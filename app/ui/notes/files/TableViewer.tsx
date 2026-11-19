@@ -93,12 +93,21 @@ function measurer(el: HTMLElement): (text: string, bold: boolean) => number {
   };
   const regular = fit(400);
   const bold = fit(600);
+  // O número fica em algarismos de largura fixa (tabular-nums), mais largos que os do canvas: a largura de um vem da página.
+  probe.style.fontWeight = "400";
+  probe.style.fontVariantNumeric = "tabular-nums";
+  probe.textContent = "0123456789";
+  const digit = probe.getBoundingClientRect().width / 10;
   probe.remove();
-  return (text, isBold) => {
-    const f = isBold ? bold : regular;
+  const width = (text: string, f: { font: string; scale: number }) => {
     if (!ctx) return text.length * f.scale;
     ctx.font = f.font;
     return ctx.measureText(text).width * f.scale;
+  };
+  return (text, isBold) => {
+    if (isBold || !isNumeric(text)) return width(text, isBold ? bold : regular);
+    const digits = text.replace(/\D/g, "").length;
+    return width(text.replace(/\d/g, ""), regular) + digits * digit;
   };
 }
 
@@ -120,9 +129,18 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
   useLayoutEffect(() => {
     const el = scroll.current;
     if (!el) return;
-    const measure = measurer(el);
-    setWidths(columnWidths(header, rows, columns, measure));
-    setNumW(Math.max(MIN_NUM, Math.ceil(measure(String(firstRow + rows.length), false) + CELL_PAD)));
+    let live = true;
+    const fit = () => {
+      const measure = measurer(el);
+      setWidths(columnWidths(header, rows, columns, measure));
+      setNumW(Math.max(MIN_NUM, Math.ceil(measure(String(firstRow + rows.length), false) + CELL_PAD)));
+    };
+    fit();
+    // A fonte pode chegar depois da primeira medida (medida com a reserva, o texto sairia cortado): mede de novo.
+    if (document.fonts && document.fonts.status !== "loaded") void document.fonts.ready.then(() => live && fit());
+    return () => {
+      live = false;
+    };
   }, [header, rows, columns, firstRow]);
 
   const head = 2 * ROW_H;

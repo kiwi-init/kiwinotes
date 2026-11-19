@@ -2,7 +2,7 @@
 // O estoque de uma loja inventada.
 import { describe, expect, test } from "bun:test";
 
-import { CELL_PAD, columnWidths, isNumeric, MAX_COL, MIN_COL, OVERSCAN_ROWS, offsetsOf, ROW_H, SAMPLE_ROWS, trimEmpty, visibleRange } from "./grid.ts";
+import { CELL_PAD, columnWidths, isNumeric, MAX_COL, MIN_COL, OVERSCAN_ROWS, offsetsOf, ROW_H, SAMPLE_ROWS, SAMPLE_SPREAD, sampleRows, trimEmpty, visibleRange } from "./grid.ts";
 
 /** 7 px por letra, 8 no negrito: o bastante para conferir as contas. */
 const measure = (t: string, bold: boolean) => t.length * (bold ? 8 : 7);
@@ -54,8 +54,25 @@ describe("columnWidths", () => {
     expect(columnWidths([], [["x"]], 1, measure)).toEqual([MIN_COL]);
   });
 
-  test("olha só as primeiras linhas", () => {
-    const rows = Array.from({ length: SAMPLE_ROWS + 10 }, (_, i) => [i === SAMPLE_ROWS + 5 ? "uma célula bem comprida lá embaixo" : "x"]);
+  test("mede o começo e um pedaço espalhado pelo resto, o fim incluso", () => {
+    const rows = Array.from({ length: 100_000 }, (_, i) => [String(i + 1)]);
+    const sample = sampleRows(rows);
+    expect(sample.length).toBe(SAMPLE_ROWS + SAMPLE_SPREAD);
+    expect(sample[0]).toBe(rows[0]);
+    expect(sample.at(-1)).toBe(rows.at(-1));
+    // O pedido 100000, na última linha, entra na largura.
+    expect(columnWidths([], rows, 1, measure)).toEqual([Math.max(MIN_COL, 6 * 7 + CELL_PAD)]);
+  });
+
+  test("uma planilha pequena é medida inteira", () => {
+    const rows = Array.from({ length: SAMPLE_ROWS + SAMPLE_SPREAD }, (_, i) => [i === SAMPLE_ROWS + 50 ? "uma célula comprida" : "x"]);
+    expect(sampleRows(rows)).toBe(rows);
+    expect(columnWidths([], rows, 1, measure)).toEqual([19 * 7 + CELL_PAD]);
+  });
+
+  test("não mede tudo: uma linha fora da amostra não muda a largura", () => {
+    const rows = Array.from({ length: 100_000 }, (_, i) => [i === 50_001 ? "uma célula bem comprida no meio" : "x"]);
+    expect(sampleRows(rows)).not.toContain(rows[50_001]);
     expect(columnWidths([], rows, 1, measure)).toEqual([MIN_COL]);
   });
 });

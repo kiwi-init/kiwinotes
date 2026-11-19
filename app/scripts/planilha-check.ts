@@ -99,6 +99,11 @@ const box = async (p: Page, sel: string) => {
   assert.ok(b, `não achei ${sel}`);
   return b;
 };
+/** As células montadas que cortam o texto sem estar no máximo (320 px): a largura mediu errado. */
+const cutCells = (p: Page) =>
+  p.locator(".kn-grid-cell").evaluateAll((cells) =>
+    cells.filter((c) => c.scrollWidth > c.clientWidth && c.getBoundingClientRect().width < 319).map((c) => `${c.textContent} (${Math.round(c.getBoundingClientRect().width)} px)`),
+  );
 const scrollTo = async (p: Page, left: number, top: number) => {
   await p.locator(".kn-grid").evaluate((el, [x, y]) => el.scrollTo(x!, y!), [left, top]);
   await p.waitForTimeout(250);
@@ -133,6 +138,7 @@ try {
       const long = p.locator(".kn-grid-top [aria-colindex='7']");
       const cell = await long.evaluate((el) => ({ h: el.getBoundingClientRect().height, w: el.getBoundingClientRect().width, cut: el.scrollWidth > el.clientWidth, ov: getComputedStyle(el).textOverflow, ws: getComputedStyle(el).whiteSpace }));
       assert.deepEqual([cell.h, cell.w, cell.cut, cell.ov, cell.ws], [30, 320, true, "ellipsis", "nowrap"], JSON.stringify(cell));
+      assert.deepEqual(await cutCells(p), [], "só corta a coluna no máximo");
       // O número à direita, o texto à esquerda.
       const code = p.locator(".kn-grid-row[aria-rowindex='2'] [aria-colindex='2']");
       assert.equal(await code.textContent(), "1001");
@@ -202,6 +208,7 @@ try {
       const opened = performance.now() - t0;
       assert.match((await p.locator(".kn-file-table-foot").textContent()) ?? "", /^100\.000 linhas, 4 colunas/);
       assert.equal(await p.locator(".kn-file-table-more").count(), 0);
+      assert.deepEqual(await cutCells(p), [], "no começo, nada cortado abaixo do máximo");
       // A rolagem até o fim, em passos: cada um volta a tempo (nada trava montando 100.000 linhas).
       const steps: number[] = [];
       for (const top of [500_000, 1_500_000, 2_999_000, 4_000_000]) {
@@ -211,6 +218,7 @@ try {
       }
       await p.waitForSelector(".kn-grid-row[aria-rowindex='100001'] .kn-grid-n:text-is('100001')", { timeout: 5000 });
       assert.ok((await p.locator(".kn-grid-row").count()) < 80, "só as linhas da tela");
+      assert.deepEqual(await cutCells(p), [], "no fim (pedido 100000), nada cortado abaixo do máximo");
       await p.screenshot({ path: join(out, "vendas-fim-dark.png") });
       console.log(`ok     vendas-do-ano.csv: 100.000 linhas, aberto em ${(opened / 1000).toFixed(1)} s, rolagem ${steps.map((s) => s.toFixed(0)).join("/")} ms (com 250 de espera)`);
     } finally {

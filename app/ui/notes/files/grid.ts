@@ -5,12 +5,25 @@
 /** A largura de uma coluna fica entre estas duas (px). O que não cabe no máximo corta com "…". */
 export const MIN_COL = 64;
 export const MAX_COL = 320;
-/** O respiro de cada lado do texto, somado (px). */
-export const CELL_PAD = 24;
+/** O respiro de cada lado do texto, somado (px): 12 + 12 do padding, 1 da borda e 1 de folga do arredondamento. */
+export const CELL_PAD = 26;
 /** A altura de cada linha, a do cabeçalho inclusive (px). */
 export const ROW_H = 30;
-/** Quantas linhas a largura olha: as do começo dizem o tamanho da coluna sem medir 100.000. */
-export const SAMPLE_ROWS = 300;
+/**
+ * Quantas linhas a largura olha, sem medir 100.000: as `SAMPLE_ROWS` do começo e mais `SAMPLE_SPREAD` espalhadas pelo
+ * resto, a última inclusa (o pedido 100000 e o total maior costumam estar no fim).
+ */
+export const SAMPLE_ROWS = 200;
+export const SAMPLE_SPREAD = 100;
+
+/** As linhas que a largura mede. */
+export function sampleRows(rows: string[][]): string[][] {
+  if (rows.length <= SAMPLE_ROWS + SAMPLE_SPREAD) return rows;
+  const out = rows.slice(0, SAMPLE_ROWS);
+  const rest = rows.length - SAMPLE_ROWS;
+  for (let i = 1; i <= SAMPLE_SPREAD; i++) out.push(rows[SAMPLE_ROWS + Math.ceil((i * rest) / SAMPLE_SPREAD) - 1]!);
+  return out;
+}
 /** As linhas e colunas montadas a mais, de cada lado da tela, para a rolagem não mostrar o branco. */
 export const OVERSCAN_ROWS = 8;
 export const OVERSCAN_PX = 320;
@@ -50,12 +63,12 @@ export function isNumeric(text: string): boolean {
 }
 
 /**
- * A largura de cada coluna: o texto mais largo da coluna nas primeiras `SAMPLE_ROWS` linhas (e no cabeçalho, em
+ * A largura de cada coluna: o texto mais largo da coluna nas linhas de `sampleRows` (e no cabeçalho, em
  * negrito), mais o respiro, entre `MIN_COL` e `MAX_COL`. `measure(text, bold)` dá a largura do texto em px.
  */
 export function columnWidths(header: string[], rows: string[][], columns: number, measure: (text: string, bold: boolean) => number): number[] {
   const widths: number[] = [];
-  const sample = rows.length > SAMPLE_ROWS ? rows.slice(0, SAMPLE_ROWS) : rows;
+  const sample = sampleRows(rows);
   for (let c = 0; c < columns; c++) {
     let w = header[c] ? measure(header[c]!, true) : 0;
     for (const r of sample) {
