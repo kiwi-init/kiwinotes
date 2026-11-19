@@ -1,0 +1,130 @@
+/* A tela do que o Kiwi faz (T20838, spec #20828): a fala em cima, o resultado embaixo, num palco de altura fixa para a
+   tela não pular entre os exemplos. Com Reduzir movimento, sem animação. */
+.kn-show-step { width: min(620px, 100%); }
+.kn-show-stage {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: var(--space-3);
+  min-height: 400px;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card, 12px);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.kn-show-chat { display: grid; gap: var(--space-2); }
+.kn-show-ask {
+  justify-self: end;
+  min-height: 1.45em;
+  max-width: 80%;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.kn-show-caret { display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -2px; background: currentColor; animation: kn-show-blink 900ms steps(2) infinite; }
+.kn-show-kiwi { display: flex; align-items: center; gap: var(--space-2); }
+.kn-show-cat { flex: none; width: 72px; height: 72px; }
+.kn-show-line { display: grid; margin: 0; }
+.kn-show-line strong { font-size: var(--text-sm); color: var(--text-2); }
+.kn-show-line[data-phase="trabalhando"] span { color: var(--text-2); }
+
+.kn-show-result { min-height: 0; }
+.kn-show-in { animation: kn-show-in 420ms var(--ease) both; }
+
+/* 1. A nota: bagunçada, depois organizada. */
+.kn-show-note, .kn-show-meeting, .kn-show-found, .kn-show-folder {
+  height: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--r-row, 8px);
+  background: var(--bg);
+  overflow: hidden;
+}
+.kn-show-note-bar, .kn-show-meeting-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+.kn-show-note-body { padding: var(--space-2) var(--space-3); }
+.kn-show-note-body p, .kn-show-proposal p { margin: 2px 0; }
+.kn-show-note-body h3, .kn-show-proposal h3 { margin: 10px 0 2px; font-size: var(--text-md); }
+.kn-show-note-body h3:first-child, .kn-show-proposal h3:first-child { margin-top: 0; }
+.kn-show-note-body p[data-kind="li"]::before { content: "•"; margin-right: 8px; color: var(--text-3); }
+.kn-show p[data-kind="todo"] { display: flex; align-items: center; gap: 8px; }
+.kn-show p[data-kind="todo"] i { flex: none; width: 13px; height: 13px; border: 1.5px solid var(--text-3); border-radius: 4px; }
+.kn-show-messy p { color: var(--text-2); font-family: var(--mono, ui-monospace, monospace); font-size: var(--text-sm); }
+.kn-show-stage[data-phase="trabalhando"] .kn-show-messy p { animation: kn-show-scan 1200ms var(--ease) infinite; animation-delay: calc(var(--n, 0) * 80ms); }
+
+/* 2. A pasta e a planilha. */
+.kn-show-folder { display: grid; grid-template-columns: 180px 1fr; }
+.kn-show-files { padding: var(--space-2); border-right: 1px solid var(--border); font-size: var(--text-sm); }
+.kn-show-folder-name { margin-bottom: 4px; color: var(--text-2); font-weight: 600; }
+.kn-show-file { padding: 4px 8px; border-radius: 6px; }
+.kn-show-file[data-new="true"] { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); font-weight: 600; }
+.kn-show-sheet { align-self: start; margin: var(--space-3); border-collapse: collapse; font-size: var(--text-sm); }
+.kn-show-sheet th, .kn-show-sheet td { padding: 5px 14px; border: 1px solid var(--border); text-align: left; }
+.kn-show-sheet td:last-child, .kn-show-sheet th:last-child { text-align: right; }
+.kn-show-sheet th { background: var(--surface); }
+.kn-show-sheet tr[data-total="true"] td { font-weight: 600; }
+
+/* 3. A reunião e a proposta. */
+.kn-show-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+.kn-show-wave { display: flex; align-items: center; justify-content: center; gap: 4px; height: calc(100% - 34px); }
+.kn-show-wave i { width: 4px; height: calc(8px + (var(--i) * 7 % 30) * 1px); border-radius: 2px; background: var(--border-strong); }
+.kn-show-stage[data-phase="trabalhando"] .kn-show-wave i { animation: kn-show-scan 1000ms var(--ease) infinite; animation-delay: calc(var(--i) * 40ms); }
+.kn-show-proposal { margin: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--r-row, 8px); background: var(--surface); }
+.kn-show-proposal-to { margin-bottom: 8px; color: var(--text-2); font-size: var(--text-sm); }
+.kn-show-fake-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.kn-show-fake-actions span { padding: 4px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: var(--text-sm); }
+.kn-show-fake-actions span[data-primary="true"] { border-color: transparent; background: var(--accent); color: var(--on-accent); }
+
+/* 4. A busca e o trecho. */
+.kn-show-found { display: grid; align-content: start; padding: var(--space-3); }
+.kn-show-search { display: grid; gap: 6px; }
+.kn-show-search div { padding: 6px 10px; border-radius: 6px; background: var(--surface); color: var(--text-2); font-size: var(--text-sm); }
+.kn-show-stage[data-phase="trabalhando"] .kn-show-search div { animation: kn-show-scan 900ms var(--ease) infinite; }
+.kn-show-stage[data-phase="trabalhando"] .kn-show-search div:nth-child(2) { animation-delay: 150ms; }
+.kn-show-stage[data-phase="trabalhando"] .kn-show-search div:nth-child(3) { animation-delay: 300ms; }
+.kn-show-hit { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--r-row, 8px); background: var(--surface); }
+.kn-show-hit-path { margin-bottom: 6px; color: var(--text-2); font-size: var(--text-sm); }
+.kn-show-hit p { margin: 0; }
+.kn-show-found { gap: var(--space-2); }
+.kn-show-also { display: grid; gap: 4px; color: var(--text-2); font-size: var(--text-sm); }
+.kn-show-also span { color: var(--text-3); }
+.kn-show-also div { padding: 4px 10px; border-radius: 6px; background: var(--surface); }
+.kn-show-hit mark { padding: 0 2px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 28%, transparent); color: inherit; }
+
+/* Os pontos: um botão por exemplo, com o nome embaixo. */
+.kn-show-dots { display: flex; justify-content: center; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.kn-show-dots button {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.kn-show-dots button::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); transition: background var(--fast) var(--ease), transform var(--fast) var(--ease); }
+.kn-show-dots button[data-on="true"] { color: var(--text); }
+.kn-show-dots button[data-on="true"]::before { background: var(--accent); transform: scale(1.25); }
+.kn-show-dots button:hover { background: var(--surface-hover); }
+.kn-show-dots button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+@keyframes kn-show-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes kn-show-scan { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes kn-show-blink { to { visibility: hidden; } }
+
+.kn-show[data-motion="reduced"] *, .kn-show[data-motion="reduced"] *::before { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .kn-show *, .kn-show *::before { animation: none !important; transition: none !important; }
+}
