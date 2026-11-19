@@ -23,10 +23,12 @@
     {"expectCount": ".kn-versions", "count": 0, "name": "o diálogo fecha"},
     {"waitFor": ".cm-content:has-text('linha nova')", "state": "detached", "name": "o editor voltou para a original"},
     {"expectText": ".cm-content", "text": "linha original"},
-    {"expectCount": ".kn-tree-pop", "count": 1, "name": "a árvore continua aberta (o diálogo saiu por cima dela)"},
-    {"click": ".kn-side-item:has-text('Orçamento')", "modifiers": ["Control"], "name": "menu de novo"},
+    {"click": ".kn-crumb-bt", "name": "a árvore de novo (ela é de hover, T4363: fechou quando o ponteiro ficou no diálogo, fora dela)"},
+    {"expectCount": ".kn-tree-pop[data-open]", "count": 1, "name": "a árvore abre"},
+    {"click": ".kn-tree-pop[data-open] .kn-side-item:has-text('Orçamento')", "modifiers": ["Control"], "name": "menu de novo"},
     {"click": ".kn-menu-item:has-text('Versões')", "name": "Versões… de novo"},
     {"waitFor": ".kn-versions-it >> nth=2", "name": "o restaurar também virou versão (dá para voltar dele)"},
+    {"screenshot": "versoes-de-novo.png"},
     {"press": "Escape"}
   ]
 }
