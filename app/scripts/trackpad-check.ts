@@ -412,6 +412,32 @@ try {
           },
           [x, y],
         );
+      /**
+       * A letra `index` do parágrafo que começa com `start`, e a caixa dela. Pela posição no texto, não por um x: depois do
+       * zoom a quebra depende da largura da janela, e um x fixo pode cair depois do fim da linha (revisão 2 do T22178).
+       */
+      const letterOf = (start: string, index: number) =>
+        p.evaluate(
+          ([st, ix]) => {
+            const line = [...document.querySelectorAll(".cm-content p, .cm-line")].find((l) => l.textContent?.startsWith(st as string))!;
+            const w = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+            let left = Math.max(0, Math.min(ix as number, line.textContent!.length - 1));
+            const at = left;
+            for (let n = w.nextNode(); n; n = w.nextNode()) {
+              const k = n.textContent!.length;
+              if (left < k) {
+                const r = document.createRange();
+                r.setStart(n, left);
+                r.setEnd(n, left + 1);
+                const b = r.getBoundingClientRect();
+                return { x: b.left + 1, y: b.top + b.height / 2, text: line.textContent!, index: at, top: b.top, left: b.left, h: b.height };
+              }
+              left -= k;
+            }
+            throw new Error(`a letra ${ix} não está no parágrafo`);
+          },
+          [start, index] as const,
+        );
       const mid = (await p.evaluate(`(() => { const r = (${para})("Parágrafo 12 ").getBoundingClientRect(); return { x: r.left + r.width * 0.55, y: r.top + r.height * 0.5 }; })()`)) as { x: number; y: number };
       const l0: Letter = await letterAt(mid.x, mid.y);
       const lines0 = Math.round(((await p.evaluate(`(${para})("Parágrafo 12 ").getBoundingClientRect().height`)) as number) / l0.h);
@@ -432,7 +458,7 @@ try {
       assert.ok(side <= 1, `nota: com zoom, a coluna passou da janela (${side} px)`);
       await p.screenshot({ path: join(out, "nota-pinca.png") });
       // O clique com zoom: o cursor antes da letra clicada (um marcador digitado cai bem ali).
-      const target = await letterAt(mid.x + 60, mid.y);
+      const target = await letterOf(l0.text.slice(0, 14), l0.index + 6);
       await p.mouse.click(target.left + 1, target.top + target.h / 2);
       await p.keyboard.type("§");
       await p.waitForTimeout(200);
@@ -440,11 +466,19 @@ try {
       assert.equal(typed, `${target.text.slice(0, target.index)}§${target.text.slice(target.index)}`, "nota: com zoom, o clique pôs o cursor em outra letra");
       // O menu do botão direito com zoom (revisão do T22178): no clique, no tamanho normal, e dentro da janela.
       await p.keyboard.press("Escape");
-      const spot = await letterAt(mid.x - 40, mid.y);
+      const spot = await letterOf(l0.text.slice(0, 14), l0.index - 4);
       await p.mouse.click(spot.left + 1, spot.top + spot.h / 2, { button: "right" });
       const menu = p.locator(".kn-menu").first();
       await menu.waitFor({ timeout: 5000 });
-      const mb = (await menu.boundingBox())!;
+      // A caixa parada: a entrada do menu ainda pode estar no meio quando ele aparece.
+      let mb = (await menu.boundingBox())!;
+      for (let i = 0; i < 40; i++) {
+        await p.waitForTimeout(50);
+        const next = (await menu.boundingBox())!;
+        const same = Math.abs(next.y - mb.y) < 0.5 && Math.abs(next.height - mb.height) < 0.5 && Math.abs(next.x - mb.x) < 0.5;
+        mb = next;
+        if (same) break;
+      }
       const win = p.viewportSize()!;
       // No clique; ou, sem lugar embaixo, preso ao pé da janela (8 px, como em 1×) e ainda cobrindo o clique.
       const cy = spot.top + spot.h / 2, dx = Math.abs(mb.x - (spot.left + 1));
