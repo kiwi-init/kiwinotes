@@ -69,6 +69,20 @@ const inflectionOnly = (a: string[], b: string[]) =>
  * "esta" → "está", "ana" → "Ana"), menos a grafia de sigla ou de nome com maiúscula no meio ("orbit" → "ORBIT").
  */
 export function learnedPair(pasted: string, edited: string): LearnedPair | null {
+  const pair = explainPair(pasted, edited);
+  return "reason" in pair ? null : pair;
+}
+
+/**
+ * Por que uma edição não vira troca (issue #1), para o log: só o nome da regra, nunca o texto. `same`: nada mudou nas
+ * palavras; `words`: mais de 3 palavras de um lado, ou só inserir ou apagar; `long`: passa do tamanho de um termo;
+ * `common`: troca a partir de palavra comum, ou sem letra; `spelling`: só acento, pontuação ou maiúscula; `inflection`:
+ * só gênero ou número; `different`: outra palavra; `word`: troca entre palavras comuns.
+ */
+export type PairRefusal = "same" | "words" | "long" | "common" | "spelling" | "inflection" | "different" | "word";
+
+/** O `learnedPair`, com o motivo quando não há troca. */
+export function explainPair(pasted: string, edited: string): LearnedPair | { reason: PairRefusal } {
   const a = words(pasted);
   const b = words(edited);
   let start = 0;
@@ -77,24 +91,25 @@ export function learnedPair(pasted: string, edited: string): LearnedPair | null 
   while (end < a.length - start && end < b.length - start && a[a.length - 1 - end] === b[b.length - 1 - end]) end++;
   const removed = a.slice(start, a.length - end);
   const added = b.slice(start, b.length - end);
-  if (!removed.length || !added.length || removed.length > MAX_WORDS || added.length > MAX_WORDS) return null;
+  if (!removed.length && !added.length) return { reason: "same" };
+  if (!removed.length || !added.length || removed.length > MAX_WORDS || added.length > MAX_WORDS) return { reason: "words" };
   const from = removed.join(" ");
   const to = added.join(" ");
-  if (from.length > MAX_TERM_LENGTH || to.length > MAX_TERM_LENGTH) return null;
-  if (!/\p{L}/u.test(to) || removed.every(isCommon)) return null;
+  if (from.length > MAX_TERM_LENGTH || to.length > MAX_TERM_LENGTH) return { reason: "long" };
+  if (!/\p{L}/u.test(to) || removed.every(isCommon)) return { reason: "common" };
   const x = squash(from);
   const y = squash(to);
-  if (!x || !y) return null;
+  if (!x || !y) return { reason: "common" };
   if (x === y) {
     const caseOnly = from.toLocaleLowerCase("pt-BR") === to.toLocaleLowerCase("pt-BR");
-    if (!caseOnly || !/\p{Lu}/u.test(to.slice(1))) return null;
+    if (!caseOnly || !/\p{Lu}/u.test(to.slice(1))) return { reason: "spelling" };
   } else {
-    if (inflectionOnly(removed, added)) return null;
+    if (inflectionOnly(removed, added)) return { reason: "inflection" };
     const d = distance(x, y);
-    if (d / Math.max(x.length, y.length) > MAX_DISTANCE) return null;
+    if (d / Math.max(x.length, y.length) > MAX_DISTANCE) return { reason: "different" };
     // Duas palavras comuns parecidas ("servidor" → "serviço"): sem maiúscula, dígito nem junção de palavras (o STT que
     // partiu um termo, "cube control" → "kubectl"), é troca de palavra e não de termo; só um erro de digitação passa.
-    if (to === to.toLocaleLowerCase("pt-BR") && !/\p{N}/u.test(to) && removed.length === added.length && d > 1) return null;
+    if (to === to.toLocaleLowerCase("pt-BR") && !/\p{N}/u.test(to) && removed.length === added.length && d > 1) return { reason: "word" };
   }
   return { from, to };
 }

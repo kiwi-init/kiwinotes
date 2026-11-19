@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { learnedPair, withLearned } from "./learn.ts";
+import { explainPair, learnedPair, withLearned } from "./learn.ts";
 
 describe("learnedPair", () => {
   test("a troca de um termo que soa parecido aprende", () => {
@@ -74,3 +74,25 @@ describe("withLearned", () => {
     expect(withLearned([{ term: "ORBIT", aliases: [] }], { from: "orbit", to: "ORBIT" })).toBeNull();
   });
 });
+
+// Issue #1: o motivo de cada recusa vai ao log, sem o texto.
+describe("explainPair", () => {
+  const why = (a: string, b: string) => {
+    const r = explainPair(a, b);
+    return "reason" in r ? r.reason : r;
+  };
+  test("cada regra diz o seu nome", () => {
+    expect(why("o pedido saiu", "o pedido saiu")).toBe("same");
+    expect(why("o pedido saiu", "o pedido saiu hoje")).toBe("words");
+    expect(why("o pedido foi para a loja do bairro", "a encomenda chegou na casa da vizinha")).toBe("words");
+    expect(why("mas eu fui", "mais eu fui")).toBe("common");
+    expect(why("a ana chegou", "a Ana chegou")).toBe("spelling");
+    expect(why("um ótimo dia", "um ótima dia")).toBe("inflection");
+    expect(why("o Cilo caiu", "o Brasa caiu")).toBe("different");
+    expect(why("o servidor caiu", "o serviço caiu")).toBe("word");
+  });
+  test("a troca que vale sai igual ao learnedPair", () => {
+    expect(why("Mandei para o Cilo ontem.", "Mandei para o SILO ontem.")).toEqual({ from: "Cilo", to: "SILO" });
+  });
+});
+
