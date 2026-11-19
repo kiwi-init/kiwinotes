@@ -856,3 +856,56 @@
 @media (prefers-reduced-motion: reduce) {
   .kn-file-docx-kiwi[data-fading] { animation: none; }
 }
+/* ---------------------------------------------------------- a barra de formatação do docx (T23238) */
+
+/* A mesma das Notas (a `kn-fmt` do editor): um grupo que flutua em cima da seleção. */
+.kn-file-docx {
+  position: relative;
+}
+.kn-file-docx-fmt {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--float, var(--surface));
+  box-shadow: var(--shadow-float, var(--shadow-pop));
+}
+.kn-file-docx-fmt .kn-fmt-cell {
+  display: flex;
+  align-items: center;
+}
+.kn-file-docx-fmt .kn-fmt-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--border);
+}
+.kn-file-docx-fmt .kn-fmt-bt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-2, var(--text-2));
+  font: 600 13px/1 var(--ui, var(--font));
+  cursor: default;
+}
+.kn-file-docx-fmt .kn-fmt-bt:hover {
+  background: var(--wash-2, var(--surface-hover));
+  color: var(--ink, var(--text));
+}
+/* Ligado na seleção: o botão fica aceso, como o estado do texto. */
+.kn-file-docx-fmt .kn-fmt-bt[aria-pressed="true"] {
+  background: var(--wash-2, var(--surface-hover));
+  color: var(--ink, var(--text));
+}
+.kn-file-docx-fmt .kn-fmt-italic { font-style: italic; font-family: Georgia, serif; }
+.kn-file-docx-fmt .kn-fmt-underline { text-decoration: underline; }
+.kn-file-docx-fmt .kn-fmt-strike { text-decoration: line-through; }

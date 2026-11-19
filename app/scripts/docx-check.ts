@@ -74,7 +74,14 @@ const fromOutside = (text: string) => {
 const EXTRAS = "Docs/extras.docx";
 const extras = Bun.spawnSync([process.execPath, join(import.meta.dir, "docx-prova/make-extras.ts"), join(vault, EXTRAS)], { cwd: app });
 assert.equal(extras.exitCode, 0, extras.stderr.toString());
+// O docx que a pessoa formata e onde cola (T23238): outra cópia da proposta.
+const FORMATAR = "Docs/formatar.docx";
+put(FORMATAR, PROPOSTA);
 const disk = (rel: string) => new Uint8Array(readFileSync(join(vault, rel)));
+/** Os trechos (`w:r`) e os parágrafos (`w:p`) de um document.xml que têm `text`. */
+const runsWith = (xml: string, text: string) => [...xml.matchAll(/<w:r[ >][\s\S]*?<\/w:r>/g)].map((m) => m[0]).filter((r) => r.includes(text));
+const parasWith = (xml: string, text: string) => [...xml.matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].map((m) => m[0]).filter((r) => r.replace(/<[^>]+>/g, "").includes(text));
+const hasTag = (xml: string, tag: string) => new RegExp(`<w:${tag}(?: [^>]*)?/?>`).test(xml);
 /** Espera o disco mudar (a gravação vem um instante depois da última tecla). */
 const diskChange = async (rel: string, from: string, ms = 8000) => {
   const end = Date.now() + ms;
@@ -409,6 +416,215 @@ try {
         const single = [...xml.matchAll(/<w:t(?: [^>]*)?>([^<]*)<\/w:t>/g)].filter((m) => m[1]!.length === 1).length;
         assert.ok(xml.includes(">Linha nova escrita no Kiwi.</w:t>"), `o parágrafo novo saiu em ${single} trechos de uma letra`);
         return `: o parágrafo novo num trecho só (${single} trechos de uma letra no documento)`;
+      });
+    } finally {
+      await w.close();
+    }
+  }
+
+  // Formatar, colar e o mouse (T23238): a barra das Notas e os atalhos dela gravam no docx, o HTML de fora entra limpo.
+  {
+    const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1100, height: 760, motion: false, browser: "webkit", query: { note: FORMATAR } });
+    const p = w.page;
+    const bar = p.locator(".kn-file-docx-fmt");
+    /** Onde está uma palavra na 1ª página (o retângulo dela, pelo texto). */
+    const wordBox = (word: string) =>
+      p.evaluate((word) => {
+        // O texto da página inteira (o motor quebra as palavras em pedaços e usa o espaço fixo), e cada letra no nó dela.
+        const root = document.querySelector(".docx-page")!;
+        const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        const at: { node: Text; i: number }[] = [];
+        let all = "";
+        for (let n = walk.nextNode() as Text | null; n; n = walk.nextNode() as Text | null) {
+          for (let i = 0; i < n.data.length; i++) at.push({ node: n, i });
+          all += n.data.replace(/\u00a0/g, " ");
+        }
+        const k = all.indexOf(word);
+        if (k < 0) throw new Error(`sem "${word}" na página`);
+        const r = document.createRange();
+        r.setStart(at[k]!.node, at[k]!.i);
+        const end = at[k + word.length - 1]!;
+        r.setEnd(end.node, end.i + 1);
+        const b = r.getBoundingClientRect();
+        return { x: b.left, y: b.top, width: b.width, height: b.height };
+      }, word);
+    const selected = () => p.evaluate(() => (window.getSelection()?.toString() ?? "").replace(/\u00a0/g, " ").trim());
+    const dbl = async (word: string) => {
+      // Longe do último clique: o motor contaria este como o 3º.
+      await p.waitForTimeout(600);
+      const b = await wordBox(word);
+      await p.mouse.dblclick(b.x + b.width / 2, b.y + b.height / 2);
+      await p.waitForTimeout(150);
+    };
+    const caretAtEnd = async (word: string) => {
+      const b = await wordBox(word);
+      await p.mouse.click(b.x + b.width - 1, b.y + b.height / 2);
+      await p.keyboard.press("End");
+      await p.waitForTimeout(100);
+    };
+    /** Espera a gravação acabar: o disco mudou e parou de mudar. */
+    const saved = async (start: string) => {
+      await diskChange(FORMATAR, start);
+      let last = sha(FORMATAR);
+      for (let i = 0; i < 20; i++) {
+        await p.waitForTimeout(150);
+        const now = sha(FORMATAR);
+        if (now === last && i > 3) break;
+        last = now;
+      }
+      return bodyOf(disk(FORMATAR)).xml;
+    };
+    /** Um colar como o do macOS: o evento com o texto e o HTML na área de transferência. */
+    const paste = (text: string, html: string | null) =>
+      p.evaluate(
+        ([text, html]) => {
+          const dt = new DataTransfer();
+          dt.setData("text/plain", text!);
+          if (html) dt.setData("text/html", html);
+          const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+          (document.activeElement ?? document.querySelector(".docx-pages"))!.dispatchEvent(ev);
+        },
+        [text, html] as const,
+      );
+    const fstep = (name: string, fn: () => Promise<string | void>) =>
+      check(name, async () => {
+        try {
+          return await fn();
+        } catch (e) {
+          await shot(p, `falhou-${name.slice(0, 24).replace(/\W+/g, "-")}`).catch(() => {});
+          throw new Error(`${(e as Error).message.split("\n")[0]}\n       página: ${JSON.stringify(w.report.problems.slice(-5))}`);
+        }
+      });
+    try {
+      await p.waitForSelector(".kn-file[data-state='ready'] .docx-page", { timeout: 30000 });
+
+      await fstep("o mouse: duplo, triplo clique e arrastar selecionam, e a barra aparece em cima; um clique a esconde", async () => {
+        await dbl("documento");
+        assert.equal(await selected(), "documento", "o duplo clique pega a palavra");
+        await bar.waitFor({ state: "visible", timeout: 3000 });
+        const word = await wordBox("documento");
+        const box = (await bar.boundingBox())!;
+        assert.ok(box.y + box.height <= word.y, `a barra em cima da palavra (barra ${box.y + box.height}, palavra ${word.y})`);
+        const b = await wordBox("Cadeiras novas");
+        await p.waitForTimeout(600);
+        await p.mouse.click(b.x + 4, b.y + b.height / 2, { clickCount: 3 });
+        await p.waitForTimeout(150);
+        assert.ok((await selected()).includes("Cadeiras novas"), `o triplo clique pega o parágrafo: ${await selected()}`);
+        await bar.waitFor({ state: "visible", timeout: 3000 });
+        const from = await wordBox("descreve a mudança");
+        await p.mouse.move(from.x + 1, from.y + from.height / 2);
+        await p.mouse.down();
+        await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2, { steps: 6 });
+        await p.mouse.move(from.x + from.width - 1, from.y + from.height / 2, { steps: 6 });
+        await p.mouse.up();
+        await p.waitForTimeout(150);
+        assert.equal(await selected(), "descreve a mudança", "arrastar seleciona");
+        await bar.waitFor({ state: "visible", timeout: 3000 });
+        await p.waitForTimeout(600);
+        await p.mouse.click(from.x + 1, from.y + from.height / 2);
+        await bar.waitFor({ state: "hidden", timeout: 3000 });
+        assert.equal(await selected(), "", "o clique põe o cursor, sem seleção");
+      });
+
+      await fstep("a barra: negrito e alinhamento gravam no docx, e o botão acende", async () => {
+        const start = sha(FORMATAR);
+        await dbl("documento");
+        await p.click(".kn-fmt-bold");
+        await p.waitForSelector(".kn-fmt-bold[aria-pressed='true']", { timeout: 3000 });
+        await shot(p, "docx-barra");
+        await p.click(".kn-fmt-center");
+        const xml = await saved(start);
+        const runs = runsWith(xml, "documento");
+        assert.ok(runs.some((r) => hasTag(r, "b")), `negrito: ${runs.join(" ").slice(0, 200)}`);
+        assert.ok(!runsWith(xml, "descreve").some((r) => hasTag(r, "b")), "só a palavra");
+        assert.ok(/<w:jc w:val="center"\/>/.test(parasWith(xml, "Este documento")[0] ?? ""), "centralizado");
+      });
+
+      await fstep("o teclado das Notas: ⇧⌘X tacha, ⌘1 põe o título e tira, ⇧⌘8 faz a lista", async () => {
+        let start = sha(FORMATAR);
+        await dbl("orçamento");
+        await p.keyboard.press("Meta+Shift+x");
+        let xml = await saved(start);
+        assert.ok(runsWith(xml, "orçamento").some((r) => hasTag(r, "strike")), "tachado");
+        start = sha(FORMATAR);
+        await caretAtEnd("Este documento");
+        await p.keyboard.press("Meta+1");
+        xml = await saved(start);
+        assert.ok(/<w:pStyle w:val="Heading1"\/>/.test(parasWith(xml, "Este documento")[0] ?? ""), "título 1");
+        start = sha(FORMATAR);
+        await p.keyboard.press("Meta+1");
+        xml = await saved(start);
+        assert.ok(!/<w:pStyle w:val="Heading1"\/>/.test(parasWith(xml, "Este documento")[0] ?? ""), `o ⌘1 de novo tira o título: ${parasWith(xml, "Este documento")[0]?.slice(0, 160)}`);
+        start = sha(FORMATAR);
+        await p.keyboard.press("Meta+Shift+8");
+        xml = await saved(start);
+        assert.ok(hasTag(parasWith(xml, "Este documento")[0] ?? "", "numPr"), "a lista");
+      });
+
+      await fstep("colar de uma página: fica o negrito e o itálico, sai a fonte e a cor", async () => {
+        const start = sha(FORMATAR);
+        await caretAtEnd("Iluminação");
+        await p.keyboard.press("Enter");
+        await paste(
+          "Ana trouxe a lista",
+          `<meta charset="utf-8"><p style="font-family:'Comic Sans MS';color:#ff0000;font-size:30px;background:yellow"><b>Ana</b> trouxe <span style="font-style:italic;color:#ff0000">a lista</span></p>`,
+        );
+        const xml = await saved(start);
+        assert.ok(bodyOf(disk(FORMATAR)).text.includes("Ana trouxe a lista"), "o texto colado");
+        assert.ok(runsWith(xml, "Ana").some((r) => hasTag(r, "b")), "o negrito");
+        assert.ok(runsWith(xml, "a lista").some((r) => hasTag(r, "i")), "o itálico");
+        const junk = ["Comic Sans", "FF0000", "w:sz w:val=\"60\"", "w:highlight", "w:shd"].filter((j) => xml.toUpperCase().includes(j.toUpperCase()));
+        assert.deepEqual(junk, [], "sem o estilo de fora");
+      });
+
+      await fstep("colar texto com a fonte de fora e nada mais: entra como texto, na letra do documento", async () => {
+        const start = sha(FORMATAR);
+        await p.keyboard.press("Enter");
+        await paste("Recado do Bruno", `<span style="font-family:'Comic Sans MS';color:#ff0000">Recado do Bruno</span>`);
+        const xml = await saved(start);
+        const runs = runsWith(xml, "Recado do Bruno");
+        assert.ok(runs.length > 0, "o texto colado");
+        assert.ok(!runs.some((r) => /Comic Sans|FF0000/i.test(r)), `sem a fonte e a cor: ${runs.join(" ").slice(0, 200)}`);
+      });
+
+      await fstep("colar de outro docx: o trecho copiado vem com a formatação do documento", async () => {
+        const start = sha(FORMATAR);
+        await dbl("documento");
+        const html = await p.evaluate(() => {
+          const dt = new DataTransfer();
+          document.activeElement!.dispatchEvent(new ClipboardEvent("copy", { clipboardData: dt, bubbles: true, cancelable: true }));
+          return dt.getData("text/html");
+        });
+        assert.ok(html.includes("data-docx-fragment"), "a cópia do motor");
+        await caretAtEnd("Recado do Bruno");
+        await p.keyboard.press("Enter");
+        await paste("documento", html);
+        const xml = await saved(start);
+        assert.ok(runsWith(xml, "documento").filter((r) => hasTag(r, "b")).length >= 2, "o negrito veio junto");
+      });
+
+      await fstep("o docx gravado reabre com a formatação", async () => {
+        const again = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1100, height: 760, motion: false, browser: "webkit", query: { note: FORMATAR } });
+        try {
+          const q = again.page;
+          await q.waitForSelector(".kn-file[data-state='ready'] .docx-page", { timeout: 30000 });
+          const style = (word: string) =>
+            q.evaluate((word) => {
+              const walk = document.createTreeWalker(document.querySelector(".docx-page")!, NodeFilter.SHOW_TEXT);
+              for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+                if (!n.nodeValue!.replace(/\u00a0/g, " ").includes(word.split(" ")[0]!)) continue;
+                const css = getComputedStyle(n.parentElement!);
+                return { weight: Number(css.fontWeight), line: css.textDecorationLine, family: css.fontFamily };
+              }
+              return null;
+            }, word);
+          assert.ok(((await style("documento"))?.weight ?? 0) >= 600, `negrito: ${JSON.stringify(await style("documento"))}`);
+          assert.ok((await style("orçamento"))?.line.includes("line-through"), `tachado: ${JSON.stringify(await style("orçamento"))}`);
+          assert.ok(((await style("Ana"))?.weight ?? 0) >= 600, "o negrito colado");
+          assert.ok(!/comic/i.test((await style("Recado do Bruno"))?.family ?? ""), "sem a fonte de fora");
+        } finally {
+          await again.close();
+        }
       });
     } finally {
       await w.close();
