@@ -77,6 +77,8 @@ interface GridProps {
   kiwi?: GridKiwi | null;
   /** O Kiwi Cat inseriu ou apagou linhas: a caixa aberta vai para esta célula (`row` -1: ela saiu). `n` muda a cada vez. */
   moveEditing?: { row: number; col: number; n: number } | null;
+  /** Abrir com a seleção nesta linha do arquivo (a busca achou o termo nela, T21240). */
+  goTo?: { line: number };
 }
 
 /** A coluna dos números das linhas: no mínimo esta largura (px). */
@@ -138,7 +140,7 @@ interface Editing {
  * dos números paradas. Todas as linhas e colunas: só as células que estão na tela são montadas, e a rolagem segue lisa
  * com 256 colunas e 100.000 linhas. As linhas e colunas vazias do fim não contam (na grade que edita, a folga fica).
  */
-export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal, columnTotal, widthMemory, name = "", rowNumbers, edit, view: viewSpec, zoomKey = "", kiwi, moveEditing }: GridProps) {
+export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal, columnTotal, widthMemory, name = "", rowNumbers, edit, view: viewSpec, zoomKey = "", kiwi, moveEditing, goTo }: GridProps) {
   const editable = !!edit;
   const { rows, columns } = useMemo(
     () => (editable ? { rows: rawRows, columns: rawColumns } : trimEmpty(rawHeader, rawRows, rawColumns)),
@@ -299,6 +301,19 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     const to = scrollToShow(cell, offsets, v, byKey);
     if (to.left !== v.left || to.top !== v.top) el.scrollTo(to.left * z, to.top * z);
   };
+
+  // A busca abriu o arquivo numa linha (T21240): a seleção vai para ela uma vez, quando a grade já tem as medidas. A
+  // linha da grade é a que mostra o número dela, para valer na vista ordenada ou filtrada também.
+  const went = useRef<{ line: number } | null>(null);
+  useEffect(() => {
+    if (!goTo || !offsets || !columns || went.current === goTo) return;
+    went.current = goTo;
+    let row = goTo.line - firstRow + 1;
+    if (goTo.line === firstRow - 1) row = 0;
+    else if (rowNumbers) row = rowNumbers.indexOf(goTo.line) + 1;
+    if (row < 0 || row > rows.length) return;
+    select({ row, col: 0 });
+  }, [goTo, offsets, columns, rows.length, firstRow, rowNumbers]);
 
   // A caixa de digitar: fechar grava (o Esc não), e a seleção anda como no Excel.
   const close = (save: boolean, move?: { dr: number; dc: number }) => {

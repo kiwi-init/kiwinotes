@@ -34,6 +34,11 @@ export interface FileViewerProps {
   preview?: boolean;
   /** O Kiwi Cat editando a planilha ao vivo (T21114): de onde vêm as operações dele. */
   kiwi?: KiwiSheetSource;
+  /**
+   * Abrir numa linha (T21240): a busca achou o termo nela. O texto rola até ela e a seleciona; a tabela, até a linha da
+   * grade. Um objeto novo a cada pedido, para a mesma linha pedida de novo rolar outra vez.
+   */
+  at?: { line: number };
 }
 
 export interface FileViewer {

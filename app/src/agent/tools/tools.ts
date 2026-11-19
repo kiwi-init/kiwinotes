@@ -20,6 +20,7 @@ import { markdownStructure, headingFor, type NoteHeading } from "../../shared/ma
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
 import { hasSections, isSecretFile, isTextFile, searchFileNames, textFormat, type VaultReader } from "./reader.ts";
 import type { VaultFile } from "../../notes/vault.ts";
+import { lineOf } from "../../notes/text-index.ts";
 import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument, splitZipPath } from "./files.ts";
 import { buildFile, CREATE_FORMATS, type CreateContent, type CreateFormat, type DocBlock } from "./files-create.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
@@ -1304,20 +1305,32 @@ async function run(
       const terms = queryTerms(query);
       for (const h of hits) {
         let trecho = h.snippet;
+        let linha = h.line;
         if (guard) {
           // O trecho sai da nota já filtrada, para um segredo partido na borda não escapar. E a busca não confirma
           // segredo: um achado cujas palavras só aparecem dentro de um segredo não volta.
-          const content = (await reader.get(h.path)).content;
-          const masked = await seen(h.path, content);
-          const inReal = terms.some((t) => fold(content).includes(t));
-          const inMasked = terms.some((t) => fold(masked).includes(t));
-          if (inReal && !inMasked) continue;
-          trecho = snippetOf(masked, inMasked ? terms : []);
+          const content = await reader.get(h.path).then((n) => n.content, (e) => {
+            // O arquivo de texto grande demais para ler (T21240) entrou só pelo nome: vai sem trecho.
+            if (h.file && (e as { code?: string }).code === "E_TOO_LARGE") return null;
+            throw e;
+          });
+          if (content === null) trecho = "";
+          else {
+            const masked = await seen(h.path, content);
+            const inReal = terms.some((t) => fold(content).includes(t));
+            const inMasked = terms.some((t) => fold(masked).includes(t));
+            if (inReal && !inMasked) continue;
+            trecho = snippetOf(masked, inMasked ? terms : []);
+            // A linha também sai do texto filtrado: a do 1º termo que sobrou nele.
+            linha = h.file && inMasked ? lineOf(masked, terms)?.line : undefined;
+          }
         }
         resultados.push({
           path: h.path,
           titulo: h.title,
           trecho,
+          ...(h.file ? { formato: h.file.format } : {}),
+          ...(h.file && linha ? { linha } : {}),
           ...(h.semantic ? { como: "pelo sentido" } : h.approx ? { como: "aproximado" } : {}),
         });
       }

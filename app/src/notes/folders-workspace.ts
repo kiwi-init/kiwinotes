@@ -1,6 +1,6 @@
 // Choosing the root is separate from a relative vault path (ADR 0007). All tests pass scratch folders.
 import { createHash } from "node:crypto";
-import { lstat, readdir, realpath } from "node:fs/promises";
+import { lstat, readdir, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { readJson, writeJson } from "../store/files.ts";
@@ -17,6 +17,7 @@ import { DictationNotes } from "./fromDictation.ts";
 import { MeetingNotes } from "./meetings.ts";
 import { Attachments } from "./attachments.ts";
 import { OcrIndex, type OcrRunner } from "./ocr.ts";
+import { TextIndex } from "./text-index.ts";
 import { NoteExporter } from "./export.ts";
 import { SemanticIndex } from "./semantic/index.ts";
 import type { SemanticEngine } from "./semantic/engine.ts";
@@ -170,6 +171,8 @@ export interface FolderBundle {
   meetingNotes: MeetingNotes;
   attachments: Attachments;
   ocr: OcrIndex;
+  /** O texto dos arquivos de texto (T21240), em `folders/<chave>/text-index/`, fora do cofre. */
+  text: TextIndex;
   exporter: NoteExporter;
   /** A busca pelo sentido desta pasta (T6013): os vetores em `folders/<chave>/semantic/`, fora do cofre. */
   semantic?: SemanticIndex;
@@ -249,6 +252,10 @@ export class NotesFolders {
       runner: this.ocrRunner,
       enabled: async () => (await settings.load()).ocr,
     });
+    const text = new TextIndex({
+      root,
+      dir: internal ? path.join(this.options.dir, "text-index") : path.join(this.options.dir, "folders", key, "text-index"),
+    });
     const exporter = new NoteExporter({ vault: notes });
     if (this.pdf) exporter.setPdf(this.pdf);
     const semantic = this.options.semantic
@@ -264,6 +271,7 @@ export class NotesFolders {
       notes,
       settings,
       ocr,
+      text,
       exporter,
       semantic,
       versions: new NoteVersions({
@@ -500,12 +508,14 @@ export class NotesFolders {
           if (next !== this.internalBundle) {
             next.notes.close();
             void next.semantic?.close();
+            void next.text.close();
           }
           this.progress = { ...this.progress, phase: "idle" };
           this.emit();
           throw error;
         }
         const previous = this.active!;
+        const before = [previous.ref.path, ...this.registry!.recent];
         const registry: Registry = {
           version: 1,
           current: candidate,
@@ -520,6 +530,7 @@ export class NotesFolders {
             next.notes.close();
             await next.semantic?.close();
             await next.versions.close();
+            await next.text.close();
           }
           throw error;
         }
@@ -530,6 +541,12 @@ export class NotesFolders {
           previous.notes.close();
           await previous.semantic?.close();
           await previous.versions.close();
+          await previous.text.close();
+        }
+        // A pasta que saiu das recentes saiu do Kiwi (T21240): o índice do texto dela vai junto.
+        for (const gone of before) {
+          if (gone === this.options.defaultRoot || registry.recent.includes(gone)) continue;
+          await rm(path.join(this.options.dir, "folders", folderKey(gone), "text-index"), { recursive: true, force: true }).catch(() => {});
         }
         this.progress = { ...this.progress, phase: "idle" };
         this.emit();
@@ -582,6 +599,7 @@ export class NotesFolders {
       b.notes.close();
       await b.semantic?.close();
       await b.versions.close();
+      await b.text.close();
     }
   }
 }

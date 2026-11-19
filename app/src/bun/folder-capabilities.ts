@@ -30,6 +30,7 @@ export function folderCapabilities(
       settings: b.settings,
       attachments: b.attachments,
       ocr: b.ocr,
+      textIndex: b.text,
       semantic: b.semantic,
       semanticSource: b.notes,
       versions: b.versions,

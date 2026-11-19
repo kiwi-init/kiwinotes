@@ -94,6 +94,10 @@ export interface SearchHit {
   approx?: boolean;
   /** Achou só pelo sentido (T6013): nenhuma palavra casou, e o trecho é o da nota mais perto da busca. */
   semantic?: boolean;
+  /** Um arquivo de texto, não uma nota (T21240): o formato, o tamanho e a data, para a lista mostrar e abrir. */
+  file?: { format: string; size: number; mtime: string };
+  /** A linha achada, de 1 (T21240): o arquivo abre nela. */
+  line?: number;
 }
 
 /** Quantas notas a busca pelo sentido traz no máximo, além das que casam pelas palavras. */
@@ -764,6 +768,16 @@ export class Vault {
     // Em ordem antes do corte (revisão do #540): com mais de `limit`, vêm os primeiros do alfabeto.
     found.sort((a, b) => a.path.localeCompare(b.path));
     return { files: found.slice(0, limit), filesVersion: this.filesVersion(), more: found.length > limit };
+  }
+
+  /** Todos os arquivos que não são nota (T21240): o índice do texto compara o mtime e o tamanho de cada um. */
+  otherFiles(): IterableIterator<VaultFile> {
+    return this.files.values();
+  }
+
+  /** Um arquivo que não é nota, como está agora, ou `undefined` (saiu). */
+  fileInfo(path: string): VaultFile | undefined {
+    return this.files.get(path);
   }
 
   /** Os links para arquivos (spec #13664), em lote: cada alvo `[[…]]` e o caminho achado, ou null. */

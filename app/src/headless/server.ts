@@ -216,6 +216,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     audioInputs: async () => headlessAudioInputs((await stores.settings.load()).microphone),
     precise: () => session?.precise.status() ?? null,
     ocr: stores.ocr,
+    textIndex: stores.textIndex,
     semanticEngine: stores.semantic,
     exporter: stores.exporter,
     // O headless nunca abre diálogo: a pasta do exportar vem de KIWI_EXPORT_DIR (T2684), ou o exportar dá E_CANCELED.

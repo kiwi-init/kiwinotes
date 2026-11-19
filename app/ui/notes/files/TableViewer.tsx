@@ -15,7 +15,7 @@ export { TableGrid } from "./TableGrid.tsx";
 
 const ENCODINGS = { "utf-8": "UTF-8", "utf-16le": "UTF-16", "utf-16be": "UTF-16", "windows-1252": "Windows-1252" } as const;
 
-export function TableViewer({ path, file, files, flushRef, kiwi }: FileViewerProps) {
+export function TableViewer({ path, file, files, flushRef, kiwi, at }: FileViewerProps) {
   // Um engine antigo entrega o texto: vira bytes em UTF-8, como estava.
   const base64 = useMemo(() => ("base64" in file ? file.base64 : "text" in file ? base64Of(new TextEncoder().encode(file.text)) : ""), [file]);
   const name = path.split("/").at(-1) ?? path;
@@ -48,7 +48,7 @@ export function TableViewer({ path, file, files, flushRef, kiwi }: FileViewerPro
           {session.notice}
         </div>
       ) : null}
-      <SheetPane session={session} doc={state.doc} sheet={sheet} decimal="," countHeader={false} widthMemory={widthMemory} zoomKey={path} foot={enc && enc !== "utf-8" ? `lido como ${ENCODINGS[enc]}` : null} />
+      <SheetPane session={session} doc={state.doc} sheet={sheet} decimal="," countHeader={false} widthMemory={widthMemory} zoomKey={path} foot={enc && enc !== "utf-8" ? `lido como ${ENCODINGS[enc]}` : null} goTo={at} />
     </div>
   );
 }

@@ -235,3 +235,28 @@ describe("tags e modelos no ⌘K e no vault de mentira (T2619)", () => {
     expect(n.content).toBe("# Ata\n04/11/2026");
   });
 });
+
+describe("o ⌘K lista os arquivos de texto (T21240, spec #21165)", () => {
+  const n = [meta("Receitas.md", "2026-11-01")];
+  const hit = { path: "Codigo/horta.py", title: "horta.py", snippet: "return 'carambola'", score: 1, file: { format: "py", size: 40, mtime: "2026-11-01T00:00:00.000Z" }, line: 4 };
+
+  test("o achado pelo conteúdo traz o formato e a linha; o achado pelo nome vem depois, sem repetir", () => {
+    const byName = [
+      { path: "Codigo/horta.py", size: 40, mtime: "" },
+      { path: "Dados/carambola.csv", size: 10, mtime: "" },
+      { path: "Notas/carambola.md", size: 10, mtime: "" },
+    ];
+    for (const ranked of [false, true]) {
+      const items = paletteItems(n, "carambola", [hit], [], ranked, byName).filter((i) => i.kind === "note");
+      expect(items).toEqual([
+        { kind: "note", path: "Codigo/horta.py", title: "horta.py", detail: "Codigo", snippet: "return 'carambola'", format: "py", line: 4 },
+        { kind: "note", path: "Dados/carambola.csv", title: "carambola.csv", detail: "Dados", format: "csv" },
+      ]);
+    }
+  });
+
+  test("a nota segue sem formato nem linha", () => {
+    const note = { path: "Receitas.md", title: "Receitas", snippet: "carambola", score: 2 };
+    expect(paletteItems(n, "carambola", [note], []).find((i) => i.kind === "note")).toEqual({ kind: "note", path: "Receitas.md", title: "Receitas", detail: "", snippet: "carambola" });
+  });
+});

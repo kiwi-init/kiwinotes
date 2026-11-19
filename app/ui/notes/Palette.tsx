@@ -6,13 +6,14 @@ import { plainSnippet } from "./links.ts";
 import { Highlight } from "./Highlight.tsx";
 import { type PaletteCommand, type PaletteItem, paletteItems, snippetRanges, titleRanges } from "./palette.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
-import type { NoteMeta, NotesApi, SearchHit } from "./types.ts";
+import type { NoteMeta, NotesApi, SearchHit, VaultFile } from "./types.ts";
 import { SEARCH_TOO_LONG, searchTooLong } from "../../src/shared/query.ts";
 
 export interface PaletteProps {
   api: NotesApi;
   notes: NoteMeta[];
-  onOpen(path: string): void;
+  /** `line` (T21240): um arquivo de texto achado pelo conteúdo abre na linha. */
+  onOpen(path: string, line?: number): void;
   onCreate(title: string): void;
   onClose(): void;
   /** A busca já aberta com um texto (T2619: o clique numa #tag abre com `tag:…`). */
@@ -22,10 +23,13 @@ export interface PaletteProps {
   onCommand?(id: string, query: string): void;
 }
 
+const NO_FILES: VaultFile[] = [];
+
 export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = "", commands = [], onCommand }: PaletteProps) {
   const [query, setQuery] = useState(initialQuery);
-  const [search, setSearch] = useState<{ query: string; hits: SearchHit[] } | null>(null);
+  const [search, setSearch] = useState<{ query: string; hits: SearchHit[]; files: VaultFile[] } | null>(null);
   const hits = search?.query === query ? search.hits : [];
+  const files = search?.query === query ? search.files : NO_FILES;
   const ranked = search?.query === query;
   const [sel, setSel] = useState(0);
   const seq = useRef(0);
@@ -37,8 +41,10 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
     // Longa demais (T7791): o engine recusaria; a lista dá lugar ao aviso.
     if (!query.trim() || tooLong) return setSearch(null);
     const t = setTimeout(() => {
-      api.search(query, 20).then(
-        (h) => my === seq.current && setSearch({ query, hits: h }),
+      // Os arquivos pelo nome (T21240) vêm junto, do mesmo `findFiles` da barra; sem ele, só a busca.
+      const byName = api.findFiles ? api.findFiles(query).catch(() => NO_FILES) : Promise.resolve(NO_FILES);
+      Promise.all([api.search(query, 20), byName]).then(
+        ([h, f]) => my === seq.current && setSearch({ query, hits: h, files: f }),
         () => my === seq.current && setSearch(null),
       );
     }, 120);
@@ -46,12 +52,12 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
   }, [query, api, notes]);
 
   // Uma vez por mudança (T8110): o `setSel(0)` de cada letra desenhava de novo e refazia a lista das 10 mil notas.
-  const items = useMemo(() => (tooLong ? [] : paletteItems(notes, query, hits, commands, ranked)), [tooLong, notes, query, hits, commands, ranked]);
+  const items = useMemo(() => (tooLong ? [] : paletteItems(notes, query, hits, commands, ranked, files)), [tooLong, notes, query, hits, commands, ranked, files]);
   useEffect(() => setSel(0), [query]);
 
   const choose = (item: PaletteItem | undefined) => {
     if (!item) return;
-    if (item.kind === "note") onOpen(item.path);
+    if (item.kind === "note") onOpen(item.path, item.line);
     else if (item.kind === "command") onCommand?.(item.id, query);
     else onCreate(item.title);
   };
@@ -100,6 +106,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
                     {it.snippet ? <Snippet text={plainSnippet(it.snippet)} query={query} /> : null}
                   </span>
                   <span className="kn-palette-r">
+                    {it.format ? <span className="kn-palette-type" title={it.line ? `Linha ${it.line}` : undefined}>{it.format}{it.line ? `:${it.line}` : ""}</span> : null}
                     {it.semantic ? <span className="kn-palette-why" title="Sem as palavras da busca, mas sobre o mesmo assunto">pelo sentido</span> : null}
                     {it.detail}
                   </span>
