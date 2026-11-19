@@ -75,6 +75,19 @@ test("na bateria, para; o pmset roda no máximo uma vez por minuto", async () =>
   expect(reads).toBe(2);
 });
 
+test("com `battery: false`, a bateria não segura: o índice do conteúdo segue nela (lead #24453)", async () => {
+  const c = clock();
+  let slept = 0;
+  const g = new BackgroundGate({ now: c.now, battery: async () => BATT, systemIdle: null, sleep: async () => void slept++ });
+  expect(await g.blocked()).toBe("battery");
+  expect(await g.blocked({ battery: false })).toBeNull();
+  await g.wait(() => false, { battery: false });
+  expect(slept).toBe(0);
+  // O uso segura do mesmo jeito.
+  g.touch();
+  expect(await g.blocked({ battery: false })).toBe("active");
+});
+
 test("o wait espera até poder andar, e o stop corta a espera", async () => {
   const c = clock();
   const slept: number[] = [];

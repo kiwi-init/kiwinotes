@@ -328,7 +328,8 @@ test("o índice do texto espera o portão da pessoa no Mac (spec #24228, T24286)
   let open!: () => void;
   const opened = new Promise<void>((r) => (open = r));
   let waits = 0;
-  const gate = { wait: async () => { waits++; await opened; } };
+  const seen: unknown[] = [];
+  const gate = { wait: async (_stop?: () => boolean, o?: unknown) => { waits++; seen.push(o); await opened; } };
   const r = await rig(20_000, false, { gate });
   const root = path.join(r.home, "Pasta portão");
   await mkdir(root, { recursive: true });
@@ -341,6 +342,8 @@ test("o índice do texto espera o portão da pessoa no Mac (spec #24228, T24286)
   await Bun.sleep(100);
   expect(waits).toBeGreaterThan(0);
   expect(done).toBe(false);
+  // A bateria não segura o índice do conteúdo, só o uso (lead #24453).
+  expect(seen.every((o) => (o as { battery?: boolean } | undefined)?.battery === false)).toBe(true);
   open();
   await synced;
   expect(done).toBe(true);

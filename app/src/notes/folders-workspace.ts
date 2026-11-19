@@ -255,11 +255,13 @@ export class NotesFolders {
       runner: this.ocrRunner,
       enabled: async () => (await settings.load()).ocr,
     });
+    const gate = this.options.gate;
     const text = createTextIndex({
       root,
       dir: internal ? path.join(this.options.dir, "text-index") : path.join(this.options.dir, "folders", key, "text-index"),
-      // O mesmo portão da busca pelo sentido (spec #24228, T24286): a 1ª passada espera a pessoa parar de usar o Mac.
-    }, undefined, this.options.gate);
+      // O portão da busca pelo sentido (spec #24228, T24286): a 1ª passada espera a pessoa parar de usar o Mac. A bateria,
+      // não: o índice do conteúdo é leve e segue nela com o teto de 25% (lead #24453).
+    }, undefined, gate ? { wait: (stop) => gate.wait(stop, { battery: false }) } : undefined);
     const exporter = new NoteExporter({ vault: notes });
     if (this.pdf) exporter.setPdf(this.pdf);
     const semantic = this.options.semantic
