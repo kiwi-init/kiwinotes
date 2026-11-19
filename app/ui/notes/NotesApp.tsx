@@ -701,8 +701,9 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   useEffect(
     () =>
       api.onAgentWrote?.((e) => {
+        // A nota anima no editor; o arquivo que abre fora dele (um .txt, uma planilha) mostra só o aviso no card.
         if (e.edits) kiwiWrites.current.add(e);
-        else setKiwiTouched(e.path);
+        setKiwiTouched(e.path);
       }),
     [api],
   );

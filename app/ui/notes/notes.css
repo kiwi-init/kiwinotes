@@ -1579,16 +1579,19 @@ button.kn-side-head:focus-visible {
   background: color-mix(in srgb, var(--kiwi-accent) 10%, transparent);
 }
 /* O aviso enquanto o Kiwi escreve: a nota é dele até terminar, ou até a pessoa clicar ou digitar. */
+/* Embaixo, no lugar do aviso com Desfazer: em cima, com a nota rolada, ele cobria o texto. */
 .kn-kiwi-notice {
-  position: sticky;
-  top: 8px;
-  z-index: 3;
+  position: fixed;
+  z-index: 14;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 6px;
   width: max-content;
-  margin: 0 auto 8px;
-  padding: 3px 10px 3px 4px;
+  max-width: calc(100% - 48px);
+  padding: 4px 12px 4px 5px;
   border-radius: 999px;
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--kiwi-accent) 45%, transparent);

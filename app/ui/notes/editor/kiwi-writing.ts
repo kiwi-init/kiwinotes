@@ -10,15 +10,11 @@
 
 import { Annotation, type ChangeSpec, EditorState, type Extension, RangeSet, StateEffect, StateField, Transaction } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
+import type { LiveEdit } from "../../../src/shared/live-edits.ts";
 import { lineChanges } from "../../../src/shared/merge3.ts";
 
 /** Um trecho trocado, em posições do texto de antes (o contrato do `agent.wrote`). */
-export interface KiwiEdit {
-  from: number;
-  to: number;
-  removed: string;
-  inserted: string;
-}
+export type KiwiEdit = LiveEdit;
 
 /** O ritmo da escrita (ms). */
 export const KIWI_PACE = {
