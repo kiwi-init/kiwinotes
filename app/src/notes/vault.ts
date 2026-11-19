@@ -965,11 +965,12 @@ export class Vault {
     if (from === to) return { path: to, updatedLinks: 0, skippedPaths: [] };
     // Num disco sem diferença de maiúscula, "a.pdf" → "A.pdf" é o mesmo arquivo: vale.
     if (from.toLowerCase() !== to.toLowerCase() && (await exists(toAbs))) throw new VaultError("E_EXISTS", `${to} already exists`);
-    // Do disco, como o renomear de nota (revisão #1397): o índice pode estar atrás.
-    await this.scan();
     // O que está dentro de um pacote (`.pages`, `.key`) é do app dono dele: um arquivo não entra lá, nem sumiria da
-    // árvore dentro do documento (T20517).
-    if (this.packageOf(parentOf(to))) throw new VaultError("E_BAD_ARGS", `${to} would be inside a document package`);
+    // árvore dentro do documento (T20517). Pelo índice e pelo disco, como as notas (T20554).
+    await this.refuseInPackage(to);
+    // Do disco, como o renomear de nota (revisão #1397): o índice pode estar atrás. Sem o scan inteiro (T20547, como o
+    // T20166 nas notas): as notas que entraram ou saíram vêm pelos nomes; as que mudaram, pelo `stat` lá embaixo.
+    await this.catchUp();
     const before = [...this.files.keys()];
     if (!before.includes(from)) before.push(from);
     const after = before.map((f) => (f === from ? to : f));
@@ -998,12 +999,21 @@ export class Vault {
     const fromKey = from.slice(from.lastIndexOf("/") + 1).normalize("NFC").toLowerCase();
     let updatedLinks = 0;
     const skippedPaths: string[] = [];
-    for (const e of [...this.notes.values()]) {
-      if (!looseDecode(e.content).normalize("NFC").toLowerCase().includes(fromKey)) continue;
-      const result = await this.refactorNote(e.meta.path, (disk) => rewriteFileReferences(disk, e.meta.path, from, to, resolveBefore, resolveAfter));
-      if (result.skipped) skippedPaths.push(e.meta.path);
+    const rewriteOne = async (p: string) => {
+      const result = await this.refactorNote(p, (disk) => rewriteFileReferences(disk, p, from, to, resolveBefore, resolveAfter));
+      if (result.skipped) skippedPaths.push(p);
       updatedLinks += result.count;
+    };
+    const discarded: Entry[] = [];
+    for (const e of [...this.notes.values()]) {
+      if (looseDecode(e.content).normalize("NFC").toLowerCase().includes(fromKey)) await rewriteOne(e.meta.path);
+      else discarded.push(e);
     }
+    // O filtro olha o índice: uma nota escrita por fora depois dele pode ter ganhado um link para o arquivo (o mesmo
+    // cuidado do rename de nota, #7980). As descartadas que mudaram no disco são conferidas como as outras.
+    const changed = await Promise.all(discarded.map((e) =>
+      stat(path.join(this.root, e.meta.path)).then((st) => st.mtimeMs !== e.mtimeMs || st.size !== e.meta.size, () => false)));
+    for (const [i, e] of discarded.entries()) if (changed[i]) await rewriteOne(e.meta.path);
     return { path: to, updatedLinks, skippedPaths };
   }
 
