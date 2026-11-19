@@ -19,7 +19,7 @@ import { untilSeen } from "./watch-wait.ts";
 import { tempDir } from "../../test/tmp.ts";
 
 const rigs: { root: string; folders: NotesFolders }[] = [];
-async function rig(limit = 20_000, watch = false) {
+async function rig(limit = 20_000, watch = false, extra: Partial<ConstructorParameters<typeof NotesFolders>[0]> = {}) {
   const root = await realpath(
     tempDir("kn-folders-"),
   );
@@ -45,6 +45,7 @@ async function rig(limit = 20_000, watch = false) {
     home,
     watch,
     limit,
+    ...extra,
   };
   const folders = new NotesFolders(options);
   rigs.push({ root, folders });
@@ -322,6 +323,28 @@ test("watcher reports only the current external root after switching", async () 
   );
   expect(events.some((e) => e.path === r.a)).toBe(false);
 }, 20_000);
+
+test("o índice do texto espera o portão da pessoa no Mac (spec #24228, T24286)", async () => {
+  let open!: () => void;
+  const opened = new Promise<void>((r) => (open = r));
+  let waits = 0;
+  const gate = { wait: async () => { waits++; await opened; } };
+  const r = await rig(20_000, false, { gate });
+  const root = path.join(r.home, "Pasta portão");
+  await mkdir(root, { recursive: true });
+  await writeFile(path.join(root, "lista.txt"), "acerola\n");
+  await r.folders.open(root);
+  const b = await r.folders.current();
+  let done = false;
+  const synced = b.text.sync(b.notes.otherFiles()).then(() => (done = true));
+  for (let i = 0; i < 50 && !waits; i++) await Bun.sleep(20);
+  await Bun.sleep(100);
+  expect(waits).toBeGreaterThan(0);
+  expect(done).toBe(false);
+  open();
+  await synced;
+  expect(done).toBe(true);
+});
 
 test("o índice do texto (T21240): fica nos dados do app, por pasta, e some quando a pasta sai das recentes", async () => {
   const r = await rig();

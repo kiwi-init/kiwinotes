@@ -258,7 +258,8 @@ export class NotesFolders {
     const text = createTextIndex({
       root,
       dir: internal ? path.join(this.options.dir, "text-index") : path.join(this.options.dir, "folders", key, "text-index"),
-    });
+      // O mesmo portão da busca pelo sentido (spec #24228, T24286): a 1ª passada espera a pessoa parar de usar o Mac.
+    }, undefined, this.options.gate);
     const exporter = new NoteExporter({ vault: notes });
     if (this.pdf) exporter.setPdf(this.pdf);
     const semantic = this.options.semantic
