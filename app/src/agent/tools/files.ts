@@ -161,7 +161,7 @@ function docLines(nodes: DocNode[]): string[] {
 }
 
 /** O texto de uma página do pdf, com a quebra de linha onde o pdf marca (ou onde a linha de base muda). */
-function pdfPageLines(items: { str?: string; hasEOL?: boolean; transform?: number[]; height?: number }[]): string[] {
+export function pdfPageLines(items: { str?: string; hasEOL?: boolean; transform?: number[]; height?: number }[]): string[] {
   let text = "";
   let lastY: number | null = null;
   let lastH = 0;
@@ -180,7 +180,7 @@ function pdfPageLines(items: { str?: string; hasEOL?: boolean; transform?: numbe
 }
 
 /** O PDF.js no main, sem worker: o do próprio pacote, importado aqui para o bundle levar junto. */
-async function pdfjs() {
+export async function pdfjs() {
   const [lib, worker] = await Promise.all([import("pdfjs-dist/legacy/build/pdf.mjs"), import("pdfjs-dist/legacy/build/pdf.worker.mjs")]);
   (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker ??= worker;
   return lib;
@@ -204,7 +204,7 @@ function zipFiles(bytes: Uint8Array): ZipEntry[] {
  * Os bytes de uma entrada, descompactados em pedaços e contados: passou de `cap`, para (o zip bomba, que declara um
  * tamanho e abre outro). O tamanho declarado não decide nada.
  */
-function zipExtract(bytes: Uint8Array, e: ZipEntry, cap: number): Uint8Array {
+export function zipExtract(bytes: Uint8Array, e: ZipEntry, cap: number): Uint8Array {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (e.offset + 30 > bytes.length || view.getUint32(e.offset, true) !== 0x04034b50) throw new FileReadError("E_BAD_FILE", "não é um zip que abre");
   const start = e.offset + 30 + view.getUint16(e.offset + 26, true) + view.getUint16(e.offset + 28, true);
@@ -242,7 +242,7 @@ function zipExtract(bytes: Uint8Array, e: ZipEntry, cap: number): Uint8Array {
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
 /** As entidades do XML e do HTML: as com nome mais comuns e as numéricas. */
-function decodeEntities(s: string): string {
+export function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (all, e: string) => {
     if (e[0] === "#") {
       const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
