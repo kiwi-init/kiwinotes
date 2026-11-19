@@ -1,5 +1,5 @@
-// Quanto o histórico custa em cada gravação (T22576, spec #21160): 20 gravações seguidas de uma planilha de uns 3,6 MB
-// e de um quadro branco, pelo `files.save` e pelo `notes.canvasSave` de verdade, num cofre num tmp. Conta quantas vezes
+// Quanto o histórico custa em cada gravação (T22576, T22706, spec #21160): 20 gravações seguidas de uma planilha de uns
+// 3,6 MB, de um quadro branco e de uma nota, pelo `files.save`, pelo `notes.canvasSave` e pelo `notes.save` de verdade, num cofre num tmp. Conta quantas vezes
 // a gravação leu o arquivo inteiro do disco antes de gravar, e mede quanto leva cada uma. Tudo inventado (as vendas de
 // uma loja de exemplo e um quadro de tarefas).
 //
@@ -116,6 +116,31 @@ try {
   console.log(
     `quadro de 300 cartões, ${SAVES} gravações: ${reads.canvas} leituras do quadro; a 1ª leu ${cper[0]}, as outras ${cper.slice(1).reduce((a, b) => a + b, 0)} no total; ` +
       `mediana ${median(cms.slice(1)).toFixed(1)} ms`,
+  );
+  // A nota (T22706): um diário de exemplo de uns 0,5 MB, pelo notes.save.
+  const diary = (edit: number) =>
+    "# Diário da loja\n\n" + Array.from({ length: 12_000 }, (_, i) => `- dia ${i}: ${i === edit ? "fechado para balanço" : `vendeu ${(i * 7) % 40} cafés e ${(i * 3) % 25} pães`}`).join("\n") + "\n";
+  writeFileSync(path.join(root, "Loja", "Diário.md"), diary(-1));
+  const getNote = vault.get.bind(vault);
+  let notes = 0;
+  vault.get = (async (...args: Parameters<typeof vault.get>) => {
+    notes++;
+    return getNote(...args);
+  }) as typeof vault.get;
+  let nv = (await getNote("Loja/Diário.md")).version;
+  const nms: number[] = [];
+  const nper: number[] = [];
+  for (let i = 0; i < SAVES; i++) {
+    const before = notes;
+    const t0 = performance.now();
+    const r = await call("notes.save", { path: "Loja/Diário.md", content: diary(i), baseVersion: nv });
+    nms.push(performance.now() - t0);
+    nper.push(notes - before);
+    nv = r.meta.version;
+  }
+  console.log(
+    `nota de ${(Buffer.byteLength(diary(0)) / 1024 / 1024).toFixed(1)} MB, ${SAVES} gravações: ${notes} leituras da nota; a 1ª leu ${nper[0]}, as outras ${nper.slice(1).reduce((a, b) => a + b, 0)} no total; ` +
+      `mediana ${median(nms.slice(1)).toFixed(1)} ms`,
   );
   vault.close?.();
   await versions.close();
