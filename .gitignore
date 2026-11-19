@@ -10,3 +10,5 @@ DerivedData/
 .env.*
 models/
 *.log
+# A fixture do .log da régua dos arquivos (T21236): o `arquivos.ts --write` gera, e o teste lê do repo.
+!app/test/regua/arquivos/estoque.log

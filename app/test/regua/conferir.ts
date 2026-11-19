@@ -22,7 +22,7 @@ import { imageInfo, imageProblem } from "../../ui/notes/files/imageInfo.ts";
 import { mediaType } from "../../ui/notes/files/media.ts";
 import { readWorkbook } from "../../ui/notes/files/sheet.ts";
 import { checkZip } from "../../ui/notes/files/zipSize.ts";
-import { csvGrande, esparso, jsonGrande, MARCA, PASTA, xlsxGrande } from "./arquivos.ts";
+import { ABA_LARGA, csvGrande, esparso, jsonGrande, MARCA, PASTA, TITULO_LONGO, xlsxGrande } from "./arquivos.ts";
 
 /** Abrir a fixture pequena: até 1,5 s (a do pdf inclui carregar o PDF.js). */
 export const ABRE_MS = 1_500;
@@ -39,6 +39,8 @@ export interface Familia {
   abrir(bytes: Uint8Array, nome: string): Promise<string | null>;
   /** O texto aberto tem a marca (as imagens sem texto e a mídia não). */
   temTexto: boolean;
+  /** O que mais tem de aparecer aberto: o título comprido, a aba de nome comprido (os casos difíceis do #21018). */
+  tambem?: string[];
   /** Um arquivo pesado mas abaixo do limite, que tem de abrir em `GRANDE_MS`. */
   pesado?: () => string | Uint8Array;
 }
@@ -80,12 +82,14 @@ export const FAMILIAS: Record<string, Familia> = {
     temTexto: true,
     abrir: async (b, nome) => JSON.stringify(await readDocument(nome, b, 100_000)),
   },
-  docx: { arquivo: "estoque.docx", como: "binario", temTexto: true, abrir: abrirDocx },
+  docx: { arquivo: "estoque.docx", como: "binario", temTexto: true, abrir: abrirDocx, tambem: [TITULO_LONGO] },
   xlsx: {
     arquivo: "estoque.xlsx",
     como: "binario",
     temTexto: true,
-    abrir: async (b) => readWorkbook(XLSX, b, ",").sheets.map((s) => tabela(s.rows)).join("\n"),
+    // A marca está só na 256ª coluna (IV) da aba larga: uma coluna cortada perde a marca.
+    abrir: async (b) => readWorkbook(XLSX, b, ",").sheets.map((s) => `${s.name}\n${tabela(s.rows)}`).join("\n"),
+    tambem: [ABA_LARGA, TITULO_LONGO],
     pesado: () => xlsxGrande(),
   },
   imagem: {
@@ -228,6 +232,8 @@ export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promis
       });
       if (aberto === null) return "não abriu";
       if (f.temTexto && !aberto.includes(MARCA)) return "abriu sem o texto de dentro";
+      const sem = (f.tambem ?? []).filter((t) => !aberto.includes(t));
+      if (sem.length) return `abriu sem: ${sem.map((t) => `"${t.slice(0, 30)}…"`).join(", ")}`;
       return ms > ABRE_MS ? `levou ${ms} ms (o máximo é ${ABRE_MS})` : null;
     } catch (e) {
       return `não abriu: ${motivo(e)}`;
@@ -368,10 +374,3 @@ export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promis
     }
   },
 };
-
-/** 11. Tudo local: roda as outras conferências do tipo com o `fetch` preso e conta os pedidos de rede. */
-export async function semRede(c: Cofre, tipo: string): Promise<string | null> {
-  const antes = c.rede;
-  for (const conferir of Object.values(CONFERIR)) await conferir!(c, tipo);
-  return c.rede === antes ? null : `${c.rede - antes} pedido(s) de rede`;
-}
