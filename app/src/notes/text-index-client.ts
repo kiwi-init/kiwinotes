@@ -47,9 +47,16 @@ export function textIndexWorkerScript(dir = import.meta.dir): string | null {
 }
 
 /** O índice no worker, ou no main se não houver worker (`KIWI_TEXT_INDEX_WORKER=0`, ou um build sem ele). */
-export function createTextIndex(o: WorkerOptions): TextIndexApi {
-  const script = process.env.KIWI_TEXT_INDEX_WORKER === "0" ? null : textIndexWorkerScript();
-  return script ? new TextIndexWorker(o, script) : new TextIndex(o);
+export function createTextIndex(o: WorkerOptions, dir = import.meta.dir): TextIndexApi {
+  if (process.env.KIWI_TEXT_INDEX_WORKER === "0") {
+    console.warn("[text-index] KIWI_TEXT_INDEX_WORKER=0: o índice roda na thread do main");
+    return new TextIndex(o);
+  }
+  const script = textIndexWorkerScript(dir);
+  if (script) return new TextIndexWorker(o, script);
+  // Um build sem o `workers/` volta ao problema do P0 #23988: que fique no log, não calado.
+  console.warn("[text-index] o worker do índice não está no app (falta workers/text-index-worker.js): o índice roda na thread do main");
+  return new TextIndex(o);
 }
 
 export class TextIndexWorker implements TextIndexApi {

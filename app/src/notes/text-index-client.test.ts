@@ -1,6 +1,6 @@
 // O índice do conteúdo num Worker (P0 #23988, 2ª metade), num cofre inventado num tmp.
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -113,5 +113,16 @@ describe("o índice num Worker (P0 #23988)", () => {
       else process.env.KIWI_TEXT_INDEX_WORKER = before;
     }
     expect(createTextIndex({ root: "/nao/existe", dir: "/nao/existe/idx" })).toBeInstanceOf(TextIndexWorker);
+  });
+
+  test("um build sem o workers/ roda no main e avisa no log (lead, #24141)", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const t = createTextIndex({ root: "/nao/existe", dir: "/nao/existe/idx" }, "/nao/existe/bun");
+      expect(t).toBeInstanceOf(TextIndex);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("workers/text-index-worker.js");
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
