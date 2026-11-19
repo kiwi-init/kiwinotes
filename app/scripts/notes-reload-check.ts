@@ -2,7 +2,7 @@
 // acompanham o que o engine corrige, venha de onde vier. Headless (WebKit), nada na tela; o cofre é inventado (#17952).
 //
 // - renomear uma nota, criar uma pasta, apagar e desfazer pela janela: nenhuma `notes.list` (o pedaço da lista vem no
-//   `notes.changed`, U2); renomear uma pasta: uma (o eco do watcher no engine, E0b);
+//   `notes.changed`, U2), nem renomear uma pasta (sem o eco do watcher, T20227);
 // - o agente (a capacidade direta no engine) renomeia uma nota fixada: as Fixadas mostram o nome novo, sem a janela
 //   fazer nada (o `settings.changed` traz as fixadas corrigidas);
 // - a rolagem da árvore fica onde estava depois de renomear uma pasta;
@@ -147,10 +147,9 @@ try {
     assert.ok(top > 0, "a árvore tem rolagem");
     const folderLists = await lists(() => rename(p, item("folder", "Área 4/Grupo 2"), "Grupo dois"));
     await p.waitForSelector(item("folder", "Área 4/Grupo dois"));
-    console.log(`renomear pasta: ${folderLists} notes.list; ${calls.slice(-12).join(" ")}`);
-    assert.ok(folderLists <= 2, `renomear pasta: ${folderLists} listas`);
+    assert.equal(folderLists, 0, "renomear pasta: nenhuma lista");
     assert.equal(await scrollTop(p), top, "a rolagem não pulou");
-    checks.push(`renomear uma pasta: ${folderLists} notes.list (eram 4; o que sobra é o eco do watcher no engine), e a rolagem fica em ${top}`);
+    checks.push(`renomear uma pasta: 0 notes.list (eram 4; o eco do watcher saiu na T20227), e a rolagem fica em ${top}`);
 
     // O agente renomeia uma nota fixada direto no engine: as Fixadas acompanham sem a janela fazer nada.
     await invoke("notes.rename", { path: "Projeto X/Plano.md", newPath: "Projeto X/Plano novo.md" });
