@@ -438,7 +438,24 @@ try {
       await p.waitForTimeout(200);
       const typed = (await p.evaluate(`(${para})(${JSON.stringify(target.text.slice(0, 14))}).textContent`)) as string;
       assert.equal(typed, `${target.text.slice(0, target.index)}§${target.text.slice(target.index)}`, "nota: com zoom, o clique pôs o cursor em outra letra");
-      report.push(`ok     Leia-me.md: parágrafo de ${lines0} linhas quebra de novo com 2×, a letra andou ${drift.toFixed(1)} px, sem rolar para o lado; o clique com zoom cai na letra certa`);
+      // O menu do botão direito com zoom (revisão do T22178): no clique, no tamanho normal, e dentro da janela.
+      await p.keyboard.press("Escape");
+      const spot = await letterAt(mid.x - 40, mid.y);
+      await p.mouse.click(spot.left + 1, spot.top + spot.h / 2, { button: "right" });
+      const menu = p.locator(".kn-menu").first();
+      await menu.waitFor({ timeout: 5000 });
+      const mb = (await menu.boundingBox())!;
+      const win = p.viewportSize()!;
+      // No clique; ou, sem lugar embaixo, preso ao pé da janela (8 px, como em 1×) e ainda cobrindo o clique.
+      const cy = spot.top + spot.h / 2, dx = Math.abs(mb.x - (spot.left + 1));
+      const atClick = Math.abs(mb.y - cy) <= 3, clamped = Math.abs(mb.y + mb.height - (win.height - 8)) <= 3 && mb.y <= cy;
+      assert.ok(dx <= 3 && (atClick || clamped), `nota: com zoom, o menu abriu em (${mb.x.toFixed(0)}, ${mb.y.toFixed(0)}), ${mb.height.toFixed(0)} px de altura, e o clique foi em (${(spot.left + 1).toFixed(0)}, ${cy.toFixed(0)})`);
+      assert.ok(mb.x >= 0 && mb.y >= 0 && mb.x + mb.width <= win.width && mb.y + mb.height <= win.height, `nota: com zoom, o menu passou da janela (${JSON.stringify(mb)})`);
+      const zoomed = (await menu.evaluate((el) => { let z = 1; for (let e: Element | null = el; e; e = e.parentElement) z *= parseFloat(getComputedStyle(e).zoom) || 1; return z; })) as number;
+      assert.equal(zoomed, 1, "nota: o menu herdou o zoom da nota");
+      await p.screenshot({ path: join(out, "nota-menu-zoom.png") });
+      await p.keyboard.press("Escape");
+      report.push(`ok     Leia-me.md: parágrafo de ${lines0} linhas quebra de novo com 2×, a letra andou ${drift.toFixed(1)} px, sem rolar para o lado; o clique com zoom cai na letra certa; o menu do botão direito abre no clique, sem o zoom`);
     } catch (e) {
       failed = true;
       report.push(`FALHOU Leia-me.md (parágrafos): ${(e as Error).message}`);

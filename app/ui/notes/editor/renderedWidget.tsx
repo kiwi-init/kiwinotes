@@ -24,6 +24,7 @@ import { indexTaskItems, markInlineImages } from "react-native-enriched-markdown
 import type { ASTNode } from "react-native-enriched-markdown/lib/typescript/src/web/types";
 
 import { externalUrl, openableUrl, parseLinks } from "../links.ts";
+import { cssZoom } from "../files/zoom.ts";
 import type { AttachmentFile, AttachmentSource } from "./attachments.ts";
 import { editorFocused, focusEditorNow, itemHasGap, type LinkResolver, linksChanged, listItemAtLine } from "./livePreview.ts";
 import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
@@ -918,8 +919,10 @@ function footnoteHover(actions: RenderedActions) {
         tip.setAttribute("role", "tooltip");
         const box = host.getBoundingClientRect();
         const at = el.getBoundingClientRect();
-        tip.style.top = `${Math.round(at.bottom - box.top + 6)}px`;
-        tip.style.left = `${Math.round(Math.max(0, Math.min(at.left - box.left - 12, box.width - 360)))}px`;
+        // Os retângulos são px da tela, e a dica fica dentro da nota, que pode ter o `zoom` do CSS (T22178): em px dela.
+        const z = cssZoom(host);
+        tip.style.top = `${Math.round((at.bottom - box.top) / z + 6)}px`;
+        tip.style.left = `${Math.round(Math.max(0, Math.min((at.left - box.left) / z - 12, box.width / z - 360)))}px`;
         host.appendChild(tip);
         this.tip = tip;
         this.anchor = el;

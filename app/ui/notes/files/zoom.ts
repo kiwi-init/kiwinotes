@@ -80,3 +80,10 @@ export function rememberZoom(path: string, zoom: number | null): void {
 export function forgetZooms(): void {
   remembered.clear();
 }
+
+/** O `zoom` do CSS que vale num elemento: o produto do dos ancestrais (T22178, a nota com a pinça). */
+export function cssZoom(el: Element | null): number {
+  let z = 1;
+  for (; el; el = el.parentElement) z *= parseFloat(getComputedStyle(el).zoom) || 1;
+  return z;
+}
