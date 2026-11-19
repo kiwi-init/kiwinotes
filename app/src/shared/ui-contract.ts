@@ -5,6 +5,7 @@ import type { AgentOnboarding } from "./agent-onboarding.ts";
 export type { AgentOnboarding } from "./agent-onboarding.ts";
 import type { AgentRoutine, AgentRoutines, CustomRoutineInput, RoutineKind } from "./agent-routines.ts";
 export type { AgentRoutine, AgentRoutines, CustomRoutine, CustomRoutineInput, RoutineDays, RoutineKind } from "./agent-routines.ts";
+export type { LiveEdit } from "./live-edits.ts";
 import type { LinkWarning, RefactorResult } from "../notes/refactor.ts";
 import type { SpellingResult } from "./spelling.ts";
 import type { IntroLayout } from "./intro-layout.ts";
@@ -22,6 +23,7 @@ import type { HomePending, HomeToday, HomeWeek } from "./home.ts";
 import type { AgentMeetingSettings, AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
+import type { LiveEdit } from "./live-edits.ts";
 import type { Backlink, CanvasFile, CanvasSaveResult, FileContent, FileSaveResult, FolderNode, ListingPatch, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
 } from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
@@ -249,7 +251,9 @@ export type { NoteModel };
 // 1.85.0 (T20249, spec #20118): o `listing` no `notes.changed`, o pedaço da lista que mudou. Só acréscimo.
 // 1.86.0 (T20796, spec #20780): o passo da primeira abertura: `firstRun` nas settings, `setup.status`, `setup.request`,
 //   `setup.done` e o evento `setup.changed`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.86.0";
+// 1.87.0 (T20868, spec #20843): o evento `agent.wrote`, o que uma escrita do agente mudou e onde, para a janela das
+//   Notas mostrar o Kiwi escrevendo. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.87.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -1291,6 +1295,17 @@ export interface UiEvents {
   "notes.changed": { paths: string[]; folderId?: string; listing?: ListingPatch | null };
   /** Arquivos que não são nota apareceram, mudaram ou sumiram, inclusive fora do app (1.19.0): a árvore lista de novo. */
   "files.changed": { paths: string[]; folderId?: string };
+  /**
+   * O Kiwi escreveu (1.87.0, spec #20843): sai no mesmo tick e logo antes do `notes.changed` (ou do `files.changed`, no
+   * `.txt`) da mesma escrita aceita; a janela deve aceitar também a outra ordem, pela `version`.
+   * - `edits`: posições no texto de antes (`baseVersion`, o arquivo inteiro, com o frontmatter), em ordem crescente e sem
+   *   sobrepor; `removed` é `antes.slice(from, to)`. `applyLiveEdits(antes, edits)` (`shared/live-edits.ts`) dá
+   *   exatamente o texto de `version`; se não der, recarregue como antes. `[]`: a escrita não mudou nada.
+   * - Sem `edits` (arquivo que não é nota, como o do `files_create`): só o aviso, sem a escrita letra a letra.
+   * - Cada chamada de ferramenta é um evento, na ordem em que o agente escreveu; as de um pedido têm o mesmo `turnId`, e
+   *   cada uma tem o `baseVersion` da anterior.
+   */
+  "agent.wrote": { path: string; folderId?: string; baseVersion?: string; version?: string; turnId?: string; edits?: LiveEdit[] };
   /** O hub aberto vai para uma seção (1.4.0, T2121): o menu da barra ou o atalho pediram. */
   "hub.navigate": { section: HubSection; path?: string };
   /** As atualizações mudaram (checando, baixando, pronta, a última checagem): a seção Sobre acompanha (1.6.0). */

@@ -13,6 +13,7 @@ import { parseLinks } from "../links.ts";
 import { embedLine } from "./attachments.ts";
 import { noteEmbedLine } from "./embed-line.ts";
 import { type Footnotes, footnoteLabel, footnotesOf, superscript } from "./footnotes.ts";
+import { kiwiRawRanges } from "./kiwi-writing.ts";
 import { DICTATION_CAPTION } from "./livePreview.ts";
 
 /** Os blocos de cima da árvore que a lib desenha. Tabela tem o widget editável dela (`tablePreview`). */
@@ -102,6 +103,8 @@ const selectionLines = (state: EditorState) => lineRanges(state, state.selection
 export function renderedBlocks(state: EditorState, focused: boolean, tree: Tree = fullTree(state), only?: readonly (readonly [number, number])[]): RenderedBlock[] {
   const out: RenderedBlock[] = [];
   const near = only ? lineRanges(state, only) : null;
+  // O trecho em que o Kiwi escreve fica cru, com o cursor e o realce dele (T20869).
+  const kiwi = lineRanges(state, kiwiRawRanges(state));
   let covered = -1;
   for (let n = tree.topNode.firstChild; n; n = n.nextSibling) {
     // A linha recuada de uma definição de uma palavra só, que o parser lê como bloco de código: já foi com a nota.
@@ -110,6 +113,7 @@ export function renderedBlocks(state: EditorState, focused: boolean, tree: Tree 
     // `[^1]: Palavra` (uma palavra só, ou um endereço) é um link de referência para o parser: é a nota de rodapé (T6377).
     const footnoteDef = n.name === "LinkReference" && /^ {0,3}\[\^/.test(state.doc.sliceString(n.from, n.from + 6));
     if (!RENDERED.has(n.name) && !footnoteDef) continue;
+    if (kiwi.length && crosses(n, kiwi)) continue;
     const from = state.doc.lineAt(n.from).from;
     let to = state.doc.lineAt(n.to).to;
     if (footnoteDef) {

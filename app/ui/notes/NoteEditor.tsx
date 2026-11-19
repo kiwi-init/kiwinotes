@@ -22,6 +22,7 @@ import { focusCompartment, focusExtension, typewriterCompartment, typewriterExte
 import { titleCompartment, titleHeading } from "./editor/titleHeading.ts";
 import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
 } from "./editor/index.ts";
+import { type KiwiEdit, type KiwiWriteHandle, playKiwiWrite, runningKiwiWrite } from "./editor/kiwi-writing.ts";
 
 const externalUpdates = new WeakSet<EditorView>();
 /** O Sumário se refaz depois disto sem tecla (T7876). */
@@ -98,10 +99,11 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   const extensions = useRef(
     editorExtensions(
       {
-        onChange: (d) => {
+        onChange: (d, kiwi) => {
           clearTimeout(docTimer.current);
           docTimer.current = setTimeout(() => setEditorDoc(d), OUTLINE_AFTER_MS);
-          if (!view.current || !externalUpdates.has(view.current))
+          // A escrita do Kiwi (T20869) já está no disco: não volta como digitação.
+          if (!kiwi && (!view.current || !externalUpdates.has(view.current)))
             latest.current.onChange(d);
         },
         onOpenLink: (t) => latest.current.onOpenLink(t),
@@ -152,6 +154,8 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
     setEditorDoc(doc);
     const v = view.current;
     if (!v) return;
+    // Outra nota (ou a mesma recarregada): a escrita do Kiwi que corria acaba antes, e o estado novo começa limpo.
+    runningKiwiWrite(v)?.skip();
     v.setState(stateFor(doc, withModes(extensions.current)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey]);
@@ -330,4 +334,15 @@ export function updateEditorDocument(next: string): void {
   } finally {
     externalUpdates.delete(view);
   }
+}
+
+/**
+ * A escrita do Kiwi na nota aberta (T20869): `edits` no texto que o editor tem agora, `final` o do disco. `null` sem
+ * editor, ou quando o editor não tem o texto de antes (a janela recarrega como antes).
+ */
+export function kiwiWriteInEditor(before: string, edits: readonly KiwiEdit[], final: string, reduced: boolean): KiwiWriteHandle | null {
+  const dom = document.querySelector<HTMLElement>(".kn-note-editor .cm-editor");
+  const view = dom ? EditorView.findFromDOM(dom) : null;
+  if (!view || view.state.doc.toString() !== before) return null;
+  return playKiwiWrite(view, edits, final, { reduced });
 }

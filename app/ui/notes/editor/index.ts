@@ -40,6 +40,7 @@ import { highlightSyntax, HIGHLIGHT_BACKGROUND } from "./highlight.ts";
 import { spellingAttributes, disableSpellcheck, SPELLING_EXCLUDED } from "./spelling.ts";
 import { clearInline, insertLink, mapLines, setHeading, toggleInline, toggleList, toggleTask } from "./format.ts";
 import { cursorAfterTitle } from "./titleHeading.ts";
+import { kiwiWriting, kiwiWritingExtension } from "./kiwi-writing.ts";
 
 export interface LinkTarget {
   /** O título da nota (o que aparece na lista). */
@@ -53,7 +54,8 @@ export interface LinkTarget {
 export interface EditorOptions {
   parent: HTMLElement;
   doc: string;
-  onChange(doc: string): void;
+  /** `kiwi`: a mudança é a escrita do Kiwi (T20869), que já está no disco; não é digitação da pessoa. */
+  onChange(doc: string, kiwi?: boolean): void;
   /** Clique num `[[link]]` (⌘-clique com o cursor dentro dele). */
   onOpenLink(target: string): void;
   /** ⌘-clique num link do Markdown que pode abrir fora (já passou pelo `openableUrl`). */
@@ -442,11 +444,12 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     formatBar,
     tableKeys,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+    kiwiWritingExtension(),
     EditorView.lineWrapping,
     placeholder("Escreva, ou segure Fn e dite"),
     theme,
     EditorView.updateListener.of((u) => {
-      if (u.docChanged) opts.onChange(u.state.doc.toString());
+      if (u.docChanged) opts.onChange(u.state.doc.toString(), u.transactions.every((tr) => !tr.docChanged || tr.annotation(kiwiWriting) === true));
     }),
     EditorView.domEventHandlers({
       // O ⇧ no ⌘V: cola o texto puro, sem converter o HTML (como o "Colar sem formatação" do menu).

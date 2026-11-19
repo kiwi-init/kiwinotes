@@ -1,7 +1,7 @@
 // As capacidades `notes.*` do contrato (A1, T1316, src/shared/ui-contract.ts), do lado da janela Notas (T1317), mais as
 // de pastas do contrato 1.7.0 (T2468): `folders.*`, `notes.move|duplicate|restore|reveal`, o `ctime` e o `pinned`.
 
-import type { UiCapabilities } from "../../src/shared/ui-contract.ts";
+import type { UiCapabilities, UiEvents } from "../../src/shared/ui-contract.ts";
 
 /** Um projeto, como o `projects.list` devolve. */
 export type ProjectView = UiCapabilities["projects.list"]["result"]["projects"][number];
@@ -61,7 +61,16 @@ export interface TreePrefs {
   dailyFolder: string;
   /** A largura da coluna da nota (T5299); `null` num engine de antes do 1.24.0, que não a guarda. */
   noteWidth: number | null;
+  /** A paleta do Kiwi Cat (`kiwicat.cor`): a cor do cursor do Kiwi na nota (T20869). */
+  catColor?: string;
 }
+
+/**
+ * Uma escrita do Kiwi aceita no disco (o `agent.wrote`, T20868): `edits` em posições do texto de antes (o arquivo
+ * inteiro, com o frontmatter), em ordem crescente e sem sobrepor; aplicados à `baseVersion`, dão a `version`. Um arquivo
+ * que não é nota vem sem `edits`.
+ */
+export type AgentWrote = UiEvents["agent.wrote"];
 
 type Result<C extends keyof UiCapabilities> = Promise<UiCapabilities[C]["result"]>;
 
@@ -114,6 +123,11 @@ export interface NotesApi {
    * (spec #20118): o estado de agora desses caminhos, para trocar só esse pedaço da lista; sem ele, a lista inteira.
    */
   onChanged(fn: (paths: string[], listing?: ListingPatch | null) => void): () => void;
+  /**
+   * O Kiwi escreveu num arquivo (spec #20843, `agent.wrote`): o que mudou e onde, para a janela mostrar a escrita em vez
+   * de recarregar. Num engine sem o evento, não chama nunca.
+   */
+  onAgentWrote?(fn: (e: AgentWrote) => void): () => void;
   /** As de pastas (T2468). Num engine sem elas, a janela esconde o que depende delas (`has`). */
   folders?: FoldersApi;
   /**
