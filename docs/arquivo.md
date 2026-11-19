@@ -37,3 +37,5 @@ O gato novo trocou o motor do Kiwi Cat. O de antes está inteiro no commit `c305
 | `docs/meetings/` | `docs/specs/reunioes/` |
 | `docs/notes-folders.md` e `docs/diagnostics.md` | `docs/specs/pasta-das-notas.md` e `docs/specs/log-e-diagnostico.md` |
 | `docs/licenses/` | `licenses/`, na raiz, ao lado do `NOTICE` |
+
+Ensaio do T21438, rodada 1: só texto (não entra).
