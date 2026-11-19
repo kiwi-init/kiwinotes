@@ -95,6 +95,23 @@ try {
     const partial = await typedNow();
     assert.ok(partial > 10 && partial < 120, `depois do reveal, um pedaço: ${partial}`);
     await p.screenshot({ path: join(out, "depois-da-intro-escrevendo.png") });
+    // Escondido no meio (revisão do T23565): o balão pausa e volta de onde parou, sem apagar nem pular.
+    await p.evaluate(() => {
+      window.__kiwiHeld = true;
+    });
+    const paused = await typedNow();
+    assert.ok(paused >= partial, `ao esconder, o balão voltou: ${partial} → ${paused}`);
+    await Bun.sleep(1500);
+    const still = await typedNow();
+    assert.ok(still >= paused && still - paused <= 8, `escondido, o balão andou: ${paused} → ${still}`);
+    await p.evaluate(() => {
+      window.__kiwiHeld = false;
+    });
+    await Bun.sleep(150);
+    const back = await typedNow();
+    assert.ok(back >= still && back - still <= 12, `ao voltar, o balão apagou ou pulou: ${still} → ${back}`);
+    await Bun.sleep(600);
+    assert.ok((await typedNow()) > back, "ao voltar, o balão não seguiu");
     await p.waitForSelector('.kn-welcome-bubble[data-typed="true"]', { timeout: 15000 });
     await h.close();
   }

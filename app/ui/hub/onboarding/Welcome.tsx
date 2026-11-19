@@ -39,27 +39,34 @@ const systemReduced = () => typeof matchMedia === "function" && matchMedia("(pre
  * O hub ainda não está na tela (T23565): segurado para a intro (`__kiwiHeld`, até o `__kiwiReveal`) ou com a janela
  * escondida. Na abertura do zero, a boas-vindas monta atrás da intro.
  */
+/** O maior passo de um quadro: um intervalo maior é a janela parada (escondida), e conta como pausa. */
+const FRAME_MAX = 100;
+
 const offScreen = () => window.__kiwiHeld === true || document.visibilityState === "hidden";
 
 /**
  * O balão que se escreve: um clique nele mostra o texto inteiro. O leitor de tela lê o texto inteiro de uma vez. O
- * relógio começa no primeiro quadro com o hub na tela (T23565): antes, ele começava ao montar, atrás da intro, e o rAF
- * parado na janela escondida pulava direto para o texto inteiro quando o hub aparecia.
+ * relógio só anda com o hub na tela (T23565): antes, ele começava ao montar, atrás da intro, e o rAF parado na janela
+ * escondida pulava direto para o texto inteiro quando o hub aparecia.
  */
 function TypedBubble({ reduced, onTyped }: { reduced: boolean; onTyped: () => void }) {
   const [shown, setShown] = useState(() => typedLength(WELCOME_TEXT, 0, reduced));
   const typed = shown >= WELCOME_TEXT.length;
   useEffect(() => {
     if (typed) return onTyped();
-    let start: number | null = null;
+    // O tempo escrito soma só os quadros com o hub na tela, e no máximo `FRAME_MAX` por quadro: escondido no meio
+    // (⌘H, outro Space), o balão pausa e volta de onde parou, sem apagar nem pular (revisão do T23565).
+    let elapsed = 0;
+    let last: number | null = null;
     let frame = requestAnimationFrame(function tick(now) {
       if (offScreen()) {
-        start = null;
+        last = null;
         frame = requestAnimationFrame(tick);
         return;
       }
-      start ??= now;
-      const n = typedLength(WELCOME_TEXT, now - start, reduced);
+      elapsed += last === null ? 0 : Math.min(now - last, FRAME_MAX);
+      last = now;
+      const n = typedLength(WELCOME_TEXT, elapsed, reduced);
       setShown(n);
       if (n < WELCOME_TEXT.length) frame = requestAnimationFrame(tick);
     });
