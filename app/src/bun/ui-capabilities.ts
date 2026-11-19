@@ -547,15 +547,15 @@ export function uiCapabilities(deps: CapabilityDeps,
   };
   /**
    * Se a gravação precisa ler o conteúdo de antes (T22576): só com o histórico ligado, e para a cópia do agente
-   * (`snapshot`) ou para a 1ª versão de um arquivo que ainda não tem nenhuma. Um caminho que nem é de arquivo lê como
-   * antes, e o save diz o erro.
+   * (`snapshot`) ou para a 1ª versão de um arquivo que ainda não tem nenhuma. `key` dá a chave do histórico: `filePath`
+   * para os arquivos e o quadro, `notePath` para a nota (T22706). Um caminho inválido lê como antes, e o save diz o erro.
    */
-  const needsBefore = async (p: unknown, snapshot: boolean): Promise<boolean> => {
+  const needsBefore = async (p: unknown, snapshot: boolean, key: (p: unknown) => string = filePath): Promise<boolean> => {
     if (!deps.versions) return false;
     if (snapshot) return true;
     let rel: string;
     try {
-      rel = filePath(p);
+      rel = key(p);
     } catch {
       return true;
     }
@@ -988,8 +988,11 @@ export function uiCapabilities(deps: CapabilityDeps,
       ]);
       if (a.snapshot !== undefined && typeof a.snapshot !== "boolean") throw bad("snapshot must be true or false");
       const v = await vault();
-      // O texto de antes, para a 1ª versão de uma nota sem histórico (T2680).
-      const current = deps.versions ? await v.get(a.path).catch(() => undefined) : undefined;
+      // O texto de antes, para a 1ª versão de uma nota sem histórico (T2680) e para o `snapshot`. Só nesses dois casos
+      // ele é lido (T22706): com histórico, o `record` não o usa.
+      const current = (await needsBefore(a.path, a.snapshot === true, notePath))
+        ? await v.get(a.path).catch(() => undefined)
+        : undefined;
       const before = current?.content;
       if (a.baseContent !== undefined && typeof a.baseContent !== "string")
         throw bad("baseContent must be a string");

@@ -311,4 +311,36 @@ describe("gravar não lê o arquivo inteiro à toa (T22576)", () => {
     expect(await save("três")).toBe(1);
     expect(await save("quatro")).toBe(1);
   });
+
+  test("com histórico, o notes.save não relê a nota; a 1ª versão e o snapshot ainda leem o de antes (T22706)", async () => {
+    const { call, vault, root, advance } = setup();
+    writeFileSync(path.join(root, "Loja", "Compras.md"), "# Compras\n\ncafé\n");
+    const p = "Loja/Compras.md";
+    const save = async (content: string, extra: object = {}) => {
+      const baseVersion = (await call("notes.get", { path: p })).version;
+      const n = { get: 0 };
+      const get = vault.get.bind(vault);
+      vault.get = ((...a: Parameters<typeof vault.get>) => (n.get++, get(...a))) as typeof vault.get;
+      try {
+        await call("notes.save", { path: p, content, baseVersion, ...extra });
+      } finally {
+        vault.get = get;
+      }
+      return n.get;
+    };
+    const list = async () => (await call("notes.versions", { path: p })).versions as { id: string }[];
+    const text = async (id: string) => (await call("notes.version", { path: p, id })).content as string;
+    // A 1ª: sem histórico, lê o de antes (e o save confere a dele), e a versão original fica.
+    expect(await save("# Compras\n\ncafé\nleite\n")).toBe(2);
+    expect(await text((await list())[1]!.id)).toBe("# Compras\n\ncafé\n");
+    // Com histórico: só a leitura do save (a da versão de base).
+    advance(300_000);
+    expect(await save("# Compras\n\ncafé\nleite\npão\n")).toBe(1);
+    advance(10_000);
+    expect(await save("# Compras\n\ncafé\nleite\npão\nchá\n")).toBe(1);
+    // A cópia do agente (`snapshot`) ainda lê, e guarda o de antes na hora.
+    advance(10_000);
+    expect(await save("# Compras\n\nsó água\n", { snapshot: true })).toBe(2);
+    expect(await Promise.all((await list()).map((v) => text(v.id)))).toContain("# Compras\n\ncafé\nleite\npão\nchá\n");
+  });
 });
