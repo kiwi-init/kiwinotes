@@ -315,9 +315,9 @@ export const KIWI_TOOL_DEF = {
   description: [
     "As notas, pastas, projetos, reuniões e arquivos da pessoa no Kiwi Notes. Uma ação por chamada:",
     'fazer "achar" (opcoes.como: nome, o padrão, acha pelo nome falado e devolve o cartão; texto, busca no texto; pasta; reunioes; projetos).',
-    'fazer "ler" (nota, o padrão, com opcoes.secao; sumario; reuniao; arquivo, com opcoes.parte; celulas, as células de uma planilha para mudar; projeto). A leitura devolve a versao.',
+    'fazer "ler" (nota, o padrão, com opcoes.secao; sumario; reuniao; arquivo, com opcoes.parte; celulas, de uma planilha; projeto). A leitura devolve a versao.',
     'fazer "escrever" (acrescentar, o padrão; trecho, troca opcoes.de pelo texto; trocar; mover; renomear; juntar; criar, alvo Pasta/Título; diario). Só a diferença, com a versao do cartão. Nada apaga uma nota; o antes fica nas Versões.',
-    'fazer "propor" e as ações organizar, arquivo e planilha (mudar as células de um xlsx ou csv) trazem as instruções no pedido, quando ele precisa. fazer "lembrar": um fato sobre a pessoa (opcoes.como esquecer, para tirar).',
+    'fazer "propor" e as ações organizar, arquivo e planilha (xlsx, csv) trazem as instruções no pedido, quando ele precisa. fazer "lembrar": um fato sobre a pessoa (opcoes.como esquecer, para tirar).',
     "O alvo aceita o caminho ou o nome como a pessoa fala. Nos textos do Kiwi, kiwi ler/sumario quer dizer fazer ler, opcoes.como sumario.",
   ].join(" "),
   inputSchema: {
