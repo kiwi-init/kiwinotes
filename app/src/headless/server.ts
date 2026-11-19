@@ -306,8 +306,20 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.recoveries.onChanged(homeChanged),
     meetings?.onChange(homeChanged) ?? (() => {}),
     () => home.stop(),
-    stores.folders.onNotesChanged((folder, paths, listing) => event("notes.changed", { paths, folderId:folder.id, listing: listing() })),
-    stores.folders.onFilesChanged((folder, paths) => event("files.changed", { paths, folderId:folder.id })),
+    stores.folders.onNotesChanged((folder, paths, listing) => {
+      const payload = { paths, folderId: folder.id, listing: listing() };
+      // O Kiwi escrevendo ao vivo (spec #20843): o `agent.wrote` da mesma escrita vai antes, como no app.
+      const versions = new Map((payload.listing?.notes ?? []).map((n) => [n.path, n.version]));
+      for (const wrote of stores.agent.liveWrites.take(paths, folder.id, (p) => versions.get(p))) event("agent.wrote", wrote);
+      event("notes.changed", payload);
+    }),
+    stores.folders.onFilesChanged((folder, paths) => {
+      for (const wrote of stores.agent.liveWrites.take(paths, folder.id)) event("agent.wrote", wrote);
+      event("files.changed", { paths, folderId: folder.id });
+    }),
+    stores.agent.liveWrites.onAnnounce((wrote) => {
+      void stores.folders.current().then((f) => event("agent.wrote", { ...wrote, folderId: f.ref.id }), () => {});
+    }),
     stores.folders.onChange(view=>event("notes.folderChanged",view)),
     stores.history.onAdded((entry) => event("history.added", entry)),
     stores.recoveries.onChanged(()=>event("history.changed",{})),

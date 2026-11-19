@@ -1558,7 +1558,7 @@ async function commit(
   const copy = await journal.keep(n.path, n.content);
   let r: Awaited<ReturnType<VaultWriter["save"]>>;
   try {
-    r = await writer.save(n.path, next, n.version);
+    r = await writer.save(n.path, next, n.version, n.content);
   } catch (e) {
     await journal.drop(copy);
     throw e;

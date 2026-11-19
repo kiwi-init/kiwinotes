@@ -26,8 +26,11 @@ export interface WriterNote {
 
 export interface VaultWriter {
   get(path: string): Promise<WriterNote>;
-  /** Grava se ninguém mudou a nota desde `baseVersion`, guardando antes o texto de agora nas Versões. */
-  save(path: string, content: string, baseVersion: string): Promise<{ saved: true; path: string; version: string } | { saved: false }>;
+  /**
+   * Grava se ninguém mudou a nota desde `baseVersion`, guardando antes o texto de agora nas Versões. O `before` (o texto
+   * lido nessa versão) é para o Kiwi ao vivo (spec #20843): o `liveWriter` diz à janela onde a escrita mudou.
+   */
+  save(path: string, content: string, baseVersion: string, before?: string): Promise<{ saved: true; path: string; version: string } | { saved: false }>;
   /** Uma nota nova; com o título já usado na pasta, ela ganha um número ("Título 2"). */
   create(folder: string, title: string, content: string): Promise<WriterNote>;
   /** O id da pasta de notas aberta, ou null num app que não troca de pasta. */

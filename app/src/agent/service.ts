@@ -138,6 +138,7 @@ import type { MemorySink, ProposalDraft, ProposalSink, SummaryDraft } from "./to
 import { DEFAULT_AGENT_MEETING_SETTINGS, effortOf, isAgentChoice, sanitizeAgentMeetingSettings, sanitizeEffortByModel, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
 import type { Notices } from "../bun/notices.ts";
 import { WaitingNotice, type NoticeState } from "./notice.ts";
+import { LiveWrites, liveWriter } from "./live-write.ts";
 
 /** O prazo da dúvida nos roteiros do WebKit (`KIWI_DOUBT_TIMEOUT_MS`), só com o agente falso (`KIWI_FAKE_AGENT=1`). */
 function testDoubtTimeout(): number | undefined {
@@ -412,7 +413,7 @@ export class AgentService {
   constructor(private readonly d: AgentServiceDeps) {
     this.name = d.name ?? "Claude Code";
     this.reader = d.reader ?? null;
-    this.writer = d.writer ?? null;
+    this.writer = d.writer ? this.live(d.writer) : null;
     this.activity = new AgentActivity({ dir: path.join(agentDir(d.data), "activity") });
     this.answers = new DoubtAnswers(agentDir(d.data));
     this.usage = new UsageStore(agentDir(d.data), d.now);
@@ -653,7 +654,18 @@ export class AgentService {
    * abertura do programa do agente.
    */
   useWriter(writer: VaultWriter): void {
-    this.writer = writer;
+    this.writer = this.live(writer);
+  }
+
+  /**
+   * O Kiwi escrevendo ao vivo (spec #20843): as escritas do agente que a janela das Notas anima. Quem manda o
+   * `notes.changed` e o `files.changed` às janelas chama `liveWrites.take` antes, e manda o `agent.wrote` primeiro.
+   */
+  readonly liveWrites = new LiveWrites();
+
+  /** O escritor que avisa o `liveWrites`, com o pedido de agora. */
+  private live(writer: VaultWriter): VaultWriter {
+    return liveWriter(writer, this.liveWrites, () => this.turn?.id);
   }
 
   /** As notas que o desfazer usa (spec #9353): ler, voltar o texto e mandar para a Lixeira, pelas capacidades das Notas. */
@@ -1477,7 +1489,7 @@ export class AgentService {
           if (mainHasMeeting(n.content, notePath)) break;
           const next = mainNoteWithMeeting(n.content, notePath, meeting, fields);
           const copy = await this.activity.keep(request, n.content);
-          const r = await writer.save(n.path, next, n.version).catch(async (e) => {
+          const r = await writer.save(n.path, next, n.version, n.content).catch(async (e) => {
             await this.activity.drop(copy);
             throw e;
           });
@@ -1543,7 +1555,7 @@ export class AgentService {
       const next = noteWithReferences(n.content, r.items).content;
       if (next === n.content) break;
       const copy = await this.activity.keep(request, n.content);
-      const w = await writer.save(n.path, next, n.version).catch(async (e) => {
+      const w = await writer.save(n.path, next, n.version, n.content).catch(async (e) => {
         await this.activity.drop(copy);
         throw e;
       });
@@ -1580,7 +1592,7 @@ export class AgentService {
       const next = mainNoteWithSummary(n.content, section);
       if (next === n.content) break;
       const copy = await this.activity.keep(request, n.content);
-      const r = await writer.save(n.path, next, n.version).catch(async (e) => {
+      const r = await writer.save(n.path, next, n.version, n.content).catch(async (e) => {
         await this.activity.drop(copy);
         throw e;
       });

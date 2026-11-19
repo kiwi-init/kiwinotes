@@ -24,6 +24,7 @@ import { EMPTY_READER, readerFromCapabilities, type VaultReader } from "./tools/
 import { writerFromCapabilities, type VaultWriter } from "./tools/writer.ts";
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { Vault } from "../notes/vault.ts";
+import { applyLiveEdits } from "../shared/live-edits.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { AgentActivity } from "./activity.ts";
 import type { UndoNotes } from "./undo.ts";
@@ -2712,6 +2713,147 @@ describe("as notas .txt pelo agente falso (spec #13379)", () => {
       expect(read!.texto).toBe("mudar o legado até março\n");
     } finally {
       vault.close();
+    }
+  });
+});
+
+describe("o Kiwi escrevendo ao vivo: o agent.wrote (spec #20843, T20868)", () => {
+  /** Um cofre de verdade num tmp, com o agente falso escrevendo pelas capacidades, e os avisos na ordem em que saem. */
+  function live(files: Record<string, string>) {
+    const root = path.join(tmp(), "KiwiNotes");
+    for (const [rel, content] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      writeFileSync(path.join(root, rel), content);
+    }
+    const vault = new Vault({ root, debounceMs: 20, trash: async () => {} });
+    const caps = uiCapabilities({
+      dictionary: { load: async () => [], save: async (t) => t },
+      snippets: { load: async () => [], save: async (s) => s },
+      history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
+      dictationNotes: { toNew: async () => { throw new Error("not used"); }, append: async () => { throw new Error("not used"); } },
+      settings: { load: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }), save: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }) },
+      clipboardWrite: () => {},
+      notes: vault,
+    });
+    const m = make({ reader: readerFromCapabilities(caps as never), writer: writerFromCapabilities(caps as never) });
+    // Como o `windows.ts`: o `agent.wrote` da escrita sai antes do `notes.changed` (ou do `files.changed`) dela.
+    const events: { name: string; payload: any }[] = [];
+    const offs = [
+      vault.onChanged((paths) => {
+        for (const w of m.svc.liveWrites.take(paths, "pasta")) events.push({ name: "agent.wrote", payload: w });
+        events.push({ name: "notes.changed", payload: { paths } });
+      }),
+      vault.onOtherFiles((paths) => {
+        for (const w of m.svc.liveWrites.take(paths, "pasta")) events.push({ name: "agent.wrote", payload: w });
+        events.push({ name: "files.changed", payload: { paths } });
+      }),
+      m.svc.liveWrites.onAnnounce((w) => events.push({ name: "agent.wrote", payload: w })),
+    ];
+    const close = () => {
+      for (const off of offs) off();
+      vault.close();
+    };
+    return { root, vault, m, events, close };
+  }
+
+  const wrote = (events: { name: string; payload: any }[]) => events.filter((e) => e.name === "agent.wrote").map((e) => e.payload);
+
+  test("acrescentar e trocar um trecho: um aviso por escrita, antes do notes.changed, e os edits dão o texto do disco", async () => {
+    const before = "# Projeto X\n\nA Ana cuida do prazo.\n\n## Tarefas\n- revisar o exemplo\n";
+    const l = live({ "Projeto X.md": before });
+    try {
+      await readyNow(l.m);
+      const turn = await askAndWait(
+        l.m,
+        'arrume a nota\n/tool notes_edit {"path":"Projeto X.md","old":"A Ana cuida","text":"A Bia cuida"}\n/tool notes_append {"path":"Projeto X.md","section":"Tarefas","text":"- marcar a reunião"}',
+      );
+      expect(turn.at(-1)!.type).toBe("done");
+      const ws = wrote(l.events);
+      expect(ws).toHaveLength(2);
+      // Cada aviso vem logo antes do notes.changed da mesma escrita.
+      for (const w of ws) {
+        const i = l.events.findIndex((e) => e.payload === w);
+        expect(l.events[i + 1]).toMatchObject({ name: "notes.changed", payload: { paths: ["Projeto X.md"] } });
+      }
+      const id = turn[0]!.id;
+      expect(ws.map((w) => w.turnId)).toEqual([id, id]);
+      expect(ws.map((w) => w.folderId)).toEqual(["pasta", "pasta"]);
+      // A troca: só os caracteres que mudaram ("Ana" → "Bia"); o acréscimo: só o texto novo. Encadeados pela versão.
+      expect(ws[0].edits).toEqual([{ from: 15, to: 17, removed: "An", inserted: "Bi" }]);
+      expect(ws[1].baseVersion).toBe(ws[0].version);
+      expect(ws[1].edits).toHaveLength(1);
+      expect(ws[1].edits[0].removed).toBe("");
+      expect(ws[1].edits[0].inserted).toContain("- marcar a reunião");
+      // A garantia: os edits sobre o texto de antes dão exatamente o disco, e a versão é a dele.
+      const disk = readFileSync(path.join(l.root, "Projeto X.md"), "utf8");
+      const mid = applyLiveEdits(before, ws[0].edits)!;
+      expect(versionOf(before)).toBe(ws[0].baseVersion);
+      expect(versionOf(mid)).toBe(ws[0].version);
+      expect(applyLiveEdits(mid, ws[1].edits)).toBe(disk);
+      expect(versionOf(disk)).toBe(ws[1].version);
+    } finally {
+      l.close();
+    }
+  });
+
+  test("a nota inteira trocada: vários edits pequenos, que dão o texto do disco", async () => {
+    const before = "# Plano\n\nlinha um\nlinha dois\nlinha três\nlinha quatro\n";
+    const l = live({ "Plano.md": before });
+    try {
+      await readyNow(l.m);
+      const version = versionOf(before);
+      const text = "# Plano\n\nlinha UM\nlinha dois\nlinha três\nlinha QUATRO\n";
+      const turn = await askAndWait(l.m, `/tool notes_write ${JSON.stringify({ path: "Plano.md", text, version })}`);
+      expect(turn.at(-1)!.type).toBe("done");
+      const [w] = wrote(l.events);
+      expect(w.edits.map((e: { removed: string; inserted: string }) => [e.removed, e.inserted])).toEqual([["um", "UM"], ["quatro", "QUATRO"]]);
+      expect(applyLiveEdits(before, w.edits)).toBe(readFileSync(path.join(l.root, "Plano.md"), "utf8"));
+    } finally {
+      l.close();
+    }
+  });
+
+  test("o .txt leva os edits, antes do files.changed dele", async () => {
+    const before = "lista do exemplo\n- pão\n";
+    const l = live({ "lista.txt": before });
+    try {
+      await readyNow(l.m);
+      expect((await askAndWait(l.m, '/tool notes_append {"path":"lista.txt","text":"- café"}')).at(-1)!.type).toBe("done");
+      const [w] = wrote(l.events);
+      const i = l.events.findIndex((e) => e.payload === w);
+      expect(l.events[i + 1]).toMatchObject({ name: "files.changed", payload: { paths: ["lista.txt"] } });
+      expect(applyLiveEdits(before, w.edits)).toBe(readFileSync(path.join(l.root, "lista.txt"), "utf8"));
+    } finally {
+      l.close();
+    }
+  });
+
+  test("um arquivo que não é nota: só o caminho, sem edits", async () => {
+    const l = live({ "Leia.md": "# Leia\n" });
+    try {
+      await readyNow(l.m);
+      const turn = await askAndWait(l.m, `/tool files_create ${JSON.stringify({ formato: "csv", nome: "notas", conteudo: { tabela: [["nome", "nota"], ["Ana", "10"]] } })}`);
+      expect(turn.at(-1)!.type).toBe("done");
+      const [w] = wrote(l.events);
+      expect(w.path).toBe("notas.csv");
+      expect(w.edits).toBeUndefined();
+      expect(w.turnId).toBe(turn[0]!.id);
+    } finally {
+      l.close();
+    }
+  });
+
+  test("a nota que mudou no meio: a escrita é recusada e nenhum aviso sai", async () => {
+    const before = "# Ideias\n\nexemplo\n";
+    const l = live({ "Ideias.md": before });
+    try {
+      await readyNow(l.m);
+      const turn = await askAndWait(l.m, `/tool notes_write ${JSON.stringify({ path: "Ideias.md", text: "outra", version: "0000000000000000" })}`);
+      expect(turn.at(-1)!.type).toBe("done");
+      expect(wrote(l.events)).toEqual([]);
+      expect(readFileSync(path.join(l.root, "Ideias.md"), "utf8")).toBe(before);
+    } finally {
+      l.close();
     }
   });
 });
