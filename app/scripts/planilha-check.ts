@@ -232,6 +232,8 @@ try {
         await scrollTo(p, 0, top);
         steps.push(performance.now() - s);
       }
+      // A grade que edita tem 50 linhas vazias depois dos dados (T21109): a última com dados fica um pouco acima do fim.
+      await p.locator(".kn-grid").evaluate((el) => el.scrollBy(0, -50 * 30 - 30));
       await p.waitForSelector(".kn-grid-row[aria-rowindex='100001'] .kn-grid-n:text-is('100001')", { timeout: 5000 });
       assert.ok((await p.locator(".kn-grid-row").count()) < 80, "só as linhas da tela");
       assert.deepEqual(await cutCells(p), [], "no fim (pedido 100000), nada cortado abaixo do máximo");

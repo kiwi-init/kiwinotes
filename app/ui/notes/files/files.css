@@ -743,3 +743,79 @@
 .kn-file-media[data-kind="audio"] .kn-file-media-player {
   width: min(560px, 100%);
 }
+
+/* A grade que edita (T21109): a área selecionada, a célula aberta para digitar, a fórmula que o Kiwi não refaz e o ⌘F. */
+/* Na área, só o fundo; a moldura fica na célula ativa, como no Excel. */
+.kn-grid-cell[data-area] {
+  background: color-mix(in srgb, var(--accent, Highlight) 10%, var(--bg, Canvas));
+}
+
+.kn-grid-cell[data-area]:not([data-active]) {
+  box-shadow: none;
+}
+
+.kn-grid-cell[data-editing] {
+  padding: 0;
+  overflow: visible;
+  z-index: 2;
+}
+
+.kn-grid-editor {
+  box-sizing: border-box;
+  min-width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0 10px;
+  border: 2px solid var(--accent, Highlight);
+  border-radius: 0;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  outline: none;
+  background: var(--bg, Canvas);
+  color: var(--text);
+  font: inherit;
+  line-height: 26px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* O canto marcado, como o Excel marca uma célula com aviso. */
+.kn-grid-cell[data-stale]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-style: solid;
+  border-width: 0 7px 7px 0;
+  border-color: transparent var(--warn, #d08a1f) transparent transparent;
+}
+
+.kn-grid-stale-note {
+  color: var(--text-2);
+}
+
+.kn-grid-find {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-left: 1px solid var(--border, var(--surface-2));
+}
+
+.kn-grid-find input {
+  width: 180px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border, var(--surface-2));
+  border-radius: 6px;
+  background: var(--bg, Canvas);
+  color: var(--text);
+  font: inherit;
+}
+
+.kn-grid-find-count {
+  min-width: 48px;
+  color: var(--text-3);
+  font-size: var(--t-meta, 12px);
+  font-variant-numeric: tabular-nums;
+}
