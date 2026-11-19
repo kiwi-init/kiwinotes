@@ -211,3 +211,14 @@ describe("mover um arquivo para uma pasta que ainda não existe (T20516)", () =>
     expect([...v.list().folders].sort()).toEqual([...fresh.list().folders].sort());
   });
 });
+
+describe("um arquivo não entra num pacote (T20517)", () => {
+  test("mover um arquivo para dentro de um .key é recusado, e nada muda", async () => {
+    const { v, root } = await vault({ "docs/exemplo.pdf": "pdf", "docs/Plano.key/Index.zip": "zip" });
+    expect(await code(v.renameFile("docs/exemplo.pdf", "docs/Plano.key/exemplo.pdf"))).toBe("E_BAD_ARGS");
+    expect(await code(v.renameFile("docs/exemplo.pdf", "docs/Plano.key/Data/exemplo.pdf"))).toBe("E_BAD_ARGS");
+    expect(existsSync(path.join(root, "docs/exemplo.pdf"))).toBe(true);
+    expect(existsSync(path.join(root, "docs/Plano.key/Data"))).toBe(false);
+    expect((v.list().files ?? []).map((f) => f.path).sort()).toEqual(["docs/Plano.key", "docs/exemplo.pdf"]);
+  });
+});
