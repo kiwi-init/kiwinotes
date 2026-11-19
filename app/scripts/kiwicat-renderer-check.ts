@@ -149,18 +149,31 @@ try {
     const slept = await frames(s.page);
     await s.page.waitForTimeout(1000);
     const sleptAfter = await frames(s.page);
+    // A cor e o fundo novos, descansando: um quadro cada, e o laço segue parado.
+    await s.page.evaluate(() => (window as any).kiwiCat.update({ cor: "kiwi-neon" }));
+    await s.page.waitForTimeout(300);
+    const recolored = await frames(s.page);
+    await s.page.evaluate(() => (window as any).kiwiCat.setBackground("light"));
+    await s.page.waitForTimeout(300);
+    const rethemed = await frames(s.page);
+    await s.page.waitForTimeout(800);
+    const repaintRest = await frames(s.page);
+    const restingBefore = await s.page.evaluate(() => (window as any).kiwiCat.stats.resting as boolean);
     await s.page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await s.page.waitForTimeout(500);
     const focused = await frames(s.page);
     const resting = await s.page.evaluate(() => (window as any).kiwiCat.stats.resting as boolean);
-    report.rest = { idle: idleAfter - idle, woke: woke - idleAfter, blurred: blurredAfter - blurred, slept: slept - blurredAfter, sleptRest: sleptAfter - slept, focused: focused - sleptAfter, resting, errors: s.errors };
+    report.rest = { idle: idleAfter - idle, woke: woke - idleAfter, blurred: blurredAfter - blurred, slept: slept - blurredAfter, sleptRest: sleptAfter - slept, recolor: recolored - sleptAfter, retheme: rethemed - recolored, repaintRest: repaintRest - rethemed, restingBefore, focused: focused - repaintRest, resting, errors: s.errors };
     check(idleAfter === idle, `em foco e parado, desenhou ${idleAfter - idle} quadros no descanso`);
     check(woke - idleAfter >= 3, `o mouse não acordou o gato (${woke - idleAfter} quadros)`);
     check(blurredAfter === blurred, `fora de foco, desenhou ${blurredAfter - blurred} quadros`);
     const wakeFrames = REST_WAKE_S * QUIET_FPS;
     check(slept - blurredAfter >= wakeFrames * 0.5 && slept - blurredAfter <= wakeFrames * 2, `a troca de estado no descanso desenhou ${slept - blurredAfter} quadros, esperado perto de ${wakeFrames}`);
     check(sleptAfter === slept, `depois da troca, o descanso voltou e desenhou ${sleptAfter - slept} quadros`);
-    check(focused - sleptAfter >= 3 && !resting, `o foco não acordou o gato (${focused - sleptAfter} quadros)`);
+    check(recolored - sleptAfter === 1, `descansando, a cor nova pintou ${recolored - sleptAfter} quadros, esperado 1`);
+    check(rethemed - recolored === 1, `descansando, o fundo novo pintou ${rethemed - recolored} quadros, esperado 1`);
+    check(repaintRest === rethemed && restingBefore, `depois da cor e do fundo, o descanso não voltou (${repaintRest - rethemed} quadros)`);
+    check(focused - repaintRest >= 3 && !resting, `o foco não acordou o gato (${focused - repaintRest} quadros)`);
     check(s.errors.length === 0, `descanso: ${s.errors.join("; ")}`);
     await s.close();
   }

@@ -417,7 +417,8 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
     setBackground(value: SymbolBackground) {
       if (disposed || value === background) return;
       background = value;
-      if (!stats.hidden && (stats.reduced || options.mode === "capture")) paint(stats.reduced ? still() : frame);
+      // Parado (reduzir movimento, a prova, o descanso), o laço não pinta: um quadro agora, na tinta nova.
+      if (!stats.hidden && (stats.reduced || stats.resting || options.mode === "capture")) paint(stats.reduced ? still() : frame);
     },
     /** O estado de hoje que o gato mostra agora (dos 8). */
     get visualState(): FogState { return visual.state; },
@@ -437,8 +438,8 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
       stats.reduced = stillMode();
       if (before !== visual.state) awakeUntil = performance.now() + REST_WAKE_S * 1000;
       if (before !== visual.state || wasReduced !== stats.reduced) { if (stats.resting) previousStamp = performance.now(); restart(); }
-      // A paleta nova: animando, sai no próximo quadro; parado (reduzir movimento ou a prova), um quadro agora.
-      else if (inputs.cor !== corBefore && !stats.hidden && (stats.reduced || options.mode === "capture")) paint(stats.reduced ? still() : frame);
+      // A paleta nova: animando, sai no próximo quadro; parado (reduzir movimento, a prova, o descanso), um quadro agora.
+      else if (inputs.cor !== corBefore && !stats.hidden && (stats.reduced || stats.resting || options.mode === "capture")) paint(stats.reduced ? still() : frame);
     },
     /** Só no `mode: "capture"`: leva o gato até `seconds` e desenha. */
     capture(seconds: number) {
