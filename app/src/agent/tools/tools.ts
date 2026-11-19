@@ -18,7 +18,7 @@ import { splitMeetingNote, transcriptSection, isMeetingNote } from "../../shared
 import { closest, folderNames, nearSections, noteCard, noteNamed, noteNames } from "./find.ts";
 import { markdownStructure, headingFor, type NoteHeading } from "../../shared/markdown-structure.ts";
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
-import { isTextNote, searchFileNames, type VaultReader } from "./reader.ts";
+import { hasSections, isTextFile, searchFileNames, textFormat, type VaultReader } from "./reader.ts";
 import type { VaultFile } from "../../notes/vault.ts";
 import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument, splitZipPath } from "./files.ts";
 import { buildFile, CREATE_FORMATS, type CreateContent, type CreateFormat, type DocBlock } from "./files-create.ts";
@@ -172,7 +172,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     name: "notes_search",
     title: "Procurar nas notas",
     description:
-      "Procura nas notas do Kiwi (.md e .txt) pelas palavras e, se a busca pelo sentido estiver ligada, pelo assunto. Devolve o caminho, o título e um trecho de cada nota achada. Acha também os outros arquivos da pasta (pdf, planilha, docx, zip…) pelo nome, em `arquivos`: o texto deles se lê com files_read. Use antes de ler, para achar o que precisa sem ler tudo. Aceita \"frases\", tag:x, path:pasta e -palavra.",
+      "Procura nas notas do Kiwi (.md e .txt) e nos arquivos de texto (código, json, yaml, log) pelas palavras e, se a busca pelo sentido estiver ligada, pelo assunto. Devolve o caminho, o título e um trecho de cada nota achada. Acha também os outros arquivos da pasta (pdf, planilha, docx, zip…) pelo nome, em `arquivos`: o texto deles se lê com files_read. Use antes de ler, para achar o que precisa sem ler tudo. Aceita \"frases\", tag:x, path:pasta e -palavra.",
     inputSchema: {
       type: "object",
       properties: {
@@ -213,7 +213,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "notes_list",
     title: "Listar uma pasta",
-    description: `Tudo o que há numa pasta do Kiwi (só o primeiro nível): as pastas, as notas (.md e .txt) e, em \`arquivos\`, todo outro arquivo (pdf, planilha, docx, pptx, zip…), com o tipo, o tamanho e a última mudança. Um arquivo com leitura "files_read" se lê pelo files_read; "sem leitura" o Kiwi não sabe ler. Até ${LIST_PAGE} entradas por vez. A pasta se acha pelo nome, sem diferenciar maiúscula, acento, espaço, - e _ ("Legacy PR" acha legacy-pr).`,
+    description: `Tudo o que há numa pasta do Kiwi (só o primeiro nível): as pastas, as notas (.md e .txt), os arquivos de texto (código, json, yaml, log: a nota da lista com o formato, que se lê com notes_read e se muda com notes_edit, notes_append e notes_write, sem section) e, em \`arquivos\`, todo outro arquivo (pdf, planilha, docx, pptx, zip…), com o tipo, o tamanho e a última mudança. Um arquivo com leitura "files_read" se lê pelo files_read; "sem leitura" o Kiwi não sabe ler. Até ${LIST_PAGE} entradas por vez. A pasta se acha pelo nome, sem diferenciar maiúscula, acento, espaço, - e _ ("Legacy PR" acha legacy-pr).`,
     inputSchema: {
       type: "object",
       properties: {
@@ -268,7 +268,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "files_read",
     title: "Ler um arquivo do cofre",
-    description: `Lê um arquivo do cofre (${FILE_FORMATS.join(", ")}) como texto: a planilha vira uma tabela por aba, com o cabeçalho; o docx, o texto com os títulos; o pdf, o texto de cada página; o pptx, o texto de cada slide; o html, o texto sem as tags; o json e o xml, o texto. O zip devolve a lista do que há nele; um arquivo de dentro se lê pelo caminho do zip com o de dentro (ex.: Projetos/fotos.zip/dentro/tabela.csv). Devolve o sumário (as abas, as páginas, os slides, as linhas), o índice das partes e uma parte de cada vez (a 1ª, sem parte). Para ler o resto, peça a parte pelo número. Até 20 MB. Para uma nota (.md ou .txt do cofre), use notes_read.`,
+    description: `Lê um arquivo do cofre (${FILE_FORMATS.join(", ")}) como texto: a planilha vira uma tabela por aba, com o cabeçalho; o docx, o texto com os títulos; o pdf, o texto de cada página; o pptx, o texto de cada slide; o html, o texto sem as tags; o json e o xml, o texto. O zip devolve a lista do que há nele; um arquivo de dentro se lê pelo caminho do zip com o de dentro (ex.: Projetos/fotos.zip/dentro/tabela.csv). Devolve o sumário (as abas, as páginas, os slides, as linhas), o índice das partes e uma parte de cada vez (a 1ª, sem parte). Para ler o resto, peça a parte pelo número. Até 20 MB. Para uma nota (.md ou .txt do cofre) ou um arquivo de texto (código, yaml, log), use notes_read.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -315,7 +315,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "notes_write",
     title: "Trocar o texto de uma nota",
-    description: `Troca o texto de uma seção, ou da nota inteira. Mande a versao do notes_read: se a nota mudou depois, nada é escrito e você lê de novo. Com section, troca só o que está abaixo do título. Sem section, o texto vira a nota inteira, com o frontmatter. Até ${WRITE_MAX_CHARS} caracteres: para mais, troque por seção. O texto de antes fica nas Versões (num .txt, no registro do [Desfazer]). Num .txt, o Kiwi pergunta antes à pessoa; com o não, nada muda, e você sugere na resposta um .md organizado ao lado.`,
+    description: `Troca o texto de uma seção, ou da nota inteira. Mande a versao do notes_read: se a nota mudou depois, nada é escrito e você lê de novo. Com section, troca só o que está abaixo do título. Sem section, o texto vira a nota inteira, com o frontmatter. Até ${WRITE_MAX_CHARS} caracteres: para mais, troque por seção. O texto de antes fica nas Versões (num .txt ou num arquivo de texto, no registro do [Desfazer]). Num .txt, o Kiwi pergunta antes à pessoa; com o não, nada muda, e você sugere na resposta um .md organizado ao lado.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -931,6 +931,15 @@ function nearLines(text: string, want: string): string[] {
  * senão, uma linha em branco separa do próximo título.
  */
 function appendTo(base: string, text: string, last: boolean): string {
+  const joined = appendLines(base, text, last);
+  // O fim de linha do arquivo (spec #21158): um `.log` do Windows segue em `\r\n`. O texto de antes fica como estava, e
+  // o que entra depois dele usa o mesmo fim de linha.
+  if (!/\r\n/.test(base)) return joined;
+  const keep = trimEndNewlines(base).length;
+  return joined.slice(0, keep) + joined.slice(keep).replace(/\r?\n/g, "\r\n");
+}
+
+function appendLines(base: string, text: string, last: boolean): string {
   const core = trimEndNewlines(base);
   const added = trimEndNewlines(text);
   // Uma 1ª linha só de `=` ou de `-` (um separador `---`) colada abaixo de um parágrafo o transformaria num título
@@ -1001,6 +1010,21 @@ export function folderNamed(folders: readonly string[], raw: string): string {
   if (found.length > 1) throw new ToolError("E_AMBIGUOUS", `há ${found.length} pastas chamadas ${want}; diga qual: ${found.slice(0, 20).join(", ")}`);
   const near = key ? folders.filter((f) => folderKey(f.split("/").pop()!).includes(key)).slice(0, 10) : [];
   throw new ToolError("E_NOT_FOUND", `a pasta ${want} não existe${near.length ? `; as parecidas: ${near.join(", ")}` : ""}`);
+}
+
+/**
+ * O `.txt` que o Kiwi pergunta antes de reescrever (spec #13379): ele costuma ser a anotação solta da pessoa. O código,
+ * o json e os outros textos (spec #21158) seguem a permissão da nota, sem a pergunta.
+ */
+const isTxt = (path: string) => /\.txt$/i.test(path);
+
+/**
+ * O que é só de Markdown num arquivo de código (spec #21158): o erro claro, antes de qualquer escrita. Um `#` no `.py`
+ * é comentário, e a "seção" dele trocaria o arquivo no lugar errado.
+ */
+function onlyMarkdown(path: string, what: string): void {
+  if (!hasSections(path))
+    throw new ToolError("E_BAD_ARGS", `${what} é só de nota (.md): ${path} é um arquivo .${textFormat(path)}. Nada foi escrito. Troque um trecho com notes_edit (sem section), acrescente no fim com notes_append, ou mande o arquivo inteiro com notes_write (sem section).`);
 }
 
 /** As respostas da pergunta do `.txt` neste pedido: a pessoa responde uma vez por arquivo. */
@@ -1159,7 +1183,7 @@ export async function noteAt(reader: VaultReader, raw: string): Promise<Awaited<
   } catch (e) {
     // Um nome sem a extensão chega como `E_BAD_ARGS` ("path must name a .md note"): também vai pelo nome.
     const code = (e as { code?: unknown })?.code;
-    if (code !== "E_NOT_FOUND" && !(code === "E_BAD_ARGS" && !/\.(md|txt)$/i.test(raw.trim()))) throw e;
+    if (code !== "E_NOT_FOUND" && !(code === "E_BAD_ARGS" && !/\.md$/i.test(raw.trim()) && !isTextFile(raw.trim()))) throw e;
     const r = noteNamed((await reader.list()).notes, raw);
     if ("note" in r) return reader.get(r.note.path);
     if ("ambiguous" in r)
@@ -1229,6 +1253,7 @@ async function run(
     case "notes_outline": {
       const a = args(raw, ["path"]);
       const n = await noteAt(reader, str(a, "path", true)!);
+      onlyMarkdown(n.path, "notes_outline");
       // Os títulos e os tamanhos do texto que o agente vê.
       const content = await seen(n.path, n.content);
       const headings = markdownStructure(content).headings;
@@ -1258,12 +1283,13 @@ async function run(
       const content = await seen(n.path, n.content);
       const max = economy ? ECONOMY_READ_MAX_CHARS : READ_MAX_CHARS;
       if (section !== undefined && section.trim()) {
+        onlyMarkdown(n.path, "section");
         const s = sectionOf(content, section);
         if (!s) throw noSection(n.path, content, section);
         return { value: { path: n.path, titulo: n.title, ...versao, secao: s.titulo, ...chunk(s.texto, offset, max) }, target: `${n.path} › ${s.titulo}` };
       }
       // Modo econômico (spec #11084): sem seção, o sumário no lugar da nota longa, e o caminho para ler o resto.
-      const headings = economy && offset === 0 && content.length > max ? markdownStructure(content).headings : [];
+      const headings = economy && offset === 0 && content.length > max && hasSections(n.path) ? markdownStructure(content).headings : [];
       if (headings.length) {
         const secoes = headings.slice(0, OUTLINE_MAX).map((h) => ({ nivel: h.level, titulo: h.title }));
         const aviso = "Modo econômico: a nota é longa, então vai o sumário. Há mais: peça uma seção com section, ou o texto em pedaços com offset.";
@@ -1278,7 +1304,10 @@ async function run(
       // Um arquivo de dentro de um zip (T17600): o disco lê o zip, e o readDocument abre o de dentro.
       const inZip = splitZipPath(path);
       if (!inZip && /\.md$/i.test(path)) throw new ToolError("E_BAD_ARGS", `${path} é uma nota: leia com \`notes_read\``);
-      if (!fileFormat(path)) throw new ToolError("E_BAD_ARGS", `o \`files_read\` lê só ${FILE_FORMATS.join(", ")}`);
+      if (!fileFormat(path)) {
+        if (!inZip && isTextFile(path)) throw new ToolError("E_BAD_ARGS", `${path} é um arquivo de texto: leia com \`notes_read\` e mude com notes_edit`);
+        throw new ToolError("E_BAD_ARGS", `o \`files_read\` lê só ${FILE_FORMATS.join(", ")}`);
+      }
       const f = await reader.file(inZip ? inZip.zip : path);
       if ("tooLarge" in f || f.size > FILES_READ_MAX_BYTES)
         throw new ToolError("E_TOO_LARGE", `${path} tem ${Math.round(f.size / 1024 / 1024)} MB, e o agente lê arquivos de até ${FILES_READ_MAX_BYTES / 1024 / 1024} MB`);
@@ -1423,7 +1452,7 @@ async function run(
         value: {
           pasta: folder,
           pastas,
-          notas: page.map((n) => ({ path: n.path, titulo: n.title, caracteres: n.size, mudou: n.mtime, ...(isTextNote(n.path) ? { formato: "txt" } : {}) })),
+          notas: page.map((n) => ({ path: n.path, titulo: n.title, caracteres: n.size, mudou: n.mtime, ...(isTextFile(n.path) ? { formato: textFormat(n.path) } : {}) })),
           ...(files.length ? { arquivos: filePage.map(fileCard) } : {}),
           total,
           ...(more ? { proximoOffset: offset + LIST_PAGE } : {}),
@@ -1610,6 +1639,7 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
       for (let tries = 0; ; tries++) {
         const n = await writer.get(path);
         writable(n);
+        if (sentSection) onlyMarkdown(n.path, "section");
         if (version !== undefined && version !== n.version) throw changed(n.path);
         // Os marcadores voltam ao original (no texto e no nome da seção) antes de conferir e gravar.
         const text = restore(guard, n.path, sent);
@@ -1656,8 +1686,9 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
       const sentSection = str(a, "section", false, 500)?.trim() || undefined;
       const n = await writer.get(path);
       writable(n);
+      if (sentSection) onlyMarkdown(n.path, "section");
       if (version !== n.version) throw changed(n.path);
-      if (isTextNote(n.path)) await mayRewriteText(n.path, decider);
+      if (isTxt(n.path)) await mayRewriteText(n.path, decider);
       // Os marcadores voltam ao original (no texto e no nome da seção) antes de conferir e gravar.
       const text = restore(guard, n.path, sent);
       capped(text);
@@ -1706,9 +1737,10 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
       const version = str(a, "version", false, 200);
       const n = await writer.get(path);
       writable(n);
+      if (sentRef !== undefined) onlyMarkdown(n.path, "section");
       if (version !== undefined && version !== n.version) throw changed(n.path);
       // Num .txt, o trecho pode ser o arquivo inteiro: pergunta antes, como a troca (spec #13379, revisão do T14650).
-      if (isTextNote(n.path)) await mayRewriteText(n.path, decider);
+      if (isTxt(n.path)) await mayRewriteText(n.path, decider);
       // Os marcadores voltam ao original antes de procurar e de gravar: o trecho que o agente viu é o da nota.
       const old = restore(guard, n.path, sentOld);
       const text = restore(guard, n.path, sentText);
@@ -1747,8 +1779,9 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
       const version = str(a, "version", true, 200)!;
       const n = await writer.get(path);
       writable(n);
+      onlyMarkdown(n.path, name);
       if (version !== n.version) throw changed(n.path);
-      if (isTextNote(n.path)) await mayRewriteText(n.path, decider);
+      if (isTxt(n.path)) await mayRewriteText(n.path, decider);
       const c = n.content;
       const at = (r: number | string) => sectionAt(n.path, c, restoreRef(guard, n.path, r));
       const s = at(ref);
