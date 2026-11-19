@@ -41,9 +41,15 @@ import { folderOf, linkTextFor, noteName, plainContext } from "./links.ts";
 import { errorCode } from "./errors.ts";
 import { linkSafeName, makeFileResolver, type Resolver } from "../../src/shared/wikilinks.ts";
 import { focusEditor, insertIntoEditor,
+  kiwiWriteInEditor,
   updateEditorDocument,
   NoteEditor,
 } from "./NoteEditor.tsx";
+import { KiwiWrites, kiwiPlan, reducedMotion } from "./kiwiWrite.ts";
+import { KiwiNotice } from "./KiwiNotice.tsx";
+import { setKiwiFace } from "./editor/kiwi-writing.ts";
+import { kiwiFaceElement } from "./editor/kiwi-face.ts";
+import { catPalette } from "../../src/shared/kiwicat-colors.ts";
 import { fillTemplate } from "../../src/shared/templates.ts";
 import { Palette } from "./Palette.tsx";
 import { type SideRoot, type SideTarget, Sidebar, sideKey, whereLabel } from "./Sidebar.tsx";
@@ -288,6 +294,11 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const clearNewProperty = useCallback(() => setNewProperty(null), []);
   const version = useRef("");
   const baseContent = useRef("");
+  /** As escritas do Kiwi esperando a recarga da nota (T20869), e se uma está na tela agora (o aviso). */
+  const kiwiWrites = useRef(new KiwiWrites());
+  const [kiwiWriting, setKiwiWriting] = useState(false);
+  /** O arquivo que não é nota que o Kiwi acabou de mudar: o aviso no cartão, por alguns segundos. */
+  const [kiwiTouched, setKiwiTouched] = useState<string | null>(null);
   const current = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Um `[[relatorio.pdf]]` acha o arquivo do vault (T7616): o link não fica de quebrado, e seguir abre o arquivo.
@@ -414,6 +425,27 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     },
     [api, drafts],
   );
+
+  /**
+   * A escrita do Kiwi na nota aberta (T20869): em vez de recarregar, o editor mostra o cursor dele escrevendo, e no fim
+   * tem o texto do disco. `false` quando não dá para animar (a janela recarrega como antes, pelo `show`).
+   */
+  const showKiwiWrite = useCallback((n: Note): boolean => {
+    const plan = kiwiPlan({ content: baseContent.current, version: version.current }, n, kiwiWrites.current.take(n.path, n.version));
+    if (!plan) return false;
+    const handle = kiwiWriteInEditor(plan.before, plan.edits, plan.final, reducedMotion());
+    if (!handle) return false;
+    // A nota é a do disco a partir daqui (o save seguinte parte desta versão); o editor chega nela pela animação.
+    version.current = n.version;
+    baseContent.current = n.content;
+    pending.current = null;
+    setNote(n);
+    setBody(plan.final);
+    setWords(wordCount(plan.final));
+    setKiwiWriting(true);
+    void handle.done.then(() => setKiwiWriting(false));
+    return true;
+  }, []);
 
   /**
    * Um texto juntado (T5454, ou a escrita da reunião) passa a ser o do editor, sobre a nota de agora no disco: a base
@@ -664,6 +696,24 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api]);
 
+  // O Kiwi escreveu (T20869): chega logo antes do `notes.changed`, e a recarga da nota decide se anima. Arquivo que não
+  // é nota vem sem trechos: o aviso no cartão, se ele está aberto.
+  useEffect(
+    () =>
+      api.onAgentWrote?.((e) => {
+        if (e.edits) kiwiWrites.current.add(e);
+        else setKiwiTouched(e.path);
+      }),
+    [api],
+  );
+  useEffect(() => {
+    if (!kiwiTouched) return;
+    const t = setTimeout(() => setKiwiTouched(null), 4000);
+    return () => clearTimeout(t);
+  }, [kiwiTouched]);
+  // O rostinho do cursor do Kiwi na cor escolhida nos Ajustes.
+  useEffect(() => setKiwiFace(() => kiwiFaceElement(prefs.catColor)), [prefs.catColor]);
+
   // Mudou no disco (pelo app ou fora dele, no Obsidian): a lista, os links e os backlinks se refazem. A nota aberta só
   // recarrega se não tem nada pendente; com edição pendente, o próximo save mostra o conflito.
   useEffect(
@@ -710,6 +760,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
               frontmatter.current +
               (pending.current ?? splitFrontmatter(baseContent.current).body);
             if (pending.current === null || undecided.current) {
+              if (pending.current === null && !undecided.current && showKiwiWrite(n)) return;
               if (pending.current === null) show(n, true);
               return;
             }
@@ -1757,7 +1808,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         />
       </TreePopover>
       {/* A largura da nota vale também para o .txt aberto (spec #13382): o texto quebra na mesma coluna. */}
-      <main className="kn-center" style={{ "--note-width": `${dragWidth ?? prefs.noteWidth ?? NOTE_WIDTH.default}px` } as CSSProperties}>
+      <main className="kn-center" style={{ "--note-width": `${dragWidth ?? prefs.noteWidth ?? NOTE_WIDTH.default}px`, "--kiwi-accent": catPalette(prefs.catColor).accentColor } as CSSProperties}>
         {view === "canvas" && board && api.canvas ? (
           <CanvasView
             key={board}
@@ -1775,6 +1826,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             onError={(text) => say(text)}
           />
         ) : view === "file" && fileOpen && api.files?.read ? (
+          <>
+          {kiwiTouched === fileOpen ? <KiwiNotice cor={prefs.catColor} text="O Kiwi atualizou este arquivo" /> : null}
           <FileView
             key={fileOpen}
             files={api.files as FilesApi}
@@ -1785,6 +1838,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             onReveal={folders ? (p) => void folders.reveal(p).catch(failed_("mostrar no Finder")) : undefined}
             stat={statFile}
           />
+          </>
         ) : view === "trash" && api.extras ? (
           <TrashView
             extras={api.extras}
@@ -1970,6 +2024,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
               <summary>{linkWarnings.length === 100 ? "100 ou mais" : linkWarnings.length} {linkWarnings.length === 1 ? "link quebrado" : "links quebrados"}</summary>
               <ul>{linkWarnings.map((w, i) => <li key={`${w.line}:${i}`}><span>{w.target}</span> — {w.reason === "note" ? "nota não encontrada" : "título não encontrado"} · linha {w.line}</li>)}</ul>
             </details> : null}
+            {kiwiWriting ? <KiwiNotice cor={prefs.catColor} text="O Kiwi está escrevendo…" hint="clique ou digite para pular" /> : null}
             <NoteEditor
               docKey={docKey}
               readOnly={note.readOnly === true}

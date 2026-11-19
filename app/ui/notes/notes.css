@@ -1512,3 +1512,98 @@ button.kn-side-head:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
+
+/* O Kiwi escrevendo ao vivo (T20869, spec #20843): o cursor dele, como o de outra pessoa num doc compartilhado, na cor
+   do Kiwi Cat (`--kiwi-accent`, da paleta escolhida). O texto trocado esmaece antes de sair, e o novo fica realçado
+   e some sozinho. */
+:root {
+  --kiwi-accent: #F472B6;
+}
+.kn-kiwi-cursor {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 1.2em;
+  vertical-align: text-bottom;
+  pointer-events: none;
+}
+.kn-kiwi-caret {
+  position: absolute;
+  left: -1px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--kiwi-accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--kiwi-accent) 55%, transparent);
+}
+.kn-kiwi-tag {
+  position: absolute;
+  left: -1px;
+  bottom: calc(100% + 2px);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px 1px 2px;
+  border-radius: 9px 9px 9px 2px;
+  background: var(--kiwi-accent);
+  color: #0b0b10;
+  font: 600 11px/16px var(--font);
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+  animation: kn-kiwi-tag-in 0.18s ease-out;
+}
+.kn-kiwi-face {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #050507;
+}
+@keyframes kn-kiwi-tag-in {
+  from { opacity: 0; transform: translateY(3px) scale(0.92); }
+}
+.kn-kiwi-written {
+  background: color-mix(in srgb, var(--kiwi-accent) 22%, transparent);
+  border-radius: 2px;
+}
+.cm-editor[data-kiwi-writing="fading"] .kn-kiwi-written {
+  animation: kn-kiwi-fade 2.6s ease-in 0.5s forwards;
+}
+@keyframes kn-kiwi-fade {
+  to { background: transparent; }
+}
+.kn-kiwi-removing {
+  color: color-mix(in srgb, currentColor 40%, transparent);
+  text-decoration: line-through color-mix(in srgb, var(--kiwi-accent) 70%, transparent);
+  background: color-mix(in srgb, var(--kiwi-accent) 10%, transparent);
+}
+/* O aviso enquanto o Kiwi escreve: a nota é dele até terminar, ou até a pessoa clicar ou digitar. */
+.kn-kiwi-notice {
+  position: sticky;
+  top: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  margin: 0 auto 8px;
+  padding: 3px 10px 3px 4px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--kiwi-accent) 45%, transparent);
+  color: var(--text-2, var(--text));
+  font-size: 12px;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.12);
+}
+.kn-kiwi-notice .kn-kiwi-face {
+  width: 18px;
+  height: 18px;
+}
+.kn-kiwi-notice-hint {
+  opacity: 0.7;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kn-kiwi-tag { animation: none; }
+}
+:root[data-motion="reduced"] .kn-kiwi-tag { animation: none; }
