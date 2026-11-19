@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { openTarget, VIEWER_TYPES } from "../../src/shared/file-view.ts";
 import { tempDir } from "../tmp.ts";
-import { Cofre, CONFERIR, FAMILIAS } from "./conferir.ts";
+import { Cofre, CONFERIR, FAMILIAS, medirAte } from "./conferir.ts";
 import { ITENS, julgar, lerEstado, lerRegua, repetidas, semLinha, type Linha } from "./regua.ts";
 
 const DOC = path.join(import.meta.dir, "../../../docs/specs/regua-dos-arquivos.md");
@@ -92,6 +92,23 @@ describe("o teste do teste", () => {
   test('um "falta" que passa pede a troca para "cumpre" na tabela; o que ainda falha passa', () => {
     expect(julgar("docx", 3, { kind: "falta", ref: "issue #156" }, null)).toContain('Troque para "cumpre" na tabela');
     expect(julgar("docx", 3, { kind: "falta", ref: "issue #156" }, "a busca não acha o conteúdo")).toBeNull();
+  });
+
+  test("o tempo de abrir falha só se todas as medidas passam do máximo (T22099)", async () => {
+    const espera = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+    let n = 0;
+    const lentoUmaVez = await medirAte(async () => (n++ === 0 ? espera(60) : undefined), 40);
+    expect(lentoUmaVez.ok).toBe(true);
+    expect(lentoUmaVez.ms.length).toBe(2);
+
+    const rapido = await medirAte(async () => "aberto", 40);
+    expect(rapido).toMatchObject({ r: "aberto", ok: true });
+    expect(rapido.ms.length).toBe(1);
+
+    const sempreLento = await medirAte(() => espera(60), 40, 3);
+    expect(sempreLento.ok).toBe(false);
+    expect(sempreLento.ms.length).toBe(3);
+    expect(sempreLento.ms.every((t) => t > 40)).toBe(true);
   });
 
   test('"n/a" e "abre fora" não rodam', () => {
