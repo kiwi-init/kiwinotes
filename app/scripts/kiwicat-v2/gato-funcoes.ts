@@ -8,6 +8,7 @@ const size = Number(q.get("size") ?? 240);
 const cat = await createKiwiCat(document.getElementById("cat")!, {
   mode: (q.get("mode") ?? "runtime") as "runtime" | "capture", backend: "webgl2", background: "dark", width: Number(q.get("w") ?? size), height: Number(q.get("h") ?? size),
   inputs: { estado: (q.get("state") ?? "repouso") as FogState, cor: "padrao", voz: null, parado: q.get("parado") === "1" },
+  ...(q.has("rest") ? { restAfter: Number(q.get("rest")) } : {}),
 });
 /** Um gato a mais, fora da tela, para o caso do criar e descartar (o `dispose` solta o WebGL2). */
 const extra = (estado: FogState = "repouso") => {

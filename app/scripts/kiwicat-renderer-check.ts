@@ -8,12 +8,14 @@
 // 4. escondido, nenhum quadro;
 // 5. um contexto WebGL2 por janela: com o gato da página vivo, 40 gatos criados e descartados (mais que o teto de
 //    contextos do WebKit) não passam do teto (o aviso "too many active WebGL contexts" não aparece), o gato da página
-//    não perde o contexto, e o último ainda desenha em WebGL2.
+//    não perde o contexto, e o último ainda desenha em WebGL2;
+// 6. o descanso (spec #24228): parado, fora de foco ou em foco sem mouse nem tecla, nenhum quadro; o mouse o acorda,
+//    e uma troca de estado anima `REST_WAKE_S` e descansa de novo.
 // Da raiz do app: `bun scripts/kiwicat-renderer-check.ts [pasta]`. Sai 1 se algo falha.
 import { webkit, type Browser } from "playwright-core";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { QUIET_FPS } from "../ui/kiwicat/cat";
+import { QUIET_FPS, REST_WAKE_S } from "../ui/kiwicat/cat";
 import { STATES } from "../ui/kiwicat/visual";
 import { serve } from "./kiwicat-v2/servir";
 
@@ -126,11 +128,47 @@ try {
     check(s.errors.length === 0, `descartes: ${s.errors.join("; ")}`);
     await s.close();
   }
+
+  // 6. O descanso: em foco e sem ninguém mexer (aqui depois de 1 s), e fora de foco; o mouse e o foco o acordam.
+  {
+    const s = await open(browser, "state=repouso&rest=1");
+    await s.page.waitForTimeout(1600);
+    const idle = await frames(s.page);
+    await s.page.waitForTimeout(1500);
+    const idleAfter = await frames(s.page);
+    await s.page.mouse.move(50, 50); await s.page.mouse.move(80, 90);
+    await s.page.waitForTimeout(500);
+    const woke = await frames(s.page);
+    await s.page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await s.page.waitForTimeout(300);
+    const blurred = await frames(s.page);
+    await s.page.waitForTimeout(1500);
+    const blurredAfter = await frames(s.page);
+    await s.page.evaluate(() => (window as any).kiwiCat.update({ estado: "dormindo" }));
+    await s.page.waitForTimeout(REST_WAKE_S * 1000 + 800);
+    const slept = await frames(s.page);
+    await s.page.waitForTimeout(1000);
+    const sleptAfter = await frames(s.page);
+    await s.page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await s.page.waitForTimeout(500);
+    const focused = await frames(s.page);
+    const resting = await s.page.evaluate(() => (window as any).kiwiCat.stats.resting as boolean);
+    report.rest = { idle: idleAfter - idle, woke: woke - idleAfter, blurred: blurredAfter - blurred, slept: slept - blurredAfter, sleptRest: sleptAfter - slept, focused: focused - sleptAfter, resting, errors: s.errors };
+    check(idleAfter === idle, `em foco e parado, desenhou ${idleAfter - idle} quadros no descanso`);
+    check(woke - idleAfter >= 3, `o mouse não acordou o gato (${woke - idleAfter} quadros)`);
+    check(blurredAfter === blurred, `fora de foco, desenhou ${blurredAfter - blurred} quadros`);
+    const wakeFrames = REST_WAKE_S * QUIET_FPS;
+    check(slept - blurredAfter >= wakeFrames * 0.5 && slept - blurredAfter <= wakeFrames * 2, `a troca de estado no descanso desenhou ${slept - blurredAfter} quadros, esperado perto de ${wakeFrames}`);
+    check(sleptAfter === slept, `depois da troca, o descanso voltou e desenhou ${sleptAfter - slept} quadros`);
+    check(focused - sleptAfter >= 3 && !resting, `o foco não acordou o gato (${focused - sleptAfter} quadros)`);
+    check(s.errors.length === 0, `descanso: ${s.errors.join("; ")}`);
+    await s.close();
+  }
 } finally {
   await browser.close();
   server.close();
   report.failures = failures;
   writeFileSync(join(out, "report.json"), JSON.stringify(report, null, 2) + "\n");
 }
-console.log(JSON.stringify({ reduced: report.reduced, quiet: report.quiet, dispose: report.dispose, failures }));
+console.log(JSON.stringify({ reduced: report.reduced, quiet: report.quiet, dispose: report.dispose, rest: report.rest, failures }));
 process.exit(failures.length ? 1 : 0);

@@ -6,7 +6,8 @@
 // - **O estado:** os 8 de hoje entram pelo `update({ estado })` e viram estado + emote pela tabela 1.1 (`catLook`); os
 //   tempos (o `pronto` que volta, o sono, o `acordou`) são os do `CatVisual`.
 // - **O ritmo:** parado (`repouso`, `dormindo`) a `quietFPS` (18); trabalhando, a cada quadro do navegador, ou a
-//   `activeFPS` (o overlay passa 30). Escondido, nada desenha. Com reduzir movimento (o do macOS ou o `parado` do app),
+//   `activeFPS` (o overlay passa 30). Escondido, nada desenha. Parado com a janela fora de foco, ou em foco e sem
+//   mouse nem tecla há 20 s, também não: o último quadro fica (o descanso, `pauseUnfocused`, spec #24228). Com reduzir movimento (o do macOS ou o `parado` do app),
 //   um quadro só, parado, e um novo a cada troca de estado.
 // - **Sem WebGL2** (ou `backend: "none"`), a névoa vira o gradiente do pacote, e o rosto e os emotes seguem iguais.
 
@@ -49,6 +50,16 @@ export interface CatOptions {
   activeFPS?: number;
   /** O ritmo parado (fps), 15 a 20 pelo spec. */
   quietFPS?: number;
+  /**
+   * O descanso (spec #24228): parado (`repouso`, `dormindo`) com a janela fora de foco, ou em foco e sem mouse nem
+   * tecla nela há `restAfter` segundos, nada desenha. O último quadro fica, e só a troca de estado (o sono) desenha um
+   * novo; o foco, o mouse ou uma tecla na janela o acordam. A 18 fps, dois gatos parados (o hub e os Ajustes) gastavam
+   * 16% de CPU no WebKit (o webview e a GPU). O padrão é `true`; o overlay passa `false`, porque o painel dele nunca tem
+   * o foco e ele some quando o agente acaba.
+   */
+  pauseUnfocused?: boolean;
+  /** Em foco, quantos segundos sem mouse nem tecla até o descanso (o padrão é `REST_AFTER_S`). */
+  restAfter?: number;
   /** A resolução da névoa (0 a 1) sobre a do pacote. */
   densityScale?: number;
   background?: SymbolBackground;
@@ -67,10 +78,16 @@ export interface CatStats {
   frames: number;
   hidden: boolean;
   reduced: boolean;
+  /** Parado e fora de foco: o último quadro, sem desenhar (`pauseUnfocused`). */
+  resting: boolean;
   activeIntervals: Array<{ state: FogState; seconds: number }>;
 }
 
 export const QUIET_FPS = 18;
+/** Em foco e sem ninguém mexer, o gato respira por este tempo antes de descansar (s). */
+export const REST_AFTER_S = 20;
+/** No descanso, uma troca de estado (o sono, o `pronto` que volta) anima por este tempo e descansa de novo (s). */
+export const REST_WAKE_S = 2.5;
 
 /**
  * O `CAT_CONFIG` com as cores da paleta (spec #14963): os `prismStops`, o `accentColor` e o `eyeColor`. A entrada é o id;
@@ -116,7 +133,12 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
   const guard = new SlowGuard();
   /** O quadro parado: o reduzir movimento, ou a GPU lenta (`SlowGuard`). */
   const stillMode = () => inputs.parado || media.matches || guard.slow;
-  const stats: CatStats = { frames: 0, hidden: document.hidden, reduced: stillMode(), activeIntervals: [] };
+  const stats: CatStats = { frames: 0, hidden: document.hidden, reduced: stillMode(), resting: false, activeIntervals: [] };
+  /** A janela tem o foco, e quando veio o último mouse ou tecla nela (o descanso, `pauseUnfocused`). */
+  let focused = document.hasFocus();
+  let lastInput = performance.now();
+  /** Até quando uma troca de estado anima, mesmo no descanso. */
+  let awakeUntil = 0;
   const lookNow = (): CatLook => options.look ?? visual.look;
   const visual = new CatVisual(inputs.estado, 0, { random, sleepSeconds: options.sleepSeconds });
   visual.update(inputs.estado, 0, inputs.limite);
@@ -312,6 +334,20 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
       }, Math.ceil(Math.max(0, due - elapsed) * 1000) + 1);
       return;
     }
+    stats.resting = options.pauseUnfocused !== false && quietState(lookNow().estado)
+      && performance.now() > awakeUntil
+      && (!focused || performance.now() - lastInput > (options.restAfter ?? REST_AFTER_S) * 1000);
+    if (stats.resting) {
+      // O último quadro fica; a troca de estado que vem sozinha (o sono) anima `REST_WAKE_S` no tempo dela.
+      const due = visual.nextBoundary();
+      if (!Number.isFinite(due)) return;
+      timerId = window.setTimeout(() => {
+        timerId = 0;
+        awakeUntil = performance.now() + REST_WAKE_S * 1000;
+        wake();
+      }, Math.ceil(Math.max(0, due - elapsed) * 1000) + 1);
+      return;
+    }
     const gap = interval();
     if (gap <= 0) { frameId = requestAnimationFrame(draw); return; }
     const wait = Math.max(0, lastDraw + gap - elapsed - (performance.now() - previousStamp) / 1000);
@@ -352,6 +388,21 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
     restart();
   }
 
+  /** Do descanso de volta: o gato respira de novo na hora. Saindo, o laço para sozinho no próximo `schedule`. */
+  function wake() {
+    if (!stats.resting || stats.hidden || disposed) return;
+    syncClock();
+    cancel();
+    previousStamp = performance.now();
+    restart();
+  }
+  const onFocus = () => { focused = true; lastInput = performance.now(); wake(); };
+  const onBlur = () => { focused = false; };
+  const onInput = () => { lastInput = performance.now(); wake(); };
+  const INPUTS = ["pointermove", "pointerdown", "keydown", "wheel"] as const;
+  window.addEventListener("focus", onFocus);
+  window.addEventListener("blur", onBlur);
+  for (const e of INPUTS) window.addEventListener(e, onInput, { passive: true, capture: true });
   const onVisibility = () => visibility(document.hidden);
   const onReduced = () => reducedChanged();
   document.addEventListener("visibilitychange", onVisibility);
@@ -384,7 +435,8 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
         visual.update(input.estado, elapsed, input.limite ?? inputs.limite ?? false);
       }
       stats.reduced = stillMode();
-      if (before !== visual.state || wasReduced !== stats.reduced) restart();
+      if (before !== visual.state) awakeUntil = performance.now() + REST_WAKE_S * 1000;
+      if (before !== visual.state || wasReduced !== stats.reduced) { if (stats.resting) previousStamp = performance.now(); restart(); }
       // A paleta nova: animando, sai no próximo quadro; parado (reduzir movimento ou a prova), um quadro agora.
       else if (inputs.cor !== corBefore && !stats.hidden && (stats.reduced || options.mode === "capture")) paint(stats.reduced ? still() : frame);
     },
@@ -405,6 +457,9 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
       disposed = true;
       cancel();
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("blur", onBlur);
+      for (const e of INPUTS) window.removeEventListener(e, onInput, { capture: true });
       media.removeEventListener("change", onReduced);
       if (renderer) releaseFog();
       root.replaceChildren();

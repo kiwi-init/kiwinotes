@@ -20,6 +20,7 @@
     "ui:serve": "bun scripts/ui-serve.ts",
     "notes:bench": "bun scripts/notes-bench.ts",
     "mem:scenarios": "bun scripts/mem-scenarios.ts",
+    "cpu:scenarios": "bun scripts/cpu-scenarios.ts",
     "cli": "bun scripts/cli.ts"
   },
   "dependencies": {
