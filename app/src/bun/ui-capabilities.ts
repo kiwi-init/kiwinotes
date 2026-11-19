@@ -159,7 +159,7 @@ export interface CapabilityDeps {
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
    * respondem lista vazia e E_NOT_FOUND, e o save não guarda versão.
    */
-  versions?: Pick<NoteVersions, "record" | "list" | "get" | "read" | "snapshot" | "flush" | "move">;
+  versions?: Pick<NoteVersions, "record" | "list" | "get" | "read" | "snapshot" | "flush" | "move" | "hasHistory">;
   /** Exportar nota (T2684). Sem ele, o `notes.export` dá E_NO_EXPORT. */
   exporter?: Pick<NoteExporter, "export">;
   /**
@@ -544,6 +544,22 @@ export function uiCapabilities(deps: CapabilityDeps,
     if (!f || "tooLarge" in f) return null;
     if ("base64" in f) return { path: f.path, version: f.version, content: new Uint8Array(Buffer.from(f.base64, "base64")) };
     return f.readOnly ? null : { path: f.path, version: f.version, content: f.text };
+  };
+  /**
+   * Se a gravação precisa ler o conteúdo de antes (T22576): só com o histórico ligado, e para a cópia do agente
+   * (`snapshot`) ou para a 1ª versão de um arquivo que ainda não tem nenhuma. Um caminho que nem é de arquivo lê como
+   * antes, e o save diz o erro.
+   */
+  const needsBefore = async (p: unknown, snapshot: boolean): Promise<boolean> => {
+    if (!deps.versions) return false;
+    if (snapshot) return true;
+    let rel: string;
+    try {
+      rel = filePath(p);
+    } catch {
+      return true;
+    }
+    return !(await deps.versions.hasHistory(rel));
   };
   /** Uma versão guardada, com o erro do histórico virando o da capacidade. */
   const versionOf = async (p: string, id: unknown) => {
@@ -1134,8 +1150,10 @@ export function uiCapabilities(deps: CapabilityDeps,
       const v = await vault();
       const binary = a.base64 !== undefined;
       if (binary && !v.saveFileBytes) throw bad("files.save: this vault can't save spreadsheets");
-      // O de antes (T21239): a 1ª versão de um arquivo sem histórico, e a cópia na hora do agente (`snapshot`).
-      const before = deps.versions ? await fileContentOf(v, a.path, binary) : null;
+      // O de antes (T21239): a 1ª versão de um arquivo sem histórico, e a cópia na hora do agente (`snapshot`). Só nesses
+      // dois casos ele é lido (T22576): com histórico, o `record` não o usa, e a pessoa pagaria a leitura do arquivo
+      // inteiro a cada gravação.
+      const before = (await needsBefore(a.path, a.snapshot === true)) ? await fileContentOf(v, a.path, binary) : null;
       if (a.snapshot === true && deps.versions && before && before.version === a.baseVersion)
         await deps.versions.snapshot(before.path, before.content).catch((e) => console.error("[notes] versions:", e));
       const r = binary ? await v.saveFileBytes!(a.path, a.base64, a.baseVersion) : await v.saveFile(a.path, a.content, a.baseVersion);
@@ -1217,7 +1235,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       const a = fields(args, "notes.canvasSave", ["path", "content", "baseVersion"]);
       const v = await vault();
       // O quadro também tem histórico (T22432, issue #182), com as regras da nota: o JSON Canvas é texto.
-      const before = deps.versions ? await v.getCanvas(a.path).catch(() => null) : null;
+      const before = (await needsBefore(a.path, false)) ? await v.getCanvas(a.path).catch(() => null) : null;
       const r = await v.saveCanvas(a.path, a.content, a.baseVersion);
       if (r.saved && deps.versions && typeof a.content === "string")
         await deps.versions.record(r.path, a.content, before?.content).catch((e) => console.error("[notes] versions:", e));
