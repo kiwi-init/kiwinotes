@@ -1,6 +1,6 @@
 // O docx como no Word nas Notas (T21151, spec #21080), na janela de verdade: o AppEngine headless e a janela Notas num
 // WebKit headless, com um relatório inventado de 20 páginas (o `docx-prova/make-doc.ts`). Confere as páginas, o ⌘F com
-// as marcas, o zoom, nenhum pedido de rede, o arquivo igual byte a byte depois de abrir e fechar, e o motor solto ao
+// as marcas, o zoom, nenhum pedido de rede, o arquivo igual byte a byte depois de abrir, rolar e fechar, e o motor solto ao
 // trocar de arquivo. O tempo de abrir segue a régua (`ABRE_MS` e `medirAte`, de test/regua): o motor desenha num canvas,
 // e esta é a prova do item 1 para o docx. Nada na tela de ninguém; os dados num tmp.
 //
@@ -69,6 +69,21 @@ const fromOutside = (text: string) => {
   assert.notEqual(next, xml, "o parágrafo de fora entrou");
   return writeZip(PROPOSTA, parts, new Map([["word/document.xml", new TextEncoder().encode(next)]]));
 };
+// Caixa 8 do spec #21080 (T23170): o docx com senha é um arquivo do Office cifrado, não um zip. Os dois são inventados:
+// o começo de um "Compound File" da Microsoft e bytes ao acaso; o com senha leva o nome do fluxo `EncryptedPackage` em
+// UTF-16LE, e o antigo (um .doc de antes de 2007 renomeado) não. E um docx que o motor não desenha: a proposta com o
+// `document.xml` quebrado.
+const compound = (encrypted: boolean) => {
+  const b = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, ...Array.from({ length: 4096 }, (_, i) => (i * 37) % 251)]);
+  if (encrypted) b.set([..."EncryptedPackage"].flatMap((c) => [c.charCodeAt(0), 0]), 1024);
+  return b;
+};
+const SENHA = "Docs/com-senha.docx";
+put(SENHA, compound(true));
+const ANTIGO = "Docs/antigo.docx";
+put(ANTIGO, compound(false));
+const QUEBRADO = "Docs/quebrado.docx";
+put(QUEBRADO, writeZip(PROPOSTA, readZip(PROPOSTA), new Map([["word/document.xml", new TextEncoder().encode("<w:document><w:body><w:p")]])));
 // O docx com controle de alterações (T21152): digitar logo depois da inserção do Bruno faz o motor gravar o parágrafo
 // novo com uma letra por trecho, e é o tidyDocx que junta.
 const EXTRAS = "Docs/extras.docx";
@@ -220,6 +235,27 @@ try {
       await check("tudo local e sem erro na página", async () => {
         assert.deepEqual(w.report.blocked, []);
         assert.deepEqual(w.report.problems, []);
+      });
+
+      // Caixa 6 do spec #21080 (T23170): rolar não é editar. Pela roda e pelo teclado até a última página e de volta; o
+      // arquivo segue igual mesmo com o documento aberto, depois da espera de quem grava sozinho.
+      await check("rolar até o fim e voltar não grava", async () => {
+        const scroll = p.locator(".kn-file-docx-scroll");
+        await scroll.hover();
+        for (let i = 0; i < 6; i++) await p.mouse.wheel(0, 2400);
+        await scroll.click({ position: { x: 20, y: 20 } });
+        await p.keyboard.press("PageDown");
+        await p.keyboard.press("End");
+        await p.waitForFunction(() => {
+          const el = document.querySelector(".kn-file-docx-scroll")!;
+          return el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+        }, null, { timeout: 5000 });
+        const bottom = await scroll.evaluate((el) => el.scrollTop);
+        await p.keyboard.press("Home");
+        await p.waitForFunction(() => document.querySelector(".kn-file-docx-scroll")!.scrollTop < 4, null, { timeout: 5000 });
+        await p.waitForTimeout(1200);
+        assert.equal(sha(REPORT), before.report, "o relatório mudou no disco com ele aberto");
+        return `: até ${Math.round(bottom)} px e de volta, o arquivo igual`;
       });
 
       await check("trocar de arquivo solta o motor", async () => {
@@ -382,6 +418,16 @@ try {
         const saved = await diskChange(EDITAR, start, 3000);
         assert.ok(/Proposta de mudança final\n/.test(bodyOf(saved).text), `no disco: ${bodyOf(saved).text.slice(0, 80)}`);
         assert.equal(await p.evaluate(() => window.__kiwiDocxLive), 0, "o motor solto");
+      });
+
+      // Caixa 7 do spec #21080 (T23170): carregar o motor, abrir e gravar, tudo nesta janela, sem um pedido de rede.
+      await step("gravar o docx não faz pedido de rede", async () => {
+        const saves = w.report.invokes["files.save"] ?? 0;
+        assert.ok(saves >= 3, `só ${saves} gravações nesta janela`);
+        assert.deepEqual(w.report.blocked, []);
+        // O pedido que a CSP da janela barra antes de sair também conta: ele nem chega à rota acima.
+        assert.deepEqual(w.report.problems.filter((m) => /Content Security Policy|Refused to connect|connect-src|Load failed|Failed to fetch/i.test(m)), []);
+        return `: ${saves} gravações, nenhum pedido para fora`;
       });
     } finally {
       await w.close();
@@ -631,7 +677,36 @@ try {
     }
   }
 
-  await check("o arquivo fica igual, byte a byte, depois de abrir e fechar", async () => {
+  // Caixa 8: o docx com senha e o que o motor não desenha abrem só com o aviso do porquê, e nada é gravado.
+  for (const [rel, why, words] of [
+    [SENHA, "password", "senha"],
+    [ANTIGO, "format", ".doc antigo"],
+    [QUEBRADO, "engine", "não conseguiu mostrar"],
+  ] as const) {
+    const start = sha(rel);
+    const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1100, height: 760, motion: false, browser: "webkit", query: { note: rel } });
+    const p = w.page;
+    try {
+      await check(`${rel.slice(5)}: só o aviso do porquê, e o arquivo fica`, async () => {
+        const notice = p.locator(".kn-file-notice[role='status']");
+        await notice.waitFor({ timeout: 30000 });
+        assert.equal(await notice.getAttribute("data-why"), why);
+        const text = (await notice.innerText()).trim();
+        assert.ok(text.includes(words), text);
+        assert.equal(await p.locator(".docx-page").count(), 0, "nenhuma página");
+        await p.waitForTimeout(800);
+        assert.equal(w.report.invokes["files.save"] ?? 0, 0, "nada gravado");
+        assert.equal(sha(rel), start, "o arquivo mudou");
+        assert.deepEqual(w.report.blocked, []);
+        if (why === "password") await shot(p, "docx-senha");
+        return `: "${text.slice(0, 48)}…"`;
+      });
+    } finally {
+      await w.close();
+    }
+  }
+
+  await check("o arquivo fica igual, byte a byte, depois de abrir, rolar e fechar", async () => {
     assert.deepEqual({ report: sha(REPORT), proposta: sha("Docs/proposta.docx") }, before);
   });
 } finally {

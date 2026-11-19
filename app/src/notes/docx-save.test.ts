@@ -12,11 +12,16 @@ import { tempDir } from "../../test/tmp.ts";
 
 const PROPOSTA = new Uint8Array(readFileSync(path.join(import.meta.dir, "../../test/fixtures/files/proposta.docx")));
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
-const CFB = (() => {
-  const b = new Uint8Array(512);
+/** Um Compound File inventado: o começo dele e, no docx cifrado, o nome do fluxo `EncryptedPackage` em UTF-16LE. */
+const compound = (encrypted: boolean) => {
+  const b = new Uint8Array(1024);
   b.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+  if (encrypted) b.set([..."EncryptedPackage"].flatMap((c) => [c.charCodeAt(0), 0]), 640);
   return b;
-})();
+};
+const CFB = compound(true);
+/** O formato antigo do Office (o `.doc` de antes de 2007), sem senha: o mesmo começo, sem o fluxo do docx cifrado. */
+const OLD = compound(false);
 
 /** A proposta com uma frase a mais, como o motor gravaria. */
 function edited(): Uint8Array {
@@ -53,6 +58,8 @@ describe("inspectDocx", () => {
   test("docx, docx com senha e o que não é docx", () => {
     expect(inspectDocx(PROPOSTA)).toEqual({ editable: true });
     expect(inspectDocx(CFB)).toEqual({ editable: false, reason: "password" });
+    // O .doc antigo começa igual, e não tem senha (revisão do T23170).
+    expect(inspectDocx(OLD)).toEqual({ editable: false, reason: "not-docx" });
     expect(inspectDocx(new TextEncoder().encode("não é zip"))).toEqual({ editable: false, reason: "not-docx" });
     // Um zip que não tem o documento do Word (um xlsx, por exemplo).
     const parts = readZip(PROPOSTA);
@@ -90,7 +97,7 @@ describe("gravar um docx do cofre (T21152)", () => {
   });
 
   test("o .doc antigo continua de fora", async () => {
-    const { v } = await vault({ "velho.doc": CFB });
-    expect(await code(v.saveFileBytes("velho.doc", b64(PROPOSTA), bytesVersion(CFB)))).toBe("E_BAD_ARGS");
+    const { v } = await vault({ "velho.doc": OLD });
+    expect(await code(v.saveFileBytes("velho.doc", b64(PROPOSTA), bytesVersion(OLD)))).toBe("E_BAD_ARGS");
   });
 });
