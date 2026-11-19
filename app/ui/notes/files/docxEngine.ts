@@ -55,12 +55,8 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, onLink }
     scale: zoom * PT_TO_PX,
     ...(base ? { measurer: wordMeasurer(base), producer: "kiwi-word-lines" } : {}),
     onHyperlinkPopover: ({ link }) => {
+      // Um link de dentro do documento (um sumário, "veja a seção 3") o motor rola sozinho até o marcador.
       if (link.kind === "external" && link.href) onLink(link.href);
-      // Um link de dentro do documento (um sumário, "veja a seção 3"): rola até o marcador, como no Word e no leitor de antes.
-      else if (link.kind === "internal") {
-        const name = link.anchor ?? link.href?.replace(/^#/, "");
-        if (name) surface?.navigation.goToBookmark(name);
-      }
     },
   });
   if (!r.ok) return { ok: false, reason: r.reason };
