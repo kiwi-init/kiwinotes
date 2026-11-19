@@ -114,11 +114,28 @@ describe("sem o scan inteiro (T20166)", () => {
     expect(v.resolve("Segunda")).toBeNull();
   });
 
-  test("o desfazer da pasta traz o que tinha dentro", async () => {
-    const { v, root } = await setup();
-    await v.deleteFolder("Diário");
-    await v.restore("Diário");
-    expect(view(v)).toEqual(await fresh(root));
+  test("o desfazer da pasta traz o que tinha dentro, sem scan (T20227)", async () => {
+    const { v, root, scans } = await setup();
+    await v.deleteFolder("Projetos");
+    await v.restore("Projetos");
+    expect(scans()).toBe(0);
+    const now = view(v);
+    expect(now).toEqual(await fresh(root));
+    expect(now.files.some((f) => f.startsWith("Projetos/Relatório.pages|"))).toBe(true);
+    expect(v.resolve("Lista")).toBe("Projetos/Velhos/Lista.md");
+  });
+
+  test("o desfazer de uma subpasta cuja mãe foi apagada depois: a mãe volta junto", async () => {
+    const { v, root, scans } = await setup();
+    // Vazia: sem nota dentro, só a volta das pastas de cima põe a mãe no índice.
+    await v.createFolder("Projetos/Vazia");
+    await v.deleteFolder("Projetos/Vazia");
+    await v.deleteFolder("Projetos");
+    await v.restore("Projetos/Vazia");
+    expect(scans()).toBe(0);
+    const now = view(v);
+    expect(now.folders).toEqual(["Diário", "Diário/2026", "Projetos", "Projetos/Vazia"]);
+    expect(now).toEqual(await fresh(root));
   });
 
   test("uma nota criada e outra apagada por fora, que o índice não viu, entram no rename", async () => {
