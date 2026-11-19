@@ -85,21 +85,30 @@ describe("a busca das pastas de projeto (spec #12950)", () => {
   });
 
   test("uma árvore grande não para o Bun: a busca cede a vez (a meta do #12918)", async () => {
+    // A medida é contra a própria busca, não contra um número fixo, para valer com a máquina carregada (T22697): o
+    // relógio de 5 ms tem de andar durante a busca, e o maior intervalo sem ele (contando o último, até o fim) fica
+    // abaixo da metade da busca inteira. Uma busca que trava o Bun não deixa o relógio andar: o intervalo é a busca toda.
     const home = tempDir("kiwi-finder-");
     const paths: string[] = [];
-    for (let i = 0; i < 300; i++) for (let j = 0; j < 10; j++) paths.push(`p${i}/q${j}/r/`);
+    for (let i = 0; i < 60; i++) for (let j = 0; j < 10; j++) paths.push(`p${i}/q${j}/r/`);
     tree(home, paths);
-    let last = performance.now();
+    let ticks = 0;
+    const start = performance.now();
+    let last = start;
     let worst = 0;
     const timer = setInterval(() => {
       const t = performance.now();
-      worst = Math.max(worst, t - last - 5);
+      worst = Math.max(worst, t - last);
       last = t;
+      ticks++;
     }, 5);
     await find(home);
+    const end = performance.now();
     clearInterval(timer);
-    expect(worst).toBeLessThan(100);
-  });
+    worst = Math.max(worst, end - last);
+    expect(ticks).toBeGreaterThanOrEqual(3);
+    expect(worst).toBeLessThan((end - start) / 2);
+  }, 30_000);
 
   test("os lugares: a pasta de notas, os comuns e a casa; nenhuma pasta duas vezes, e o lugar negado fica de fora", async () => {
     const home = tempDir("kiwi-finder-");
