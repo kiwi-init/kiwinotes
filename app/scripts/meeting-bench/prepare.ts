@@ -210,7 +210,7 @@ export const MODELS = join(dirname(BENCH), "models");
 export const CANDIDATES = [
   { stage: "wsmall", repo: "handy-computer/whisper-small-gguf", revision: "4afdc7942ecf1997f359deae48a63506b062eac4",
     file: "whisper-small-Q8_0.gguf", sha256: "9b9c8811bbcc82a7766f0fb0925614bdacb0923b2cc630daeac17108b655b860" },
-  { stage: "wturbo", repo: "handy-computer/whisper-large-v3-turbo-gguf", revision: "main",
+  { stage: "wturbo", repo: "handy-computer/whisper-large-v3-turbo-gguf", revision: "18ada752005f5fddef499256f9a458d0b37a203a",
     file: "whisper-large-v3-turbo-Q8_0.gguf", sha256: "257aa7ec9121c22c167d5e2c49e3e76b4ba0e6e27ebc13074eba0a80f8190220" },
 ] as const;
 
