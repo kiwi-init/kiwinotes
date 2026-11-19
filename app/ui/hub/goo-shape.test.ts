@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { GooRect } from "./goo.ts";
-import { GOO_BEATS, type GooGeom, gooDropParts, gooDropPath, gooSizes, roundRect } from "./goo-shape.ts";
+import { GOO_BEATS, type GooGeom, gooDropParts, gooDropPath, gooHeadAnchor, gooRunEase, gooSizes, roundRect } from "./goo-shape.ts";
 
 type Pt = [number, number];
 
@@ -240,6 +240,40 @@ describe("o desenho", () => {
       worst = Math.max(worst, step);
     }
     expect(worst).toBeLessThan(8);
+  });
+
+  test("a cabeça anda pelo ponto do compositor: relativa a ele, quase parada entre quadros (#231)", () => {
+    // A camada da cabeça anda pelo `gooHeadAnchor` no compositor; o caminho, relativo ao ponto, sai no rAF de 60 Hz.
+    // Um quadro de 60 Hz na ida de 500 ms é ~3,3% de `t`: da soltura em diante (antes dela a cabeça é presa à pílula e
+    // o ponto não anda), o ponto anda muito mais que a forma em volta dele.
+    const dt = 1000 / 60 / 500;
+    for (const g of [end, start, { ...end, back: true }]) {
+      let moved = 0;
+      let shape = 0;
+      for (let t = GOO_BEATS.pinch + 0.001; t + dt <= 1; t += 0.005) {
+        const a = gooHeadAnchor(t, g);
+        const b = gooHeadAnchor(t + dt, g);
+        const x = box(gooDropParts(t, g).head);
+        const y = box(gooDropParts(t + dt, g).head);
+        moved = Math.max(moved, Math.abs(b.x - a.x));
+        if (!x || !y) continue;
+        // A caixa da cabeça relativa ao ponto, de um quadro ao outro.
+        const rel = Math.max(Math.abs(y.l - b.x - (x.l - a.x)), Math.abs(y.r - b.x - (x.r - a.x)), Math.abs(y.t - b.y - (x.t - a.y)), Math.abs(y.b - b.y - (x.b - a.y)));
+        shape = Math.max(shape, rel);
+      }
+      expect(moved).toBeGreaterThan(8);
+      expect(shape).toBeLessThan(moved / 3);
+    }
+  });
+
+  test("o ponto para na soltura e nos botões; a corrida sai e chega parada", () => {
+    expect(gooHeadAnchor(0, end)).toEqual(gooHeadAnchor(GOO_BEATS.pinch, end));
+    const c = gooHeadAnchor(1, end);
+    expect(c.x).toBeCloseTo(end.target.x + end.target.w / 2, 6);
+    expect(gooHeadAnchor(GOO_BEATS.arrive, end).x).toBeCloseTo(c.x, 6);
+    const v = (r: number) => (gooRunEase(r + 1e-4) - gooRunEase(r)) / 1e-4;
+    expect(v(0)).toBeLessThan(0.01);
+    expect(v(1 - 1e-4)).toBeLessThan(0.01);
   });
 
   test("o cone some já recolhido, rente à beira da pílula", () => {

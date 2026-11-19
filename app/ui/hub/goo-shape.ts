@@ -16,16 +16,21 @@
 
 import type { GooRect, GooSide } from "./goo.ts";
 
-/** Os tempos da ida, em frações de `t`. A coreografia (T18949) ajusta estes números e a duração. */
+/**
+ * Os tempos da ida, em frações de `t`. A coreografia (T18949) ajusta estes números e a duração.
+ * Com a ida em 500 ms (#231), a barriga, o pescoço e a corrida ficam com quase os mesmos milissegundos dos 460 ms de
+ * antes (75, 120 e 175 ms), e a chegada passa de 83 para 130 ms: ali a gota se abre da lágrima (~35 px) até a largura
+ * dos botões (até 130 px), e em 5 quadros de 60 Hz eram até 48 px por quadro, um tranco em vez de uma mola.
+ */
 export const GOO_BEATS = {
   /** Até aqui, a barriga. */
-  belly: 0.16,
+  belly: 0.15,
   /** Até aqui, o pescoço; aqui ele parte. */
-  pinch: 0.42,
+  pinch: 0.39,
   /** Até aqui, o cone volta para a pílula e o respingo some. */
-  settle: 0.6,
+  settle: 0.55,
   /** Aqui a gota chega aos botões; dali ao fim, amassa e assenta. */
-  arrive: 0.82,
+  arrive: 0.74,
 } as const;
 
 export type GooBeats = { belly: number; pinch: number; settle: number; arrive: number };
@@ -75,6 +80,28 @@ export function gooSizes(h: number, th = h) {
     /** Meia largura do pescoço mais fino: o pescoço fica acima dos 2 px do traço, e o anel não some no escuro. */
     neck: 1.6,
   };
+}
+
+/**
+ * A curva do lugar na corrida (`r` de 0 a 1, da soltura à chegada): sai parada da soltura e chega parada nos botões,
+ * onde a mola começa a abrir a gota sem tranco. Quem anda por ela é o compositor (`gooHeadAnchor`).
+ */
+export const gooRunEase = (r: number) => smooth(r);
+
+/**
+ * O ponto que a cabeça da gota segue no quadro `t`, na barra: parado no ponto da soltura até ela, anda pela corrida com
+ * o `gooRunEase` e para no centro dos botões. A camada da cabeça (`Goo.tsx`) anda por ele com uma animação de
+ * `transform` no compositor, a 120 Hz e fora da thread principal; o caminho da cabeça é desenhado relativo a ele.
+ */
+export function gooHeadAnchor(t: number, g: GooGeom, beats: GooBeats = GOO_BEATS): { x: number; y: number } {
+  const dir = g.side === "end" ? 1 : -1;
+  const x0 = g.side === "end" ? g.tabs.x + g.tabs.w : g.tabs.x;
+  const cy = g.tabs.y + g.tabs.h / 2;
+  const { reach } = gooSizes(g.tabs.h, g.target.h);
+  const tu = dir > 0 ? g.target.x + g.target.w / 2 - x0 : x0 - (g.target.x + g.target.w / 2);
+  const tv = g.target.y + g.target.h / 2 - cy;
+  const m = gooRunEase(span(clamp(t), beats.pinch, beats.arrive));
+  return { x: x0 + dir * lerp(reach, tu, m), y: cy + lerp(0, tv, m) };
 }
 
 /** O caminho SVG da gota inteira no quadro `t` (0 a 1), na barra. */
@@ -188,15 +215,19 @@ export function gooDropParts(t: number, g: GooGeom, beats: GooBeats = GOO_BEATS)
     const sw = g.back ? smooth(span(r, 0, 0.3)) : 0;
     const af = lerp(round, tail, sw);
     const ab = lerp(tail, round, sw);
-    const cu = lerp(reach, tu + (ab - af) / 2, m);
+    // O lugar segue o `gooRunEase`, o mesmo do `gooHeadAnchor` (a camada da corrida anda por ele no compositor).
+    const mp = gooRunEase(r);
+    const cu = lerp(reach, tu + (ab - af) / 2, mp);
     head = {
-      cu, cv: lerp(0, tv, m), af, ab, b,
+      cu, cv: lerp(0, tv, mp), af, ab, b,
       fe: { rx: af, ry: b, point: sw }, be: { rx: ab, ry: b, point: 1 - sw },
     };
   } else {
-    // Chega: a lágrima amassa no retângulo dos botões, passa um pouco do ponto e assenta (uma mola).
+    // Chega: a lágrima amassa no retângulo dos botões, passa um pouco do ponto e assenta (uma mola). A mola sai devagar
+    // de onde a corrida parou (sem tranco: a derivada é 0 em `q` 0), passa ~5% do ponto e assenta sem tremer; a de antes
+    // (um cosseno de 1,2 volta) cabia em 5 quadros e dava saltos de até 48 px (#231).
     const q = span(t, beats.arrive, 1);
-    const f = Math.cos(2.4 * Math.PI * q) * (1 - q) ** 2;
+    const f = (1 - q) ** 2 * (1 + 2 * q - 6 * q * q);
     // Passa do ponto pouco (a mola, -0.12): passar muito da largura dos botões deixa o anel por fora deles.
     const w = g.target.w + (2 * (bT + d) - g.target.w) * Math.max(f, -0.12);
     const h = g.target.h + (2 * bT - g.target.h) * Math.max(f, -0.25);
