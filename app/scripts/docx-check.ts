@@ -69,6 +69,13 @@ const fromOutside = (text: string) => {
   assert.notEqual(next, xml, "o parágrafo de fora entrou");
   return writeZip(PROPOSTA, parts, new Map([["word/document.xml", new TextEncoder().encode(next)]]));
 };
+// Caixa 8 do spec #21080 (T23170): o docx com senha é um arquivo do Office cifrado, não um zip. Este é inventado: o
+// começo de um (o "Compound File" da Microsoft) e bytes ao acaso, o bastante para ninguém abrir. E um docx que o motor
+// não desenha: a proposta com o `document.xml` quebrado.
+const SENHA = "Docs/com-senha.docx";
+put(SENHA, new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, ...Array.from({ length: 4096 }, (_, i) => (i * 37) % 251)]));
+const QUEBRADO = "Docs/quebrado.docx";
+put(QUEBRADO, writeZip(PROPOSTA, readZip(PROPOSTA), new Map([["word/document.xml", new TextEncoder().encode("<w:document><w:body><w:p")]])));
 // O docx com controle de alterações (T21152): digitar logo depois da inserção do Bruno faz o motor gravar o parágrafo
 // novo com uma letra por trecho, e é o tidyDocx que junta.
 const EXTRAS = "Docs/extras.docx";
@@ -404,6 +411,16 @@ try {
         assert.ok(/Proposta de mudança final\n/.test(bodyOf(saved).text), `no disco: ${bodyOf(saved).text.slice(0, 80)}`);
         assert.equal(await p.evaluate(() => window.__kiwiDocxLive), 0, "o motor solto");
       });
+
+      // Caixa 7 do spec #21080 (T23170): carregar o motor, abrir e gravar, tudo nesta janela, sem um pedido de rede.
+      await step("gravar o docx não faz pedido de rede", async () => {
+        const saves = w.report.invokes["files.save"] ?? 0;
+        assert.ok(saves >= 3, `só ${saves} gravações nesta janela`);
+        assert.deepEqual(w.report.blocked, []);
+        // O pedido que a CSP da janela barra antes de sair também conta: ele nem chega à rota acima.
+        assert.deepEqual(w.report.problems.filter((m) => /Content Security Policy|Refused to connect|connect-src|Load failed|Failed to fetch/i.test(m)), []);
+        return `: ${saves} gravações, nenhum pedido para fora`;
+      });
     } finally {
       await w.close();
     }
@@ -646,6 +663,34 @@ try {
         } finally {
           await again.close();
         }
+      });
+    } finally {
+      await w.close();
+    }
+  }
+
+  // Caixa 8: o docx com senha e o que o motor não desenha abrem só com o aviso do porquê, e nada é gravado.
+  for (const [rel, why, words] of [
+    [SENHA, "password", "senha"],
+    [QUEBRADO, "engine", "não conseguiu mostrar"],
+  ] as const) {
+    const start = sha(rel);
+    const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1100, height: 760, motion: false, browser: "webkit", query: { note: rel } });
+    const p = w.page;
+    try {
+      await check(`${rel.slice(5)}: só o aviso do porquê, e o arquivo fica`, async () => {
+        const notice = p.locator(".kn-file-notice[role='status']");
+        await notice.waitFor({ timeout: 30000 });
+        assert.equal(await notice.getAttribute("data-why"), why);
+        const text = (await notice.innerText()).trim();
+        assert.ok(text.includes(words), text);
+        assert.equal(await p.locator(".docx-page").count(), 0, "nenhuma página");
+        await p.waitForTimeout(800);
+        assert.equal(w.report.invokes["files.save"] ?? 0, 0, "nada gravado");
+        assert.equal(sha(rel), start, "o arquivo mudou");
+        assert.deepEqual(w.report.blocked, []);
+        if (why === "password") await shot(p, "docx-senha");
+        return `: "${text.slice(0, 48)}…"`;
       });
     } finally {
       await w.close();

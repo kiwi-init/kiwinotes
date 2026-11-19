@@ -13,6 +13,7 @@
 import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { docxOpsResult } from "../../../src/shared/docx/ops.ts";
+import { inspectDocx } from "../../../src/shared/docx-file.ts";
 import { NO_TEXT_ASSIST } from "../../src/textAssist.ts";
 import { kiwiFaceUrl } from "../editor/kiwi-face.ts";
 import { reducedMotion } from "../kiwiWrite.ts";
@@ -29,7 +30,15 @@ import type { FileViewerProps } from "./viewers.ts";
 import { checkZip } from "./zipSize.ts";
 import { recallZoom, stepZoom } from "./zoom.ts";
 
-type State = { kind: "loading" } | { kind: "ready"; pages: number } | { kind: "tooLarge" } | { kind: "error" };
+// O porquê de não abrir (caixa 8 do spec #21080, T23170): `password`, o docx com senha (cifrado, não é um zip);
+// `engine`, um zip que o motor não desenhou; `format`, o que não é um docx. Nos três, nada é gravado.
+type State = { kind: "loading" } | { kind: "ready"; pages: number } | { kind: "tooLarge" } | { kind: "error"; why: "password" | "engine" | "format" };
+
+const ERROR_TEXT = {
+  password: "Este documento tem senha, e o Kiwi não abre documento com senha. Ele fica como está: abra no Word para ler ou editar.",
+  engine: "O Kiwi não conseguiu mostrar este documento, e não mexeu nele: o arquivo fica como está. Abra no app padrão.",
+  format: "Não deu para abrir este documento. Ele pode estar corrompido ou ser de outro formato (o .doc antigo, por exemplo).",
+} as const;
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
@@ -170,9 +179,14 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi, readOnly }: 
       try {
         const bytes = bytesOf(base64);
         // Antes do motor, o tamanho aberto (revisão do T7110): um docx pequeno pode descompactar em centenas de MB.
+        const kind = inspectDocx(bytes);
+        if (!kind.editable && kind.reason === "password") {
+          if (alive) setState({ kind: "error", why: "password" });
+          return;
+        }
         const zip = checkZip(bytes);
         if (!zip.ok) {
-          if (alive) setState({ kind: zip.reason === "too-large" ? "tooLarge" : "error" });
+          if (alive) setState(zip.reason === "too-large" ? { kind: "tooLarge" } : { kind: "error", why: "format" });
           return;
         }
         const { mountDocx } = await import("./docxEngine.ts");
@@ -197,7 +211,7 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi, readOnly }: 
             if (url) window.open(url, "_blank", "noopener,noreferrer");
           },
         });
-        if (!r.ok) return setState({ kind: "error" });
+        if (!r.ok) return setState({ kind: "error", why: "engine" });
         engine.current = r.handle;
         saver.opened(source.version);
         mounted.current = true;
@@ -207,7 +221,7 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi, readOnly }: 
         if (glow?.length) r.handle.glow(glow);
         setState({ kind: "ready", pages: r.handle.pages() });
       } catch {
-        if (alive) setState({ kind: "error" });
+        if (alive) setState({ kind: "error", why: "engine" });
       }
     })();
     return () => {
@@ -302,8 +316,8 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi, readOnly }: 
 
   if (state.kind === "error") {
     return (
-      <div className="kn-file-notice" role="status">
-        <p>Não deu para abrir este documento. Ele pode estar corrompido ou ser de outro formato (o .doc antigo, por exemplo).</p>
+      <div className="kn-file-notice" role="status" data-why={state.why}>
+        <p>{ERROR_TEXT[state.why]}</p>
       </div>
     );
   }
