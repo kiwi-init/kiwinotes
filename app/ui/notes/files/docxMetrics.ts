@@ -2,7 +2,8 @@
 // winAscent + o winDescent da tabela OS/2); o canvas do WebKit mede pela outra (a hhea), e um texto em Helvetica ou
 // Georgia sai com a linha mais baixa: as páginas quebram em outro lugar. Aqui só a altura da linha muda: a largura das
 // letras segue a do canvas. Os números são das próprias fontes (o OS/2 de cada uma, dividido pelas unidades do em); a
-// Calibri e a Cambria vêm das fontes livres de métrica igual (Carlito e Caladea), porque o Mac não as tem.
+// Calibri vem da Carlito, a livre de métrica igual, porque o Mac não a tem. A Cambria fica de fora: sem ela nem a
+// Caladea no Mac, não deu para conferir o número (revisão do T21151); uma fonte fora da tabela fica com a do canvas.
 
 import type { TextMeasurer } from "@docx-editor.dev/core/layout";
 
@@ -10,7 +11,6 @@ import type { TextMeasurer } from "@docx-editor.dev/core/layout";
 export const WORD_LINE_EM: Readonly<Record<string, number>> = {
   arial: 2288 / 2048,
   calibri: 2500 / 2048,
-  cambria: 1.3,
   "courier new": 2320 / 2048,
   georgia: 2327 / 2048,
   helvetica: 2407 / 2048,
@@ -21,7 +21,6 @@ export const WORD_LINE_EM: Readonly<Record<string, number>> = {
   verdana: 2489 / 2048,
   // As livres de métrica igual: o mesmo número da fonte que copiam.
   carlito: 2500 / 2048,
-  caladea: 1.3,
   "liberation sans": 2288 / 2048,
   "liberation serif": 2268 / 2048,
   "liberation mono": 2320 / 2048,

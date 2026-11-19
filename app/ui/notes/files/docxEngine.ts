@@ -10,6 +10,13 @@ import { forEachSemanticSpan, keyedRangeRects, type SemanticLayout, tryCreateCan
 import type { DocxMatch, DocxPiece } from "./docxFind.ts";
 import { wordMeasurer } from "./docxMetrics.ts";
 
+declare global {
+  interface Window {
+    /** Quantos documentos o motor tem abertos nesta janela (#22186): a prova de que fechar solta o motor. */
+    __kiwiDocxLive?: number;
+  }
+}
+
 /** Pontos para pixels do CSS, como o Word a 100%. */
 export const PT_TO_PX = 96 / 72;
 
@@ -49,10 +56,17 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, onLink }
     ...(base ? { measurer: wordMeasurer(base), producer: "kiwi-word-lines" } : {}),
     onHyperlinkPopover: ({ link }) => {
       if (link.kind === "external" && link.href) onLink(link.href);
+      // Um link de dentro do documento (um sumário, "veja a seção 3"): rola até o marcador, como no Word e no leitor de antes.
+      else if (link.kind === "internal") {
+        const name = link.anchor ?? link.href?.replace(/^#/, "");
+        if (name) surface?.navigation.goToBookmark(name);
+      }
     },
   });
   if (!r.ok) return { ok: false, reason: r.reason };
   let surface: Scalable | null = r.surface;
+  const win = host.ownerDocument.defaultView;
+  if (win) win.__kiwiDocxLive = (win.__kiwiDocxLive ?? 0) + 1;
   let marks: { matches: DocxMatch[]; current: number } = { matches: [], current: -1 };
 
   surface.setHighlightPainter((frame) => {
@@ -102,6 +116,7 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, onLink }
       surface.setHighlightPainter(null);
       surface.destroy();
       surface = null;
+      if (win) win.__kiwiDocxLive = Math.max(0, (win.__kiwiDocxLive ?? 1) - 1);
       marks = { matches: [], current: -1 };
       host.replaceChildren();
     },

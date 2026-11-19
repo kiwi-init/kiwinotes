@@ -22,7 +22,9 @@ test("o nome da família vale com espaço e maiúscula, e as livres de métrica 
   const a = wordLineMetrics({ height: 1, baseline: 0.8 }, { fontFamily: "  Times New Roman ", fontSizePt: 12 });
   expect(a.height).toBeCloseTo(12 * WORD_LINE_EM["times new roman"]!, 6);
   expect(WORD_LINE_EM.carlito).toBe(WORD_LINE_EM.calibri!);
-  expect(WORD_LINE_EM.caladea).toBe(WORD_LINE_EM.cambria!);
+  // A Cambria e a Caladea ficam de fora (sem número conferido): a linha delas é a do canvas.
+  expect(WORD_LINE_EM.cambria).toBeUndefined();
+  expect(wordLineMetrics({ height: 14, baseline: 11 }, { fontFamily: "Cambria", fontSizePt: 11 })).toEqual({ height: 14, baseline: 11 });
   expect(WORD_LINE_EM["liberation sans"]).toBe(WORD_LINE_EM.arial!);
   // Toda linha do Word é mais alta que o em, e nenhuma passa de 1,5 em.
   for (const em of Object.values(WORD_LINE_EM)) expect(em > 1 && em < 1.5).toBe(true);

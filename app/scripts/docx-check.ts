@@ -1,7 +1,8 @@
 // O docx como no Word nas Notas (T21151, spec #21080), na janela de verdade: o AppEngine headless e a janela Notas num
 // WebKit headless, com um relatório inventado de 20 páginas (o `docx-prova/make-doc.ts`). Confere as páginas, o ⌘F com
 // as marcas, o zoom, nenhum pedido de rede, o arquivo igual byte a byte depois de abrir e fechar, e o motor solto ao
-// trocar de arquivo. Nada na tela de ninguém; os dados num tmp.
+// trocar de arquivo. O tempo de abrir segue a régua (`ABRE_MS` e `medirAte`, de test/regua): o motor desenha num canvas,
+// e esta é a prova do item 1 para o docx. Nada na tela de ninguém; os dados num tmp.
 //
 //   bun scripts/docx-check.ts [pasta dos prints]
 import assert from "node:assert/strict";
@@ -9,7 +10,9 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { Bookmark, Document, InternalHyperlink, Packer, PageBreak, Paragraph, TextRun } from "docx";
 import { type Page, webkit } from "playwright-core";
+import { ABRE_MS, medirAte } from "../test/regua/conferir.ts";
 import { connect, request } from "./cli";
 import { openWindow, type UiContext } from "./ui-page";
 
@@ -29,6 +32,24 @@ const made = Bun.spawnSync([process.execPath, join(import.meta.dir, "docx-prova/
 assert.equal(made.exitCode, 0, made.stderr.toString());
 put("Docs/proposta.docx", readFileSync(join(app, "test/fixtures/files/proposta.docx")));
 put("Leia-me.md", "# Leia-me\n\nUma nota de exemplo.\n");
+// Um link de dentro do documento, como o de um sumário: na 1ª página, aponta para um marcador na 4ª.
+const INDICE = "Docs/indice.docx";
+put(
+  INDICE,
+  await Packer.toBuffer(
+    new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({ children: [new InternalHyperlink({ anchor: "conclusao", children: [new TextRun({ text: "Ir para a conclusão", style: "Hyperlink" })] })] }),
+            ...[1, 2, 3].map((n) => new Paragraph({ children: [new TextRun(`Parte ${n} do relatório da loja de exemplo.`), new PageBreak()] })),
+            new Paragraph({ children: [new Bookmark({ id: "conclusao", children: [new TextRun("Conclusão: o estoque fechou o mês em dia.")] })] }),
+          ],
+        },
+      ],
+    }),
+  ),
+);
 const sha = (rel: string) => createHash("sha256").update(readFileSync(join(vault, rel))).digest("hex");
 const before = { report: sha(REPORT), proposta: sha("Docs/proposta.docx") };
 
@@ -82,10 +103,15 @@ try {
     const p = w.page;
     try {
       await check(`${theme}: o relatório abre em páginas, como no Word`, async () => {
-        const t0 = Date.now();
-        await p.waitForSelector(".kn-file[data-state='ready'] .docx-page", { timeout: 30000 });
-        await p.waitForFunction(() => /\d+ páginas/.test(document.querySelector(".kn-file-pdf-page")?.textContent ?? ""), null, { timeout: 30000 });
-        const ms = Date.now() - t0;
+        // A 1ª medida é a da janela que acabou de abrir; se passa do teto, a página recarrega e mede de novo (a regra da régua).
+        let again = false;
+        const { ms, ok, fria } = await medirAte(async () => {
+          if (again) await p.reload();
+          again = true;
+          await p.waitForSelector(".kn-file[data-state='ready'] .docx-page", { timeout: 30000 });
+          await p.waitForFunction(() => /\d+ páginas/.test(document.querySelector(".kn-file-pdf-page")?.textContent ?? ""), null, { timeout: 30000 });
+        }, ABRE_MS);
+        if (!ok) throw new Error(fria ? `a 1ª abertura levou ${ms[0]} ms (o teto dela é ${2 * ABRE_MS})` : `levou ${ms.join(", ")} ms em ${ms.length} medidas (o máximo é ${ABRE_MS})`);
         const pages = await p.locator(".kn-file-pdf-page").textContent();
         assert.equal(pages, "20 páginas");
         const text = await p.locator(".docx-page").first().innerText();
@@ -98,7 +124,8 @@ try {
         const ring = await p.locator(".docx-pages").evaluate((el) => getComputedStyle(el).boxShadow);
         assert.equal(ring, "none");
         await shot(p, `docx-${theme}`);
-        return `: 20 páginas, a primeira com o cabeçalho e o rodapé, em ${ms} ms`;
+        assert.equal(await p.evaluate(() => window.__kiwiDocxLive), 1, "um motor vivo");
+        return `: 20 páginas, a primeira com o cabeçalho e o rodapé, em ${ms.join(", ")} ms`;
       });
       if (theme === "dark") continue;
 
@@ -155,10 +182,13 @@ try {
       });
 
       await check("trocar de arquivo solta o motor", async () => {
+        assert.equal(await p.evaluate(() => window.__kiwiDocxLive), 1, "o motor vivo antes de trocar");
         await p.click(".kn-crumb-bt");
         await p.click(".kn-tree-pop .kn-side-item[data-kind='note']");
         await p.waitForSelector(".kn-note-editor .cm-content", { timeout: 10000 });
         assert.equal(await p.locator(".docx-page, .docx-paginated-surface").count(), 0);
+        // O DOM sai com o React mesmo sem o `destroy`: a conta do motor é a prova de que ele foi solto (revisão do T21151).
+        assert.equal(await p.evaluate(() => window.__kiwiDocxLive), 0, "o motor solto");
       });
     } finally {
       await w.close();
@@ -178,6 +208,32 @@ try {
         assert.ok((await p.locator(".docx-page img, .docx-page canvas, .docx-page svg image").count()) > 0, "a imagem");
         assert.deepEqual(w.report.blocked, []);
         await shot(p, "docx-proposta");
+      });
+    } finally {
+      await w.close();
+    }
+  }
+
+  {
+    const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1100, height: 760, motion: false, browser: "webkit", query: { note: INDICE } });
+    const p = w.page;
+    try {
+      await check("um link de dentro do documento rola até o marcador", async () => {
+        await p.waitForSelector(".kn-file[data-state='ready'] .docx-page", { timeout: 30000 });
+        assert.equal(await p.locator(".kn-file-pdf-page").textContent(), "4 páginas");
+        const scroll = p.locator(".kn-file-docx-scroll");
+        const before = await scroll.evaluate((el) => el.scrollTop);
+        await p.locator(".docx-page a.docx-hyperlink", { hasText: "Ir para a conclusão" }).click();
+        await p.waitForFunction((y) => document.querySelector(".kn-file-docx-scroll")!.scrollTop > y + 1000, before, { timeout: 5000 });
+        await p.waitForTimeout(300);
+        // A conclusão, na 4ª página, à vista.
+        const seen = await p.evaluate(() => {
+          const area = document.querySelector(".kn-file-docx-scroll")!.getBoundingClientRect();
+          const last = [...document.querySelectorAll<HTMLElement>(".docx-page")].find((el) => el.innerText.includes("Conclusão"));
+          const r = last?.getBoundingClientRect();
+          return !!r && r.bottom > area.top && r.top < area.bottom;
+        });
+        assert.ok(seen, "a página da conclusão à vista");
       });
     } finally {
       await w.close();
