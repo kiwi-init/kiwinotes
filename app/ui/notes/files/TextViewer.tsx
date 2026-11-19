@@ -13,8 +13,8 @@
 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { indentUnit, syntaxHighlighting } from "@codemirror/language";
-import { Annotation, Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+import { Annotation, Compartment, EditorSelection, EditorState, StateEffect, StateField, Transaction } from "@codemirror/state";
+import { Decoration, type DecorationSet, EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api as appApi, has } from "../../src/api.ts";
@@ -30,6 +30,20 @@ import { detectEol, TextSession, type TextSaveState, toEditor } from "./textSess
 import { useViewerZoom } from "./useViewerZoom.ts";
 import type { FileViewerProps } from "./viewers.ts";
 import { type Point, recallZoom, type Scroll } from "./zoom.ts";
+
+/**
+ * A linha que a busca achou (T21240): um fundo nela, que se vê mesmo sem o foco no editor. Sai quando a pessoa escreve.
+ */
+const markFound = StateEffect.define<number | null>();
+const foundLine = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    if (tr.docChanged) return Decoration.none;
+    for (const e of tr.effects) if (e.is(markFound)) return e.value === null ? Decoration.none : Decoration.set([Decoration.line({ class: "kn-file-found" }).range(e.value)]);
+    return deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 /** Uma troca que veio de fora (o arquivo mudou no disco): não é a pessoa digitando. */
 const fromDisk = Annotation.define<boolean>();
@@ -67,7 +81,7 @@ const codeGutter = [
 /** A pausa na digitação antes de a prévia do .html desenhar de novo (T19314): uma página grande não pisca a cada tecla. */
 export const PREVIEW_DELAY_MS = 300;
 
-export function TextViewer({ path, file, files, flushRef, widthHandles, preview = false }: FileViewerProps) {
+export function TextViewer({ path, file, files, flushRef, widthHandles, preview = false, at }: FileViewerProps) {
   const initial = "text" in file ? file : { text: "", version: file.version };
   const notUtf8 = "readOnly" in file && file.readOnly === true;
   const mixedEol = detectEol(initial.text) === null;
@@ -181,6 +195,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
           theme,
           // ⌘F busca e troca, como na nota .md.
           searchOnly,
+          foundLine,
           lang.of([]),
           // A pessoa digitou: a sessão só marca, e lê o texto inteiro quando grava (depois da pausa).
           EditorView.updateListener.of((u) => {
@@ -220,6 +235,15 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, readOnly]);
+
+  // A linha da busca (T21240): rola até ela, no meio da tela, e a seleciona inteira.
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !at) return;
+    const line = v.state.doc.line(Math.min(Math.max(1, Math.floor(at.line)), v.state.doc.lines));
+    v.dispatch({ selection: { anchor: line.from, head: line.to }, effects: [markFound.of(line.from), EditorView.scrollIntoView(line.from, { y: "center" })] });
+    v.focus();
+  }, [at, session, readOnly]);
 
   useEffect(() => {
     if (readOnly) return;

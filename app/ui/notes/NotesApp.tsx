@@ -228,6 +228,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const [view, setView] = useState<"note" | "trash" | "canvas" | "file">("note");
   /** O arquivo que não é nota aberto no lugar dela (T7103, spec #7079). */
   const [fileOpen, setFileOpen] = useState<string | null>(null);
+  /** A linha onde o arquivo aberto pela busca começa (T21240); um objeto novo a cada pedido. */
+  const [fileAt, setFileAt] = useState<{ path: string; at: { line: number } } | null>(null);
   /** O "grava antes de sair" do arquivo aberto, quando o visualizador edita (T7105). */
   const fileFlush = useRef<(() => Promise<boolean>) | null>(null);
   /** O quadro branco aberto (T6600), e o "grava antes de sair" dele. */
@@ -634,10 +636,11 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
 
   /** Abre um arquivo que não é nota no lugar da nota (T7103): o visualizador do tipo, ou o aviso com o app padrão. */
   const openFileView = useCallback(
-    async (p: string, keepSearch = false) => {
+    async (p: string, keepSearch = false, line?: number) => {
       if (!(await leave())) return;
       setFocusMode(false);
       setFileOpen(p);
+      setFileAt(line ? { path: p, at: { line } } : null);
       setView("file");
       if (!keepSearch) setPalette(false);
       setTreeOpen(false);
@@ -922,13 +925,13 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   };
 
   /** Um arquivo do vault que não é nota, pela árvore ou por um `[[link]]` (T7616). */
-  const openVaultFile = (p: string) => {
+  const openVaultFile = (p: string, line?: number) => {
     // O quadro branco abre no Kiwi (T6600).
     if (api.canvas && /\.canvas$/i.test(p)) return void openCanvas(p);
     // Todo o resto abre nas Notas (spec #19277): o tipo com visualizador (T7103), o que é texto (T19313), e o que não
     // é ganha o cartão do arquivo (T19316), com o app padrão e o Finder. Só um engine antigo, sem `files.read`, manda
     // direto para o app padrão do Mac.
-    if (api.files?.read) return void openFileView(p);
+    if (api.files?.read) return void openFileView(p, false, line);
     setTreeOpen(false);
     api.files?.open(p).catch(failed_("abrir o arquivo"));
   };
@@ -1603,11 +1606,18 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       clearTimeout(t);
     };
   }, [api, query]);
+  /**
+   * Os arquivos de texto achados pelo conteúdo (T21240): entram na árvore como os achados pelo nome, e a linha de cada um
+   * vai junto, para o clique abrir nela.
+   */
+  const [textHits, setTextHits] = useState<{ files: VaultFile[]; lines: Map<string, number> } | null>(null);
   const treeListing = useMemo(() => {
-    if (!listing || !searchFiles?.length) return listing;
+    const extra = [...(searchFiles ?? []), ...(textHits?.files ?? [])];
+    if (!listing || !extra.length) return listing;
     const have = new Set((listing.files ?? []).map((f) => f.path));
-    return { ...listing, files: [...(listing.files ?? []), ...searchFiles.filter((f) => !have.has(f.path))] };
-  }, [listing, searchFiles]);
+    const add = extra.filter((f) => !have.has(f.path) && !!have.add(f.path));
+    return add.length ? { ...listing, files: [...(listing.files ?? []), ...add] } : listing;
+  }, [listing, searchFiles, textHits]);
   // O tamanho e a data de um arquivo, para o cartão (T19316): da lista da árvore, ou, se a pasta dele ainda não abriu
   // (um `[[link]]`, a busca), da busca de arquivos do engine, pelas palavras do caminho inteiro.
   const filesRef = useRef(treeListing?.files);
@@ -1631,6 +1641,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   // T6011: o engine decide as notas também sem filtros (raízes PT e conteúdo); a árvore mantém a hierarquia.
   const [queryPaths, setQueryPaths] = useState<Set<string> | null>(null);
   useEffect(() => {
+    setTextHits(null);
     if (!query.trim()) return setQueryPaths(null);
     // Longa demais (T7791): sem chamar o engine, a árvore fica vazia e diz por quê.
     if (searchTooLong(query)) return setQueryPaths(new Set());
@@ -1638,7 +1649,12 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     let live = true;
     const t = setTimeout(() => {
       api.search(query, Math.min(100_000, Math.max(100, listing?.notes.length ?? 0))).then(
-        (hits) => live && setQueryPaths(new Set(hits.map((h) => h.path))),
+        (hits) => {
+          if (!live) return;
+          const files = hits.flatMap((h) => (h.file ? [{ path: h.path, size: h.file.size, mtime: h.file.mtime }] : []));
+          setTextHits(files.length ? { files, lines: new Map(hits.flatMap((h) => (h.file && h.line ? [[h.path, h.line] as const] : []))) } : null);
+          setQueryPaths(new Set(hits.map((h) => h.path)));
+        },
         () => live && setQueryPaths(new Set()),
       );
     }, 120);
@@ -1784,7 +1800,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             setCollapsed((s) => (s.has("notes") ? toggled(s, "notes") : s));
           }}
           onOpen={(p) => void open(p)}
-          onOpenFile={api.files ? openVaultFile : undefined}
+          onOpenFile={api.files ? (p: string) => openVaultFile(p, query.trim() ? textHits?.lines.get(p) : undefined) : undefined}
           onNewNote={(f) => void create("Sem título", true, f)}
           onNewFolder={folders ? (f) => void newFolder(f) : undefined}
           fresh={fresh}
@@ -1839,6 +1855,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             key={fileOpen}
             files={api.files as FilesApi}
             path={fileOpen}
+            {...(fileAt?.path === fileOpen ? { at: fileAt.at } : {})}
             flushRef={fileFlush}
             widthHandles={widthHandles}
             onOpenExternal={(p) => void api.files?.open(p).catch(failed_("abrir o arquivo"))}
@@ -2092,7 +2109,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             id === "template" ? fromTemplate(selectedFolderRef.current) : id === "save-search" ? saveSearch(q) : id === "canvas" ? void newCanvas(selectedFolderRef.current)
               : id === "focus" ? toggleFocus() : id === "typewriter" ? toggleTypewriter() : id === "add-property" ? addNoteProperty() : undefined
           )}
-          onOpen={showNotes((p: string) => void open(p))}
+          onOpen={showNotes((p: string, line?: number) => (/\.md$/i.test(p) ? void open(p) : openVaultFile(p, line)))}
           onCreate={showNotes((t: string) => void create(t))}
           onClose={() => setPalette(false)}
         />,

@@ -196,6 +196,12 @@
   box-shadow: none;
 }
 
+/* A linha que a busca achou (T21240): o fundo de destaque, até a pessoa escrever. */
+.kn-file-found {
+  background: var(--accent-soft);
+  border-radius: 3px;
+}
+
 .kn-file-text-note,
 .kn-file-text-alert {
   flex: none;

@@ -322,3 +322,24 @@ test("watcher reports only the current external root after switching", async () 
   );
   expect(events.some((e) => e.path === r.a)).toBe(false);
 }, 20_000);
+
+test("o índice do texto (T21240): fica nos dados do app, por pasta, e some quando a pasta sai das recentes", async () => {
+  const r = await rig();
+  const roots = Array.from({ length: 11 }, (_, i) => path.join(r.home, `Pasta ${i}`));
+  for (const p of roots) {
+    await mkdir(p, { recursive: true });
+    await writeFile(path.join(p, "lista.txt"), "acerola\n");
+  }
+  await r.folders.open(roots[0]!);
+  const first = await r.folders.current();
+  await first.text.sync(first.notes.otherFiles());
+  const index = path.join(r.dir, "folders", first.ref.key, "text-index");
+  expect((await readdir(index)).includes("index.sqlite")).toBe(true);
+  expect((await readdir(roots[0]!)).sort()).toEqual(["lista.txt"]);
+  // Nove pastas depois, ela ainda está nas recentes: o índice fica.
+  for (const p of roots.slice(1, 10)) await r.folders.open(p);
+  expect((await readdir(index)).includes("index.sqlite")).toBe(true);
+  // A décima a empurra para fora das recentes: o índice dela vai junto.
+  await r.folders.open(roots[10]!);
+  await expect(readdir(index)).rejects.toThrow();
+});

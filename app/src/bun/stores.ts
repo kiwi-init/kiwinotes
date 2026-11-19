@@ -70,6 +70,7 @@ export const stores = {
   },
   attachments: fixed.attachments,
   ocr: fixed.ocr,
+  textIndex: fixed.text,
   versions: fixed.versions,
   exporter: fixed.exporter,
 };

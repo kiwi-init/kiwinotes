@@ -23,6 +23,7 @@ import { PACKAGE_HEAD_NONE } from "./pacote.ts";
 import { EMPTY_READER, readerFromCapabilities, type VaultReader } from "./tools/reader.ts";
 import { writerFromCapabilities, type VaultWriter } from "./tools/writer.ts";
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
+import { TextIndex } from "../notes/text-index.ts";
 import { Vault } from "../notes/vault.ts";
 import { applyLiveEdits } from "../shared/live-edits.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
@@ -2710,6 +2711,8 @@ describe("as notas .txt pelo agente falso (spec #13379)", () => {
       writeFileSync(path.join(root, rel), content);
     }
     const vault = new Vault({ root, debounceMs: 20, trash: async () => {} });
+    // O .txt é achado pelo índice do texto dos arquivos (T21240), como no app.
+    const text = new TextIndex({ root, dir: path.join(tmp(), "text-index"), pause: async () => {} });
     try {
       const caps = uiCapabilities({
         dictionary: { load: async () => [], save: async (t) => t },
@@ -2719,7 +2722,10 @@ describe("as notas .txt pelo agente falso (spec #13379)", () => {
         settings: { load: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }), save: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }) },
         clipboardWrite: () => {},
         notes: vault,
+        textIndex: text,
       });
+      await (caps as Record<string, (a: unknown) => Promise<unknown>>)["notes.list"]!(undefined);
+      await text.idle();
       const m = make({ reader: readerFromCapabilities(caps as never), writer: writerFromCapabilities(caps as never) });
       await readyNow(m);
       const done = (await askAndWait(
@@ -2734,6 +2740,7 @@ describe("as notas .txt pelo agente falso (spec #13379)", () => {
       expect(read!.texto).toBe("mudar o legado até março\n");
     } finally {
       vault.close();
+      await text.close();
     }
   });
 });

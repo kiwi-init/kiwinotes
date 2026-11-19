@@ -38,67 +38,20 @@ export const hasSections = (path: string): boolean => /\.(md|txt)$/i.test(path);
 /** O título de um arquivo de texto: o `.txt` sem a extensão, como a nota; o código e os outros, com ela. */
 export const textNoteTitle = (path: string) => (path.split("/").pop() ?? path).replace(/\.txt$/i, "");
 
-/**
- * Os limites da busca nos `.txt` (spec #13379): quantos ela olha, o maior que ela lê, e quanto lê no total por busca
- * (revisão do #524: sem o total, 400 arquivos de 512 KB davam uns 200 MB por busca). Passado um limite, o resto casa
- * só pelo nome.
- */
-export const TEXT_SEARCH_FILES = 400;
-export const TEXT_SEARCH_MAX_BYTES = 512 * 1024;
-export const TEXT_SEARCH_TOTAL_BYTES = 4 * 1024 * 1024;
-
 export interface ReaderHit {
   path: string;
   title: string;
   snippet: string;
   approx?: boolean;
   semantic?: boolean;
+  /** Um arquivo de texto (T21240), com o formato; a nota não tem. */
+  file?: { format: string; size: number; mtime: string };
+  line?: number;
 }
 
 const fold = (t: string) => t.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
 const terms = (q: string) =>
   [...new Set(fold(q).split(/\s+/).filter((w) => w && !/^-|^(tag|path):/.test(w)).map((w) => w.replace(/^"|"$/g, "")).filter((w) => w.length >= 2))];
-
-/** Um trecho em volta da 1ª palavra achada (ou o começo). */
-function textSnippet(text: string, words: string[]): string {
-  const f = fold(text);
-  const at = words.map((w) => f.indexOf(w)).filter((i) => i >= 0).sort((a, b) => a - b)[0] ?? 0;
-  const start = Math.max(0, at - 80);
-  const end = Math.min(text.length, at + 160);
-  return `${start > 0 ? "…" : ""}${text.slice(start, end).replace(/\s+/g, " ").trim()}${end < text.length ? "…" : ""}`;
-}
-
-/**
- * A busca nos `.txt` (spec #13379): todas as palavras no caminho ou no texto, sem diferenciar maiúscula nem acento. O
- * `path:pasta` da busca vale aqui também. Olha no máximo `TEXT_SEARCH_FILES` arquivos e lê os de até
- * `TEXT_SEARCH_MAX_BYTES`, até `TEXT_SEARCH_TOTAL_BYTES` no total; o que passa disso só casa pelo nome.
- */
-export async function searchTextNotes(
-  query: string,
-  files: readonly VaultFile[],
-  read: (path: string) => Promise<string | null>,
-  limit: number,
-): Promise<ReaderHit[]> {
-  const words = terms(query);
-  const inPath = fold(query).match(/(?:^|\s)path:("[^"]+"|\S+)/)?.[1]?.replace(/^"|"$/g, "");
-  if (!words.length && !inPath) return [];
-  const hits: ReaderHit[] = [];
-  let budget = TEXT_SEARCH_TOTAL_BYTES;
-  for (const f of files.filter((x) => isTextFile(x.path)).slice(0, TEXT_SEARCH_FILES)) {
-    if (hits.length >= limit) break;
-    const where = fold(f.path);
-    if (inPath && !where.startsWith(`${inPath.replace(/\/+$/, "")}/`)) continue;
-    let text = "";
-    if (words.some((w) => !where.includes(w)) && f.size <= TEXT_SEARCH_MAX_BYTES && f.size <= budget) {
-      budget -= f.size;
-      text = (await read(f.path)) ?? "";
-    }
-    const all = `${where}\n${fold(text)}`;
-    if (!words.every((w) => all.includes(w))) continue;
-    hits.push({ path: f.path, title: textNoteTitle(f.path), snippet: text ? textSnippet(text, words) : "" });
-  }
-  return hits;
-}
 
 /**
  * A busca pelo nome nos arquivos que não são nota (spec #17587): um pdf, uma planilha ou um zip cujo caminho tem todas
@@ -165,17 +118,9 @@ export function readerFromCapabilities(caps: Record<ReaderCapability, (args: unk
   const call = async <T>(cap: ReaderCapability, args: unknown): Promise<T> => (await caps[cap](args)) as T;
   const listed = () => call<{ folders: string[]; notes: ReaderNoteMeta[]; files?: VaultFile[] }>("notes.list", undefined);
   return {
-    search: async (query, limit) => {
-      const hits = await call<ReaderHit[]>("notes.search", { query, limit });
-      if (hits.length >= limit) return hits;
-      // Os arquivos de texto (spec #13379, #21158) completam a lista, depois das notas.
-      const files = (await listed()).files ?? [];
-      const text = async (path: string) => {
-        const f = await call<FileContent>("files.read", { path, as: "text" }).catch(() => null);
-        return f && "text" in f ? f.text : null;
-      };
-      return [...hits, ...(await searchTextNotes(query, files, text, limit - hits.length))];
-    },
+    // Uma busca só (T21240): as notas e o texto de todo arquivo de texto vêm do mesmo índice que as Notas e o ⌘K usam.
+    // O arquivo de segredos nunca entra nele; o filtro aqui é a segunda trava.
+    search: async (query, limit) => (await call<ReaderHit[]>("notes.search", { query, limit })).filter((h) => !isSecretFile(h.path)),
     list: async () => {
       const r = await listed();
       const files = (r.files ?? []).filter((f) => !isSecretFile(f.path));

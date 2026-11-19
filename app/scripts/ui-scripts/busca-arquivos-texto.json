@@ -1,0 +1,114 @@
+{
+ "_": "T21240: rode antes o scripts/busca-arquivos-texto-seed.ts DIR (o .py, o .csv e o .json do roteiro).",
+ "window": "notes",
+ "steps": [
+  {
+   "invoke": "notes.create",
+   "args": {
+    "folder": "",
+    "title": "Lista de compras",
+    "content": "Comprar carambola na feira.\n"
+   }
+  },
+  {
+   "waitFor": ".kn-crumb-bt",
+   "name": "a janela Notas abre"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "press": "Meta+k"
+  },
+  {
+   "type": "carambola"
+  },
+  {
+   "waitFor": ".kn-palette .kn-palette-it:has-text('horta.py')",
+   "name": "o .py achado pelo conteúdo"
+  },
+  {
+   "expectText": ".kn-palette .kn-palette-it >> nth=0",
+   "text": "Lista de compras",
+   "name": "a nota primeiro"
+  },
+  {
+   "expectText": ".kn-palette .kn-palette-it:has-text('horta.py') .kn-palette-type",
+   "text": "py:92",
+   "name": "o tipo e a linha"
+  },
+  {
+   "expectText": ".kn-palette .kn-palette-it:has-text('vendas.csv') .kn-palette-type",
+   "text": "csv:42",
+   "name": "o csv pelo conteúdo"
+  },
+  {
+   "expectText": ".kn-palette .kn-palette-it:has-text('carambola-precos.json') .kn-palette-type",
+   "text": "json",
+   "name": "o json pelo nome"
+  },
+  {
+   "screenshot": "cmdk-arquivos.png"
+  },
+  {
+   "click": ".kn-palette .kn-palette-it:has-text('horta.py')",
+   "name": "abre o .py"
+  },
+  {
+   "waitFor": ".cm-content:has-text('carambola madura')",
+   "name": "o arquivo abre no visualizador"
+  },
+  {
+   "expectText": ".cm-line.kn-file-found",
+   "text": "return 'carambola madura'",
+   "name": "a linha achada marcada"
+  },
+  {
+   "screenshot": "py-na-linha.png"
+  },
+  {
+   "press": "Meta+k"
+  },
+  {
+   "type": "carambola"
+  },
+  {
+   "waitFor": ".kn-palette .kn-palette-it:has-text('vendas.csv')"
+  },
+  {
+   "click": ".kn-palette .kn-palette-it:has-text('vendas.csv')",
+   "name": "abre o csv"
+  },
+  {
+   "waitFor": "[role='gridcell'][aria-selected='true']:has-text('carambola')",
+   "name": "a célula da linha achada selecionada"
+  },
+  {
+   "screenshot": "csv-na-linha.png"
+  },
+  {
+   "click": ".kn-crumb-bt",
+   "name": "abre a árvore"
+  },
+  {
+   "fill": ".kn-tree-pop .kn-side-search",
+   "text": "madura"
+  },
+  {
+   "waitFor": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('horta')",
+   "name": "a busca da barra acha o .py pelo conteúdo"
+  },
+  {
+   "screenshot": "arvore-busca.png"
+  },
+  {
+   "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('horta')",
+   "name": "abre pela árvore"
+  },
+  {
+   "expectText": ".cm-line.kn-file-found",
+   "text": "return 'carambola madura'",
+   "name": "também na linha achada"
+  }
+ ]
+}

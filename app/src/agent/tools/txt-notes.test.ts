@@ -9,17 +9,20 @@ import path from "node:path";
 
 import { uiCapabilities } from "../../bun/ui-capabilities.ts";
 import { Vault } from "../../notes/vault.ts";
+import { TextIndex } from "../../notes/text-index.ts";
 import { NoteVersions } from "../../notes/versions.ts";
 import { DEFAULT_SETTINGS } from "../../store/settings.ts";
 import { AgentActivity } from "../activity.ts";
 import { undo, undoNotesFromCapabilities } from "../undo.ts";
-import { readerFromCapabilities, searchTextNotes } from "./reader.ts";
+import { readerFromCapabilities } from "./reader.ts";
 import { folderNamed, runKiwiTool, ToolError } from "./tools.ts";
 import { writerFromCapabilities } from "./writer.ts";
 import { tempDir } from "../../../test/tmp.ts";
 
 const vaults: Vault[] = [];
-afterEach(() => {
+const indexes: TextIndex[] = [];
+afterEach(async () => {
+  for (const t of indexes.splice(0)) await t.close();
   for (const v of vaults.splice(0)) v.close?.();
 });
 
@@ -42,6 +45,9 @@ function setup(files: Record<string, string> = {}) {
   }
   const v = new Vault({ root, debounceMs: 20, trash: async () => {} });
   vaults.push(v);
+  // O índice do texto (T21240), num tmp; a busca do agente espera a passada dele, como a pessoa depois da abertura.
+  const text = new TextIndex({ root, dir: path.join(base, "text-index"), pause: async () => {} });
+  indexes.push(text);
   const caps = uiCapabilities({
     dictionary: { load: async () => [], save: async (t) => t },
     snippets: { load: async () => [], save: async (s) => s },
@@ -51,6 +57,7 @@ function setup(files: Record<string, string> = {}) {
     clipboardWrite: () => {},
     notes: v,
     versions: new NoteVersions({ dir: path.join(base, "history") }),
+    textIndex: text,
   }) as Caps;
   let clock = Date.parse("2026-11-14T12:00:00.000Z");
   const now = () => clock;
@@ -68,6 +75,10 @@ function setup(files: Record<string, string> = {}) {
   };
   const tool = async (name: string, args: unknown) => {
     clock += 1000;
+    if (name === "notes_search") {
+      await caps["notes.list"]!(undefined);
+      await text.idle();
+    }
     const journal = { keep: (_p: string, before: string) => activity.keep(id, before), drop: (c: string) => activity.drop(c) };
     const r = await runKiwiTool({ reader, writer, journal, decider }, name, args);
     if (r.change) await activity.change(id, r.change);
@@ -209,29 +220,17 @@ describe("a pasta pelo nome (spec #13379)", () => {
   });
 });
 
-describe("a busca nos .txt (spec #13379)", () => {
-  test("lê no máximo 4 MB por busca (revisão do #524): passado o total, o resto casa só pelo nome", async () => {
-    const files = Array.from({ length: 20 }, (_, i) => ({ path: `a/nota-${i}.txt`, size: 500 * 1024, mtime: "" }));
-    files.push({ path: "a/legado-no-nome.txt", size: 500 * 1024, mtime: "" });
-    let bytes = 0;
-    const hits = await searchTextNotes("legado", files, async (p) => {
-      bytes += files.find((f) => f.path === p)!.size;
-      return "sem a palavra";
-    }, 10);
-    expect(bytes).toBeLessThanOrEqual(4 * 1024 * 1024);
-    expect(hits.map((h) => h.path)).toEqual(["a/legado-no-nome.txt"]);
-  });
-
-  test("lê no máximo os de até 512 KB; o maior casa só pelo nome", async () => {
-    const files = [
-      { path: "a/grande-legado.txt", size: 600 * 1024, mtime: "" },
-      { path: "a/grande.txt", size: 600 * 1024, mtime: "" },
-      { path: "a/x.md", size: 10, mtime: "" },
-    ];
-    const read: string[] = [];
-    const hits = await searchTextNotes("legado", files, async (p) => (read.push(p), "legado"), 10);
-    expect(hits.map((h) => h.path)).toEqual(["a/grande-legado.txt"]);
-    expect(read).toEqual([]);
+describe("a busca nos arquivos de texto (spec #21165)", () => {
+  test("sem o atalho dos 400 .txt: o 500º arquivo de texto acha pelo conteúdo, e o .py e o .json também", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 500; i++) files[`Muitos/nota-${String(i).padStart(3, "0")}.txt`] = `linha ${i}\n`;
+    files["Muitos/nota-499.txt"] = "começo\nsó aqui: pitangueira\n";
+    files["Codigo/rega.py"] = "def regar():\n    return 'pitangueira'\n";
+    files["Codigo/horta.json"] = '{"arvore": "pitangueira"}\n';
+    const t = setup(files);
+    const r = await t.tool("notes_search", { query: "pitangueira", limit: 10 });
+    const got = Object.fromEntries(r.resultados.map((h: { path: string; formato?: string; linha?: number }) => [h.path, [h.formato, h.linha]]));
+    expect(got).toEqual({ "Muitos/nota-499.txt": ["txt", 2], "Codigo/rega.py": ["py", 2], "Codigo/horta.json": ["json", 1] });
   });
 });
 

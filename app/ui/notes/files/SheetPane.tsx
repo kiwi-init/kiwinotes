@@ -29,9 +29,11 @@ interface Props {
   countHeader?: boolean;
   /** O arquivo, para o zoom da grade ficar guardado por ele (T21238). */
   zoomKey?: string;
+  /** Abrir com a seleção nesta linha do arquivo (T21240). */
+  goTo?: { line: number } | undefined;
 }
 
-export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, countHeader = true, zoomKey }: Props) {
+export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, countHeader = true, zoomKey, goTo }: Props) {
   const editable = !session.readOnly;
   const [spec, setSpec] = useState<ViewSpec>({});
   const texts = useMemo(() => sheetTexts(sheet), [sheet]);
@@ -145,6 +147,7 @@ export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, cou
       foot={foot}
       kiwi={kiwi}
       moveEditing={moveEditing}
+      {...(goTo ? { goTo } : {})}
     />
   );
 }

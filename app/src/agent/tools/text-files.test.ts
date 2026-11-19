@@ -9,6 +9,7 @@ import path from "node:path";
 
 import { uiCapabilities } from "../../bun/ui-capabilities.ts";
 import { Vault } from "../../notes/vault.ts";
+import { TextIndex } from "../../notes/text-index.ts";
 import { NoteVersions } from "../../notes/versions.ts";
 import { EDITABLE_TEXT } from "../../shared/file-view.ts";
 import { DEFAULT_SETTINGS } from "../../store/settings.ts";
@@ -18,9 +19,12 @@ import { undo, undoNotesFromCapabilities } from "../undo.ts";
 import * as reader from "./reader.ts";
 import { runKiwiTool, ToolError } from "./tools.ts";
 import { writerFromCapabilities } from "./writer.ts";
+import { SecretGuard } from "../../guardrail/filter.ts";
 
 const vaults: Vault[] = [];
-afterEach(() => {
+const indexes: TextIndex[] = [];
+afterEach(async () => {
+  for (const t of indexes.splice(0)) await t.close();
   for (const v of vaults.splice(0)) v.close?.();
 });
 
@@ -31,7 +35,7 @@ const LOG = "2026-11-02 09:00 abriu o caixa\r\n2026-11-02 09:05 vendeu 2 cafés\
 
 type Caps = Record<string, (a: unknown) => unknown>;
 
-function setup(files: Record<string, string> = {}) {
+function setup(files: Record<string, string> = {}, guard?: SecretGuard) {
   const base = tempDir("kiwi-texts-");
   const root = path.join(base, "KiwiNotes");
   const all = {
@@ -48,6 +52,9 @@ function setup(files: Record<string, string> = {}) {
   }
   const v = new Vault({ root, debounceMs: 20, trash: async () => {} });
   vaults.push(v);
+  // O índice do texto (T21240), num tmp; a busca do agente espera a passada dele, como a pessoa depois da abertura.
+  const text = new TextIndex({ root, dir: path.join(base, "text-index"), pause: async () => {} });
+  indexes.push(text);
   const caps = uiCapabilities({
     dictionary: { load: async () => [], save: async (t) => t },
     snippets: { load: async () => [], save: async (s) => s },
@@ -57,6 +64,7 @@ function setup(files: Record<string, string> = {}) {
     clipboardWrite: () => {},
     notes: v,
     versions: new NoteVersions({ dir: path.join(base, "history") }),
+    textIndex: text,
   }) as Caps;
   let clock = Date.parse("2026-11-19T12:00:00.000Z");
   const now = () => clock;
@@ -64,9 +72,13 @@ function setup(files: Record<string, string> = {}) {
   const asked: string[] = [];
   const id = `p-${randomUUID()}`;
   const decider = { request: id, answers: {} as never, questions: { confirm: async (_r: string, q: string) => (asked.push(q), true) } as never };
-  const ctx = { reader: reader.readerFromCapabilities(caps as never), writer: writerFromCapabilities(caps as never), decider };
+  const ctx = { reader: reader.readerFromCapabilities(caps as never), writer: writerFromCapabilities(caps as never), decider, ...(guard ? { guard } : {}) };
   const tool = async (name: string, args: unknown) => {
     clock += 1000;
+    if (name === "notes_search") {
+      await caps["notes.list"]!(undefined);
+      await text.idle();
+    }
     const journal = { keep: (_p: string, before: string) => activity.keep(id, before), drop: (c: string) => activity.drop(c) };
     const r = await runKiwiTool({ ...ctx, journal }, name, args);
     if (r.change) await activity.change(id, r.change);
@@ -212,5 +224,38 @@ describe("o Kiwi Cat edita qualquer arquivo de texto (spec #21158)", () => {
       expect(e!.message).toContain("Nada foi escrito");
     }
     expect(t.read("Loja/estoque.py")).toBe(PY);
+  });
+});
+
+describe("a busca no conteúdo e o filtro (T21240)", () => {
+  // Um token inventado num formato que o filtro reconhece, montado aqui para a linha não parecer um segredo.
+  const TOKEN = ["ghp", "0123456789abcdefghijABCDEFGHIJ012345"].join("_");
+
+  test("o trecho e a linha de um yaml saem do texto filtrado; o que só existe dentro do segredo não volta", async () => {
+    const t = setup({ "Loja/config.yaml": `loja: cafe\nchave: ${TOKEN}\nentrega: jabuticaba\n` }, new SecretGuard());
+    const r = await t.tool("notes_search", { query: "jabuticaba" });
+    const hit = r.resultados.find((h: { path: string }) => h.path === "Loja/config.yaml");
+    expect(hit).toMatchObject({ formato: "yaml", linha: 3 });
+    expect(JSON.stringify(r)).not.toContain(TOKEN);
+    // A parte do token não confirma o segredo.
+    expect((await t.tool("notes_search", { query: "0123456789abcdefghijABCDEFGHIJ012345" })).resultados).toEqual([]);
+  });
+
+  test("o .env não aparece nem pelo conteúdo, nem com o filtro desligado", async () => {
+    const t = setup({ "Loja/.env": "LOJA=pitomba\n", "Loja/prod.env": "LOJA=pitomba\n" });
+    expect((await t.tool("notes_search", { query: "pitomba" })).resultados).toEqual([]);
+  });
+
+  test("o arquivo grande demais para a busca ler vem aproximado, sem trecho; com o filtro, só se o nome tem a palavra", async () => {
+    // Acima do que a busca lê por arquivo (512 KB): o índice acha, mas ninguém o lê de novo, nem o gato.
+    const big = `${"2026-11-02 09:00 registro qualquer\n".repeat(20_000)}vendeu rapadura\n`;
+    const files = { "Loja/vendas.log": big, "Loja/rapadura.log": big };
+    const sem = setup(files);
+    const r = (await sem.tool("notes_search", { query: "rapadura" })).resultados as Record<string, unknown>[];
+    expect(r.map((x) => x.path).sort()).toEqual(["Loja/rapadura.log", "Loja/vendas.log"]);
+    expect(r.every((x) => x.trecho === "" && x.como === "aproximado" && x.formato === "log" && !("linha" in x))).toBe(true);
+    // Com o filtro, o que achou só pelo conteúdo não lido some: a busca não confirma o que nem foi filtrado.
+    const com = setup(files, new SecretGuard());
+    expect(((await com.tool("notes_search", { query: "rapadura" })).resultados as { path: string }[]).map((x) => x.path)).toEqual(["Loja/rapadura.log"]);
   });
 });

@@ -36,9 +36,11 @@ interface Props {
   kiwi?: KiwiSheetSource;
   /** Só para testes e para os PRs dos formatos: no app, o visualizador vem do registro. */
   viewer?: FileViewer;
+  /** A linha onde abrir (T21240): a da busca. */
+  at?: { line: number };
 }
 
-export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef, widthHandles, kiwi, viewer = viewerFor(path) }: Props) {
+export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef, widthHandles, kiwi, viewer = viewerFor(path), at }: Props) {
   const [state, setState] = useState<FileState>({ kind: "loading" });
   const [info, setInfo] = useState<VaultFile | null>(null);
   const generation = useRef(0);
@@ -153,7 +155,7 @@ export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef
         {state.kind === "ready" ? (
           // Um visualizador pesado (o pdf) chega depois, por import dinâmico.
           <Suspense fallback={null}>
-            <state.viewer.View path={path} file={state.file} files={files} flushRef={flushRef} widthHandles={widthHandles} preview={html && preview} kiwi={kiwi} />
+            <state.viewer.View path={path} file={state.file} files={files} flushRef={flushRef} widthHandles={widthHandles} preview={html && preview} kiwi={kiwi} {...(at ? { at } : {})} />
           </Suspense>
         ) : state.kind === "tooLarge" ? (
           fileCard(`Este arquivo tem ${fileSize(state.size)}, e o Kiwi Notes mostra aqui até ${fileSize(state.limit)}.`)

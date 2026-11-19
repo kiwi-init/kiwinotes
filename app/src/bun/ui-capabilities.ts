@@ -30,6 +30,7 @@ import type { FileContent } from "../notes/vault.ts";
 import { RemoteImageError } from "../notes/remote-image.ts";
 import { type AudioInputs, isMicrophoneChoice } from "../shared/microphone.ts";
 import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
+import type { TextIndex } from "../notes/text-index.ts";
 import type { SemanticIndex } from "../notes/semantic/index.ts";
 import type { SemanticEngine } from "../notes/semantic/engine.ts";
 import { semanticQueryText } from "../shared/query.ts";
@@ -153,7 +154,7 @@ export interface CapabilityDeps {
   > &
     // O inode de cada nota (spec #9874): sem ele (os vaults de mentira), o projeto só segue o que o watcher viu. Sem o
     // `folderList` (spec #12918), o `notes.folders` tira as pastas do `list()`. Sem o `saveFileBytes` (T21107), a planilha não grava.
-    Partial<Pick<Vault, "noteInodes" | "noteMetas" | "folderList" | "filesIn" | "filesMatching" | "resolveFiles" | "saveFileBytes">>;
+    Partial<Pick<Vault, "noteInodes" | "noteMetas" | "folderList" | "filesIn" | "filesMatching" | "resolveFiles" | "saveFileBytes" | "otherFiles" | "fileInfo">>;
   /**
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
    * respondem lista vazia e E_NOT_FOUND, e o save não guarda versão.
@@ -179,6 +180,8 @@ export interface CapabilityDeps {
   revealTrash?(): void;
   /** O texto dos anexos para a busca (T2709). Sem ele, a busca é só nas notas. */
   ocr?: Pick<OcrIndex, "scan" | "enqueue" | "match">;
+  /** O texto de todo arquivo de texto (T21240): o código, o json, o csv… Sem ele, a busca é só nas notas. */
+  textIndex?: Pick<TextIndex, "sync" | "update" | "search">;
   /** A busca pelo sentido desta pasta (T6013). Sem ela, a busca é só pelas palavras, como antes. */
   semantic?: Pick<SemanticIndex, "sync" | "query" | "status" | "clear">;
   /** As notas que o índice do sentido acompanha: o mesmo vault de `notes`. */
@@ -364,6 +367,13 @@ export function uiCapabilities(deps: CapabilityDeps,
         const ocr = deps.ocr;
         deps.notes.onOtherFiles((paths) => ocr.enqueue(paths));
         void ocr.scan().catch((e) => console.error("[ocr] scan:", e));
+      }
+      // O texto dos arquivos (T21240): na abertura, só os novos e os que mudaram; depois, o que o watcher avisa.
+      if (deps.textIndex && deps.notes.otherFiles && deps.notes.fileInfo) {
+        const text = deps.textIndex;
+        const notes = deps.notes as Required<Pick<Vault, "otherFiles" | "fileInfo">>;
+        deps.notes.onOtherFiles((paths) => void text.update(paths, (p) => notes.fileInfo(p)));
+        void text.sync(notes.otherFiles());
       }
       // A busca pelo sentido (T6013): o índice acompanha as notas, e a fila anda em segundo plano.
       if (deps.semantic && deps.semanticSource) {
@@ -1297,10 +1307,20 @@ export function uiCapabilities(deps: CapabilityDeps,
           return undefined;
         })
         : undefined;
-      const hits = v.search(a.query, a.limit, semantic);
+      let hits = v.search(a.query, a.limit, semantic);
+      // Os arquivos de texto (T21240), depois das notas que acharam pelas palavras: o código, o json, o csv.
+      const max = typeof a.limit === "number" ? a.limit : 20;
+      if (deps.textIndex && v.fileInfo && hits.length < max) {
+        const info = v.fileInfo.bind(v);
+        const files = await deps.textIndex.search(a.query as string, max - hits.length, info).catch(() => []);
+        if (files.length) {
+          const exact = hits.filter((h) => !h.approx && !h.semantic);
+          // O arquivo aproximado (passou do que a busca lê) vai com o aproximado das notas.
+          hits = [...exact, ...files.filter((h) => !h.approx), ...hits.filter((h) => h.approx || h.semantic), ...files.filter((h) => h.approx)];
+        }
+      }
       // O texto das imagens e dos PDFs (T2709) completa a lista, depois do que achou nas notas.
       if (!deps.ocr || !(await deps.settings.load()).ocr) return hits;
-      const max = typeof a.limit === "number" ? a.limit : 20;
       if (hits.length >= max) return hits;
       // O exato antes do aproximado (T2966), nas notas e nos anexos juntos; o resto da ordem fica como veio.
       const all = [...hits, ...(await attachmentHits(deps.ocr, v, a.query as string, hits, max)),
