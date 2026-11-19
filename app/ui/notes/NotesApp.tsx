@@ -1307,8 +1307,9 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       ];
     }
     if (t.kind === "file") {
-      // Um arquivo que não é nota (T19878, spec #19256): só o que vale para ele. O "Abrir" é o mesmo do clique.
-      const shownHere = Boolean(api.canvas && /\.canvas$/i.test(t.path)) || Boolean(api.files?.read && (viewerFor(t.path) || mayBeText(t.path)));
+      // Um arquivo que não é nota (T19878, spec #19256): só o que vale para ele. O "Abrir" é o mesmo do clique, que
+      // abre tudo nas Notas (T19316, o cartão para o que não tem visualizador); o "app padrão" é a saída para o Mac.
+      const shownHere = Boolean(api.canvas && /\.canvas$/i.test(t.path)) || Boolean(api.files?.read);
       const canMove = Boolean(api.files?.rename);
       return [
         { label: "Abrir", onSelect: () => openVaultFile(t.path) },
