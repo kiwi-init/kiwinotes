@@ -224,6 +224,14 @@ describe("Sidecar", () => {
     expect(attempts).toBe(2);
   });
 
+  test("the helper's pid, for its RAM in `cli mem` (spec #20953): null before it starts", async () => {
+    const helper = fakeHelper();
+    const s = make(helper, undefined, { spawn: (argv) => Object.assign(helper.spawn(argv), { pid: 4242 }) });
+    expect(new Sidecar({ helper: "/no/such/kiwi-helper", socketPath: "/tmp/x.sock", log: () => {} }).pid).toBeNull();
+    await s.whenReady();
+    expect(s.pid).toBe(4242);
+  });
+
   test("a request without an answer times out", async () => {
     const s = make(
       fakeHelper(() => undefined),

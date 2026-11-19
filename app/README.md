@@ -60,12 +60,15 @@ bun run cli events --data /tmp/kn-test     # notes.changed, history.added, dicta
 bun run cli logs --follow --data /tmp/kn-test
 bun run cli dictate …                      # T1740: ditar um wav ou um texto, com dryRun
 bun run cli screenshot … / ui …            # T1742: prints e roteiros das janelas
+bun run cli mem --data /tmp/kn-test        # a RAM do principal e do helper (spec #20953)
 bun run cli stop --data /tmp/kn-test
 ```
 
+- **A RAM (spec #20953):** o `cli mem` devolve, em bytes, o `phys_footprint` de agora (`now`) e o pico desde que o processo abriu (`peak`), o mesmo número do Monitor de Atividade, do principal (com o `heapUsed` e o `heapTotal` do JS) e do helper (`null` sem ele). Só números. O `bun run mem:scenarios [--only 1,3] [--out arquivo.json]` roda os seis roteiros (pasta grande, ditados, reunião, agente, janelas e os quatro sem a reunião somados numa sessão), cada um num headless próprio, e dá antes, pico e 30 s depois. Os roteiros 2, 3 e 6 pegam `kiwi lock bench` sozinhos. A reunião são dois processos (o `kiwi-helper --meeting-live --realtime --segments-live --linger`, que manda cada segmento na hora e fica de pé depois do fim, e um principal com o `MeetingNotes`), e precisa do banco das reuniões (`scripts/meeting-bench`).
+
 - **Saída e exit codes:** a saída é JSON. O exit code é 0 se deu certo, 1 se a capacidade respondeu erro (o JSON traz o `code`: `E_BAD_ARGS`, `E_NO_CAPABILITY`, `E_OUTSIDE_VAULT`…), 2 para uso errado e 3 quando não há headless de pé.
 - **A pasta dos dados:** sem `--data`, vale `KIWI_HEADLESS_DATA`, senão `$TMPDIR/kiwinotes-headless`. Uma pasta que é (ou fica dentro de) `~/Library/Application Support/KiwiNotes`, `…/app.kiwinotes.desktop` ou `~/KiwiNotes`, symlinks resolvidos, é recusada com `E_REAL_DATA` (T1827).
-- **O protocolo** (o socket `<data>/control.sock`, 0600, um JSON por linha: `status`, `invoke`, `dictate`, `subscribe`, `stop`) está em `src/headless/server.ts` e no #1745.
+- **O protocolo** (o socket `<data>/control.sock`, 0600, um JSON por linha: `status`, `mem`, `invoke`, `dictate`, `subscribe`, `stop`) está em `src/headless/server.ts` e no #1745.
 
 ### O host do agente pela CLI (T8478)
 

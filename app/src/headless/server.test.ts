@@ -92,6 +92,15 @@ describe("headless (T1739)", () => {
       expect(created.json).toMatchObject({ ok: true, value: { path: "Pela CLI.md" } });
       expect(readFileSync(path.join(data, "vault", "Pela CLI.md"), "utf8")).toBe("oi");
 
+      // A RAM (spec #20953): só números, e sem helper o helper é null.
+      const mem = await cli(["mem"]);
+      expect(mem.code).toBe(0);
+      const ram = mem.json!.value as { main: { now: number; peak: number; heapUsed: number }; helper: unknown };
+      expect(ram.main.now).toBeGreaterThan(0);
+      expect(ram.main.peak).toBeGreaterThanOrEqual(ram.main.now);
+      expect(ram.main.heapUsed).toBeGreaterThan(0);
+      expect(ram.helper).toBeNull();
+
       const list = await cli(["invoke", "notes.list"]);
       expect(list.json).toMatchObject({ ok: true, value: { notes: [{ path: "Pela CLI.md" }] } });
 
@@ -120,8 +129,8 @@ describe("headless (T1739)", () => {
       expect((await cli(["status"])).code).toBe(3);
       expect(existsSync(path.join(data, "control.sock"))).toBe(false);
     },
-    // 16 chamadas da CLI, mais o start, que espera o headless subir.
-    PER_CALL_MS * 18,
+    // 17 chamadas da CLI, mais o start, que espera o headless subir.
+    PER_CALL_MS * 19,
   );
 });
 

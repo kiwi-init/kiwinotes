@@ -16,6 +16,7 @@ import { NO_SPELLING } from "../shared/spelling.ts";
 
 import { appendFileSync, chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { statusLabel } from "../bun/session-status.ts";
+import { memReport } from "../bun/memory.ts";
 import { LineWriter } from "./lineWriter.ts";
 import path from "node:path";
 import type { Socket } from "bun";
@@ -444,6 +445,9 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
         if (typeof msg.click === "string") stores.agent.noticeResponse({ id: msg.click, action: "default" });
         return { id, ok: true, value: { view: fakeView, shown: fakeShown.length } };
       }
+      case "mem":
+        // A RAM do principal e do helper (spec #20953): só números, em bytes.
+        return { id, ok: true, value: memReport(session?.sidecar.pid) };
       case "stop":
         setTimeout(() => void stop(), 10);
         return { id, ok: true, value: { stopping: true } };

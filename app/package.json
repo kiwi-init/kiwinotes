@@ -19,6 +19,7 @@
     "ui:publish": "bun scripts/ui-publish.ts",
     "ui:serve": "bun scripts/ui-serve.ts",
     "notes:bench": "bun scripts/notes-bench.ts",
+    "mem:scenarios": "bun scripts/mem-scenarios.ts",
     "cli": "bun scripts/cli.ts"
   },
   "dependencies": {
