@@ -7,7 +7,10 @@ import path from "node:path";
 import * as XLSX from "xlsx";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
+import mammoth from "mammoth";
+
 import { zipBytes } from "../../test/office-files.ts";
+import { type DocNode, parseDocHtml } from "../../ui/notes/files/docx.ts";
 import { ABA_LARGA, MARCA, PASTA, xlsxGrande } from "../../test/regua/arquivos.ts";
 import { columnName, docLines, docText, DocTextError, isDocText } from "./doc-text.ts";
 
@@ -48,7 +51,30 @@ describe("docText: as fixtures da régua", () => {
   }, 60_000); // gerar a planilha com o SheetJS leva segundos
 });
 
+/** Os blocos com texto que o visualizador do docx mostra (o mammoth), na ordem: o que o número do parágrafo conta. */
+async function viewerBlocks(bytes: Uint8Array): Promise<string[]> {
+  const out: string[] = [];
+  const text = (n: DocNode): string => (typeof n === "string" ? n : n.children.map(text).join(""));
+  const walk = (list: DocNode[]) => {
+    for (const n of list) {
+      if (typeof n === "string") continue;
+      if (/^(p|h[1-6])$/.test(n.tag)) {
+        const t = text(n).replace(/\s+/g, " ").trim();
+        if (t) out.push(t);
+      } else walk(n.children);
+    }
+  };
+  walk(parseDocHtml((await mammoth.convertToHtml({ buffer: Buffer.from(bytes) })).value));
+  return out;
+}
+
 describe("docText: docx", () => {
+  test("o número do parágrafo é o do visualizador (o mammoth): a imagem e a equação não contam", async () => {
+    const bytes = fixture("estoque.docx");
+    const mine = (await docText("estoque.docx", bytes)).segments.map((s) => s.text);
+    expect(mine).toEqual(await viewerBlocks(bytes));
+  });
+
   test("o tab e a quebra viram espaço; o código de campo e o parágrafo vazio ficam de fora", async () => {
     const body =
       p("Primeiro") +

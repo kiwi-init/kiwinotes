@@ -152,7 +152,8 @@ function attr(attrs: string, name: string): string | undefined {
 /**
  * Os parágrafos do `word/document.xml`, na ordem: o texto dos `<w:t>` (o inserido de uma alteração controlada entra; o
  * excluído, `<w:delText>`, e o código de campo, `<w:instrText>`, não), o tab e a quebra como espaço. Um parágrafo dentro
- * de outro (a caixa de texto) sai separado. Só os que têm texto contam no número.
+ * de outro (a caixa de texto) sai separado. Só os que têm texto contam no número, como no visualizador (o mammoth
+ * pula o parágrafo vazio); a equação (`<m:t>`) fica de fora pelo mesmo motivo: o mammoth não a mostra.
  */
 function docxText(bytes: Uint8Array, out: Collector): void {
   const pkg = new Package(bytes, "docx");
@@ -162,7 +163,7 @@ function docxText(bytes: Uint8Array, out: Collector): void {
   const doc = raw.replace(/<mc:Fallback\b[\s\S]*?<\/mc:Fallback>/g, "");
   const stack: string[] = [];
   let n = 0;
-  const tag = /<(\/?)(w:p|w:t|w:tab|w:br|w:cr|m:t)\b([^>]*?)(\/?)>/g;
+  const tag = /<(\/?)(w:p|w:t|w:tab|w:br|w:cr)\b([^>]*?)(\/?)>/g;
   let m: RegExpExecArray | null;
   while ((m = tag.exec(doc))) {
     const [, close, name, , self] = m;
@@ -175,7 +176,7 @@ function docxText(bytes: Uint8Array, out: Collector): void {
       }
     } else if (!stack.length || close) {
       continue;
-    } else if (name === "w:t" || name === "m:t") {
+    } else if (name === "w:t") {
       if (self) continue;
       const end = doc.indexOf(`</${name}>`, tag.lastIndex);
       if (end < 0) break;
