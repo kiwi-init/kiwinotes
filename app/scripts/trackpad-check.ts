@@ -10,7 +10,8 @@
 //   a cada quadro, os pontos da área da grade caem numa célula.
 // - Rolar para o lado numa planilha larga, até passar da borda, nunca sai do arquivo.
 //
-//   bun scripts/trackpad-check.ts [pasta]          (ONLY=lista: só os arquivos com esse pedaço no nome)
+//   bun scripts/trackpad-check.ts [pasta]          (ONLY=lista: só os arquivos com esse pedaço no nome;
+//                                                   VIDEO=1: grava um vídeo de cada um, com a pinça devagar)
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -191,6 +192,8 @@ const CASES: Case[] = [
 
 /** Quanto o ponto pode andar dentro do elemento (fração): a tolerância do arredondamento e da margem que não cresce. */
 const DRIFT = 0.08;
+/** O vídeo do PR: a pinça devagar, para ver. */
+const video = process.env.VIDEO ? join(out, "video") : undefined;
 
 let failed = false;
 const report: string[] = [];
@@ -199,7 +202,7 @@ const browser = await webkit.launch({ headless: true });
 try {
   // 1. A pinça, o ctrl+roda e o ⌘+/⌘−/⌘0 em cada tipo.
   for (const c of CASES.filter((x) => !process.env.ONLY || x.file.includes(process.env.ONLY))) {
-    const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1000, height: 680, motion: false, browser: "webkit", query: { note: c.file } });
+    const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1000, height: 680, motion: false, browser: "webkit", video, query: { note: c.file } });
     const p = w.page;
     try {
       await p.waitForSelector(`.kn-file[data-state='ready'] ${c.ready}`, { timeout: 30000 });
@@ -207,7 +210,9 @@ try {
       const a = (await p.locator(c.area).first().boundingBox())!;
       const at = { x: a.x + a.width * c.at[0], y: a.y + a.height * c.at[1] };
       const b0 = await probe(p, at, c.under);
-      await pinch(p, c.area, at, 2);
+      if (video) await p.waitForTimeout(700);
+      await pinch(p, c.area, at, 2, video ? 45 : 8);
+      if (video) await p.waitForTimeout(700);
       const b1 = await again(p, at, c.under, b0);
       const grow = c.axis === "y" ? b1.h / b0.h : b1.w / b0.w;
       assert.ok(grow > 1.6 && grow < 2.4, `${c.file}: a pinça para 2× cresceu ${grow.toFixed(2)}×`);
