@@ -216,7 +216,9 @@ export function scanRange(cwd: string, range: string[], terms: Terms, except: Se
           hits.push({ file: `${file} (imagem)`, line: 0, reason: `o OCR não leu a imagem: ${(e as Error).message}` });
           continue;
         }
-        if (text) hits.push(...scanLines(`${file} (texto da imagem)`, text.map((t, i) => ({ n: i + 1, text: t })), terms, except));
+        // Sem o Vision (fora do macOS), a imagem nova barra em vez de passar sem ser lida (spec #21331).
+        if (!text) hits.push({ file: `${file} (imagem)`, line: 0, reason: "o OCR só roda no macOS" });
+        else hits.push(...scanLines(`${file} (texto da imagem)`, text.map((t, i) => ({ n: i + 1, text: t })), terms, except));
       }
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -264,7 +266,8 @@ if (import.meta.main) {
     const known = (sha: string) => spawnSync("git", ["cat-file", "-e", `${sha}^{commit}`], { cwd: repo }).status === 0;
     for (const range of pushRanges(stdin, remote, known)) hits.push(...scanRange(repo, range, terms, except, { ocr: process.platform === "darwin" }));
   } else if (mode === "--range" && a) {
-    hits = scanRange(repo, [a], terms, except, { ocr: process.platform === "darwin" });
+    // No CI, sempre com o OCR: no Linux (o PR só de texto, spec #21331) uma imagem nova barra em vez de passar sem leitura.
+    hits = scanRange(repo, [a], terms, except, { ocr: true });
   } else if (mode === "--line" && a && b) {
     const text = readFileSync(join(process.cwd(), a), "utf8").split("\n")[Number(b) - 1] ?? "";
     const file = git(process.cwd(), ["ls-files", "--full-name", a]).trim() || a;
