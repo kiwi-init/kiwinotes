@@ -16,8 +16,11 @@ export interface SetupModel {
   state: "starting" | "loading" | "ready" | "unavailable";
   fraction?: number;
   phase?: "listing" | "downloading" | "compiling";
-  /** O modelo do vocabulário (99 MB), que baixa depois do principal; `undefined` até o helper dizer. */
-  boosting?: "loading" | "ready" | "unavailable";
+  /**
+   * O modelo do vocabulário (99 MB): só baixa e carrega com palavras no dicionário (T20949), depois do principal;
+   * `off` sem palavras, `undefined` até o helper dizer.
+   */
+  boosting?: "loading" | "ready" | "unavailable" | "off";
 }
 
 export interface SetupStatus {

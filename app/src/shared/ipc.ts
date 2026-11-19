@@ -502,11 +502,13 @@ export type Event =
    */
   | { type: "stt.status"; state: "loading" | "ready" | "unavailable"; loadMs?: number; error?: "model_unavailable" }
   /**
-   * O modelo CTC do boosting do vocabulário (T1973), que carrega depois do principal e em segundo plano: `loading`
-   * (a primeira vez, baixando 99 MB), `ready`, ou `unavailable` (offline, por exemplo). O ditado não espera por ele:
-   * sem o modelo, sai sem boosting. Depois de um `unavailable`, tenta de novo num ditado, no mínimo 10 min depois.
+   * O modelo CTC do boosting do vocabulário (T1973), que carrega em segundo plano e só com termos no dicionário
+   * (T20949): `loading` (a primeira vez, baixando 99 MB), `ready`, `unavailable` (offline, por exemplo) ou `off` (a
+   * pessoa apagou o último termo, e ele saiu da RAM; o arquivo fica no disco). Sem termos, o helper não manda nada. O
+   * ditado não espera por ele: sem o modelo, sai sem boosting. Depois de um `unavailable`, tenta de novo num ditado, no
+   * mínimo 10 min depois.
    */
-  | { type: "stt.boosting"; state: "loading" | "ready" | "unavailable" }
+  | { type: "stt.boosting"; state: "loading" | "ready" | "unavailable" | "off" }
   /**
    * O download do modelo principal (T20796), só na primeira vez: `fraction` de 0 a 1 (sai a cada 1%) e a fase
    * (`listing` procura os arquivos, `downloading` baixa, `compiling` prepara o CoreML). O passo da primeira abertura mostra.
