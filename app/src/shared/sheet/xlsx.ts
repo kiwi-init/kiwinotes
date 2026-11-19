@@ -132,6 +132,7 @@ function applyOp(book: Book, op: Exclude<SheetOp, { op: "batch" }>): void {
   if (op.op === "renameSheet") return renameSheet(book, info, op.name);
   if (info.kind !== "worksheet") throw new SheetOpError(`${info.name} é uma aba de gráfico`);
   if (op.op === "set") return setCell(book, info, op);
+  if (op.op === "cached") return setCached(book, info, op);
   return shiftSheet(book, info, shiftOf(op)!);
 }
 
@@ -328,6 +329,25 @@ function mapTableRefs(formula: string, table: string, f: (head: string, inner: s
     out += formula[i++];
   }
   return out;
+}
+
+/**
+ * Troca só o `<v>` (e o `t`) de uma célula com fórmula: o `<f>` fica byte a byte, compartilhada ou de matriz, e nada
+ * mais do arquivo muda. Sem `formulasChanged()`: quem mudou a fórmula no mesmo lote já ligou o recálculo do Excel.
+ */
+function setCached(book: Book, info: SheetInfo, op: Extract<SheetOp, { op: "cached" }>): void {
+  const xml = book.text(info.path);
+  const name = cellName({ row: op.row, col: op.col });
+  const re = new RegExp(`<c\\b(?=[^>]*\\br="${name}")([^>]*?)(?:/>|>([\\s\\S]*?)</c>)`);
+  const m = re.exec(xml);
+  const inner = m?.[2] ?? "";
+  if (!m || !/<f\b/.test(inner)) throw new SheetOpError(`${name} não tem fórmula`);
+  const content = cellContent(op.value, "");
+  const v = content?.inner.replace(/^<f>.*?<\/f>/, "") ?? "";
+  const nextInner = inner.replace(/<v\b[^>]*\/>|<v\b[^>]*>[\s\S]*?<\/v>/, "").replace(/(<f\b[^>]*\/>|<f\b[^>]*>[\s\S]*?<\/f>)/, `$1${v}`);
+  let attrs = delAttr(m[1]!, "t");
+  if (content?.t) attrs = setAttr(attrs, "t", content.t);
+  book.setText(info.path, xml.slice(0, m.index) + `<c${attrs}>${nextInner}</c>` + xml.slice(m.index + m[0].length));
 }
 
 /** O conteúdo de uma célula nova: os filhos e o tipo; `null` para a vazia. */

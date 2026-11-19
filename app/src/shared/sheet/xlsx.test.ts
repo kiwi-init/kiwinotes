@@ -383,3 +383,49 @@ describe("ler", () => {
     expect(sheetJs(out).Sheets.Estoque!.E4.f).toBe("C4*D4");
   });
 });
+
+describe("só o resultado de uma fórmula (`cached`, para o recálculo do T21108)", () => {
+  const sheet1 = (b: Uint8Array) => text(b, "xl/worksheets/sheet1.xml");
+  const cellXml = (b: Uint8Array, ref: string) => new RegExp(`<c r="${ref}"[^>]*>.*?</c>`).exec(sheet1(b))?.[0];
+
+  test("troca só o <v> e o t: a fórmula, o estilo e o resto do arquivo ficam", () => {
+    const out = patchXlsx(original, [{ op: "cached", sheet: "Estoque", row: 1, col: 4, value: 174.3 }]);
+    expect(changedParts(original, out)).toEqual(["xl/worksheets/sheet1.xml"]);
+    expect(cellXml(out, "E2")).toBe('<c r="E2" s="2"><f>C2*D2</f><v>174.3</v></c>');
+    expect(sheet1(out).replace(cellXml(out, "E2")!, "")).toBe(sheet1(original).replace(cellXml(original, "E2")!, ""));
+    expect(cell(out, "Estoque", "E2")).toMatchObject({ value: 174.3, formula: "C2*D2" });
+  });
+
+  test("texto, verdadeiro, erro e vazio ganham o tipo certo", () => {
+    const at = (value: string | boolean | null) => cellXml(patchXlsx(original, [{ op: "cached", sheet: "Estoque", row: 2, col: 4, value }]), "E3");
+    expect(at("caro")).toBe('<c r="E3" s="2" t="str"><f>C3*D3</f><v>caro</v></c>');
+    expect(at(true)).toBe('<c r="E3" s="2" t="b"><f>C3*D3</f><v>1</v></c>');
+    expect(at("#DIV/0!")).toBe('<c r="E3" s="2" t="e"><f>C3*D3</f><v>#DIV/0!</v></c>');
+    expect(at(null)).toBe('<c r="E3" s="2"><f>C3*D3</f></c>');
+  });
+
+  test("numa fórmula compartilhada, o <f> fica como está, sem expandir as outras", () => {
+    const zip = readZip(original);
+    const shared = sheet1(original)
+      .replace('<c r="E2" s="2"><f>C2*D2</f>', '<c r="E2" s="2"><f t="shared" ref="E2:E4" si="0">C2*D2</f>')
+      .replace('<c r="E3" s="2"><f>C3*D3</f>', '<c r="E3" s="2"><f t="shared" si="0"/>')
+      .replace('<c r="E4" s="2"><f>C4*D4</f>', '<c r="E4" s="2"><f t="shared" si="0"/>');
+    const book = writeZip(original, zip, new Map([["xl/worksheets/sheet1.xml", new TextEncoder().encode(shared)]]));
+    const out = patchXlsx(book, [{ op: "cached", sheet: "Estoque", row: 2, col: 4, value: 155 }]);
+    expect(cellXml(out, "E3")).toBe('<c r="E3" s="2"><f t="shared" si="0"/><v>155</v></c>');
+    expect(cellXml(out, "E4")).toBe(cellXml(book, "E4"));
+    expect(sheetJs(out).Sheets.Estoque!.E3.f).toBe("C3*D3");
+  });
+
+  test("numa célula sem fórmula, ou que não existe, é recusado", () => {
+    expect(() => patchXlsx(original, [{ op: "cached", sheet: "Estoque", row: 1, col: 2, value: 1 }])).toThrow("não tem fórmula");
+    expect(() => patchXlsx(original, [{ op: "cached", sheet: "Estoque", row: 500, col: 4, value: 1 }])).toThrow("não tem fórmula");
+  });
+
+  test("no mesmo lote da edição: a fórmula nova liga o recálculo, e o resultado entra", () => {
+    const out = patchXlsx(original, [
+      { op: "batch", ops: [{ op: "set", sheet: "Estoque", row: 1, col: 2, value: 8 }, { op: "cached", sheet: "Estoque", row: 1, col: 4, value: 199.2 }] },
+    ]);
+    expect(cell(out, "Estoque", "E2")).toMatchObject({ value: 199.2, formula: "C2*D2" });
+  });
+});

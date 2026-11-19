@@ -68,6 +68,16 @@ describe("operações na grade", () => {
     expect(n.sheets[0]!.rows[1]![3]!.value).toBe(199.2);
   });
 
+  test("`cached` troca só o resultado: a fórmula fica, e a marca de desatualizada sai", () => {
+    const g = grid();
+    g.sheets[0]!.rows[1]![3] = { ...g.sheets[0]!.rows[1]![3]!, stale: true };
+    const n = applyToGrid(g, { op: "cached", sheet: "Estoque", row: 1, col: 3, value: 199.2 });
+    expect(n.sheets[0]!.rows[1]![3]).toEqual({ value: 199.2, text: "199.2", formula: "B2*C2" });
+    expect(g.sheets[0]!.rows[1]![3]!.stale).toBe(true);
+    expect(() => applyToGrid(g, { op: "cached", sheet: "Estoque", row: 1, col: 1, value: 1 })).toThrow("não tem fórmula");
+    expect(() => applyToGrid(g, { op: "cached", sheet: "Estoque", row: 9, col: 9, value: 1 })).toThrow("não tem fórmula");
+  });
+
   test("operações que não cabem são recusadas com o motivo", () => {
     const names = ["Estoque", "Resumo"];
     expect(() => checkOp({ op: "set", sheet: "Outra", row: 0, col: 0, value: 1 }, names)).toThrow(SheetOpError);

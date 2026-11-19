@@ -18,6 +18,11 @@ export type SheetOp =
    * um (`31%` numa célula Geral).
    */
   | { op: "set"; sheet: string; row: number; col: number; value: CellValue; formula?: string; format?: string }
+  /**
+   * Só o resultado guardado de uma célula com fórmula (o `<v>` do xlsx), depois do recálculo (T21108): a fórmula, o
+   * estilo e o resto do arquivo não mudam. Vai no mesmo `batch` da edição que mudou o resultado.
+   */
+  | { op: "cached"; sheet: string; row: number; col: number; value: CellValue }
   | { op: "insertRows" | "deleteRows" | "insertCols" | "deleteCols"; sheet: string; at: number; count: number }
   | { op: "renameSheet"; sheet: string; name: string }
   | { op: "addSheet"; name: string }
@@ -58,6 +63,7 @@ export function checkOp(op: SheetOp, sheets: readonly string[]): void {
       return;
     }
     case "set":
+    case "cached":
       if (!has(op.sheet)) throw new SheetOpError(`não há aba chamada ${op.sheet}`);
       if (!int(op.row) || !int(op.col) || op.row >= MAX_ROWS || op.col >= MAX_COLS) throw new SheetOpError("a célula fica fora da planilha");
       if (typeof op.value === "number" && !Number.isFinite(op.value)) throw new SheetOpError("o número não é finito");
@@ -140,6 +146,8 @@ export interface GridCell {
   format?: string;
   /** O que a célula mostra. */
   text: string;
+  /** O recálculo não soube refazer esta fórmula (uma função que ele não tem): o `value` é o de antes (T21108). */
+  stale?: true;
 }
 
 export interface GridSheet {
@@ -184,6 +192,16 @@ export function applyToGrid(grid: Grid, op: SheetOp, display: Display = plainDis
     const cell: GridCell | undefined =
       op.value === null && op.formula === undefined && !format ? undefined : { value: op.value, text: display(op.value, format), ...(op.formula !== undefined ? { formula: op.formula } : {}), ...(format ? { format } : {}) };
     row[op.col] = cell;
+    rows[op.row] = row;
+    return { sheets: grid.sheets.map((s, k) => (k === i ? { name: s.name, rows } : s)) };
+  }
+  if (op.op === "cached") {
+    const old = target.rows[op.row]?.[op.col];
+    if (old?.formula === undefined) throw new SheetOpError("a célula não tem fórmula");
+    const rows = target.rows.slice();
+    const row = rows[op.row]!.slice();
+    const { stale: _, ...rest } = old;
+    row[op.col] = { ...rest, value: op.value, text: display(op.value, old.format) };
     rows[op.row] = row;
     return { sheets: grid.sheets.map((s, k) => (k === i ? { name: s.name, rows } : s)) };
   }
