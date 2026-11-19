@@ -26,6 +26,11 @@ declare global {
     __kiwiHold?: () => void;
     /** O hub aparece no fim da intro: o conteúdo entra só com o fade, sem subir nem crescer (T16769). */
     __kiwiReveal?: () => void;
+    /**
+     * O hub está segurado para a intro (T23565). O main põe o `true` junto com o `__kiwiHold` e o `false` com o
+     * `__kiwiReveal`: a marca vale mesmo se chegar antes de o React montar, quando as duas funções ainda não existem.
+     */
+    __kiwiHeld?: boolean;
   }
 }
 

@@ -2,6 +2,7 @@
 // caminhos (lead #20854). No hub de verdade, com o AppEngine headless, o agente de mentira (`KIWI_FAKE_AGENT`) e o passo
 // das permissões de mentira (`KIWI_FAKE_SETUP`), num WebKit headless. Nada pede ao macOS e nada aparece na tela de ninguém.
 //
+// - **Atrás da intro (T23565):** o hub segurado não escreve o balão; ele começa do zero quando o hub aparece.
 // - **Primeira abertura, Vamos lá:** o balão se escreve; Vamos lá → o que o Kiwi faz (T20838) → Pular → as permissões; o app fecha no meio e a boas-vindas
 //   volta; de novo Vamos lá → Continuar → o consentimento (ADR 0011) → Ligar → o onboarding do agente no passo 1.
 // - **A próxima abertura:** sem boas-vindas; o onboarding do agente segue aberto.
@@ -16,7 +17,7 @@ import { join, resolve } from "node:path";
 import { type Browser, type Page, webkit } from "playwright-core";
 import { connect, request } from "./cli";
 import { openWindow, type UiContext } from "./ui-page";
-import { WELCOME_TEXT } from "../ui/hub/onboarding/welcomeText.ts";
+import { typingDuration, WELCOME_TEXT } from "../ui/hub/onboarding/welcomeText.ts";
 
 const app = resolve(import.meta.dir, "..");
 const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T20795-welcome"));
@@ -49,8 +50,8 @@ function install(settings: object) {
     assert.equal(r.ok, true, JSON.stringify(r));
     return r.value as any;
   };
-  const hub = (browser: Browser, theme: "dark" | "light" = "dark", motion = false) =>
-    openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 760, motion, browser: "webkit", query: {} });
+  const hub = (browser: Browser, theme: "dark" | "light" = "dark", motion = false, init?: string) =>
+    openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 760, motion, browser: "webkit", query: {}, init });
   return { cli, invoke, hub };
 }
 
@@ -74,6 +75,46 @@ try {
   const a = install({ firstRun: "pending" });
   engines.push(() => a.cli(["stop"]));
   await a.cli(["start", "--no-helper"]);
+  // A abertura do zero (T23565): o hub abre segurado atrás da intro, com a marca que o main põe antes de o React montar.
+  // O balão espera: nenhuma letra até o hub aparecer; no reveal, ele começa do zero e se escreve aos poucos.
+  {
+    const h = await a.hub(browser, "dark", true, "window.__kiwiHeld = true");
+    const p = h.page;
+    await p.waitForSelector(".kn-welcome-bubble", { timeout: 15000 });
+    const typedNow = async () => ((await p.locator(".kn-welcome-text > span[aria-hidden]").first().textContent()) ?? "").length;
+    assert.equal(await p.locator('.kn-hub[data-entering="hold"]').count(), 1, "o hub segurado para a intro");
+    // Mais que o tempo do texto inteiro, como uma intro longa.
+    await Bun.sleep(typingDuration(WELCOME_TEXT) + 1000);
+    assert.equal(await typedNow(), 0, "o balão se escreveu atrás da intro");
+    assert.equal(await p.locator('.kn-welcome-bubble[data-typed="true"]').count(), 0, "o balão terminou atrás da intro");
+    await p.evaluate(() => {
+      window.__kiwiHeld = false;
+      window.__kiwiReveal?.();
+    });
+    await Bun.sleep(1600);
+    const partial = await typedNow();
+    assert.ok(partial > 10 && partial < 120, `depois do reveal, um pedaço: ${partial}`);
+    await p.screenshot({ path: join(out, "depois-da-intro-escrevendo.png") });
+    // Escondido no meio (revisão do T23565): o balão pausa e volta de onde parou, sem apagar nem pular.
+    await p.evaluate(() => {
+      window.__kiwiHeld = true;
+    });
+    const paused = await typedNow();
+    assert.ok(paused >= partial, `ao esconder, o balão voltou: ${partial} → ${paused}`);
+    await Bun.sleep(1500);
+    const still = await typedNow();
+    assert.ok(still >= paused && still - paused <= 8, `escondido, o balão andou: ${paused} → ${still}`);
+    await p.evaluate(() => {
+      window.__kiwiHeld = false;
+    });
+    await Bun.sleep(150);
+    const back = await typedNow();
+    assert.ok(back >= still && back - still <= 12, `ao voltar, o balão apagou ou pulou: ${still} → ${back}`);
+    await Bun.sleep(600);
+    assert.ok((await typedNow()) > back, "ao voltar, o balão não seguiu");
+    await p.waitForSelector('.kn-welcome-bubble[data-typed="true"]', { timeout: 15000 });
+    await h.close();
+  }
   {
     const h = await a.hub(browser, "dark", true);
     const p = h.page;

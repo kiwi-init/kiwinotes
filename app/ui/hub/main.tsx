@@ -279,12 +279,15 @@ function Hub() {
       if (ref.current) ref.current.dataset.entering = "hold";
     };
     window.__kiwiReveal = () => {
+      window.__kiwiHeld = false;
       const el = ref.current;
       if (!el) return;
       el.dataset.entering = "false";
       void el.offsetWidth;
       el.dataset.entering = "reveal";
     };
+    // Segurado antes de o React montar (T23565): o `__kiwiHold` ainda não existia, e a marca ficou na janela.
+    if (window.__kiwiHeld && ref.current?.dataset.entering !== "reveal") window.__kiwiHold();
   }, [section]);
   useLayoutEffect(() => {
     const el = ref.current;
