@@ -37,15 +37,17 @@ actor Transcriber {
     /// When the CTC last failed to load (offline, disk full): it's tried again only after `ctcRetryAfter`.
     private var ctcFailedAt: TimeInterval?
     static let ctcRetryAfter: TimeInterval = 10 * 60
-    /// `loading`, `ready`, `unavailable`: for the `stt.boosting` event.
+    /// `loading`, `ready`, `unavailable`, `off` (no terms, out of RAM): for the `stt.boosting` event.
     private var onBoosting: (@Sendable (String) -> Void)?
     private var boosting: (terms: [String], session: VocabularyBoostingSession)?
     private var warmedUp = false
 
     /// The CTC rescoring before the phonetic correction. On in the app since T1973 (harry, #1967): the phonetic
     /// correction alone doesn't reach terms the model mishears ("orbit do silo" → "de condu Cilo"). The 99 MB model
-    /// downloads once, in the background after the main one, from the same place (ADR 0003); until it's there, or
-    /// when it can't download, dictation runs without it. `KIWI_STT_BOOSTING=off` turns it off.
+    /// downloads once, in the background, from the same place (ADR 0003), and only with the dictionary's first term
+    /// (T20949): without terms it's neither downloaded nor in RAM, and it leaves RAM when the last term goes
+    /// (`BoostingDemand`). Until it's there, or when it can't download, dictation runs without it.
+    /// `KIWI_STT_BOOSTING=off` turns it off.
     let vocabularyBoosting: Bool
 
     init(version: AsrModelVersion = .ultra, vocabularyBoosting: Bool = false) {
@@ -65,11 +67,21 @@ actor Transcriber {
         onDownload = handler
     }
 
-    /// Starts loading the CTC model (downloading it the first time), without waiting. Once at a time, and after a
-    /// failure not again before `ctcRetryAfter`, so an offline Mac doesn't try on every dictation.
+    /// Starts loading the CTC model (downloading it the first time), without waiting, if the dictionary has terms.
+    /// Once at a time, and after a failure not again before `ctcRetryAfter`, so an offline Mac doesn't try on every
+    /// dictation. With no terms left, it drops the model from RAM.
     func prepareBoosting() {
-        guard vocabularyBoosting, ctc == nil, ctcLoading == nil else { return }
-        if let failed = ctcFailedAt, ProcessInfo.processInfo.systemUptime - failed < Self.ctcRetryAfter { return }
+        let failedRecently = ctcFailedAt.map { ProcessInfo.processInfo.systemUptime - $0 < Self.ctcRetryAfter } ?? false
+        switch BoostingDemand.action(enabled: vocabularyBoosting, hasTerms: !dictionary.terms.isEmpty, loaded: ctc != nil,
+                                     loading: ctcLoading != nil, failedRecently: failedRecently) {
+        case .none: return
+        case .release:
+            ctc = nil
+            boosting = nil
+            onBoosting?("off")
+            return
+        case .load: break
+        }
         onBoosting?("loading")
         ctcLoading = Task { try? await CtcModels.downloadAndLoad(variant: .ctc110m) }
         Task { await self.finishBoosting() }
@@ -87,6 +99,12 @@ actor Transcriber {
         guard ctcLoading != nil else { return } // the other waiter got here first
         ctcLoading = nil
         if let models {
+            // The last term went while it loaded: it doesn't stay in RAM.
+            guard BoostingDemand.keepAfterLoad(hasTerms: !dictionary.terms.isEmpty) else {
+                ctcFailedAt = nil
+                onBoosting?("off")
+                return
+            }
             ctc = models
             ctcFailedAt = nil
             _ = await boostingSession() // the session for the current dictionary, before the next dictation
@@ -101,6 +119,9 @@ actor Transcriber {
         if let language { self.language = language }
         if let dictionary { self.dictionary = dictionary }
         if let vad { useVAD = vad }
+        // With no terms left, the CTC model leaves RAM now (T20949). The first term loads it in `warmUp`, after the
+        // main model, so a first download doesn't compete with the main one.
+        if let dictionary, dictionary.terms.isEmpty { prepareBoosting() }
     }
 
     /// Downloads the model the first time (~600 MB from Hugging Face, the only network access) and loads it.
@@ -141,7 +162,8 @@ actor Transcriber {
     /// current dictionary, and the first inference (CoreML specializes the model for the Neural Engine on it).
     func warmUp() async throws {
         let manager = try await prepare()
-        // The CTC model comes after the main one, in the background: being ready to dictate doesn't wait for it.
+        // The CTC model comes after the main one, in the background, and only with terms (T20949): being ready to
+        // dictate doesn't wait for it.
         prepareBoosting()
         _ = await boostingSession()
         if useVAD, vad == nil { vad = try? await VadManager(config: VadConfig(defaultThreshold: 0.7)) }

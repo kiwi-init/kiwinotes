@@ -75,7 +75,8 @@ async function waitBoosting(data: string, timeoutMs = 300_000): Promise<string> 
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
     const b = cli(data, "status").out.value?.session?.boosting;
-    if (b === "ready" || b === "unavailable") return b;
+    // `off`: sem termos no dicionário, o modelo não carrega (T20949).
+    if (b === "ready" || b === "unavailable" || b === "off") return b;
     await Bun.sleep(250);
   }
   return "timeout";
