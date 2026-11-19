@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { NO_TEXT_ASSIST } from "../../src/textAssist.ts";
 import { ContextMenu, type MenuItem } from "../ContextMenu.tsx";
 import { columnName } from "./csv.ts";
 import { CELL_PAD, columnWidths, isNumeric, offsetsOf, ROW_H, trimEmpty, visibleRange, type Viewport } from "./grid.ts";
@@ -130,6 +131,12 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     [editable, rawHeader, rawRows, rawColumns],
   );
   const header = rawHeader;
+  // Até onde vão os dados na grade que edita (o resto é a folga para digitar).
+  const dataExtent = useMemo(() => {
+    if (!editable) return null;
+    const t = trimEmpty(rawHeader, rawRows, rawColumns);
+    return { rows: t.rows.length, columns: Math.max(1, t.columns) };
+  }, [editable, rawHeader, rawRows, rawColumns]);
   const scroll = useRef<HTMLDivElement>(null);
   // As larguras ficam no estado: a de abertura, pelo conteúdo, e por cima as que a pessoa arrastou (T21040).
   const [baseWidths, setWidths] = useState<number[] | null>(null);
@@ -328,7 +335,10 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     // A primeira seta começa no canto da tela, sem pular a rolagem para o A1.
     const from = sel ?? (e.key.startsWith("Arrow") ? firstVisible(offsets, v, rows.length) : null);
     if (!from) return;
-    const to = sel ? moveCell(from, { key: e.key, meta: e.metaKey }, rows.length, columns, page) : from;
+    // ⌘ + seta e End param no fim dos dados, como no Excel, e não no fim da folga; fora dos dados, vão até a borda.
+    const toEdge = e.metaKey || e.key === "End";
+    const lim = toEdge && dataExtent && sel && sel.row <= dataExtent.rows && sel.col < dataExtent.columns ? dataExtent : { rows: rows.length, columns };
+    const to = sel ? moveCell(from, { key: e.key, meta: e.metaKey }, lim.rows, lim.columns, page) : from;
     if (!to) return;
     e.preventDefault();
     select(to, true, e.shiftKey && !!sel);
@@ -544,7 +554,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
             className="kn-grid-editor"
             aria-label={`Editar ${cellAddress({ row: r, col: c }, firstRow)}`}
             autoFocus
-            spellCheck={false}
+            {...NO_TEXT_ASSIST}
             value={editing.text}
             // A caixa cresce com o texto, por cima das vizinhas, como no Excel.
             style={{ width: `max(100%, calc(${editing.text.length + 1}ch + 24px))` }}
@@ -576,6 +586,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
             <input
               ref={findInput}
               type="search"
+              {...NO_TEXT_ASSIST}
               aria-label="Procurar na planilha"
               placeholder="Procurar"
               value={find.query}

@@ -86,7 +86,7 @@ describe("digitar numa célula", () => {
     const grid = await shownGrid(doc, [op], display);
     expect(grid.sheets[0]!.rows[1]![4]!.text).toBe("R$ 199,20");
     // A média de uma coluna de tabela o Kiwi não refaz: fica marcada.
-    expect(grid.sheets[1]!.rows[2]![1]!.stale).toBe(true);
+    expect(grid.sheets[1]!.rows[2]![1]!.stale).toBeTruthy(); // true ou "recheck": na tela, o mesmo aviso (T21108)
   });
 
   test("gravar reaplica sobre o original, e a fórmula fica", async () => {
