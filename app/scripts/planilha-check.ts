@@ -139,6 +139,22 @@ try {
       const cell = await long.evaluate((el) => ({ h: el.getBoundingClientRect().height, w: el.getBoundingClientRect().width, cut: el.scrollWidth > el.clientWidth, ov: getComputedStyle(el).textOverflow, ws: getComputedStyle(el).whiteSpace }));
       assert.deepEqual([cell.h, cell.w, cell.cut, cell.ov, cell.ws], [30, 320, true, "ellipsis", "nowrap"], JSON.stringify(cell));
       assert.deepEqual(await cutCells(p), [], "só corta a coluna no máximo");
+      // A coluna cortada na borda mostra a letra na parte que aparece (lead #21304).
+      const lost = await p.locator(".kn-grid").evaluate((grid) => {
+        const g = grid.getBoundingClientRect();
+        const n = grid.querySelector(".kn-grid-corner")!.getBoundingClientRect();
+        const x0 = n.right;
+        const x1 = g.left + grid.clientLeft + grid.clientWidth;
+        const out: string[] = [];
+        for (const cell of grid.querySelectorAll<HTMLElement>(".kn-grid-letter")) {
+          const c = cell.getBoundingClientRect();
+          if (c.right <= x0 + 16 || c.left >= x1 - 16) continue;
+          const t = cell.querySelector(".kn-grid-letter-name")!.getBoundingClientRect();
+          if (t.left < Math.max(c.left, x0) - 0.5 || t.right > Math.min(c.right, x1) + 0.5) out.push(`${cell.textContent} ${Math.round(t.left)}-${Math.round(t.right)}`);
+        }
+        return out;
+      });
+      assert.deepEqual(lost, [], "toda coluna à vista mostra a letra");
       // O número à direita, o texto à esquerda.
       const code = p.locator(".kn-grid-row[aria-rowindex='2'] [aria-colindex='2']");
       assert.equal(await code.textContent(), "1001");
@@ -181,7 +197,7 @@ try {
       // Rola para os dois lados: as letras, a linha 1 e a coluna dos números ficam no lugar.
       const before = { top: await box(p, ".kn-grid-top [aria-colindex='3']"), n: await box(p, ".kn-grid-row[aria-rowindex='2'] .kn-grid-n") };
       await scrollTo(p, 1_000_000, 400);
-      await p.waitForSelector(".kn-grid-letter:text-is('IV')", { timeout: 5000 });
+      await p.waitForSelector(".kn-grid-letter-name:text-is('IV')", { timeout: 5000 });
       const top = await box(p, ".kn-grid-top .kn-grid-n");
       const letters = await box(p, ".kn-grid-letters");
       assert.ok(Math.abs(letters.y - (await box(p, ".kn-grid")).y) <= 1.5, "a linha das letras no alto");

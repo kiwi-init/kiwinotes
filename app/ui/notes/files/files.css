@@ -290,6 +290,15 @@
 
 .kn-grid-letter {
   text-align: center;
+  /* Sem o recorte da célula, para a letra grudar na rolagem da grade (sticky não passa de um overflow: hidden). */
+  overflow: visible;
+}
+
+.kn-grid-letter-name {
+  position: sticky;
+  right: 0;
+  display: inline-block;
+  padding: 0 4px;
 }
 
 .kn-grid-n {

@@ -206,7 +206,10 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
               {offsets
                 ? cols.map((c) => (
                     <div key={c} className="kn-grid-cell kn-grid-letter" style={{ left: numW + offsets[c]!, width: widths![c] }}>
-                      {columnName(c)}
+                      {/* Grudada na área das células: a coluna cortada na borda mostra a letra na parte que aparece. */}
+                      <span className="kn-grid-letter-name" style={{ left: numW }}>
+                        {columnName(c)}
+                      </span>
                     </div>
                   ))
                 : null}
