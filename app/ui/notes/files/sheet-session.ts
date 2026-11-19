@@ -52,6 +52,8 @@ export function useSheetSession(opts: {
   /** A versão do arquivo no disco que as operações têm por base, e a do último que gravamos. */
   const disk = useRef<string>("");
   const dirty = useRef(false);
+  /** Os bytes (base64) da nossa última gravação: a leitura que volta com eles não reabre nada. */
+  const written = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saving = useRef<Promise<boolean> | null>(null);
   /** As edições entram em fila: cada uma espera a de antes (o recálculo é assíncrono). */
@@ -68,7 +70,11 @@ export function useSheetSession(opts: {
   // Abrir, e abrir de novo quando o arquivo muda fora do Kiwi (a nossa gravação volta com a versão que já temos).
   useEffect(() => {
     if (!display) return;
-    if (version === disk.current && docRef.current) return;
+    if (docRef.current && (version === disk.current || base64 === written.current)) {
+      // O aviso de mudança da nossa própria gravação pode chegar antes da resposta dela: os bytes são os nossos.
+      if (base64 === written.current && !saving.current) disk.current = version;
+      return;
+    }
     try {
       const doc = openDoc(bytesOf(base64), name, display);
       if (dirty.current) setNotice("O arquivo mudou fora do Kiwi: abri a versão nova, e a última edição não foi gravada.");
@@ -106,7 +112,9 @@ export function useSheetSession(opts: {
         return false;
       }
       try {
-        const r = await files.saveBytes!(path, base64Of(bytes), disk.current);
+        const b64 = base64Of(bytes);
+        written.current = b64;
+        const r = await files.saveBytes!(path, b64, disk.current);
         if (r.saved) {
           disk.current = r.version;
           return true;

@@ -149,7 +149,13 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
   // área (T21109): Shift + seta ou Shift + clique estendem a seleção a partir dela.
   const [selected, setSelected] = useState<Cell | null>(null);
   const [anchor, setAnchor] = useState<Cell | null>(null);
-  const [editing, setEditing] = useState<Editing | null>(null);
+  const [editing, setEditingState] = useState<Editing | null>(null);
+  // A caixa aberta agora, sem esperar o render: o Enter fecha, e o `blur` que vem logo depois não grava de novo.
+  const editingRef = useRef<Editing | null>(null);
+  const setEditing = (e: Editing | null) => {
+    editingRef.current = e;
+    setEditingState(e);
+  };
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [find, setFind] = useState<{ query: string; index: number } | null>(null);
   const findInput = useRef<HTMLInputElement>(null);
@@ -240,7 +246,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
 
   // A caixa de digitar: fechar grava (o Esc não), e a seleção anda como no Excel.
   const close = (save: boolean, move?: { dr: number; dc: number }) => {
-    const e = editing;
+    const e = editingRef.current;
     if (!e) return;
     setEditing(null);
     if (save && edit && e.text !== edit.textOf(e.row, e.col)) edit.commit(e.row, e.col, e.text);
@@ -273,9 +279,10 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     if (cell && edit && !(e.target as HTMLElement).closest(".kn-grid-editor")) open(cell);
   };
 
+  // A barra nova abre com o foco (autoFocus); a que já estava aberta seleciona o que tinha, para digitar por cima.
   const openFind = () => {
-    setFind((f) => f ?? { query: "", index: -1 });
-    requestAnimationFrame(() => findInput.current?.select());
+    if (find) findInput.current?.select();
+    else setFind({ query: "", index: -1 });
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -527,6 +534,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
         className="kn-grid-cell"
         data-num={role === "gridcell" && isNumeric(text) ? "" : undefined}
         data-area={inArea(r, c) ? "" : undefined}
+        data-active={on && multi ? "" : undefined}
         data-stale={edit?.staleAt?.(r, c) ? "" : undefined}
         data-editing={isOpen ? "" : undefined}
         style={{ left: numW + offsets![c]!, width: widths![c] }}
@@ -538,6 +546,8 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
             autoFocus
             spellCheck={false}
             value={editing.text}
+            // A caixa cresce com o texto, por cima das vizinhas, como no Excel.
+            style={{ width: `max(100%, calc(${editing.text.length + 1}ch + 24px))` }}
             onChange={(e) => setEditing({ ...editing, text: e.target.value })}
             onKeyDown={onEditorKey}
             onBlur={() => close(true)}

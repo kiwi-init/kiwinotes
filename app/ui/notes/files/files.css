@@ -745,8 +745,13 @@
 }
 
 /* A grade que edita (T21109): a área selecionada, a célula aberta para digitar, a fórmula que o Kiwi não refaz e o ⌘F. */
+/* Na área, só o fundo; a moldura fica na célula ativa, como no Excel. */
 .kn-grid-cell[data-area] {
   background: color-mix(in srgb, var(--accent, Highlight) 10%, var(--bg, Canvas));
+}
+
+.kn-grid-cell[data-area]:not([data-active]) {
+  box-shadow: none;
 }
 
 .kn-grid-cell[data-editing] {
@@ -757,13 +762,13 @@
 
 .kn-grid-editor {
   box-sizing: border-box;
-  width: 100%;
   min-width: 100%;
   height: 30px;
   margin: 0;
   padding: 0 10px;
   border: 2px solid var(--accent, Highlight);
   border-radius: 0;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
   outline: none;
   background: var(--bg, Canvas);
   color: var(--text);
