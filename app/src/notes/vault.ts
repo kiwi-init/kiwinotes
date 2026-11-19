@@ -965,6 +965,9 @@ export class Vault {
     if (from.toLowerCase() !== to.toLowerCase() && (await exists(toAbs))) throw new VaultError("E_EXISTS", `${to} already exists`);
     // Do disco, como o renomear de nota (revisão #1397): o índice pode estar atrás.
     await this.scan();
+    // O que está dentro de um pacote (`.pages`, `.key`) é do app dono dele: um arquivo não entra lá, nem sumiria da
+    // árvore dentro do documento (T20517).
+    if (this.packageOf(parentOf(to))) throw new VaultError("E_BAD_ARGS", `${to} would be inside a document package`);
     const before = [...this.files.keys()];
     if (!before.includes(from)) before.push(from);
     const after = before.map((f) => (f === from ? to : f));
