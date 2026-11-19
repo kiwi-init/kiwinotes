@@ -891,6 +891,48 @@ await step("digitando sem parar, o rascunho anda a cada 1,5 s", async () => {
   expectEq(seen.includes(typed), true);
 });
 
+await step("a árvore aberta no carregamento não fecha quando a nota abre sozinha (T23119); o clique numa nota fecha", async () => {
+  // Uma página nova, com o `get` do vault de mentira preso: a nota que as Notas abrem sozinhas só chega quando o teste
+  // soltar. Assim o clique no caminho vem antes dela sempre, sem depender da sorte.
+  const fresh = await browser.newPage({ viewport: { width: 1180, height: 760 } });
+  fresh.on("pageerror", (e) => errors.push(String(e)));
+  await fresh.addInitScript(() => {
+    const w = window as any;
+    w.__kiwiGate = new Promise<void>((r) => (w.__kiwiRelease = r));
+    let mock: any;
+    Object.defineProperty(w, "__kiwiNotesMock", {
+      configurable: true,
+      get: () => mock,
+      set: (m) => {
+        const get = m.get.bind(m);
+        m.get = async (p: string) => (await w.__kiwiGate, get(p));
+        mock = m;
+      },
+    });
+  });
+  try {
+    await fresh.goto(URL);
+    await fresh.waitForSelector(".kn-crumb-bt");
+    await fresh.click(".kn-crumb-bt");
+    await fresh.waitForSelector(".kn-tree-pop[data-open] .kn-side", { state: "visible" });
+    expectEq(await fresh.$$(".kn-title"), []);
+    await fresh.evaluate(() => (window as any).__kiwiRelease());
+    await fresh.waitForSelector(".kn-title");
+    // O fechamento viria no mesmo render da nota; dois quadros depois, ele já teria acontecido.
+    await fresh.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    expectEq(await fresh.getAttribute(".kn-crumb-bt", "aria-expanded"), "true");
+    expectEq((await fresh.$$(".kn-tree-pop[data-open]")).length, 1);
+    if (shots) await fresh.screenshot({ path: `${shots}/notas-arvore-no-carregamento.png` });
+    // A nota que a pessoa escolhe na árvore continua fechando a árvore.
+    await fresh.click(".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Pessoas')");
+    await fresh.click(".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Ana')");
+    await fresh.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Ana");
+    await fresh.waitForSelector(".kn-tree-pop[data-open]", { state: "detached" });
+  } finally {
+    await fresh.close();
+  }
+});
+
 await page.keyboard.press("Meta+k");
 await page.keyboard.type("ana");
 await page.waitForTimeout(300);
