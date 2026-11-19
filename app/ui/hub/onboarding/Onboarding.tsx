@@ -55,7 +55,7 @@ const HELLO_WAIT_TRIES = 30;
 const theme = (): "light" | "dark" => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
 
 /** O gato grande do topo: segue os pedidos (acordou → thinking → pronto), na cor escolhida. */
-function BigCat({ cor, reduced }: { cor: string; reduced: boolean }) {
+export function BigCat({ cor, reduced }: { cor: string; reduced: boolean }) {
   const root = useRef<HTMLDivElement>(null);
   const handle = useRef<Cat | undefined>(undefined);
   const corRef = useRef(cor);

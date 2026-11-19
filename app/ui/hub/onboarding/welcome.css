@@ -1,0 +1,31 @@
+/* A boas-vindas da primeira abertura (T20795): o balão em cima, o Kiwi Cat grande embaixo, o rabo apontando para ele, e os
+   dois botões. O balão é o do hub (`.kn-bubble-shell`), maior. Com o Reduzir movimento, sem animação. */
+.kn-welcome { grid-template-rows: 1fr auto; align-items: center; }
+.kn-welcome-stage { display: grid; justify-items: center; align-content: center; align-self: center; gap: var(--space-4, 20px); width: min(480px, 100%); }
+/* O `.kn-bubble-shell` do hub é solto (absolute, 320 px) para seguir o gato no canto; aqui ele fica no fluxo, acima do gato. */
+.kn-welcome .kn-welcome-bubble {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  max-width: none;
+  width: 100%;
+  padding: 16px 22px;
+  font-size: 17px;
+  line-height: 1.45;
+  cursor: default;
+  animation: kn-welcome-pop 320ms var(--ease, ease-out) both;
+}
+/* A ponta do rabo (7,5 px para dentro da quina dele) no meio do balão, em cima do gato. */
+.kn-welcome-bubble .kn-bubble-tail { left: calc(50% - 26px); }
+/* O gato fica no fundo da caixa dele: sobe um pouco, para o rabo do balão quase encostar. */
+.kn-welcome .kn-onb-cat { margin-top: -28px; }
+.kn-welcome-text { margin: 0; }
+.kn-welcome-rest { visibility: hidden; }
+.kn-welcome-actions { display: flex; justify-content: center; gap: var(--space-2); transition: opacity 240ms var(--ease, ease-out); }
+.kn-welcome-actions[data-shown="false"] { opacity: 0.35; }
+.kn-welcome-consent { grid-template-rows: 1fr; align-items: center; }
+.kn-welcome-consent .kn-agent-consent { margin: 0; }
+@keyframes kn-welcome-pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+.kn-welcome[data-motion="reduced"] .kn-welcome-bubble,
+.kn-welcome[data-motion="reduced"] .kn-welcome-actions { animation: none; transition: none; }
+@media (prefers-reduced-motion: reduce) { .kn-welcome-bubble { animation: none; } }

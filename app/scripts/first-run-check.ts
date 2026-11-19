@@ -51,6 +51,8 @@ try {
   for (const theme of ["dark", "light"] as const) {
     const h = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 760, motion: false, browser: "webkit", query: {} });
     const p = h.page;
+    // Antes, a boas-vindas do Kiwi Cat (T20795): o Agora não vai direto a este passo.
+    await p.locator(".kn-welcome-actions button", { hasText: "Agora não" }).click({ timeout: 15000 });
     await p.waitForSelector(".kn-setup", { timeout: 15000 });
     await p.waitForFunction(() => document.querySelector(".kn-setup-line")?.textContent?.startsWith("Baixando: 42%"), undefined, { timeout: 15000 });
     assert.equal(await p.locator('.kn-setup-row[data-permission="inputMonitoring"] button').textContent(), "Permitir");

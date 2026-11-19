@@ -9,7 +9,7 @@ import { DoubtCard } from "./DoubtCard";
 import { GooLayer } from "./Goo.tsx";
 import { KiwiCat, useAgentCat } from "./KiwiCat";
 import { Onboarding } from "./onboarding/Onboarding.tsx";
-import { FirstRunSetup } from "./onboarding/FirstRunSetup.tsx";
+import { Welcome } from "./onboarding/Welcome.tsx";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -298,9 +298,12 @@ function Hub() {
   const [start, setStart] = useState<HTMLElement | null>(null);
   const [end, setEnd] = useState<HTMLElement | null>(null);
   const [bar, setBar] = useState<HTMLElement | null>(null);
-  // O passo da primeira abertura (T20796): por cima do hub enquanto o `firstRun` está `pending`. A boas-vindas do
-  // Kiwi Cat (T20795) troca este lugar pelo caminho dela.
-  const [setupClosed, setSetupClosed] = useState(false);
+  // A primeira abertura (T20795, spec #20780): a boas-vindas do Kiwi Cat por cima do hub, se o `firstRun` está `pending`
+  // quando o hub abre. Fica até o fim do caminho dela: o `FirstRunSetup` grava `done` no meio, antes do consentimento.
+  const [firstRun, setFirstRun] = useState<"open" | "closed" | null>(null);
+  useEffect(() => {
+    if (firstRun === null && settings) setFirstRun(settings.firstRun === "pending" ? "open" : "closed");
+  }, [settings, firstRun]);
 
   return (
     <HubNavContext.Provider value={{ openSettings }}>
@@ -317,7 +320,7 @@ function Hub() {
         <KiwiCat status={agentStatus} settings={settings} atHome={section === "home"} />
         {/* O onboarding do agente (spec #11955): por cima de tudo, na primeira vez que o agente liga. */}
         <Onboarding />
-        {settings?.firstRun === "pending" && !setupClosed ? <FirstRunSetup onDone={() => setSetupClosed(true)} /> : null}
+        {firstRun === "open" && settings ? <Welcome settings={settings} onClosed={() => setFirstRun("closed")} /> : null}
         <div className="kn-hub-main">
           {TABS.filter((s) => visited.has(s)).map((s) => (
             <section key={s} className="kn-hub-pane" data-section={s} hidden={s !== section} aria-label={LABELS[s]}>
