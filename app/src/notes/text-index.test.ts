@@ -466,6 +466,16 @@ describe("o ritmo e o portão (spec #24228, T24286)", () => {
     expect((await t.search("caju42", 10, f.stat)).map((h) => h.path)).toEqual(["codigo/mod-42.ts"]);
   });
 
+  test("fechar o índice solta a passada parada no portão, sem salvo nenhum (revisão #24467)", async () => {
+    const f = folder({ "x.txt": "graviola\n" });
+    let asked = 0;
+    const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), pause: async () => {}, gate: () => (asked++, new Promise<void>(() => {})) });
+    const done = t.sync(f.all());
+    while (!asked) await Bun.sleep(1);
+    await t.close();
+    await done;
+  });
+
   test("fechar o índice solta a passada parada no portão e os salvos dela", async () => {
     const f = folder({ "x.txt": "graviola\n" });
     const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), pause: async () => {}, gate: () => new Promise<void>(() => {}) });

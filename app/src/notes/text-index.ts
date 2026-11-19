@@ -206,12 +206,12 @@ export class TextIndex {
   private closed = false;
   private readonly maxBytes: number;
   private readonly pause: (workMs: number) => Promise<void>;
-  /** O que a sessão fez (o teste da 2ª abertura e a medição). */
   /** Passadas (`sync`) na fila ou andando: um `update` no meio entra entre os lotes, sem esperar o portão. */
   private syncing = 0;
   private readonly saved: { paths: readonly string[]; stat: (p: string) => VaultFile | undefined; done: () => void }[] = [];
   private wake: (() => void) | null = null;
   private gateWait: Promise<void> | null = null;
+  /** O que a sessão fez (o teste da 2ª abertura e a medição). */
   readonly stats = { read: 0, nameOnly: 0, removed: 0, skipped: 0, batches: 0, maxBatchText: 0, overCap: 0, alone: 0, docs: 0 };
   /** Os bytes que a última busca leu do disco (o teste do orçamento). */
   lastSearchBytes = 0;
