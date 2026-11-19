@@ -370,11 +370,11 @@ async function syncDir(dir: string): Promise<void> {
   await fh.close().catch(() => {});
 }
 
-/** Até quantas leituras de nota ao mesmo tempo no scan (T5352): o disco responde melhor em paralelo, sem abrir demais. */
 /** Quantas pastas o scan lê ao mesmo tempo (T20227). */
 const SCAN_DIRS_AT_ONCE = 16;
 /** De quanto em quanto tempo o scan dá a vez para o app (T20227): um quadro. */
 const SCAN_YIELD_MS = 16;
+/** Até quantas leituras de nota ao mesmo tempo no scan (T5352): o disco responde melhor em paralelo, sem abrir demais. */
 const READ_AT_ONCE = 16;
 
 /** As tags do frontmatter (`tags: [a, b]` ou lista YAML) e as `#tag` do texto. */
@@ -1565,9 +1565,13 @@ export class Vault {
     if (item.timer) clearTimeout(item.timer);
     this.staged.delete(p);
     await rm(path.dirname(item.abs), { recursive: true, force: true });
-    // A nota volta sozinha, sem o scan (T20166); a pasta traz o que tinha dentro, e aí o scan (com o cache) é quem lê.
+    // A nota volta sozinha, sem o scan (T20166). A pasta traz o que tinha dentro: só a subárvore que voltou é lida
+    // (T20227), e as pastas de cima que o `mkdir` recriou (a mãe apagada depois dela) voltam para o índice.
     if (item.kind === "note") await this.index(p, await readFile(abs, "utf8"), abs);
-    else await this.scan();
+    else {
+      for (let up = parentOf(p); up; up = parentOf(up)) this.folders.add(up);
+      await this.catchUpTree(p);
+    }
     const back = item.kind === "note" ? [p] : [p, ...[...this.notes.keys()].filter((n) => n.startsWith(`${p}/`))];
     this.emit(back);
     return { path: p };
@@ -1928,6 +1932,8 @@ export class Vault {
       }
     };
     await walk(top);
+    // Um scan que já andava viu o disco de antes nesta subárvore: ao fim dele, outro acerta (como no `moveInIndex`).
+    if (this.scans) this.staleScan = true;
     const under = (p: string) => p === top || p.startsWith(`${top}/`);
     let changed = false;
     for (const p of [...this.notes.keys()]) {
