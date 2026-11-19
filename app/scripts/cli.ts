@@ -3,6 +3,7 @@
 //
 //   bun run cli start [--data DIR] [--no-helper]     sobe em segundo plano e espera ficar de pé
 //   bun run cli status | stop
+//   bun run cli mem                                  a RAM do principal e do helper, em bytes (spec #20953)
 //   bun run cli invoke <capability> '<json>'         notes.*, history.*, dictionary.*, snippets.*
 //   bun run cli dictate …                             (T1740)
 //   bun run cli screenshot … | ui …                   (T1742)
@@ -29,8 +30,9 @@ import { runScreenshot, runUi, type UiContext } from "./cli-ui.ts";
 
 export const EXIT = { ok: 0, failed: 1, usage: 2, notRunning: 3 } as const;
 
-const USAGE = `usage: bun run cli <start|stop|status|invoke|dictate|screenshot|ui|events|logs|agent|guardrail|notice> [--data DIR]
+const USAGE = `usage: bun run cli <start|stop|status|mem|invoke|dictate|screenshot|ui|events|logs|agent|guardrail|notice> [--data DIR]
   start [--no-helper]          sobe o headless em segundo plano
+  mem                          a RAM de agora e o pico do principal e do helper, e o heap do JS, em bytes
   invoke <cap> ['<json>']      uma capacidade do contrato, pelo caminho da UI
   events|logs [--follow]       o histórico recente; com --follow, continua até Ctrl-C
   agent status|ask "…"         o host do agente, com os falsos (sem o headless; T8478)
@@ -155,6 +157,7 @@ export async function main(argv: string[]): Promise<number> {
     case "start":
       return start(data, rest);
     case "status":
+    case "mem":
     case "stop": {
       const r = await request(data, { cmd });
       if (!r) return notRunning(data);

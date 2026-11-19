@@ -128,6 +128,10 @@ export class Sidecar {
   supervision(): SupervisorStatus {
     return { ...this.health };
   }
+  /** O pid do helper de pé, para a RAM dele no `cli mem` (spec #20953); `null` sem helper. */
+  get pid(): number | null {
+    return this.proc?.pid ?? null;
+  }
   onSupervision(fn: (status: SupervisorStatus) => void): () => void {
     this.healthListeners.add(fn);
     return () => this.healthListeners.delete(fn);
