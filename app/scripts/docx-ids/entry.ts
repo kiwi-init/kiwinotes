@@ -17,17 +17,10 @@ try {
   const ids = paraIds(r.surface);
   if (!ids) throw new Error("a superfície não tem a tradução dos ids");
   // Os nós dos parágrafos do corpo, na ordem de leitura.
-  const nodes = collectNodes(r.surface);
+  const nodes = ids.order();
   const out = nodes.map((n) => ids.paraIdOf(n));
   window.__ids = { ok: true, paraIds: out, back: nodes.every((n, i) => out[i] !== null && ids.nodeIdOf(out[i]!) === n) };
 } catch (e) {
   window.__ids = { error: (e as Error).message };
 }
 
-function collectNodes(surface: unknown): string[] {
-  const s = (surface as { session: { paragraphAnchors(): { ordinalByNode: ReadonlyMap<string, number> } } }).session;
-  return [...s.paragraphAnchors().ordinalByNode.entries()]
-    .filter(([n]) => n.startsWith("/word/document.xml#"))
-    .sort((a, b) => a[1] - b[1])
-    .map(([n]) => n);
-}
