@@ -907,6 +907,7 @@ export class Vault {
     const ext = m[2]!.toLowerCase();
     for (let n = 1; n < 1000; n++) {
       const p = filePath(`${dir ? `${dir}/` : ""}${n === 1 ? base : `${base} ${n}`}.${ext}`);
+      await this.refuseInPackage(p);
       const abs = inside(this.root, p);
       if (await exists(abs)) continue;
       await mkdir(path.dirname(abs), { recursive: true });
@@ -1264,6 +1265,7 @@ export class Vault {
     const name = fileNameFor(title);
     for (let n = 1; n < 1000; n++) {
       const p = canvasPath(`${dir ? `${dir}/` : ""}${n === 1 ? name : `${name} ${n}`}.canvas`);
+      await this.refuseInPackage(p);
       const abs = inside(this.root, p);
       if (this.files.has(p) || (await exists(abs))) continue;
       await mkdir(path.dirname(abs), { recursive: true });
@@ -1281,6 +1283,7 @@ export class Vault {
     const absA = inside(this.root, a);
     const absB = inside(this.root, b);
     if (!(await exists(absA))) throw new VaultError("E_NOT_FOUND", `no board ${a}`);
+    await this.refuseInPackage(b);
     // Só a caixa mudou ("quadro" → "Quadro"): no APFS é o mesmo arquivo, e o rename troca o nome.
     if (a !== b && a.toLowerCase() !== b.toLowerCase() && (await exists(absB))) throw new VaultError("E_EXISTS", `${b} already exists`);
     await mkdir(path.dirname(absB), { recursive: true });
@@ -1316,6 +1319,7 @@ export class Vault {
     const name = fileNameFor(title);
     for (let n = 1; n < 1000; n++) {
       const p = notePath(`${dir ? `${dir}/` : ""}${n === 1 ? name : `${name} ${n}`}.md`);
+      await this.refuseInPackage(p);
       if (this.notes.has(p) || (await exists(inside(this.root, p)))) continue;
       await mkdir(path.dirname(inside(this.root, p)), { recursive: true });
       const text = model ? fillTemplate(model.content, { title: noteName(p), now }) : content;
@@ -1333,6 +1337,7 @@ export class Vault {
     const fromAbs = inside(this.root, from);
     const toAbs = inside(this.root, to);
     if (!(await exists(fromAbs))) throw new VaultError("E_NOT_FOUND", `no note ${from}`);
+    await this.refuseInPackage(to);
     // O índice pode estar atrás do disco (o debounce do watcher, um evento perdido, uma nota criada fora): o rename
     // reescreve outras notas, então parte do disco, nunca do que está na memória (revisão #1397). Sem o scan inteiro
     // (T20166, 2 s com 12 mil notas): as notas que entraram ou saíram vêm pelos nomes; as que mudaram, pelo `stat` lá
@@ -1517,6 +1522,7 @@ export class Vault {
   async createFolder(input: unknown): Promise<{ path: string }> {
     const p = folderPath(input);
     if (!p) throw new VaultError("E_BAD_ARGS", "path must name a folder");
+    await this.refuseInPackage(p);
     const abs = inside(this.root, p);
     if (await exists(abs)) throw new VaultError("E_EXISTS", `${p} already exists`);
     await mkdir(abs, { recursive: true });
@@ -1539,6 +1545,7 @@ export class Vault {
     const toAbs = inside(this.root, to);
     const s = await lstat(fromAbs).catch(() => null);
     if (!s?.isDirectory()) throw new VaultError("E_NOT_FOUND", `no folder ${from}`);
+    await this.refuseInPackage(to);
     if (from.toLowerCase() !== to.toLowerCase() && (await exists(toAbs))) throw new VaultError("E_EXISTS", `${to} already exists`);
     // Do disco, como o rename de nota (revisão #1397): o índice pode estar atrás. Sem o scan inteiro (T20166).
     await this.catchUp();
@@ -2420,6 +2427,20 @@ export class Vault {
       if (isPackageDir(p, await packageEntries(path.join(this.root, p)))) return true;
     }
     return false;
+  }
+
+  /**
+   * O que está dentro de um pacote (`.pages`, `.key`) é do app dono dele: nota, arquivo e pasta não entram lá, nem
+   * sumiriam da árvore dentro do documento (T20517, T20554). `rel` é o caminho novo; a conferência vai da pasta dele
+   * para cima, no índice e no disco: um pacote criado por fora agora há pouco, que o watcher ainda não viu, também
+   * conta. No disco, só as pastas com nome de pacote (`.key`, `.pages`…) são lidas.
+   */
+  private async refuseInPackage(rel: string) {
+    let inPackage = Boolean(this.packageOf(parentOf(rel)));
+    for (let p = parentOf(rel); p && !inPackage; p = parentOf(p)) {
+      if (PACKAGE_MARKS[extOf(p)]) inPackage = isPackageDir(p, await packageEntries(path.join(this.root, p)));
+    }
+    if (inPackage) throw new VaultError("E_BAD_ARGS", `${rel} would be inside a document package`);
   }
 
   /** O pacote conhecido que contém `rel` (ou é ele), ou null. Um pacote novo entra pelo scan (pasta nova relê tudo). */
