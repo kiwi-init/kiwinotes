@@ -12,6 +12,7 @@ import * as XLSX from "xlsx";
 
 import { MAX_VIEW_BYTES, MAX_VIEW_TEXT_BYTES } from "../../src/shared/file-view.ts";
 import { Vault, type FileContent } from "../../src/notes/vault.ts";
+import { TextIndex } from "../../src/notes/text-index.ts";
 import { fileFormat, readDocument } from "../../src/agent/tools/files.ts";
 import { isTextFile } from "../../src/agent/tools/reader.ts";
 import { writerFromCapabilities } from "../../src/agent/tools/writer.ts";
@@ -136,8 +137,19 @@ export class Cofre {
   rede = 0;
   private readonly fetchAntes = globalThis.fetch;
 
+  /** O índice do texto dos arquivos (T21240), fora do cofre, como nos dados do app. */
+  readonly texto: TextIndex;
+
   constructor(readonly root: string) {
     this.vault = new Vault({ root, debounceMs: 20, trash: async () => {} });
+    this.texto = new TextIndex({ root, dir: `${root}-indice-texto` });
+  }
+
+  /** A busca do app e do ⌘K (`notes.search`): as notas e, depois, os arquivos de texto pelo conteúdo. */
+  async buscar(q: string, limite = 200): Promise<{ path: string; approx?: boolean }[]> {
+    const notas = this.vault.search(q, limite);
+    const arquivos = await this.texto.search(q, limite, (p) => this.vault.fileInfo(p));
+    return [...notas, ...arquivos];
   }
 
   /** Prepara os arquivos antes de abrir o cofre (o índice das notas os vê na abertura). */
@@ -155,6 +167,7 @@ export class Cofre {
     this.escrever("Grandes/pesado-nota.md", `# Estoque grande\n\n${"Uma linha do estoque da loja, com a contagem de sexta.\n".repeat(40_000)}${MARCA}\n`);
     this.escrever("Grandes/limite-quadro branco.canvas", `{"nodes":[${'{"id":"x","type":"text","text":"estoque","x":0,"y":0,"width":10,"height":10},'.repeat(70_000)}{"id":"y","type":"text","text":"fim","x":0,"y":0,"width":10,"height":10}],"edges":[]}`);
     await this.vault.open();
+    await this.texto.sync(this.vault.otherFiles());
     const self = this;
     globalThis.fetch = Object.assign(async () => {
       self.rede++;
@@ -165,6 +178,7 @@ export class Cofre {
   fechar(): void {
     globalThis.fetch = this.fetchAntes;
     this.vault.close();
+    void this.texto.destroy();
   }
 
   private escrever(rel: string, conteudo: string | Uint8Array): void {
@@ -307,7 +321,7 @@ export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promis
   // 4. Entra na busca do app (a mesma do ⌘K): uma palavra que só existe dentro do arquivo.
   3: async (c, tipo) => {
     const rel = c.caminho("Loja", tipo);
-    const hits = c.vault.search(MARCA, 200).filter((h) => !h.approx);
+    const hits = (await c.buscar(MARCA)).filter((h) => !h.approx);
     return hits.some((h) => h.path === rel) ? null : "a busca não acha o conteúdo";
   },
 

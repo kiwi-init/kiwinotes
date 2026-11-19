@@ -1,6 +1,7 @@
 // O índice do texto de todo arquivo de texto (T21240, spec #21165), num cofre inventado num tmp.
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { deflateRawSync } from "node:zlib";
 import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -80,6 +81,38 @@ describe("a busca no conteúdo (spec #21165)", () => {
     expect(py).toMatchObject({ title: "horta.py", line: 4, file: { format: "py" } });
     expect(py.snippet).toContain("return 'carambola'");
     expect(hits.find((h) => h.path === "Textos/lista.txt")).toMatchObject({ title: "lista", line: 1 });
+  });
+
+  test("o quadro branco e o diagrama: o texto dos cartões e os rótulos, nunca o JSON nem o XML (T22217)", async () => {
+    const quadro = JSON.stringify({
+      nodes: [
+        { id: "n1", type: "text", text: "Plantar a carambola", x: 0, y: 0, width: 200, height: 60 },
+        { id: "n2", type: "text", text: "Regar\ntoda manhã", x: 0, y: 120, width: 200, height: 60 },
+      ],
+      edges: [{ id: "e1", fromNode: "n1", toNode: "n2", label: "depois" }],
+    });
+    // O draw.io grava a página compactada: o rótulo só aparece depois de descompactar.
+    const pagina = '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" value="Colher a carambola" vertex="1" parent="1"><mxGeometry x="0" y="0" width="120" height="40" as="geometry"/></mxCell></root></mxGraphModel>';
+    const packed = deflateRawSync(Buffer.from(encodeURIComponent(pagina))).toString("base64");
+    const f = folder({
+      "Quadros/horta.canvas": quadro,
+      "Diagramas/colheita.drawio": `<mxfile><diagram id="d1" name="Pomar">${packed}</diagram></mxfile>`,
+      "Quadros/quebrado.canvas": "{ isto não é um quadro carambola",
+    });
+    const t = f.index();
+    await t.sync(f.all());
+    expect(isIndexedText("a.canvas") && isIndexedText("b.drawio")).toBe(true);
+    // A palavra do cartão e o rótulo da página compactada; o quadro que não abre fica só pelo nome.
+    expect(paths(await t.search("carambola", 20, f.stat))).toEqual(["Diagramas/colheita.drawio", "Quadros/horta.canvas"]);
+    // O texto das setas e o nome da página entram; o que é do formato, não.
+    expect(paths(await t.search("depois", 20, f.stat))).toEqual(["Quadros/horta.canvas"]);
+    expect(paths(await t.search("pomar", 20, f.stat))).toEqual(["Diagramas/colheita.drawio"]);
+    for (const formato of ["fromNode", "width", "mxCell", "mxGeometry", "vertex"]) expect(await t.search(formato, 20, f.stat)).toEqual([]);
+    // A linha seria a do texto extraído, não a do arquivo: o trecho vai, a linha não.
+    const [hit] = await t.search("manhã", 20, f.stat);
+    expect(hit).toMatchObject({ path: "Quadros/horta.canvas", file: { format: "canvas" } });
+    expect(hit!.snippet).toContain("manhã");
+    expect(hit!.line).toBeUndefined();
   });
 
   test("os filtros da busca: path:, -palavra, -path:, \"frase\"; o tag: é de nota", async () => {

@@ -14,15 +14,41 @@ import { Database } from "bun:sqlite";
 import { chmod, mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
+import { drawioPages } from "../../ui/notes/files/drawio.ts";
 import { isSecretFile, textNoteTitle } from "../agent/tools/reader.ts";
 import { isEditableText, MAX_VIEW_TEXT_BYTES } from "../shared/file-view.ts";
+import { canvasTexts, parseCanvas } from "../shared/json-canvas.ts";
 import { parseQuery } from "../shared/query.ts";
 import { fold, foldWithMap } from "../store/text.ts";
 import { inside } from "./paths.ts";
 import type { VaultFile } from "./vault.ts";
 
-/** O arquivo que entra no índice: os textos que as Notas editam, o csv e o tsv; nunca um arquivo de segredos. */
-export const isIndexedText = (p: string): boolean => (isEditableText(p) || /\.(csv|tsv)$/i.test(p)) && !isSecretFile(p);
+/** O quadro branco e o diagrama (T22217): a busca vê o texto dos cartões e os rótulos, não o JSON nem o XML. */
+const isDrawing = (p: string): boolean => /\.(canvas|drawio)$/i.test(p);
+
+/**
+ * O arquivo que entra no índice: os textos que as Notas editam, o csv, o tsv, o quadro branco e o diagrama; nunca um
+ * arquivo de segredos.
+ */
+export const isIndexedText = (p: string): boolean => (isEditableText(p) || /\.(csv|tsv)$/i.test(p) || isDrawing(p)) && !isSecretFile(p);
+
+/**
+ * O texto que a busca vê. No quadro branco, o texto de cada cartão, seta e grupo (`canvasTexts`); no diagrama, o nome
+ * de cada página e os rótulos (`drawioPages`, que descompacta a página do draw.io). Assim a palavra do cartão é achada
+ * e o `"id"`, o `"x"` e o `mxCell` não. O que não abre como quadro ou diagrama fica só pelo nome. No resto, o texto
+ * como está.
+ */
+export function searchableText(p: string, raw: string): string {
+  if (/\.canvas$/i.test(p)) {
+    try {
+      return canvasTexts(parseCanvas(raw)).map((t) => t.text).join("\n");
+    } catch {
+      return "";
+    }
+  }
+  if (/\.drawio$/i.test(p)) return (drawioPages(raw) ?? []).flatMap((pg) => [pg.name, ...pg.labels.map((l) => l.text)]).filter(Boolean).join("\n");
+  return raw;
+}
 
 /** O formato que a busca mostra: "py", "json", "csv"… */
 export const formatOf = (p: string): string => (/\.([a-z0-9]+)$/i.exec(p)?.[1] ?? "").toLowerCase();
@@ -252,7 +278,7 @@ export class TextIndex {
           }
           const bytes = await readFile(abs).catch(() => undefined);
           if (bytes === undefined) continue; // sumiu entre o aviso e a leitura: o próximo aviso diz
-          if (bytes.byteLength <= this.maxBytes && !looksBinary(bytes)) text = decode(bytes);
+          if (bytes.byteLength <= this.maxBytes && !looksBinary(bytes)) text = searchableText(f.path, decode(bytes));
         }
         batch.push({ f, text });
       }
@@ -331,7 +357,12 @@ export class TextIndex {
       const body = fold(raw).replace(/\s+/g, " ");
       if (q.notText.some((t) => body.includes(t))) continue;
       if (!terms.every((t) => body.includes(t) || where.includes(t))) continue;
+      // No quadro e no diagrama, a linha é do texto extraído, não do arquivo: o trecho vai, a linha não.
       const at = raw ? lineOf(raw, terms) : null;
+      if (at && isDrawing(r.path)) {
+        out.push({ ...hit, snippet: at.snippet });
+        continue;
+      }
       out.push({ ...hit, snippet: at?.snippet ?? "", ...(at ? { line: at.line } : {}) });
     }
     return out;
@@ -347,7 +378,7 @@ export class TextIndex {
     }
     const bytes = await readFile(abs).catch(() => undefined);
     if (bytes === undefined) return null;
-    return bytes.byteLength <= Math.min(max, this.maxBytes) && !looksBinary(bytes) ? decode(bytes) : "";
+    return bytes.byteLength <= Math.min(max, this.maxBytes) && !looksBinary(bytes) ? searchableText(rel, decode(bytes)) : "";
   }
 
   /** Fecha o banco (a pasta saiu de cena). */

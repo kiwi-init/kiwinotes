@@ -1,0 +1,41 @@
+{
+  "_": "T22217: a busca do app e o ⌘K acham o quadro pelo texto dos cartões e o diagrama pelos rótulos. Antes do cli start, copie test/fixtures/files/fluxo.drawio para DIR/vault/Diagramas/.",
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.canvasCreate",
+      "args": {
+        "folder": "Projetos",
+        "title": "Feira",
+        "content": "{\n\t\"nodes\":[\n\t\t{\"id\":\"t1\",\"type\":\"text\",\"text\":\"## Lista\\n\\n- [x] Caju\\n- [ ] Pitanga\",\"x\":-420,\"y\":-200,\"width\":320,\"height\":160},\n\t\t{\"id\":\"t2\",\"type\":\"text\",\"text\":\"Levar as sacolas de pano\",\"x\":0,\"y\":-200,\"width\":320,\"height\":100}\n\t],\n\t\"edges\":[\n\t\t{\"id\":\"e1\",\"fromNode\":\"t1\",\"fromSide\":\"right\",\"toNode\":\"t2\",\"toSide\":\"left\",\"label\":\"depois\"}\n\t]\n}"
+      },
+      "name": "um quadro inventado: a pitanga só existe num cartão"
+    },
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre" },
+    { "wait": 1200 },
+    { "press": "Meta+k" },
+    { "type": "pitanga" },
+    { "waitFor": ".kn-palette .kn-palette-it:has-text('Feira')", "name": "o quadro achado pelo texto do cartão" },
+    { "expectText": ".kn-palette .kn-palette-it:has-text('Feira') .kn-palette-type", "text": "canvas", "name": "o tipo, sem linha" },
+    { "wait": 300 },
+    { "screenshot": "01-cmdk-quadro.png" },
+    { "click": ".kn-palette .kn-palette-it:has-text('Feira')", "name": "abre o quadro" },
+    { "waitFor": ".kn-canvas-node[data-id='t1']", "name": "o quadro abre" },
+    { "press": "Meta+k" },
+    { "type": "estoque" },
+    { "waitFor": ".kn-palette .kn-palette-it:has-text('fluxo')", "name": "o diagrama achado pelo rótulo (Tem estoque?)" },
+    { "expectText": ".kn-palette .kn-palette-it:has-text('fluxo') .kn-palette-type", "text": "drawio", "name": "o tipo do diagrama" },
+    { "wait": 300 },
+    { "screenshot": "02-cmdk-diagrama.png" },
+    { "press": "Escape" },
+    { "press": "Meta+k" },
+    { "type": "fromnode" },
+    { "wait": 1200 },
+    { "expectCount": ".kn-palette .kn-palette-it:has-text('Feira')", "count": 0, "name": "o JSON do quadro não entra na busca" },
+    { "press": "Escape" },
+    { "press": "Meta+k" },
+    { "type": "mxgeometry" },
+    { "wait": 1200 },
+    { "expectCount": ".kn-palette .kn-palette-it:has-text('fluxo')", "count": 0, "name": "o XML do diagrama não entra na busca" }
+  ]
+}
