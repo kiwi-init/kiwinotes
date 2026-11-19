@@ -115,7 +115,7 @@ test("mexendo em outro app (o tempo parado do sistema < 30 s), para; o ioreg rod
   expect(await g.blocked()).toBe("system");
   expect(await g.blocked()).toBe("system");
   expect(reads).toBe(1);
-  // Parada a pessoa: entre leituras, o parado cresce com o relógio.
+  // A pessoa parou: 30 s parado, o modelo anda.
   c.advance(SYSTEM_IDLE_MS - 2_000);
   idle = SYSTEM_IDLE_MS;
   expect(await g.blocked()).toBeNull();
@@ -128,6 +128,17 @@ test("mexendo em outro app (o tempo parado do sistema < 30 s), para; o ioreg rod
   c.advance(SYSTEM_IDLE_EVERY_MS);
   expect(await g.blocked()).toBe("system");
   expect(reads).toBe(3);
+  // Entre leituras, o parado cresce com o relógio: 25 s lidos e 4 s depois, ainda espera; 1,5 s mais, anda, sem ler.
+  idle = 25_000;
+  c.advance(SYSTEM_IDLE_EVERY_MS);
+  expect(await g.blocked()).toBe("system");
+  expect(reads).toBe(4);
+  c.advance(4_000);
+  expect(await g.blocked()).toBe("system");
+  c.advance(1_500);
+  idle = 0; // uma leitura agora daria "mexendo"; a regra é não ler antes de 10 s
+  expect(await g.blocked()).toBeNull();
+  expect(reads).toBe(4);
 });
 
 test("sem resposta do ioreg, o tempo parado não segura nada", async () => {
@@ -137,11 +148,12 @@ test("sem resposta do ioreg, o tempo parado não segura nada", async () => {
 
 test("o wait do tempo parado dorme até os 30 s, de 10 em 10 no máximo", async () => {
   const c = clock();
+  const start = c.now();
   const slept: number[] = [];
   const g = new BackgroundGate({
     now: c.now,
     battery: null,
-    systemIdle: async () => ioreg(25_000),
+    systemIdle: async () => ioreg(25_000 + c.now() - start),
     sleep: async (ms) => {
       slept.push(ms);
       c.advance(ms);
