@@ -266,6 +266,8 @@ const cat = await createKiwiCat(root, {
   // O overlay fica por cima de tudo enquanto o agente trabalha: 30 quadros por segundo (spec #14813). O desenho é o
   // mesmo do hub.
   activeFPS: 30,
+  // O painel do overlay nunca tem o foco: parado, ele segue desenhando enquanto aparece (e some quando o agente acaba).
+  pauseUnfocused: false,
   // A tinta dos emotes vem do fundo de verdade (spec #14963): o overlay é escuro mesmo com o Mac no tema claro, então ela
   // é sempre a clara. O tema do sistema não entra.
   background: "dark",
