@@ -8,7 +8,7 @@ import { type MutableRefObject, type ReactNode, Suspense, useEffect, useRef, use
 
 import type { VaultFile } from "../types.ts";
 
-import { fileSize, hasTextVersions } from "../../../src/shared/file-view.ts";
+import { fileSize, hasVersions } from "../../../src/shared/file-view.ts";
 import { isPackageName, modified, typeLabel } from "./fileCard.ts";
 import { fileType } from "../tree.ts";
 import { isHtmlFile } from "./htmlPreview.ts";
@@ -149,7 +149,7 @@ export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef
                 Prévia
               </button>
             ) : null}
-            {onVersions && state.kind === "ready" && hasTextVersions(name) && !("readOnly" in state.file && state.file.readOnly) ? (
+            {onVersions && state.kind === "ready" && hasVersions(name) && !("readOnly" in state.file && state.file.readOnly) ? (
               <button type="button" className="kn-bt kn-file-versions" onClick={() => onVersions(path)}>
                 Versões
               </button>

@@ -30,9 +30,16 @@ export const isEditableText = (name: string): boolean => EDITABLE_TEXT.has((/\.(
 
 /**
  * O arquivo que não é nota e tem o painel Versões com o diff (T21239, spec #21160): o texto editável e a tabela em texto
- * (csv, tsv), que grava em bytes mas se lê como texto. O xlsx e o docx guardam versões, sem o painel ainda.
+ * (csv, tsv), que grava em bytes mas se lê como texto.
  */
 export const hasTextVersions = (name: string): boolean => isEditableText(name) || /\.(csv|tsv)$/i.test(name);
+
+/**
+ * Tudo o que tem o painel Versões (T22432, issue #182): os de texto, o xlsx (a versão abre só leitura no visualizador
+ * dele) e o quadro branco (o diff dos cartões e das setas). O docx entra quando o Kiwi o gravar (spec #21080): até lá,
+ * ele não tem versões para mostrar.
+ */
+export const hasVersions = (name: string): boolean => hasTextVersions(name) || /\.(xlsx|canvas)$/i.test(name);
 
 export const viewLimit = (as: FileReadAs): number => (as === "text" ? MAX_VIEW_TEXT_BYTES : MAX_VIEW_BYTES);
 

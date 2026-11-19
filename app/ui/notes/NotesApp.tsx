@@ -62,7 +62,8 @@ import { hasFilters, parseQuery, type SavedSearch, searchTooLong,
 import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { CanvasView } from "./canvas/CanvasView.tsx";
 import { FileView, type FilesApi } from "./files/FileView.tsx";
-import { hasTextVersions } from "../../src/shared/file-view.ts";
+import { canvasLines } from "../../src/shared/canvas-lines.ts";
+import { hasVersions } from "../../src/shared/file-view.ts";
 import { allFolders, loadCollapsed, loadOpenFolders, saveCollapsed, saveOpenFolders, type SectionId, toggled } from "./sidebarState.ts";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
 import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, VaultFile, ExportFormat, TreePrefs, ProjectView,
@@ -216,6 +217,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   /** "Exportar…" (T2684): a nota cujo formato a pessoa está escolhendo. */
   const [exporting, setExporting] = useState<string | null>(null);
   const [versionsOf, setVersionsOf] = useState<{ path: string; title: string; content: string;
+    /** O quadro (T22432): o diff dos cartões e das setas, no lugar do JSON. */
+    readable?: boolean;
   } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   // A pasta que acabou de nascer (spec #19265): a linha dela pisca por ~1 s.
@@ -1244,10 +1247,20 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
    * T21239 (spec #21160), também o de um arquivo de texto: o texto de agora vem do disco, depois do que estava por gravar.
    */
   const openVersions = async (path: string) => {
+    const title = path.split("/").pop() ?? path;
+    // O quadro (T22432, issue #182): grava o que está pendente, e o diff é dos cartões e das setas.
+    if (/\.canvas$/i.test(path)) {
+      if (board === path && boardFlush.current && !(await boardFlush.current())) return;
+      const c = await api.canvas?.get(path).catch(() => null);
+      if (c) setVersionsOf({ path, title, content: c.content, readable: true });
+      return;
+    }
     if (!/\.md$/i.test(path)) {
       if (view === "file" && fileOpen === path && fileFlush.current && !(await fileFlush.current())) return;
+      // O xlsx (T22432): a versão abre no visualizador da planilha, sem o texto de agora.
+      if (/\.xlsx$/i.test(path)) return setVersionsOf({ path, title, content: "" });
       const f = await api.files?.read?.(path, "text").catch(() => null);
-      if (f && "text" in f) setVersionsOf({ path, title: path.split("/").pop() ?? path, content: f.text });
+      if (f && "text" in f) setVersionsOf({ path, title, content: f.text });
       return;
     }
     if (current.current === path && !(await leave())) return;
@@ -1424,8 +1437,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         ...(shownHere ? [{ label: "Abrir no app padrão", onSelect: () => void api.files?.open(t.path).catch(failed_("abrir o arquivo")) }] : []),
         { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders },
         { label: "Copiar caminho", onSelect: () => copyPath(t.path) },
-        // O histórico do arquivo de texto (T21239), como o da nota.
-        ...(api.versions && hasTextVersions(t.path) ? [{ label: "Versões…", onSelect: () => void openVersions(t.path) }] : []),
+        // O histórico do arquivo (T21239), como o da nota; o do xlsx e o do quadro desde o T22432.
+        ...(api.versions && hasVersions(t.path) ? [{ label: "Versões…", onSelect: () => void openVersions(t.path) }] : []),
         { kind: "separator" },
         { label: "Renomear", onSelect: () => setRenaming(sideKey(t)), disabled: !canMove },
         { label: "Mover para…", onSelect: () => setMoving(t), disabled: !canMove || !folders },
@@ -1850,6 +1863,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             api={api as NotesApi & { canvas: NonNullable<NotesApi["canvas"]> }}
             path={board}
             flushRef={boardFlush}
+            onVersions={api.versions && api.files?.read ? () => void openVersions(board) : undefined}
             onOpenLink={(t) => void onOpenLink(t)}
             onOpenNote={(p) => void open(p)}
             onOpenTag={openTag}
@@ -2216,12 +2230,13 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
           path={versionsOf.path}
           title={versionsOf.title}
           current={versionsOf.content}
+          readable={versionsOf.readable ? canvasLines : undefined}
           onClose={() => setVersionsOf(null)}
           onRestored={() => {
             const p = versionsOf.path;
             setVersionsOf(null);
             void refresh();
-            // O arquivo de texto aberto relê do disco sozinho, pelo aviso de mudança do cofre (T21239).
+            // O arquivo aberto (texto, planilha) e o quadro releem do disco sozinhos, pelo aviso de mudança do cofre.
             // A nota aberta é a restaurada: o editor mostra o texto de volta.
             if (current.current === p) api.get(p).then((n) => show(n), () => {},
               );

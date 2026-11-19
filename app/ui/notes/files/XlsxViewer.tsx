@@ -14,7 +14,7 @@ import { systemDecimal } from "./sheet.ts";
 import { SheetPane } from "./SheetPane.tsx";
 import type { FileViewerProps } from "./viewers.ts";
 
-export function XlsxViewer({ path, file, files, flushRef, kiwi }: FileViewerProps) {
+export function XlsxViewer({ path, file, files, flushRef, kiwi, readOnly }: FileViewerProps) {
   const base64 = "base64" in file ? file.base64 : "";
   const name = path.split("/").at(-1) ?? path;
   const decimal: Decimal = useMemo(() => systemDecimal(), []);
@@ -26,7 +26,7 @@ export function XlsxViewer({ path, file, files, flushRef, kiwi }: FileViewerProp
       alive = false;
     };
   }, [decimal]);
-  const session = useSheetSession({ path, name, base64, version: file.version, files, flushRef, display, kiwi });
+  const session = useSheetSession({ path, name, base64, version: file.version, files, flushRef, display, kiwi, readOnly });
   const [tab, setTab] = useState<string | null>(null);
   // O Kiwi Cat gravou: a aba onde ele mexeu vem para a frente (T21114).
   useEffect(() => {

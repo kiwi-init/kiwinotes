@@ -39,6 +39,8 @@ export interface FileViewerProps {
    * grade. Um objeto novo a cada pedido, para a mesma linha pedida de novo rolar outra vez.
    */
   at?: { line: number };
+  /** Só leitura, e por quê (T22432): uma versão antiga no painel Versões, que se olha e não se edita. */
+  readOnly?: string;
 }
 
 export interface FileViewer {

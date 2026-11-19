@@ -197,7 +197,8 @@ export type VersionInfo = UiCapabilities["notes.versions"]["result"]["versions"]
 export interface VersionsApi {
   /** A mais nova primeiro. */
   list(path: string): Promise<VersionInfo[]>;
-  get(path: string, id: string): Promise<{ content: string; at: string }>;
+  /** O texto, ou os bytes em base64 (o xlsx, T22432), que o painel mostra no visualizador do arquivo. */
+  get(path: string, id: string): Promise<{ content: string; at: string } | { base64: string; at: string }>;
   /** Volta a nota ou o arquivo para a versão (o texto de agora vira uma versão antes). */
   restore(path: string, id: string): Promise<{ saved: boolean }>;
 }
