@@ -51,6 +51,8 @@ export interface XlsxSheet {
   name: string;
   /** Linha a linha, a partir de 0; o que falta é vazio. */
   rows: (XlsxCell | undefined)[][];
+  /** Escondida no Excel (`state="hidden"` ou `"veryHidden"`): a grade não mostra a aba, e a gravação a mantém (T21109). */
+  hidden?: true;
 }
 
 export interface XlsxBook {
@@ -77,7 +79,7 @@ export function readXlsx(bytes: Uint8Array, name = ""): XlsxBook {
       }
       rows[row.r] = Array.from(out);
     }
-    sheets.push({ name: info.name, rows: Array.from(rows, (r) => r ?? []) });
+    sheets.push({ name: info.name, rows: Array.from(rows, (r) => r ?? []), ...(info.hidden ? { hidden: true as const } : {}) });
   }
   const names = elements(book.text(book.workbook), "definedName").map((d) => {
     const local = attr(d.attrs, "localSheetId");
@@ -580,6 +582,7 @@ interface SheetInfo {
   name: string;
   path: string;
   kind: "worksheet" | "chartsheet" | "other";
+  hidden: boolean;
 }
 
 interface Rel {
@@ -704,7 +707,8 @@ class Book {
       const id = /\s[\w]+:id="([^"]*)"/.exec(s.attrs)?.[1];
       const rel = rels.find((r) => r.id === id);
       const kind = rel?.type.endsWith("/worksheet") ? "worksheet" : rel?.type.endsWith("/chartsheet") ? "chartsheet" : "other";
-      return { name: unescapeXml(attr(s.attrs, "name") ?? ""), path: rel?.path ?? "", kind };
+      const hidden = /^(hidden|veryHidden)$/.test(attr(s.attrs, "state") ?? "");
+      return { name: unescapeXml(attr(s.attrs, "name") ?? ""), path: rel?.path ?? "", kind, hidden };
     });
   }
 
