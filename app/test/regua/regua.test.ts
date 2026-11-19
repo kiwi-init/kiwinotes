@@ -2,11 +2,12 @@
 // cada tipo, o que dá para conferir sem tela. Um "cumpre" que quebra falha; um "falta" que passa pede a troca na tabela.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { openTarget, VIEWER_TYPES } from "../../src/shared/file-view.ts";
 import { tempDir } from "../tmp.ts";
+import { csvGrande, jsonGrande, PASTA, pequenas } from "./arquivos.ts";
 import { Cofre, CONFERIR, FAMILIAS, medirAte } from "./conferir.ts";
 import { ITENS, julgar, lerEstado, lerRegua, repetidas, semLinha, type Linha } from "./regua.ts";
 
@@ -36,6 +37,29 @@ describe("a tabela da régua", () => {
     expect(fora!.exts.filter((e) => openTarget(`x.${e}`) !== "app")).toEqual([]);
     expect(fora!.estados.every((e) => e.kind === "fora")).toBe(true);
     expect(regua.filter((l) => l.tipo !== FORA && l.estados.some((e) => e.kind === "fora")).map((l) => l.tipo)).toEqual([]);
+  });
+});
+
+// A pasta dos arquivos difíceis (T23519): o que está no repo é a saída do script, e só as pequenas. Uma fixture mexida
+// à mão (ou trocada por um arquivo de verdade de alguém) e uma grande commitada quebram aqui.
+describe("a pasta dos arquivos difíceis", () => {
+  /** O teto de uma fixture no repo: a maior hoje tem uns 7 KB, e as grandes (50 mil linhas, 5 MB) passam de 1 MB. */
+  const TETO = 32 * 1024;
+
+  test("é a saída do `arquivos.ts --write`, byte a byte, sem um arquivo a mais nem a menos", async () => {
+    const geradas = await pequenas();
+    expect(readdirSync(PASTA).sort()).toEqual(Object.keys(geradas).sort());
+    const diferentes = Object.entries(geradas)
+      .filter(([nome, c]) => !readFileSync(path.join(PASTA, nome)).equals(Buffer.from(c)))
+      .map(([nome]) => nome);
+    expect(diferentes).toEqual([]);
+  });
+
+  test(`só as pequenas: nenhuma passa de ${TETO / 1024} KB, e as grandes, geradas no teste, ficam acima disso`, () => {
+    const grandes = readdirSync(PASTA).filter((n) => statSync(path.join(PASTA, n)).size > TETO);
+    expect(grandes).toEqual([]);
+    expect(Buffer.byteLength(csvGrande())).toBeGreaterThan(TETO);
+    expect(Buffer.byteLength(jsonGrande())).toBeGreaterThan(TETO);
   });
 });
 
