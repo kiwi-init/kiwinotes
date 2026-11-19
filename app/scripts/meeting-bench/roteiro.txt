@@ -1,0 +1,43 @@
+# Reunião inventada para o banco de teste das reuniões (T20237, spec #20181). Tudo é fictício: o assunto (a feira de
+# pães de um bairro), os nomes, os números e as datas. A = você (o mic); B, C e D = os outros (o áudio da reunião).
+# Cada linha "X: texto" é uma fala. Os nomes, os termos e os números estão aqui de propósito: é onde o ASR mais erra.
+A: Bom dia, pessoal. Vamos começar? Hoje a pauta é a feira de pães do bairro, no sábado dia catorze.
+B: Bom dia. Eu trouxe a lista das barracas. Por enquanto são dezoito confirmadas.
+C: Oi, Ana. Eu só preciso sair às dez e meia, tudo bem?
+A: Tudo bem, Carla. Então começa você com o orçamento.
+C: Certo. O orçamento total ficou em quatro mil e duzentos reais. A maior parte vai para as tendas e para a iluminação.
+D: E o gerador? Na última feira faltou energia no fim da tarde.
+C: O gerador está incluído. São seiscentos e cinquenta reais pelo fim de semana inteiro.
+A: Ótimo. Bruno, como estão as barracas de fermentação natural?
+B: Temos cinco padarias com levain próprio. A do Diego vai levar o pão de centeio e a focaccia de alecrim.
+D: Isso. E também a ciabatta de azeitona, se o forno a lenha chegar a tempo.
+A: Quando o forno chega?
+D: O fornecedor prometeu para quinta-feira, até as três da tarde.
+B: Se atrasar, a gente pode usar o forno elétrico da escola municipal.
+A: Boa ideia. Alguém fala com a diretora Mariana?
+B: Eu falo. Ela já tinha oferecido o pátio também.
+C: Uma dúvida: a taxa de inscrição das barracas continua sendo oitenta reais?
+A: Continua. Quem é do bairro paga metade, quarenta.
+C: Então a arrecadação prevista é de mil e cento e vinte reais, se todas pagarem.
+D: Faltou contar as duas barracas de café. Elas entraram ontem à noite.
+C: Verdade. Com elas fica mil duzentos e oitenta.
+A: Vamos falar da divulgação. Elisa ficou de fazer os cartazes, mas hoje ela não pôde vir.
+B: Ela me mandou o rascunho. O título é Feira do Pão de Vila Serena, das oito da manhã às seis da tarde.
+D: Eu tiraria o horário do título. Fica melhor embaixo, em letra menor.
+A: Concordo. E o perfil da feira nas redes, quem cuida?
+C: Eu cuido. Já tem trezentos e doze seguidores, e o vídeo do sourdough passou de duas mil visualizações.
+B: O vídeo da sova foi o que mais deu certo. Dá para gravar outro com a broa de milho?
+D: Dá. Eu gravo na quarta, com a minha sobrinha Joana ajudando.
+A: Perfeito. Agora a parte chata: o lixo e a limpeza.
+B: A prefeitura vai mandar seis contêineres e um caminhão no domingo às sete.
+C: E os voluntários? Na planilha estão só nove nomes.
+A: Precisamos de pelo menos quinze. Cada um faz um turno de três horas.
+D: Eu posso pedir para o grupo da associação de moradores.
+A: Pede, por favor. Vamos revisar as tarefas antes de fechar.
+B: Eu falo com a diretora Mariana e confirmo o forno elétrico.
+C: Eu fecho o orçamento com o gerador e publico o vídeo novo na sexta.
+D: Eu acompanho a entrega do forno a lenha e chamo os voluntários.
+A: E eu mando a ata para todo mundo ainda hoje, com o mapa das dezoito barracas. Próxima reunião na terça, às nove.
+B: Combinado. Obrigado, pessoal.
+C: Até terça.
+D: Tchau, tchau.

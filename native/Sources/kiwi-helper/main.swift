@@ -7,7 +7,7 @@ let usage = """
 usage: kiwi-helper --socket <path> [--dump-wav <dir>]
        kiwi-helper --stdio [--dump-wav <dir>]
        kiwi-helper --transcribe <file.wav>… [--dictionary <file>] [--language auto|pt|en] [--vad] [--ctc]
-       kiwi-helper --meeting <file.wav> [--asr stream|batch|none] [--diarizer sortformer|lseend|vbx|none] [--realtime]
+       kiwi-helper --meeting <file.wav> [--asr stream|batch|none | --whisper <model.gguf>] [--chunk-vad] [--diarizer sortformer|lseend|vbx|none] [--realtime]
 
   --socket <path>   connect to the app's unix socket (the app listens; NDJSON v1, see docs/adr/0001-ipc.md)
   --stdio           talk NDJSON over stdin/stdout instead, for manual testing
@@ -27,9 +27,11 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
   --transcribe      transcribe 16 kHz mono WAV files the way a dictation is, one JSON line each, and exit
                     (--dictionary: one term per line; --ctc: also the CTC rescoring, on in the app since
                     T1973; downloads the model the first time and waits for it)
-  --meeting-live <file.wav> [--realtime] [--output speaker|headphones]  the R3 pipeline as the app runs it (two
-                    streaming ASRs, live Sortformer, echo filter, VBx at the end) over a 2-channel WAV, as `score.ts`
-                    lines (T4943). No mic, no sound, no spool.
+  --meeting-live <file.wav> [--realtime] [--output speaker|headphones] [--capture <Hz>] [--language pt|en]
+                    the R3 pipeline as the app runs it (two streaming ASRs, live Sortformer, echo filter, VBx at the
+                    end) over a 2-channel WAV, as `score.ts` lines plus the raw `segment`s (T4943). No mic, no sound,
+                    no spool. --capture: through the capture's resampler from that rate first; --language: a hint
+                    the app doesn't pass (T20237, bench only).
   --meeting         measure the meeting pipeline (T4926, spec #4823) on a 2-channel 16 kHz WAV (0 = you, 1 = the
                     others): streaming or batch ASR per channel and diarization of channel 1, JSON lines, and exit.
                     No mic, no sound. --realtime feeds the stream at real-time pace, for the true lag.
@@ -156,6 +158,13 @@ while let arg = args.next() {
     case "--asr":
         guard let v = args.next(), let mode = MeetingBench.ASRMode(rawValue: v), meeting != nil else { fail("--asr stream|batch|none, after --meeting") }
         meeting?.asr = mode
+    case "--whisper":
+        guard let v = args.next(), meeting != nil else { fail("--whisper <model.gguf>, after --meeting") }
+        meeting?.asr = .whisper
+        meeting?.whisperModel = v
+    case "--chunk-vad":
+        guard meeting != nil else { fail("--chunk-vad, after --meeting (batch or --whisper)") }
+        meeting?.chunkVAD = true
     case "--diarizer":
         guard let v = args.next(), let kind = MeetingBench.DiarizerKind(rawValue: v), meeting != nil else { fail("--diarizer sortformer|lseend|vbx|none, after --meeting") }
         meeting?.diarizer = kind
@@ -165,6 +174,9 @@ while let arg = args.next() {
     case "--output":
         guard let v = args.next(), ["speaker", "headphones", "unknown"].contains(v), meetingLive != nil else { fail("--output speaker|headphones, after --meeting-live") }
         meetingLive?.output = v
+    case "--capture":
+        guard let v = args.next(), let rate = Double(v), rate >= 8_000, meetingLive != nil else { fail("--capture <Hz>, after --meeting-live") }
+        meetingLive?.captureRate = rate
     case "--realtime":
         meeting?.realtime = true
         meetingLive?.realtime = true
@@ -212,7 +224,8 @@ if let meeting {
     CFRunLoopRun()
 }
 
-if let meetingLive {
+if var meetingLive {
+    meetingLive.language = language
     Task { exit(await MeetingLiveRun.run(meetingLive)) }
     CFRunLoopRun()
 }
