@@ -10,7 +10,7 @@
     { "expectCount": ".kn-file-sheet-tab", "count": 2, "name": "as 2 abas visíveis" },
     { "expectText": ".kn-file-sheet-tab[aria-selected='true']", "text": "Resumo", "name": "a primeira aberta" },
     { "expectText": ".kn-file-sheet-note", "text": "1 aba escondida", "name": "o aviso da aba escondida no Excel" },
-    { "expectCount": ".kn-grid-letter", "count": 5, "name": "as colunas com a letra, como na planilha" },
+    { "expectCount": ".kn-grid-letter", "count": 11, "name": "as colunas com a letra, como na planilha: as 5 dos dados e a folga de 6 para digitar (T21109)" },
     { "expectText": ".kn-grid-letters", "text": "ABCDE" },
     { "expectText": ".kn-grid-row[aria-rowindex='2']", "text": "R$ 2.099,40", "name": "o resultado guardado da fórmula, com a moeda e os separadores do sistema (pt-BR no headless)" },
     { "expectText": ".kn-grid-row[aria-rowindex='2']", "text": "03/11/2026", "name": "a data formatada" },

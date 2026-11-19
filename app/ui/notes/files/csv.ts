@@ -146,3 +146,10 @@ export function bytesOf(base64: string): Uint8Array {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
 }
+
+/** O base64 de bytes (o `files.save` de uma planilha), em pedaços, sem estourar a pilha num arquivo grande. */
+export function base64Of(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}

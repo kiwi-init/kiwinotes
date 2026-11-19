@@ -167,6 +167,8 @@ export interface NotesApi {
     read?(path: string, as: "text" | "binary"): Promise<FileContent>;
     /** Grava um texto aberto nas Notas (T7105, contrato 1.40.0), se ninguém o mudou desde `baseVersion`. */
     save?(path: string, content: string, baseVersion: string): Promise<FileSaveResult>;
+    /** Grava os bytes de uma planilha (xlsx, csv, tsv) aberta nas Notas (T21107/T21109, contrato 1.89.0), em base64. */
+    saveBytes?(path: string, base64: string, baseVersion: string): Promise<FileSaveResult>;
     /** Renomeia ou move, com os links das notas atrás (T19878, contrato 1.84.0). Num engine antigo, o menu não tem. */
     rename?(path: string, newPath: string): Result<"files.rename">;
     /** Para o Lixo, sem versão (o "Apagar" do menu, T19878); o Desfazer é o `folders.restore`. */

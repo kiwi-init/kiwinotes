@@ -51,7 +51,8 @@ const XlsxViewer = lazy(() => import("./XlsxViewer.tsx").then((m) => ({ default:
 const DrawioViewer = lazy(() => import("./DrawioViewer.tsx").then((m) => ({ default: m.DrawioViewer })));
 
 const text: FileViewer = { as: "text", View: TextViewer };
-const table: FileViewer = { as: "text", View: TableViewer };
+// T21109: a tabela chega em bytes, para gravar na codificação do arquivo.
+const table: FileViewer = { as: "binary", View: TableViewer };
 const image: FileViewer = { as: "binary", View: ImageViewer };
 const media: FileViewer = { as: "binary", View: MediaViewer };
 
@@ -62,7 +63,7 @@ export const VIEWERS: Record<string, FileViewer> = {
   json: text,
   yaml: text,
   yml: text,
-  // T7107: a tabela, só leitura.
+  // T7107: a tabela; editável desde o T21109.
   csv: table,
   tsv: table,
   // T7109: o pdf, pelo pdf.js do pack.
