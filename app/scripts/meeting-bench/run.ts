@@ -20,7 +20,8 @@
 // - batchvad, wsmallvad, wturbovad: os mesmos, só na fala que o Silero acha (`--chunk-vad`), um pedaço por vez. Sem o
 //            VAD, nos silêncios longos de cada canal, o Whisper pula trechos e inventa texto (no MLS, o turbo vai de 6,7% a
 //            12,6%); o Parakeet em batch roda com e sem, para a diferença ser do modelo e não do VAD (#20668).
-// No `limpo` rodam todas; nas variantes de captura (eco, ruído, baixo), só o caminho do app (live e nota). O `eco` roda
+// No `limpo` rodam todas; nas variantes de captura (eco, ruído, baixo), só o caminho do app (live e nota), e o eco também
+// roda o livedic (a correção fonética não pode trocar eco por um termo do dicionário, T22375). O `eco` roda
 // com `--output speaker` (o filtro de eco ligado, como sem fone); o resto com `headphones`.
 // - livedic, batchdic, batchvaddic: os mesmos com o dicionário da pessoa (`DICTIONARY`, `--dictionary`), só a correção
 //            fonética do texto, que o app já faz na reunião (T22375).
@@ -73,7 +74,7 @@ const helperArgs = (stage: Stage, wav: string, variant: string): string[] | null
   }
 };
 const stagesFor = (variant: string): Stage[] =>
-  variant === "limpo" ? [...STAGES] : variant === "baixo" ? ["live", "nota"] : ["live", "nota", "batch", "wsmall", "wturbo", "batchvad", "wsmallvad", "wturbovad"];
+  variant === "limpo" ? [...STAGES] : variant === "baixo" ? ["live", "nota"] : [...(variant === "eco" ? ["livedic"] as Stage[] : []), "live", "nota", "batch", "wsmall", "wturbo", "batchvad", "wsmallvad", "wturbovad"];
 
 const names = readdirSync(MEETINGS).filter((f) => f.endsWith(".truth.json")).map((f) => f.replace(/\.truth\.json$/, ""))
   .filter((n) => !only || only.includes(n.split(".")[0]!) || only.includes(n.split(".")[0]!.replace(/-\d+$/, "")))
@@ -105,8 +106,8 @@ for (const name of names) {
         const held = /bench: [a-z-]+, \d+m left/.test(line);
         if (held) { other = true; free = 0; continue; }
         free += 10;
-        if (line.includes("next:")) continue;
-        if (other || free >= 300) break;
+        // Livre com fila: quem está nela ainda não pegou; espera, mas não mais que 5 min.
+        if (free >= 300 || (other && !line.includes("next:"))) break;
       }
     }
     if (r.status !== 0) {
@@ -184,6 +185,14 @@ if (VOCAB.some((st) => names.some((n) => rows.has(`${n}.${st}`) && st.match(/dic
   for (const st of VOCAB) {
     const m = rows.get(`say.limpo.${st}`)?.dict_missed as string[] | undefined;
     if (m?.length) md.push("", `${st}, faltaram: ${m.join(", ")}.`);
+  }
+  // No eco (o filtro ligado, `--output speaker`), a correção não pode trocar uma palavra de eco por um termo do dicionário.
+  if (names.some((n) => rows.has(`${n}.livedic`) && n.endsWith(".eco"))) {
+    md.push("", "**Vocabulário no eco** (`--output speaker`; WER, palavras de eco no canal \"você\" e, no say, os termos)", "");
+    md.push("| Fonte | WER live | WER livedic | palavras de eco, live | palavras de eco, livedic |", "|---|---|---|---|---|");
+    for (const s of sources) md.push(`| ${LABEL[s] ?? s} | ${werOf(s, "eco", "live")} | ${werOf(s, "eco", "livedic")} | ${werOf(s, "eco", "live", "echo_words")} | ${werOf(s, "eco", "livedic", "echo_words")} |`);
+    const t = (st: Stage) => { const r = rows.get(`say.eco.${st}`); return r?.dict != null ? `${r.dict}%` : "—"; };
+    md.push(`| say: termos do dicionário | ${t("live")} | ${t("livedic")} | | |`);
   }
 }
 md.push("", "**Piores falas** (live, limpo; só o ID e as palavras erradas, `ref→asr`, `−` faltou, `+` sobrou)", "");
