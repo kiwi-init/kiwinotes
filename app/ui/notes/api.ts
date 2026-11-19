@@ -143,7 +143,8 @@ export function engineNotes(
             const bytes = Uint8Array.from(atob(v.base64), (c) => c.charCodeAt(0));
             return { content: new TextDecoder().decode(bytes), at: v.at };
           }
-          throw new Error("esta versão é de um arquivo em bytes");
+          // O xlsx (T22432): os bytes, para o painel abrir a versão no visualizador da planilha.
+          return v;
         },
         restore: (path, id) => (isNote(path) ? call("notes.restoreVersion", { path, id }) : call("files.restoreVersion", { path, id })),
       }

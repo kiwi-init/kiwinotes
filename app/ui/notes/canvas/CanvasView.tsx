@@ -74,6 +74,8 @@ export interface CanvasViewProps {
   onOpenFile?(path: string): void;
   onRenamed(path: string): void;
   onError(text: string): void;
+  /** O painel Versões do quadro (T22432), num engine com o histórico. */
+  onVersions?(): void;
 }
 
 type Gesture =
@@ -93,7 +95,7 @@ interface Handlers {
   editLabel(id: string, label: string): void;
 }
 
-export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpenTag, onOpenFile, onRenamed, onError }: CanvasViewProps) {
+export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpenTag, onOpenFile, onRenamed, onError, onVersions }: CanvasViewProps) {
   const [doc, setDoc] = useState<CanvasDoc | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -863,6 +865,14 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
         <button type="button" className="kn-bt" onClick={fitAll} title="Mostrar o quadro inteiro">
           Enquadrar
         </button>
+        {onVersions ? (
+          <>
+            <span className="kn-canvas-bar-sep" />
+            <button type="button" className="kn-bt kn-canvas-versions" onClick={onVersions} title="As versões guardadas deste quadro">
+              Versões
+            </button>
+          </>
+        ) : null}
       </div>
       {menu ? <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.id)} onClose={() => setMenu(null)} onRestoreFocus={() => board.current?.focus()} /> : null}
     </div>

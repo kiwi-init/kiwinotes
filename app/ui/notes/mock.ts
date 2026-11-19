@@ -421,6 +421,7 @@ export class MockVault implements NotesApi {
     },
     restore: async (path, id) => {
       const v = await this.versions.get(path, id);
+      if (!("content" in v)) throw engineError("E_BAD_ARGS", "only notes have versions here");
       return this.save(path, v.content, String(this.notes.get(path)?.version ?? ""));
     },
   };

@@ -1,0 +1,172 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "files.create",
+      "args": {
+        "folder": "Loja",
+        "name": "vendas.xlsx",
+        "base64": "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"
+      },
+      "name": "engine: um xlsx inventado (produto, total: café 10, pão 12)"
+    },
+    {
+      "invoke": "notes.canvasCreate",
+      "args": {
+        "folder": "Loja",
+        "title": "Plano",
+        "content": "{\"nodes\": [{\"id\": \"a1\", \"type\": \"text\", \"text\": \"comprar caf\\u00e9\", \"x\": 0, \"y\": 0, \"width\": 250, \"height\": 60}], \"edges\": []}"
+      },
+      "name": "engine: um quadro inventado, com um cartão"
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Loja')",
+      "name": "abre a pasta Loja"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('vendas')",
+      "name": "abre o vendas.xlsx"
+    },
+    {
+      "waitFor": ".kn-file[data-state='ready'] .kn-grid-row[aria-rowindex='3'] [aria-colindex='3']",
+      "name": "a grade"
+    },
+    {
+      "click": ".kn-grid-row[aria-rowindex='3'] [aria-colindex='3']",
+      "name": "a célula do 12"
+    },
+    {
+      "type": "15",
+      "name": "a pessoa troca o 12 por 15"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "wait": 1500,
+      "name": "a planilha grava, e o histórico guarda o original e o novo"
+    },
+    {
+      "click": ".kn-file-versions",
+      "name": "o botão Versões no topo do xlsx"
+    },
+    {
+      "waitFor": ".kn-versions-it >> nth=1",
+      "name": "a original e a editada"
+    },
+    {
+      "click": ".kn-versions-it >> nth=1",
+      "name": "a mais velha"
+    },
+    {
+      "waitFor": ".kn-versions-preview .kn-grid-row[aria-rowindex='3'] [aria-colindex='3']:has-text('12')",
+      "name": "a versão abre na grade da planilha, com o 12"
+    },
+    {
+      "expectText": ".kn-versions-preview",
+      "text": "Só leitura: a versão de",
+      "name": "só leitura, e diz por quê"
+    },
+    {
+      "expectText": ".kn-versions-stats",
+      "text": "Restaurar troca o arquivo de agora por esta versão"
+    },
+    {
+      "screenshot": "versoes-xlsx.png"
+    },
+    {
+      "click": ".kn-versions-actions .kn-bt",
+      "name": "Restaurar a do 12"
+    },
+    {
+      "expectCount": ".kn-versions",
+      "count": 0,
+      "name": "o painel fecha"
+    },
+    {
+      "waitFor": ".kn-file .kn-grid-row[aria-rowindex='3'] [aria-colindex='3']:has-text('12')",
+      "name": "a grade aberta volta ao 12"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('Plano')",
+      "name": "abre o quadro"
+    },
+    {
+      "waitFor": ".kn-canvas-node:has-text('comprar café')",
+      "name": "o quadro com o cartão"
+    },
+    {
+      "click": ".kn-canvas-bar button:has-text('+ Cartão')",
+      "name": "um cartão novo"
+    },
+    {
+      "type": "comprar pão",
+      "name": "a pessoa escreve"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "wait": 1500,
+      "name": "o quadro grava"
+    },
+    {
+      "click": ".kn-canvas-versions",
+      "name": "o botão Versões do quadro"
+    },
+    {
+      "waitFor": ".kn-versions-it >> nth=1",
+      "name": "a original e a editada"
+    },
+    {
+      "click": ".kn-versions-it >> nth=1",
+      "name": "a mais velha"
+    },
+    {
+      "expectText": ".kn-versions-stats",
+      "text": "tira 1 linha",
+      "name": "o diff dos cartões, não do JSON"
+    },
+    {
+      "expectText": ".kn-diff-del",
+      "text": "Cartão: comprar pão"
+    },
+    {
+      "expectText": ".kn-diff",
+      "text": "Cartão: comprar café"
+    },
+    {
+      "screenshot": "versoes-quadro.png"
+    },
+    {
+      "click": ".kn-versions-actions .kn-bt",
+      "name": "Restaurar a de um cartão"
+    },
+    {
+      "expectCount": ".kn-versions",
+      "count": 0,
+      "name": "o painel fecha"
+    },
+    {
+      "waitFor": ".kn-canvas-node:has-text('comprar pão')",
+      "state": "detached",
+      "name": "o quadro volta a um cartão"
+    },
+    {
+      "expectCount": ".kn-canvas-node",
+      "count": 1
+    }
+  ]
+}

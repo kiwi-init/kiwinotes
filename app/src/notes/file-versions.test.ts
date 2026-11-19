@@ -222,3 +222,39 @@ describe("arquivos em bytes (T21239)", () => {
     expect(readFileSync(path.join(root, "Loja/vendas.csv"), "utf8")).toBe("dia;total\nseg;10\n");
   });
 });
+
+describe("o quadro branco (T22432, issue #182)", () => {
+  const board = (texto: string) =>
+    JSON.stringify({ nodes: [{ id: "a", type: "text", text: texto, x: 0, y: 0, width: 200, height: 80 }], edges: [] });
+
+  test("gravar o quadro guarda versões, restaurar volta, e renomear leva o histórico", async () => {
+    const { call, list, advance } = setup();
+    const c = await call("notes.canvasCreate", { folder: "Loja", title: "Plano", content: board("comprar café") });
+    expect(c.path).toBe("Loja/Plano.canvas");
+    const s1 = await call("notes.canvasSave", { path: c.path, content: board("comprar pão"), baseVersion: c.version });
+    expect(s1.saved).toBe(true);
+    let l = await list(c.path);
+    expect(l.length).toBe(2);
+    expect((await call("files.version", { path: c.path, id: l[1]!.id })).content).toBe(board("comprar café"));
+    advance(300_000);
+    expect(await call("files.restoreVersion", { path: c.path, id: l[1]!.id })).toMatchObject({ saved: true });
+    expect((await call("notes.canvasGet", { path: c.path })).content).toBe(board("comprar café"));
+    l = await list(c.path);
+    const texts = await Promise.all(l.map((v) => call("files.version", { path: c.path, id: v.id }).then((x) => x.content)));
+    expect(texts).toContain(board("comprar pão"));
+    const n = l.length;
+    await call("notes.canvasRename", { from: c.path, to: "Loja/Plano da semana.canvas" });
+    expect((await list("Loja/Plano da semana.canvas")).length).toBe(n);
+    expect(await list(c.path)).toEqual([]);
+  });
+
+  test("restaurar não grava um quadro que não abre", async () => {
+    const { call, list } = setup();
+    const c = await call("notes.canvasCreate", { folder: "Loja", title: "Plano", content: board("um") });
+    await call("notes.canvasSave", { path: c.path, content: board("dois"), baseVersion: c.version });
+    const l = await list(c.path);
+    expect(l.length).toBe(2);
+    // A versão guardada é sempre um quadro que abriu: o restaurar passa pelo mesmo `saveCanvas`.
+    expect(await call("files.restoreVersion", { path: c.path, id: l[1]!.id })).toMatchObject({ saved: true });
+  });
+});

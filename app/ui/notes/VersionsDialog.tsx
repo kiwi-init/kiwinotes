@@ -1,9 +1,12 @@
 // "Versões…" (T2680): as versões da nota, a mais nova primeiro, com a diferença para o texto de agora e o Restaurar.
 // O restaurar grava por cima (o engine guarda o texto de agora como uma versão antes, então dá para voltar dele).
+// Desde o T22432 (issue #182): o quadro branco mostra o diff em linhas legíveis (`readable`, os cartões e as setas), e
+// o xlsx abre a versão só leitura no próprio visualizador da planilha, no lugar do diff.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { collapse, diffStats, lineDiff } from "./diff.ts";
+import { type FilesApi, viewerFor } from "./files/viewers.ts";
 import type { VersionInfo, VersionsApi } from "./types.ts";
 
 const when = (iso: string) =>
@@ -16,6 +19,7 @@ export function VersionsDialog({
   current,
   onRestored,
   onClose,
+  readable,
 }: {
   api: VersionsApi;
   path: string;
@@ -24,10 +28,14 @@ export function VersionsDialog({
   current: string;
   onRestored(): void;
   onClose(): void;
+  /** O texto que o diff compara (T22432): o quadro em cartões e setas, no lugar do JSON. */
+  readable?(text: string): string;
 }) {
   const [list, setList] = useState<VersionInfo[] | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
+  /** A versão em bytes (o xlsx): abre no visualizador, sem diff. */
+  const [bytes, setBytes] = useState<{ base64: string; at: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api.list(path).then(
@@ -40,10 +48,18 @@ export function VersionsDialog({
   }, [api, path]);
   useEffect(() => {
     setContent(null);
-    if (picked) api.get(path, picked).then((v) => setContent(v.content), () => setContent(null));
+    setBytes(null);
+    if (picked)
+      api.get(path, picked).then(
+        (v) => ("content" in v ? setContent(v.content) : setBytes(v)),
+        () => setContent(null),
+      );
   }, [api, path, picked]);
   // Do texto de agora para a versão: o que o Restaurar traz de volta (+) e o que ele tira (−).
-  const diff = useMemo(() => (content === null ? null : lineDiff(current, content)), [content, current]);
+  const diff = useMemo(
+    () => (content === null ? null : readable ? lineDiff(readable(current), readable(content)) : lineDiff(current, content)),
+    [content, current, readable],
+  );
   const stats = diff ? diffStats(diff) : null;
 
   const restore = async () => {
@@ -83,12 +99,16 @@ export function VersionsDialog({
               ))}
             </ul>
             <div className="kn-versions-diff" aria-label="O que o Restaurar muda">
+              {bytes ? (
+                <div className="kn-versions-stats">Restaurar troca o arquivo de agora por esta versão.</div>
+              ) : null}
+              {bytes ? <VersionPreview path={path} base64={bytes.base64} at={bytes.at} /> : null}
               {stats ? (
                 <div className="kn-versions-stats">
                   {stats.added || stats.removed ? `Restaurar traz ${stats.added} e tira ${stats.removed} ${stats.removed === 1 ? "linha" : "linhas"}` : "Igual ao texto de agora."}
                 </div>
               ) : null}
-              <pre className="kn-diff">
+              <pre className="kn-diff" hidden={!!bytes}>
                 {diff
                   ? collapse(diff).map((l, i) =>
                       l.kind === "gap" ? (
@@ -106,7 +126,7 @@ export function VersionsDialog({
               </pre>
               {error ? <p className="kn-trash-error" role="alert">{error}</p> : null}
               <div className="kn-versions-actions">
-                <button type="button" className="kn-bt kn-bt-acc" disabled={!picked || !stats || (!stats.added && !stats.removed)} onClick={() => void restore()}>
+                <button type="button" className="kn-bt kn-bt-acc" disabled={!picked || (!bytes && (!stats || (!stats.added && !stats.removed)))} onClick={() => void restore()}>
                   Restaurar esta versão
                 </button>
               </div>
@@ -114,6 +134,27 @@ export function VersionsDialog({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** A versão em bytes no visualizador do arquivo, só leitura: nada grava, nada chama o engine (T22432). */
+function VersionPreview({ path, base64, at }: { path: string; base64: string; at: string }) {
+  const viewer = viewerFor(path);
+  const flushRef = useRef<(() => Promise<boolean>) | null>(null);
+  const files = useMemo<FilesApi>(
+    () => ({
+      open: async () => true as const,
+      onChanged: () => () => {},
+      read: async () => ({ path, size: 0, version: `versao:${at}`, base64 }),
+    }),
+    [path, base64, at],
+  );
+  if (!viewer || viewer.as !== "binary") return null;
+  const file = { path, size: Math.floor((base64.length * 3) / 4), version: `versao:${at}`, base64 };
+  return (
+    <div className="kn-versions-preview" aria-label="A versão escolhida, só leitura">
+      <viewer.View key={at} path={path} file={file} files={files} flushRef={flushRef} readOnly={`a versão de ${when(at)}.`} />
     </div>
   );
 }

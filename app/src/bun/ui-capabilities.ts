@@ -1164,6 +1164,15 @@ export function uiCapabilities(deps: CapabilityDeps,
       await deps.versions.flush(p);
       const old = await versionOf(p, a.id);
       const binary = typeof old.content !== "string";
+      // O quadro (T22432) volta pelo `saveCanvas`, que só grava um JSON Canvas que abre.
+      if (/\.canvas$/i.test(p) && typeof old.content === "string") {
+        const cur = await v.getCanvas(p);
+        await deps.versions.snapshot(cur.path, cur.content);
+        const r = await v.saveCanvas(p, old.content, cur.version);
+        if (!r.saved) return { saved: false as const, current: { path: r.current.path, size: Buffer.byteLength(r.current.content), version: r.current.version, text: r.current.content } };
+        await deps.versions.snapshot(p, old.content);
+        return { saved: true as const, path: r.path, size: Buffer.byteLength(old.content), version: r.version };
+      }
       if (binary && !v.saveFileBytes) throw bad("files.restoreVersion: this vault can't save spreadsheets");
       const current = await fileContentOf(v, p, binary);
       if (!current) throw new CapabilityError("E_BAD_ARGS", `${p} can't be restored (too large, or not text)`);
@@ -1206,7 +1215,13 @@ export function uiCapabilities(deps: CapabilityDeps,
     "notes.canvasGet": async (args) => (await vault()).getCanvas(fields(args, "notes.canvasGet", ["path"]).path),
     "notes.canvasSave": async (args) => {
       const a = fields(args, "notes.canvasSave", ["path", "content", "baseVersion"]);
-      return (await vault()).saveCanvas(a.path, a.content, a.baseVersion);
+      const v = await vault();
+      // O quadro também tem histórico (T22432, issue #182), com as regras da nota: o JSON Canvas é texto.
+      const before = deps.versions ? await v.getCanvas(a.path).catch(() => null) : null;
+      const r = await v.saveCanvas(a.path, a.content, a.baseVersion);
+      if (r.saved && deps.versions && typeof a.content === "string")
+        await deps.versions.record(r.path, a.content, before?.content).catch((e) => console.error("[notes] versions:", e));
+      return r;
     },
     "notes.canvasCreate": async (args) => {
       const a = fields(args, "notes.canvasCreate", ["folder", "title", "content"]);
@@ -1214,7 +1229,10 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "notes.canvasRename": async (args) => {
       const a = fields(args, "notes.canvasRename", ["from", "to"]);
-      return (await vault()).renameCanvas(a.from, a.to);
+      const r = await (await vault()).renameCanvas(a.from, a.to);
+      // O histórico vai junto (T22432), como o do arquivo.
+      await deps.versions?.move((p) => (p === filePath(a.from) ? r.path : p));
+      return r;
     },
     "notes.daily": async (args) => {
       const a = fields(args, "notes.daily", ["date"]);

@@ -67,6 +67,8 @@ export function useSheetSession(opts: {
   flushRef: MutableRefObject<(() => Promise<boolean>) | null>;
   display: Display | null;
   kiwi?: KiwiSheetSource;
+  /** Só leitura, com o motivo (T22432: a versão antiga no painel Versões). */
+  readOnly?: string;
 }): SheetSession {
   const { path, name, base64, version, files, flushRef, display } = opts;
   const kiwiSource = useRef(opts.kiwi);
@@ -287,7 +289,8 @@ export function useSheetSession(opts: {
     [flush, tell],
   );
 
-  const readOnly = state.kind === "ready" ? (state.doc.readOnly ?? (canSave ? null : "Este Kiwi ainda não grava planilhas.")) : null;
+  const readOnly =
+    state.kind === "ready" ? (opts.readOnly ?? state.doc.readOnly ?? (canSave ? null : "Este Kiwi ainda não grava planilhas.")) : null;
 
   const edit = useCallback(
     (ops: SheetOp[]) => {
