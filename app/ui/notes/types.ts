@@ -167,7 +167,7 @@ export interface NotesApi {
     read?(path: string, as: "text" | "binary"): Promise<FileContent>;
     /** Grava um texto aberto nas Notas (T7105, contrato 1.40.0), se ninguém o mudou desde `baseVersion`. */
     save?(path: string, content: string, baseVersion: string): Promise<FileSaveResult>;
-    /** Grava os bytes de uma planilha (xlsx, csv, tsv) aberta nas Notas (T21107/T21109, contrato 1.89.0), em base64. */
+    /** Grava os bytes de uma planilha (xlsx, csv, tsv; contrato 1.89.0) ou de um docx (T21152, 1.92.0) aberto nas Notas, em base64. */
     saveBytes?(path: string, base64: string, baseVersion: string): Promise<FileSaveResult>;
     /** A célula com a caixa de edição aberta numa planilha, ou `null` (T21114, contrato 1.90.0): o Kiwi Cat espera. */
     editing?(path: string, owner: string, cell: { sheet: string; row: number; col: number } | null): Promise<{ ok: true }>;

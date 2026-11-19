@@ -153,7 +153,7 @@ export interface CapabilityDeps {
     | "getCanvas" | "saveCanvas" | "createCanvas" | "renameCanvas" | "readFile" | "saveFile" | "createFile" | "deleteFile" | "renameFile"
   > &
     // O inode de cada nota (spec #9874): sem ele (os vaults de mentira), o projeto só segue o que o watcher viu. Sem o
-    // `folderList` (spec #12918), o `notes.folders` tira as pastas do `list()`. Sem o `saveFileBytes` (T21107), a planilha não grava.
+    // `folderList` (spec #12918), o `notes.folders` tira as pastas do `list()`. Sem o `saveFileBytes` (T21107), a planilha e o docx (T21152) não gravam.
     Partial<Pick<Vault, "noteInodes" | "noteMetas" | "folderList" | "filesIn" | "filesMatching" | "resolveFiles" | "saveFileBytes" | "otherFiles" | "fileInfo">>;
   /**
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
@@ -1152,7 +1152,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (a.snapshot !== undefined && typeof a.snapshot !== "boolean") throw bad("files.save: snapshot must be true or false");
       const v = await vault();
       const binary = a.base64 !== undefined;
-      if (binary && !v.saveFileBytes) throw bad("files.save: this vault can't save spreadsheets");
+      if (binary && !v.saveFileBytes) throw bad("files.save: this vault can't save files from bytes");
       // O de antes (T21239): a 1ª versão de um arquivo sem histórico, e a cópia na hora do agente (`snapshot`). Só nesses
       // dois casos ele é lido (T22576): com histórico, o `record` não o usa, e a pessoa pagaria a leitura do arquivo
       // inteiro a cada gravação.

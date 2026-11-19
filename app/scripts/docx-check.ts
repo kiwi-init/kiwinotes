@@ -12,7 +12,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Bookmark, Document, InternalHyperlink, Packer, PageBreak, Paragraph, TextRun } from "docx";
 import { type Page, webkit } from "playwright-core";
+import { partBytes, partText, readZip, writeZip } from "../src/shared/sheet/zip.ts";
 import { ABRE_MS, medirAte } from "../test/regua/conferir.ts";
+import { CHANGED_OUTSIDE } from "../ui/notes/files/docxSaver.ts";
 import { connect, request } from "./cli";
 import { openWindow, type UiContext } from "./ui-page";
 
@@ -50,6 +52,33 @@ put(
     }),
   ),
 );
+// O docx que a pessoa edita (T21152): a proposta, numa cópia.
+const EDITAR = "Docs/editar.docx";
+const PROPOSTA = new Uint8Array(readFileSync(join(app, "test/fixtures/files/proposta.docx")));
+put(EDITAR, PROPOSTA);
+/** O texto do corpo de um docx, sem as marcas, e os trechos dele. */
+const bodyOf = (bytes: Uint8Array) => {
+  const parts = readZip(bytes);
+  const xml = partText(bytes, parts.find((q) => q.name === "word/document.xml")!);
+  return { parts, xml, text: xml.replace(/<\/w:p>/g, "\n").replace(/<[^>]+>/g, "") };
+};
+/** A proposta com um parágrafo a mais no fim, como outro app gravaria. */
+const fromOutside = (text: string) => {
+  const { parts, xml } = bodyOf(PROPOSTA);
+  const next = xml.replace("</w:body>", `<w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body>`);
+  assert.notEqual(next, xml, "o parágrafo de fora entrou");
+  return writeZip(PROPOSTA, parts, new Map([["word/document.xml", new TextEncoder().encode(next)]]));
+};
+const disk = (rel: string) => new Uint8Array(readFileSync(join(vault, rel)));
+/** Espera o disco mudar (a gravação vem um instante depois da última tecla). */
+const diskChange = async (rel: string, from: string, ms = 8000) => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (sha(rel) !== from) return disk(rel);
+    await Bun.sleep(50);
+  }
+  throw new Error(`o ${rel} não mudou no disco em ${ms} ms`);
+};
 const sha = (rel: string) => createHash("sha256").update(readFileSync(join(vault, rel))).digest("hex");
 const before = { report: sha(REPORT), proposta: sha("Docs/proposta.docx") };
 
@@ -234,6 +263,113 @@ try {
           return !!r && r.bottom > area.top && r.top < area.bottom;
         });
         assert.ok(seen, "a página da conclusão à vista");
+      });
+    } finally {
+      await w.close();
+    }
+  }
+
+  // Editar nas páginas e gravar (T21152).
+  {
+    const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1100, height: 760, motion: false, browser: "webkit", query: { note: EDITAR } });
+    const p = w.page;
+    const typeAtEndOf = async (text: string, typed: string) => {
+      const box = (await p.locator(".docx-page").first().getByText(text).first().boundingBox())!;
+      await p.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+      await p.keyboard.press("End");
+      await p.keyboard.type(typed, { delay: 15 });
+    };
+    // Quando um passo falha: o que a tela mostra, o aviso, os erros da página e o fim do texto no disco.
+    const diag = async () => {
+      const shown = await p.evaluate(() => ({
+        state: document.querySelector(".kn-file")?.getAttribute("data-state"),
+        live: window.__kiwiDocxLive,
+        text: (document.querySelector(".docx-paginated-surface")?.textContent ?? "").slice(0, 120),
+        note: document.querySelector(".kn-file-text-note")?.textContent ?? null,
+      }));
+      return `\n       tela: ${JSON.stringify(shown)}\n       disco: ${JSON.stringify(bodyOf(disk(EDITAR)).text.slice(0, 160))}\n       página: ${JSON.stringify(w.report.problems.slice(-5))}`;
+    };
+    const step = (name: string, fn: () => Promise<string | void>) =>
+      check(name, async () => {
+        try {
+          return await fn();
+        } catch (e) {
+          await shot(p, `falhou-${name.slice(0, 24).replace(/\W+/g, "-")}`).catch(() => {});
+          throw new Error(`${(e as Error).message.split("\n")[0]}${await diag()}`);
+        }
+      });
+    try {
+      await p.waitForSelector(".kn-file[data-state='ready'] .docx-page", { timeout: 30000 });
+      await step("editar nas páginas grava o docx, e o resto do arquivo fica", async () => {
+        const start = sha(EDITAR);
+        await typeAtEndOf("Proposta de mudança", " da Ana");
+        const t0 = Date.now();
+        const saved = await diskChange(EDITAR, start);
+        const after = Date.now() - t0;
+        const { parts, xml, text } = bodyOf(saved);
+        assert.ok(text.includes("Proposta de mudança da Ana"), text.slice(0, 120));
+        // Os trechos juntos: nada de uma letra por trecho.
+        const single = [...xml.matchAll(/<w:t(?: [^>]*)?>([^<]*)<\/w:t>/g)].filter((m) => m[1]!.length === 1).length;
+        assert.ok(single <= 1, `${single} trechos de uma letra`);
+        // As outras partes do zip, com os mesmos bytes.
+        const orig = readZip(PROPOSTA);
+        const changed = parts.filter((q) => {
+          const o = orig.find((x) => x.name === q.name);
+          return !o || Buffer.compare(Buffer.from(partBytes(saved, q)), Buffer.from(partBytes(PROPOSTA, o))) !== 0;
+        });
+        assert.deepEqual(changed.map((q) => q.name), ["word/document.xml"], `mudaram: ${changed.map((q) => q.name).join(", ")}`);
+        assert.equal(await p.locator(".kn-file-text-note").count(), 0, "sem aviso");
+        // A dica do cabeçalho e do rodapé, que aparece ao editar, sai em português.
+        const hints = await p.evaluate(() => {
+          const el = document.querySelector(".docx-pages") ?? document.body;
+          const css = getComputedStyle(el);
+          return ["add-header", "add-footer", "edit-header", "edit-footer"].map((k) => css.getPropertyValue(`--docx-hf-${k}`));
+        });
+        assert.ok(hints.every((h) => h.includes("Clique duas vezes")), `dicas: ${hints.join(" | ")}`);
+        await shot(p, "docx-editado");
+        return `: grava ${after} ms depois da última tecla; só o document.xml mudou`;
+      });
+
+      await step("⌘Z desfaz e grava de novo", async () => {
+        const start = sha(EDITAR);
+        for (let i = 0; i < 12 && (await p.locator(".docx-paginated-surface").innerText()).includes("da Ana"); i++) {
+          await p.keyboard.press("Meta+z");
+          await p.waitForTimeout(80);
+        }
+        const saved = await diskChange(EDITAR, start);
+        assert.ok(!bodyOf(saved).text.includes("da Ana"));
+        assert.ok(bodyOf(saved).text.includes("Proposta de mudança\n"));
+      });
+
+      await step("o arquivo mudou fora do Kiwi, sem edição por gravar: abre o novo, sem aviso", async () => {
+        writeFileSync(join(vault, EDITAR), fromOutside("Nota do Bruno, de outro app."));
+        await p.waitForFunction(() => document.querySelector(".docx-paginated-surface")?.textContent?.includes("Nota do Bruno"), null, { timeout: 10000 });
+        assert.equal(await p.locator(".kn-file-text-note").count(), 0, "sem aviso");
+      });
+
+      await step("mudou fora com uma edição por gravar: vale o de fora, e a barra avisa", async () => {
+        await typeAtEndOf("Proposta de mudança", " (rascunho)");
+        const outside = fromOutside("Versão da Carla, de outro app.");
+        writeFileSync(join(vault, EDITAR), outside);
+        await p.waitForSelector(".kn-file-text-note", { timeout: 10000 });
+        assert.equal(await p.locator(".kn-file-text-note").textContent(), CHANGED_OUTSIDE);
+        await p.waitForFunction(() => document.querySelector(".docx-paginated-surface")?.textContent?.includes("Versão da Carla"), null, { timeout: 10000 });
+        await p.waitForTimeout(800);
+        assert.deepEqual(disk(EDITAR), outside, "o disco fica com o de fora");
+        await shot(p, "docx-mudou-fora");
+      });
+
+      await step("sair do docx logo depois de digitar grava antes de sair", async () => {
+        await p.waitForTimeout(300);
+        const start = sha(EDITAR);
+        await typeAtEndOf("Proposta de mudança", " final");
+        // Antes dos 400 ms da gravação: troca para a nota.
+        await p.click(".kn-crumb-bt");
+        await p.click(".kn-tree-pop .kn-side-item[data-kind='note']");
+        await p.waitForSelector(".kn-note-editor .cm-content", { timeout: 10000 });
+        const saved = await diskChange(EDITAR, start, 3000);
+        assert.ok(/Proposta de mudança final\n/.test(bodyOf(saved).text), `no disco: ${bodyOf(saved).text.slice(0, 80)}`);
+        assert.equal(await p.evaluate(() => window.__kiwiDocxLive), 0, "o motor solto");
       });
     } finally {
       await w.close();

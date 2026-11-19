@@ -1,5 +1,5 @@
-// O motor do docx nas Notas (T21151, spec #21080): o @docx-editor.dev/core (Apache-2.0), só leitura, com as páginas
-// como no Word. Este arquivo é o único que o importa, e o `DocxViewer` o carrega só quando um docx abre: o motor e o
+// O motor do docx nas Notas (T21151, spec #21080): o @docx-editor.dev/core (Apache-2.0), com as páginas como no Word.
+// Desde o T21152, a pessoa edita nas páginas (o teclado, o ⌘Z, o ⌘B, colar são do motor), e o `save()` dá o docx novo. Este arquivo é o único que o importa, e o `DocxViewer` o carrega só quando um docx abre: o motor e o
 // CSS dele ficam num pedaço à parte do pack. Nada vai à rede: as fontes são as do Mac, pelo canvas.
 
 import "@docx-editor.dev/core/styles/editor.css";
@@ -9,6 +9,8 @@ import { forEachSemanticSpan, keyedRangeRects, type SemanticLayout, tryCreateCan
 
 import type { DocxMatch, DocxPiece } from "./docxFind.ts";
 import { wordMeasurer } from "./docxMetrics.ts";
+import { keepUntouchedParts } from "./docxParts.ts";
+import { tidyDocx } from "./docxRuns.ts";
 
 declare global {
   interface Window {
@@ -32,6 +34,10 @@ export interface DocxHandle {
   reveal(match: DocxMatch): void;
   /** Rola até o alto de uma página (a primeira é 0). */
   revealPage(index: number): void;
+  /** O docx com as edições, com os trechos iguais juntos (T21152). */
+  save(): Uint8Array;
+  undo(): void;
+  redo(): void;
   /** Solta o motor e o documento (#22186): a memória volta ao fechar o arquivo. */
   destroy(): void;
 }
@@ -40,6 +46,15 @@ export type MountResult = { ok: true; handle: DocxHandle } | { ok: false; reason
 
 interface Options {
   zoom: number;
+  /** A pessoa edita nas páginas (T21152); `false` é só leitura. */
+  editable: boolean;
+  /** Cada edição que mudou o documento. */
+  onEdit(): void;
+  /**
+   * O parágrafo com o cursor da pessoa, ou `null` quando o foco sai do documento ou ele fecha (T21231: o gato espera a
+   * pessoa sair do parágrafo antes de mudá-lo). Só chama quando muda.
+   */
+  onCaret?(paragraphId: string | null): void;
   /** Um clique num link de fora: quem abre é o visualizador, depois de conferir o endereço. */
   onLink(href: string): void;
 }
@@ -47,11 +62,21 @@ interface Options {
 /** O `setScale` da superfície: o mesmo que o `setZoom` do editor do motor usa, fora dos tipos públicos. */
 type Scalable = PaginatedSurface & { setScale?: (scale: number) => boolean };
 
-export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, onLink }: Options): MountResult {
+export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, editable, onEdit, onCaret, onLink }: Options): MountResult {
+  // Uma cópia dos bytes abertos: o motor pode ficar com o buffer que recebeu.
+  const original = bytes.slice();
+  let lastCaret: string | null = null;
+  const caret = (id: string | null) => {
+    if (id === lastCaret) return;
+    lastCaret = id;
+    onCaret?.(id);
+  };
   const context = host.ownerDocument.createElement("canvas").getContext("2d");
   const base = context ? tryCreateCanvasMeasurer({ context, scale: PT_TO_PX }) : null;
   const r = mountPaginatedSurface(host, bytes, {
-    editingMode: "view",
+    editingMode: editable ? "edit" : "view",
+    onEdit: () => onEdit(),
+    onChange: (state) => caret(host.contains(host.ownerDocument.activeElement) ? state.selection.head.paragraphId : null),
     scale: zoom * PT_TO_PX,
     ...(base ? { measurer: wordMeasurer(base), producer: "kiwi-word-lines" } : {}),
     onHyperlinkPopover: ({ link }) => {
@@ -60,6 +85,10 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, onLink }
     },
   });
   if (!r.ok) return { ok: false, reason: r.reason };
+  const leave = () => caret(null);
+  host.addEventListener("focusout", (e) => {
+    if (!host.contains(e.relatedTarget as Node | null)) leave();
+  });
   let surface: Scalable | null = r.surface;
   const win = host.ownerDocument.defaultView;
   if (win) win.__kiwiDocxLive = (win.__kiwiDocxLive ?? 0) + 1;
@@ -107,10 +136,19 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, onLink }
     revealPage(index) {
       surface?.revealPage(index, { block: "start", offsetPx: 0 });
     },
+    save() {
+      if (!surface) throw new Error("o documento já foi fechado");
+      surface.flushPendingInput();
+      // As partes que o motor só reescreveu voltam com os bytes de quando o arquivo abriu.
+      return tidyDocx(keepUntouchedParts(surface.save(), original));
+    },
+    undo: () => surface?.undo(),
+    redo: () => surface?.redo(),
     destroy() {
       if (!surface) return;
       surface.setHighlightPainter(null);
       surface.destroy();
+      caret(null);
       surface = null;
       if (win) win.__kiwiDocxLive = Math.max(0, (win.__kiwiDocxLive ?? 1) - 1);
       marks = { matches: [], current: -1 };

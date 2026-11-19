@@ -1,7 +1,8 @@
 // O docx dentro das Notas (T7110; desde o T21151, spec #21080, como no Word): as páginas do documento, com a fonte, as
 // tabelas, as imagens, o cabeçalho e o rodapé, pelo motor do @docx-editor.dev/core (`docxEngine.ts`), que só carrega
-// quando um docx abre. Só leitura: o arquivo não é gravado, e fica como estava, byte a byte. O ⌘F acha no texto do
-// corpo; o zoom é o de todo arquivo (a pinça e o ⌘+, ⌘−, ⌘0). Ao fechar, o motor é solto (#22186, a decisão do harry
+// quando um docx abre. Desde o T21152, a pessoa edita nas páginas, e o Kiwi grava um instante depois (`docxSaver.ts`),
+// com a versão do disco: se outro app mudou o arquivo, vale o de lá, e a barra avisa. Aberto e fechado sem edição, o
+// arquivo fica como estava, byte a byte. O ⌘F acha no texto do corpo; o zoom é o de todo arquivo (a pinça e o ⌘+, ⌘−, ⌘0). Ao fechar, o motor é solto (#22186, a decisão do harry
 // em #22216): a memória do documento volta.
 
 import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -10,6 +11,7 @@ import { NO_TEXT_ASSIST } from "../../src/textAssist.ts";
 import { externalUrl } from "../links.ts";
 import { bytesOf } from "./csv.ts";
 import type { DocxHandle } from "./docxEngine.ts";
+import { DocxSaver } from "./docxSaver.ts";
 import { type DocxMatch, type DocxParagraph, docxParagraphs, findInDocx } from "./docxFind.ts";
 import { stepMatch } from "./pdfSearch.ts";
 import { useViewerZoom } from "./useViewerZoom.ts";
@@ -22,8 +24,42 @@ type State = { kind: "loading" } | { kind: "ready"; pages: number } | { kind: "t
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 
-export function DocxViewer({ path, file, at }: FileViewerProps) {
-  const base64 = "base64" in file ? file.base64 : "";
+export function DocxViewer({ path, file, files, flushRef, at }: FileViewerProps) {
+  const incoming = "base64" in file ? file.base64 : "";
+  // O que está aberto no motor. Uma leitura nova (outro app gravou) só reabre se não for a nossa própria gravação.
+  const [source, setSource] = useState({ base64: incoming, version: file.version });
+  const base64 = source.base64;
+  const [notice, setNotice] = useState<string | null>(null);
+  const saver = useMemo(
+    () =>
+      new DocxSaver(
+        {
+          path,
+          files,
+          bytes: () => {
+            if (!engine.current) throw new Error("sem documento");
+            return engine.current.save();
+          },
+          notice: setNotice,
+          reload: (b64, version) => setSource({ base64: b64, version }),
+        },
+        file.version,
+      ),
+    // Um gravador por arquivo: a versão de partida é a da primeira leitura.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: file.version só vale na criação
+    [path, files],
+  );
+  useEffect(() => {
+    if (!saver.incoming(incoming, file.version)) setSource({ base64: incoming, version: file.version });
+  }, [saver, incoming, file.version]);
+  useEffect(() => {
+    const flush = () => saver.flush();
+    flushRef.current = flush;
+    return () => {
+      if (flushRef.current === flush) flushRef.current = null;
+      saver.dispose();
+    };
+  }, [saver, flushRef]);
   const [state, setState] = useState<State>({ kind: "loading" });
   const scroller = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
@@ -61,6 +97,15 @@ export function DocxViewer({ path, file, at }: FileViewerProps) {
         if (!alive || !el) return;
         const r = mountDocx(el, bytes, {
           zoom: zoomAtMount.current,
+          editable: saver.canSave,
+          onEdit: () => {
+            setNotice(null);
+            // O texto mudou: a busca lê os parágrafos de novo, e as marcas velhas saem.
+            paragraphs.current = null;
+            setMatches((m) => (m ? null : m));
+            setCurrent(-1);
+            saver.edited();
+          },
           onLink: (href) => {
             const url = externalUrl(href);
             // O `newWindow: "external"` da janela manda para o navegador padrão.
@@ -69,6 +114,7 @@ export function DocxViewer({ path, file, at }: FileViewerProps) {
         });
         if (!r.ok) return setState({ kind: "error" });
         engine.current = r.handle;
+        saver.opened(source.version);
         setState({ kind: "ready", pages: r.handle.pages() });
       } catch {
         if (alive) setState({ kind: "error" });
@@ -76,11 +122,14 @@ export function DocxViewer({ path, file, at }: FileViewerProps) {
     })();
     return () => {
       alive = false;
+      // Saiu do documento com uma edição por gravar: os bytes saem do motor agora, antes de soltá-lo.
+      if (engine.current) void saver.flush();
       engine.current?.destroy();
       engine.current = null;
       paragraphs.current = null;
     };
-  }, [base64]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: reabre só quando os bytes mudam
+  }, [base64, saver]);
 
   // O zoom vai ao motor, que desenha as páginas de novo na escala nova (o texto fica nítido, sem esticar a imagem). Antes
   // do `useViewerZoom`, e também num efeito de layout: quando ele mede onde o ponto dos dedos foi parar, as páginas já
@@ -166,6 +215,11 @@ export function DocxViewer({ path, file, at }: FileViewerProps) {
   return (
     // biome-ignore lint: o ⌘F e o ⌘G do documento; o foco fica nos controles e nas páginas
     <div className="kn-file-pdf kn-file-docx" aria-busy={ready ? undefined : "true"} onKeyDown={onKeyDown}>
+      {notice || (ready && !saver.canSave) ? (
+        <div className="kn-file-text-note" role="status">
+          {notice ?? "Só leitura: este Kiwi ainda não grava documentos."}
+        </div>
+      ) : null}
       <div className="kn-file-pdf-bar" role="toolbar" aria-label="Documento">
         <span className="kn-file-pdf-group">
           <button type="button" className="kn-bt" aria-label="Diminuir o zoom" disabled={!ready || z <= MIN_ZOOM} onClick={() => zoomBy(stepZoom(z, -1, MIN_ZOOM, MAX_ZOOM) / z)}>

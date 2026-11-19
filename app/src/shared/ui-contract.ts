@@ -262,7 +262,8 @@ export type { NoteModel };
 // 1.91.0 (T21239, spec #21160): o histórico de versões de todo arquivo que o Kiwi grava (`files.versions`,
 //   `files.version`, `files.restoreVersion`) e o `snapshot` do `files.save`, a cópia de antes na hora (o do agente). Só
 //   acréscimo.
-export const UI_CONTRACT_VERSION = "1.91.0";
+// 1.92.0 (T21152, spec #21080): o `files.save` com `base64` grava também o docx editado nas Notas. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.92.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -463,6 +464,8 @@ export interface UiCapabilities {
    *
    * Histórico (1.91.0, T21239): cada gravação entra nas versões do arquivo, com as regras da nota. `snapshot: true` (o
    * que o agente manda) guarda já o de agora como versão, sem o intervalo de 2 minutos, se ele ainda está em `baseVersion`.
+   * Docx (1.92.0, T21152): `.docx` grava com `base64` do mesmo jeito. Um docx com senha, ou bytes novos que não são um
+   * docx, dão E_BAD_ARGS, e nada é escrito. O `.doc` antigo continua de fora.
    */
   "files.save": { args: { path: string; content?: string; base64?: string; baseVersion: string; snapshot?: boolean }; result: FileSaveResult };
   /**
