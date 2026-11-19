@@ -31,6 +31,7 @@ import { COPIED_MS } from "./code-copy.ts";
 import { type Callout, parseCallout } from "./callouts.ts";
 import { footnoteJump, footnotesOf, footnoteText } from "./footnotes.ts";
 import { hiddenTitle } from "./titleHeading.ts";
+import { kiwiRawChanged } from "./kiwi-writing.ts";
 import {
   FOOTNOTE_DEF_LINK,
   FOOTNOTE_INLINE_LINK,
@@ -776,6 +777,7 @@ export function renderedPreview(resolver: LinkResolver, actions: RenderedActions
       const changed =
         tr.docChanged ||
         tr.effects.some((e) => e.is(linksChanged)) ||
+        kiwiRawChanged(tr) ||
         syntaxTree(tr.startState) !== syntaxTree(tr.state) ||
         tr.startState.field(editorFocused, false) !== tr.state.field(editorFocused, false) ||
         hiddenTitle(tr.startState) !== hiddenTitle(tr.state);
