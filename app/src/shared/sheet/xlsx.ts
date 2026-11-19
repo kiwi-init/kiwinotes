@@ -218,8 +218,38 @@ function tableHeader(book: Book, info: SheetInfo, op: Extract<SheetOp, { op: "se
 }
 
 function renameColumnEverywhere(book: Book, table: string, from: string, to: string): void {
-  if (!table) return;
-  const f = (x: string) => renameTableColumn(x, table, from, to);
+  if (table) mapFormulasEverywhere(book, (f) => renameTableColumn(f, table, from, to));
+}
+
+/**
+ * Tira uma tabela que perdeu todas as linhas ou colunas: a parte (e as relações dela), o `<tablePart>` da aba, a
+ * relação e o `Override`. As referências estruturadas a ela viram `#REF!`, como no Excel.
+ */
+function dropTable(book: Book, info: SheetInfo, rel: Rel): void {
+  const t = book.text(rel.path);
+  const tAttrs = /<table\b([^>]*)>/.exec(t)?.[1] ?? "";
+  const name = unescapeXml(attr(tAttrs, "displayName") ?? attr(tAttrs, "name") ?? "");
+  const types = () => book.text("[Content_Types].xml");
+  const dropPart = (path: string) => {
+    book.remove(path);
+    book.setText("[Content_Types].xml", types().replace(new RegExp(`<Override\\b[^>]*PartName="/${escapeRe(path)}"[^>]*/>`), ""));
+  };
+  for (const inner of book.rels(rel.path)) if (!inner.external && book.has(new RegExp(`^${escapeRe(inner.path)}$`))) dropPart(inner.path);
+  if (book.has(new RegExp(`^${escapeRe(relsOf(rel.path))}$`))) book.remove(relsOf(rel.path));
+  dropPart(rel.path);
+  const sheetRels = relsOf(info.path);
+  book.setText(sheetRels, mapElementsWhole(book.text(sheetRels), "Relationship", (a) => (attr(a, "Id") === rel.id ? "" : null)));
+  let xml = book.text(info.path).replace(new RegExp(`<tablePart\\b[^>]*\\b(?:\\w+:)?id="${escapeRe(rel.id)}"[^>]*/>`), "");
+  xml = mapElementsWhole(xml, "tableParts", (a, inner) => {
+    const left = (inner ?? "").match(/<tablePart\b/g)?.length ?? 0;
+    return left === 0 ? "" : `<tableParts${setAttr(a, "count", String(left))}>${inner}</tableParts>`;
+  });
+  book.setText(info.path, xml);
+  if (name) mapFormulasEverywhere(book, (f) => mapTableRefs(f, name, () => "#REF!"));
+}
+
+/** Uma troca em toda fórmula do arquivo: abas, nomes definidos, colunas calculadas das tabelas e gráficos. */
+function mapFormulasEverywhere(book: Book, f: (formula: string) => string): void {
   let changed = false;
   const edit = (path: string, next: (xml: string) => string) => {
     const before = book.text(path);
@@ -248,18 +278,36 @@ function renameColumnEverywhere(book: Book, table: string, from: string, to: str
  */
 export function renameTableColumn(formula: string, table: string, from: string, to: string): string {
   const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-  const unesc = (n: string) => n.replace(/'(.)/g, "$1");
-  const esc = (n: string) => n.replace(/['#[\]]/g, "'$&");
-  const close = (text: string, open: number) => {
-    let depth = 0;
-    for (let i = open; i < text.length; i++) {
-      if (text[i] === "'") i++;
-      else if (text[i] === "[") depth++;
-      else if (text[i] === "]" && --depth === 0) return i;
+  const column = (spec: string) => (!spec.startsWith("#") && same(spec.replace(/'(.)/g, "$1"), from) ? to.replace(/['#[\]]/g, "'$&") : spec);
+  return mapTableRefs(formula, table, (head, inner) => {
+    if (!inner.startsWith("[")) return `${head}[${column(inner)}]`;
+    let next = "";
+    for (let k = 0; k < inner.length; ) {
+      const e = inner[k] === "[" ? closeBracket(inner, k) : -1;
+      if (e < 0) {
+        next += inner[k++];
+        continue;
+      }
+      next += `[${column(inner.slice(k + 1, e))}]`;
+      k = e + 1;
     }
-    return -1;
-  };
-  const column = (spec: string) => (!spec.startsWith("#") && same(unesc(spec), from) ? esc(to) : spec);
+    return `${head}[${next}]`;
+  });
+}
+
+/** O `]` que fecha o `[` em `open`; `'` escapa o caractere seguinte. */
+function closeBracket(text: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === "'") i++;
+    else if (text[i] === "[") depth++;
+    else if (text[i] === "]" && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** Cada referência estruturada `table[…]` da fórmula, fora do texto entre aspas, trocada por `f(nome, dentro)`. */
+function mapTableRefs(formula: string, table: string, f: (head: string, inner: string) => string): string {
   let out = "";
   for (let i = 0; i < formula.length; ) {
     if (formula[i] === '"') {
@@ -270,27 +318,10 @@ export function renameTableColumn(formula: string, table: string, from: string, 
       continue;
     }
     const open = i + table.length;
-    if (same(formula.slice(i, open), table) && formula[open] === "[" && !/[\w.\\]/.test(formula[i - 1] ?? "")) {
-      const end = close(formula, open);
+    if (formula.slice(i, open).toLowerCase() === table.toLowerCase() && formula[open] === "[" && !/[\w.\\]/.test(formula[i - 1] ?? "")) {
+      const end = closeBracket(formula, open);
       if (end < 0) return out + formula.slice(i);
-      const inner = formula.slice(open + 1, end);
-      let next = "";
-      if (!inner.startsWith("[")) next = column(inner);
-      else
-        for (let k = 0; k < inner.length; ) {
-          if (inner[k] !== "[") {
-            next += inner[k++];
-            continue;
-          }
-          const e = close(inner, k);
-          if (e < 0) {
-            next += inner.slice(k);
-            break;
-          }
-          next += `[${column(inner.slice(k + 1, e))}]`;
-          k = e + 1;
-        }
-      out += `${formula.slice(i, open)}[${next}]`;
+      out += f(formula.slice(i, open), formula.slice(open + 1, end));
       i = end + 1;
       continue;
     }
@@ -339,14 +370,21 @@ function shiftSheet(book: Book, info: SheetInfo, s: Shift): void {
   }
   const filter = elements(xml, "autoFilter")[0];
   if (s.axis === "col" && filter?.inner && crosses(attr(filter.attrs, "ref") ?? "", s)) throw new SheetOpError(`não dá para ${what} dentro de um filtro aplicado`);
-  const tables = rels.filter((r) => r.type.endsWith("/table")).map((r) => r.path);
+  const tables = rels.filter((r) => r.type.endsWith("/table"));
   const tableXml = new Map<string, string>();
-  for (const path of tables) {
+  const dropped: Rel[] = [];
+  for (const rel of tables) {
+    const path = rel.path;
     const t = book.text(path);
     const ref = attr(/<table\b([^>]*)>/.exec(t)?.[1] ?? "", "ref") ?? "";
-    if (s.axis === "col" && crosses(ref, s)) throw new SheetOpError(`não dá para ${what} dentro de uma tabela`);
     const next = shiftRange(ref, s);
-    if (next === null || spanOf(next, "row") < 2) throw new SheetOpError(`não dá para ${what}: uma tabela ficaria sem linhas`);
+    // Apagar todas as linhas (ou colunas) da tabela apaga a tabela, como no Excel.
+    if (next === null) {
+      dropped.push(rel);
+      continue;
+    }
+    if (s.axis === "col" && crosses(ref, s)) throw new SheetOpError(`não dá para ${what} dentro de uma tabela`);
+    if (spanOf(next, "row") < 2) throw new SheetOpError(`não dá para ${what}: uma tabela ficaria sem linhas`);
     // O cabeçalho e a linha de totais só saem com a tabela inteira (revisão do T21107): sem eles, a primeira linha de dados
     // viraria o cabeçalho, e os `tableColumn` não bateriam mais.
     const tAttrs = /<table\b([^>]*)>/.exec(t)?.[1] ?? "";
@@ -367,6 +405,7 @@ function shiftSheet(book: Book, info: SheetInfo, s: Shift): void {
   model.tail = editSheetTail(model.tail, s);
   book.setText(info.path, serializeSheet(model));
   for (const [path, t] of tableXml) book.setText(path, t);
+  for (const rel of dropped) dropTable(book, info, rel);
 
   // Os desenhos (gráficos e imagens) ancorados na aba andam junto.
   for (const r of rels.filter((r) => r.type.endsWith("/drawing"))) book.setText(r.path, shiftAnchors(book.text(r.path), s));

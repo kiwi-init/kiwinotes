@@ -270,6 +270,29 @@ describe("tabela (revisão do T21107)", () => {
     expect(column(out)).toEqual(["Fornecedor", "Cidade", "Prazo"]);
   });
 
+  test("apagar todas as linhas, ou todas as colunas, apaga a tabela, como no Excel", () => {
+    for (const op of [
+      { op: "deleteRows", sheet: "Fornecedores", at: 0, count: 4 },
+      { op: "deleteCols", sheet: "Fornecedores", at: 0, count: 3 },
+    ] as const) {
+      const out = patchXlsx(original, [op]);
+      const names = parts(out);
+      expect(names.has("xl/tables/table1.xml")).toBe(false);
+      expect(text(out, "[Content_Types].xml")).not.toContain("/xl/tables/table1.xml");
+      expect(text(out, "xl/worksheets/_rels/sheet3.xml.rels")).not.toContain("table");
+      expect(text(out, "xl/worksheets/sheet3.xml")).not.toContain("tablePart");
+      expect(cell(out, "Resumo", "B3")).toMatchObject({ formula: "AVERAGE(#REF!)" });
+      expect(text(out, "xl/workbook.xml")).toContain(">#REF!</definedName>");
+      expect(text(out, "xl/workbook.xml")).toContain('fullCalcOnLoad="1"');
+      expect(changedParts(original, out)).toEqual(["[Content_Types].xml", "xl/tables/table1.xml", "xl/workbook.xml", "xl/worksheets/_rels/sheet3.xml.rels", "xl/worksheets/sheet2.xml", "xl/worksheets/sheet3.xml"]);
+      const js = sheetJs(out);
+      expect(js.SheetNames).toEqual(["Estoque", "Resumo", "Fornecedores"]);
+      expect(js.Sheets.Resumo!.B3.f).toBe("AVERAGE(#REF!)");
+    }
+    // Sobra só o cabeçalho: a tabela ficaria sem linha de dados, e isso continua recusado.
+    expect(() => patchXlsx(original, [{ op: "deleteRows", sheet: "Fornecedores", at: 1, count: 3 }])).toThrow("ficaria sem linhas");
+  });
+
   test("a linha de totais também só sai com a tabela", () => {
     const zip = readZip(original);
     const table = zip.find((p) => p.name === "xl/tables/table1.xml")!;
