@@ -1,3 +1,5 @@
+import AVFoundation
+import FluidAudio
 import Foundation
 import KiwiHelperCore
 
@@ -13,6 +15,11 @@ enum MeetingLiveRun {
         var realtime = false
         var output = "speaker"
         var feedSeconds = 0.1
+        /// T20237 (spec #20181): the language hint for both streaming ASRs (`--language pt|en`); the app passes none.
+        var language: TranscriptionLanguage = .auto
+        /// T20237: the capture step, simulated. Each channel goes up to this rate and back to 16 kHz through the app's
+        /// `Resampler`, in 10 ms buffers, as `SystemAudioTap` and the mic get it (`--capture 48000`).
+        var captureRate: Double?
     }
 
     private final class Collector: @unchecked Sendable {
@@ -28,17 +35,22 @@ enum MeetingLiveRun {
 
     static func run(_ o: Options) async -> Int32 {
         let started = Date()
-        let channels: [[Float]]
+        var channels: [[Float]]
         do {
             channels = try MeetingBench.readStereo(URL(fileURLWithPath: o.path))
         } catch {
             FileHandle.standardError.write(Data("meeting-live: \(error)\n".utf8))
             return 1
         }
+        if let rate = o.captureRate {
+            channels = channels.map { captured($0, through: rate) }
+        }
         let collected = Collector()
         let system = channels[1]
+        var options = LiveMeetingTranscriber.Options.fromEnvironment()
+        if o.language != .auto { options.asr = options.asr.applying(language: Language(rawValue: o.language.rawValue)) }
         let t = LiveMeetingTranscriber(
-            session: UUID().uuidString, output: o.output, dictionary: .empty,
+            session: UUID().uuidString, output: o.output, dictionary: .empty, options: options,
             systemAudio: { system },
             emit: { type, fields in
                 collected.lock.withLock {
@@ -89,6 +101,8 @@ enum MeetingLiveRun {
         timeline.replace(vbx)
         for id in order {
             guard let s = finals[id], let text = s["text"] as? String, let start = s["start"] as? Double, let end = s["end"] as? Double else { continue }
+            // T20237: the segment as the app gets it, for the note step (`MeetingNotes`, in the bench).
+            MeetingBench.emit(s.merging(["type": "segment"]) { _, new in new })
             let channel = s["channel"] as? String == "mine" ? "voce" : "sistema"
             let words = text.split(separator: " ").map(String.init)
             let each = (end - start) / Double(max(1, words.count))
@@ -105,9 +119,35 @@ enum MeetingLiveRun {
         MeetingBench.emit([
             "type": "stats", "file": (o.path as NSString).lastPathComponent, "asr": "live", "diarizer": "sortformer+vbx",
             "audioSeconds": Double(count) / StreamClock.sampleRate, "realtime": o.realtime, "output": o.output,
+            "language": o.language.rawValue, "captureRate": o.captureRate ?? 0,
             "wallSeconds": Date().timeIntervalSince(started), "cpuSeconds": MeetingBench.cpuSeconds(),
             "peakFootprintMB": MeetingBench.peakFootprintMB(), "segments": order.count, "vbxSpeakers": Set(vbx.map(\.speaker)).count, "vbxFailed": vbxFailed, "warnings": warnings,
         ])
         return 0
+    }
+
+    /// 16 kHz → `rate` → 16 kHz: up with one converter call (the audio as a device would deliver it), and back with the
+    /// app's `Resampler`, fed 10 ms at a time like the taps' buffers.
+    static func captured(_ samples: [Float], through rate: Double) -> [Float] {
+        let src = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: StreamClock.sampleRate, channels: 1, interleaved: false)!
+        let device = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false)!
+        func buffer(_ x: ArraySlice<Float>, _ f: AVAudioFormat) -> AVAudioPCMBuffer {
+            let b = AVAudioPCMBuffer(pcmFormat: f, frameCapacity: AVAudioFrameCount(max(1, x.count)))!
+            b.frameLength = AVAudioFrameCount(x.count)
+            x.withUnsafeBufferPointer { b.floatChannelData![0].update(from: $0.baseAddress!, count: x.count) }
+            return b
+        }
+        let up = Resampler(sampleRate: rate).convert(buffer(samples[...], src)) ?? []
+        let down = Resampler()
+        let step = Int(rate / 100)
+        var out: [Float] = []
+        out.reserveCapacity(samples.count)
+        var i = 0
+        while i < up.count {
+            let n = min(step, up.count - i)
+            out += down.convert(buffer(up[i..<(i + n)], device)) ?? []
+            i += n
+        }
+        return out
     }
 }
