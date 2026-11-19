@@ -936,9 +936,11 @@ export class Vault {
     const s = await lstat(abs).catch(() => null);
     // Sem `baseVersion`, o "Apagar" do menu da árvore (T19878): qualquer arquivo, um pacote (`.pages`) inclusive.
     const isPackage = baseVersion === undefined && s?.isDirectory() && this.packages.has(p);
-    if (!(s?.isFile() || isPackage) || this.packageOf(p)) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
+    // Dentro de outro pacote, não: o `packageOf` do próprio pacote seria ele mesmo (T20402).
+    if (!(s?.isFile() || isPackage) || this.packageOf(parentOf(p))) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
     // O tipo "note" da Lixeira do app é o de um arquivo só: a volta é pelo caminho, como a de uma nota.
     await this.stage(p, abs, "note", baseVersion);
+    if (isPackage) this.packages.delete(p);
     if (this.files.delete(p)) this.filesChanged([p]);
     this.touch(p);
     await this.fileWritten(p);
@@ -957,7 +959,7 @@ export class Vault {
     const fromAbs = inside(this.root, from);
     const toAbs = inside(this.root, to);
     const s = await lstat(fromAbs).catch(() => null);
-    if (!(s?.isFile() || (s?.isDirectory() && this.packages.has(from))) || this.packageOf(from)) throw new VaultError("E_NOT_FOUND", `no file ${from}`);
+    if (!(s?.isFile() || (s?.isDirectory() && this.packages.has(from))) || this.packageOf(parentOf(from))) throw new VaultError("E_NOT_FOUND", `no file ${from}`);
     if (from === to) return { path: to, updatedLinks: 0, skippedPaths: [] };
     // Num disco sem diferença de maiúscula, "a.pdf" → "A.pdf" é o mesmo arquivo: vale.
     if (from.toLowerCase() !== to.toLowerCase() && (await exists(toAbs))) throw new VaultError("E_EXISTS", `${to} already exists`);
@@ -974,6 +976,8 @@ export class Vault {
     } else {
       await rename(fromAbs, toAbs);
     }
+    // Um pacote muda de lugar como arquivo, com a marca de pacote junto (T20402).
+    if (this.packages.delete(from)) this.packages.add(to);
     if (this.files.delete(from)) this.filesChanged([from]);
     await this.fileWritten(to, [from]);
     const resolveBefore = makeFileResolver(before);
@@ -1280,7 +1284,7 @@ export class Vault {
   /** O arquivo que o próprio Kiwi escreveu entra na lista na hora, e a árvore fica sabendo (o watcher repete depois). */
   private async fileWritten(p: string, alsoGone: string[] = []) {
     const s = await stat(inside(this.root, p)).catch(() => null);
-    if (s?.isFile()) this.keepFile(p, s);
+    if (s?.isFile() || (s?.isDirectory() && this.packages.has(p))) this.keepFile(p, s);
     for (const fn of this.otherListeners) {
       try {
         fn([...alsoGone, p]);
