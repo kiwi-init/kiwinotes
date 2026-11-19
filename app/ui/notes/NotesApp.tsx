@@ -703,11 +703,13 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     () =>
       api.onAgentWrote?.((e) => {
         // A nota anima no editor; o arquivo que abre fora dele (um .txt, uma planilha) mostra só o aviso no card.
-        if (e.edits) kiwiWrites.current.add(e);
+        if (e.edits || e.sheetOps) kiwiWrites.current.add(e);
         setKiwiTouched(e.path);
       }),
     [api],
   );
+  // A planilha aberta toca as operações do Kiwi (T21114): ela pega a gravação pelo caminho e pela versão que recarregou.
+  const kiwiSheets = useMemo(() => ({ take: (p: string, v: string) => kiwiWrites.current.take(p, v), cor: prefs.catColor }), [prefs.catColor]);
   useEffect(() => {
     if (!kiwiTouched) return;
     const t = setTimeout(() => setKiwiTouched(null), 4000);
@@ -1842,6 +1844,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             onOpenExternal={(p) => void api.files?.open(p).catch(failed_("abrir o arquivo"))}
             onReveal={folders ? (p) => void folders.reveal(p).catch(failed_("mostrar no Finder")) : undefined}
             stat={statFile}
+            kiwi={kiwiSheets}
           />
           </>
         ) : view === "trash" && api.extras ? (

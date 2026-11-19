@@ -7,6 +7,7 @@ import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useStat
 import { DelimitedError } from "../../../src/shared/sheet/delimited.ts";
 import { type Display, type Grid, SheetHistory, type SheetOp, SheetOpError } from "../../../src/shared/sheet/ops.ts";
 import { base64Of, bytesOf } from "./csv.ts";
+import type { KiwiPlay, KiwiSheetSource } from "./kiwi-sheet.ts";
 import { docBytes, editBatch, openDoc, replay, type SheetDoc, shownGrid } from "./sheet-doc.ts";
 import { TooLarge } from "./sheet.ts";
 import type { FilesApi } from "./viewers.ts";
@@ -29,6 +30,9 @@ export interface SheetSession {
   edit(ops: SheetOp[]): void;
   undo(): void;
   redo(): void;
+  /** A gravação do Kiwi Cat que a grade toca agora (T21114), ou `null`; `kiwiEnd` a tira. */
+  kiwi: KiwiPlay | null;
+  kiwiEnd(): void;
 }
 
 /**
@@ -43,8 +47,14 @@ export function useSheetSession(opts: {
   files: FilesApi;
   flushRef: MutableRefObject<(() => Promise<boolean>) | null>;
   display: Display | null;
+  kiwi?: KiwiSheetSource;
 }): SheetSession {
   const { path, name, base64, version, files, flushRef, display } = opts;
+  const kiwiSource = useRef(opts.kiwi);
+  kiwiSource.current = opts.kiwi;
+  const [kiwi, setKiwi] = useState<KiwiPlay | null>(null);
+  /** A grade que está na tela: o "antes" do toque do gato. */
+  const shown = useRef<Grid | null>(null);
   const [state, setState] = useState<SheetState>({ kind: "loading" });
   const [notice, setNotice] = useState<string | null>(null);
   const history = useRef(new SheetHistory());
@@ -77,6 +87,10 @@ export function useSheetSession(opts: {
     }
     try {
       const doc = openDoc(bytesOf(base64), name, display);
+      // O Kiwi Cat gravou esta versão (T21114): a grade toca as operações dele por cima. Só com o arquivo já na tela.
+      const src = kiwiSource.current;
+      const wrote = docRef.current && src ? src.take(path, version) : null;
+      setKiwi(wrote?.sheetOps?.length ? { ops: wrote.sheetOps, before: dirty.current ? null : shown.current, cor: src!.cor } : null);
       if (dirty.current) setNotice("O arquivo mudou fora do Kiwi: abri a versão nova, e a última edição não foi gravada.");
       docRef.current = doc;
       history.current = new SheetHistory();
@@ -87,7 +101,11 @@ export function useSheetSession(opts: {
       docRef.current = null;
       setState({ kind: e instanceof TooLarge ? "tooLarge" : "error" });
     }
-  }, [base64, version, name, display]);
+  }, [base64, version, name, display, path]);
+
+  useEffect(() => {
+    if (state.kind === "ready") shown.current = state.grid;
+  }, [state]);
 
   const save = useCallback(async (): Promise<boolean> => {
     if (saving.current) await saving.current;
@@ -209,7 +227,7 @@ export function useSheetSession(opts: {
   );
 
   return useMemo(
-    () => ({ state, readOnly, notice, edit, undo: () => step(false), redo: () => step(true) }),
-    [state, readOnly, notice, edit, step],
+    () => ({ state, readOnly, notice, edit, undo: () => step(false), redo: () => step(true), kiwi, kiwiEnd: () => setKiwi(null) }),
+    [state, readOnly, notice, edit, step, kiwi],
   );
 }

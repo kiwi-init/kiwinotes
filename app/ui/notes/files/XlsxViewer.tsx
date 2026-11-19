@@ -8,12 +8,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { Display } from "../../../src/shared/sheet/ops.ts";
 import { type Decimal, sheetDisplay } from "./sheet-doc.ts";
+import { kiwiSheetOf } from "./kiwi-sheet.ts";
 import { useSheetSession } from "./sheet-session.ts";
 import { systemDecimal } from "./sheet.ts";
 import { SheetPane } from "./SheetPane.tsx";
 import type { FileViewerProps } from "./viewers.ts";
 
-export function XlsxViewer({ path, file, files, flushRef }: FileViewerProps) {
+export function XlsxViewer({ path, file, files, flushRef, kiwi }: FileViewerProps) {
   const base64 = "base64" in file ? file.base64 : "";
   const name = path.split("/").at(-1) ?? path;
   const decimal: Decimal = useMemo(() => systemDecimal(), []);
@@ -25,8 +26,15 @@ export function XlsxViewer({ path, file, files, flushRef }: FileViewerProps) {
       alive = false;
     };
   }, [decimal]);
-  const session = useSheetSession({ path, name, base64, version: file.version, files, flushRef, display });
+  const session = useSheetSession({ path, name, base64, version: file.version, files, flushRef, display, kiwi });
   const [tab, setTab] = useState<string | null>(null);
+  // O Kiwi Cat gravou: a aba onde ele mexeu vem para a frente (T21114).
+  useEffect(() => {
+    const at = session.kiwi ? kiwiSheetOf(session.kiwi.ops) : null;
+    if (at) setTab(at);
+    else if (session.kiwi) session.kiwiEnd();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.kiwi]);
   // As larguras que a pessoa arrastou, por aba: valem enquanto o arquivo está aberto, trocando de aba ou recarregando (T21040).
   const widthMemory = useMemo(() => new Map<string, Record<number, number>>(), [path]);
   const { state } = session;

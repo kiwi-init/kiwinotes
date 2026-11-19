@@ -13,6 +13,7 @@
 //   notas: a cópia de antes fica no registro do agente, e o [Desfazer] volta.
 
 import type { FileContent, FileSaveResult } from "../../notes/vault.ts";
+import type { SheetOp } from "../../shared/sheet/ops.ts";
 import { isTextFile, textNote } from "./reader.ts";
 
 /** A nota que o escritor lê antes de mudar. */
@@ -38,6 +39,13 @@ export interface VaultWriter {
   folder(): Promise<string | null>;
   /** Um arquivo novo (spec #11549): txt, csv, xlsx, docx ou pdf; com o nome já usado na pasta, ganha um número. */
   createFile(folder: string, name: string, bytes: Uint8Array): Promise<{ path: string; size: number; version: string }>;
+  /** Os bytes de uma planilha (T21114, spec #21065): xlsx, csv ou tsv, em base64, com a versão. */
+  getBytes?(path: string): Promise<{ base64: string; version: string } | { tooLarge: true; limit: number }>;
+  /**
+   * Grava a planilha se ninguém a mudou desde `baseVersion`. As `sheetOps` (as operações que levaram aos bytes novos) são
+   * para o Kiwi ao vivo: a grade toca cada uma na frente da pessoa.
+   */
+  saveBytes?(path: string, base64: string, baseVersion: string, sheetOps?: readonly SheetOp[]): Promise<{ saved: true; path: string; version: string } | { saved: false }>;
 }
 
 /** As únicas capacidades que o escritor chama. */
@@ -75,6 +83,16 @@ export function writerFromCapabilities(caps: Record<WriterCapability, (args: unk
     },
     create: async (folder, title, content) => note(await call<NoteResult>("notes.create", { folder, title, content })),
     createFile: (folder, name, bytes) => call("files.create", { folder, name, base64: Buffer.from(bytes).toString("base64") }),
+    getBytes: async (path) => {
+      const f = await call<FileContent>("files.read", { path, as: "binary" });
+      if ("tooLarge" in f) return { tooLarge: true, limit: f.limit };
+      if (!("base64" in f)) throw Object.assign(new Error("not a spreadsheet"), { code: "E_BAD_ARGS" });
+      return { base64: f.base64, version: f.version };
+    },
+    saveBytes: async (path, base64, baseVersion) => {
+      const r = await call<FileSaveResult>("files.save", { path, base64, baseVersion });
+      return r.saved ? { saved: true, path: r.path, version: r.version } : { saved: false };
+    },
     folder: async () => {
       try {
         return (await call<{ current?: { id?: string } }>("notes.folder", {})).current?.id ?? null;

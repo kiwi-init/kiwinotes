@@ -8,6 +8,7 @@ import { type ComponentType, lazy, type MutableRefObject, type ReactNode } from 
 import { extOf } from "../../../src/shared/attachments.ts";
 import { CODE_TYPES, type FileReadAs, looksLikeText, mayBeText } from "../../../src/shared/file-view.ts";
 import type { FileContent, NotesApi } from "../types.ts";
+import type { KiwiSheetSource } from "./kiwi-sheet.ts";
 import { ImageViewer } from "./ImageViewer.tsx";
 import { MEDIA_MIME } from "./media.ts";
 import { MediaViewer } from "./MediaViewer.tsx";
@@ -31,6 +32,8 @@ export interface FileViewerProps {
   widthHandles?: ReactNode;
   /** A prévia do .html ao lado do código (T19314): o botão "Prévia" do topo do `FileView` liga e desliga. */
   preview?: boolean;
+  /** O Kiwi Cat editando a planilha ao vivo (T21114): de onde vêm as operações dele. */
+  kiwi?: KiwiSheetSource;
 }
 
 export interface FileViewer {

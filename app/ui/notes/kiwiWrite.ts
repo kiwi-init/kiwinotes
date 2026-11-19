@@ -17,7 +17,8 @@ const KEEP = 32;
 export class KiwiWrites {
   private byKey = new Map<string, AgentWrote>();
   add(e: AgentWrote): void {
-    if (!e.edits || !e.version) return;
+    // A nota anima pelos trechos; a planilha, pelas operações (T21114).
+    if (!(e.edits || e.sheetOps?.length) || !e.version) return;
     const key = `${e.path}@${e.version}`;
     this.byKey.delete(key);
     this.byKey.set(key, e);

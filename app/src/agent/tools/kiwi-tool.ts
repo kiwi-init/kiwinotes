@@ -52,6 +52,8 @@ export const ACOES: readonly Acao[] = [
   { fazer: "ler", como: "sumario", tool: "notes_outline", alvo: "path" },
   { fazer: "ler", como: "reuniao", tool: "meetings_get", alvo: "path" },
   { fazer: "ler", como: "arquivo", tool: "files_read", alvo: "caminho" },
+  // A planilha célula a célula, para mudar (T21114).
+  { fazer: "ler", como: "celulas", tool: "sheets_read", alvo: "caminho" },
   { fazer: "ler", como: "projeto", tool: "project_status", alvo: "projeto" },
   { fazer: "escrever", como: "acrescentar", tool: "notes_append", alvo: "path", texto: "text", nomes: { secao: "section", versao: "version" }, padrao: true },
   { fazer: "escrever", como: "trocar", tool: "notes_write", alvo: "path", texto: "text", nomes: { secao: "section", versao: "version" } },
@@ -64,6 +66,7 @@ export const ACOES: readonly Acao[] = [
   { fazer: "escrever", como: "diario", tool: "project_diary_add", alvo: "projeto", texto: "texto" },
   { fazer: "escrever", como: "organizar", tool: "notes_organize_folder", alvo: "folder", cartao: true },
   { fazer: "escrever", como: "arquivo", tool: "files_create", alvo: "nome", cartao: true },
+  { fazer: "escrever", como: "planilha", tool: "sheets_edit", alvo: "caminho", cartao: true },
   { fazer: "propor", como: "reuniao", tool: "meeting_propose", alvo: "reuniao", cartao: true },
   { fazer: "propor", como: "resumo", tool: "project_summary_propose", alvo: "projeto", cartao: true },
   { fazer: "propor", como: "referencias", tool: "notes_add_references", alvo: "nota", cartao: true },
@@ -83,7 +86,7 @@ export function labelOf(tool: string): string {
   return a ? acaoLabel(a) : tool;
 }
 
-const NOMES_ANTIGOS = "notes_[a-z_]+|meetings_(?:list|get)|projects_list|project_(?:status|diary_add|summary_propose)|files_(?:read|create)|meeting_propose|routine_propose|memory_(?:remember|forget)|find";
+const NOMES_ANTIGOS = "notes_[a-z_]+|meetings_(?:list|get)|projects_list|project_(?:status|diary_add|summary_propose)|files_(?:read|create)|sheets_(?:read|edit)|meeting_propose|routine_propose|memory_(?:remember|forget)|find";
 const NOME_SOLTO = new RegExp(`\\b(${NOMES_ANTIGOS})\\b`, "g");
 const NOME_ENTRE_CRASES = new RegExp(`\`(${NOMES_ANTIGOS})\``, "g");
 
@@ -281,6 +284,9 @@ export function cardsFor(request: string): Acao[] {
   const out: string[] = [];
   const criar = has(/\b(ger[ae]\w*|cri[ae]\w*|mont[ae]\w*|fa(z|ca|zer)|export\w*|salv[ae]\w*)\b/);
   if (criar && has(/\b(planilha|xlsx|csv|docx|word|excel|pdf|documento|arquivo)\b/)) out.push("files_create");
+  // Mudar uma planilha que já existe (T21114): o verbo de mudar e a planilha, ou uma célula pelo nome (B3).
+  if (has(/\b(mud\w*|atualiz\w*|preench\w*|coloq\w*|poe|ponha|corrij\w*|corrig\w*|edit\w*|insir\w*|inser\w*|apag\w*|som[ae]\w*|adicion\w*|acrescent\w*|troc\w*|renome\w*)\b/) && has(/\b(planilha|xlsx|csv|tsv|celulas?|colunas?|aba)\b|\b[a-z]{1,2}[0-9]{1,5}\b/))
+    out.push("sheets_edit");
   if (has(/\borganiz\w*\b.*\b(pasta|todas as notas)\b/)) out.push("notes_organize_folder");
   if (has(/\breunia?o\b|\breunioes\b/) && has(/\b(propo\w*|proposta|ata|registr\w*|projeto)\b/)) out.push("meeting_propose");
   if (has(/\bresumo executivo\b|\b(status|ponto|situacao) d[oe]s? projeto\b|\bcomo (esta|anda|vai) o projeto\b/)) out.push("project_summary_propose");
@@ -309,9 +315,9 @@ export const KIWI_TOOL_DEF = {
   description: [
     "As notas, pastas, projetos, reuniões e arquivos da pessoa no Kiwi Notes. Uma ação por chamada:",
     'fazer "achar" (opcoes.como: nome, o padrão, acha pelo nome falado e devolve o cartão; texto, busca no texto; pasta; reunioes; projetos).',
-    'fazer "ler" (nota, o padrão, com opcoes.secao; sumario; reuniao; arquivo, com opcoes.parte; projeto). A leitura devolve a versao.',
+    'fazer "ler" (nota, o padrão, com opcoes.secao; sumario; reuniao; arquivo, com opcoes.parte; celulas, as células de uma planilha para mudar; projeto). A leitura devolve a versao.',
     'fazer "escrever" (acrescentar, o padrão; trecho, troca opcoes.de pelo texto; trocar; mover; renomear; juntar; criar, alvo Pasta/Título; diario). Só a diferença, com a versao do cartão. Nada apaga uma nota; o antes fica nas Versões.',
-    'fazer "propor" e as ações organizar e arquivo trazem as instruções no pedido, quando ele precisa. fazer "lembrar": um fato sobre a pessoa (opcoes.como esquecer, para tirar).',
+    'fazer "propor" e as ações organizar, arquivo e planilha (mudar as células de um xlsx ou csv) trazem as instruções no pedido, quando ele precisa. fazer "lembrar": um fato sobre a pessoa (opcoes.como esquecer, para tirar).',
     "O alvo aceita o caminho ou o nome como a pessoa fala. Nos textos do Kiwi, kiwi ler/sumario quer dizer fazer ler, opcoes.como sumario.",
   ].join(" "),
   inputSchema: {

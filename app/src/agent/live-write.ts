@@ -10,11 +10,12 @@
 //   do `files.changed` dele.
 
 import { liveEdits } from "../shared/live-edits.ts";
+import type { SheetOp } from "../shared/sheet/ops.ts";
 import type { UiEvents } from "../shared/ui-contract.ts";
-import { versionOf } from "../notes/vault.ts";
+import { bytesVersion, versionOf } from "../notes/vault.ts";
 import type { VaultWriter } from "./tools/writer.ts";
 
-/** O `agent.wrote` do contrato (1.87.0). */
+/** O `agent.wrote` do contrato (1.87.0; as `sheetOps` da planilha, 1.90.0). */
 export type AgentWrote = UiEvents["agent.wrote"];
 
 interface Pending {
@@ -89,6 +90,21 @@ export function liveWriter(inner: VaultWriter, live: LiveWrites, turnId: () => s
         done();
       }
     },
+    // A planilha (T21114): o aviso leva as operações, e a grade aberta toca cada uma.
+    ...(inner.getBytes ? { getBytes: inner.getBytes.bind(inner) } : {}),
+    ...(inner.saveBytes
+      ? {
+          saveBytes: async (path: string, base64: string, baseVersion: string, sheetOps?: readonly SheetOp[]) => {
+            const version = bytesVersion(Buffer.from(base64, "base64"));
+            const done = live.expect({ path, baseVersion, version, ...turn(), ...(sheetOps?.length ? { sheetOps: [...sheetOps] } : {}) });
+            try {
+              return await inner.saveBytes!(path, base64, baseVersion, sheetOps);
+            } finally {
+              done();
+            }
+          },
+        }
+      : {}),
     createFile: async (folder, name, bytes) => {
       // O caminho só se sabe depois do `files.changed` dele: o aviso sai em seguida, só com o caminho.
       const r = await inner.createFile(folder, name, bytes);

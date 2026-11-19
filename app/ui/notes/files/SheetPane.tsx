@@ -4,7 +4,11 @@
 
 import { useMemo, useState } from "react";
 
+import { kiwiFaceUrl } from "../editor/kiwi-face.ts";
+import { reducedMotion } from "../kiwiWrite.ts";
 import { columnName } from "./csv.ts";
+import { kiwiSteps } from "./kiwi-sheet.ts";
+import { type KiwiPlayInput, useKiwiPlay } from "./kiwi-sheet-play.ts";
 import type { GridSheet, SheetOp } from "../../../src/shared/sheet/ops.ts";
 import { clearOps, type Decimal, editText, inputOp, pasteOps, type SheetDoc, sheetTexts, type ViewSpec, viewRows } from "./sheet-doc.ts";
 import type { SheetSession } from "./sheet-session.ts";
@@ -53,6 +57,25 @@ export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, cou
   /** A linha do arquivo de uma linha da grade (a 0 é a de cima); depois da última, as seguintes. */
   const fileRow = (r: number) => (r === 0 ? 0 : r <= order.length ? order[r - 1]! : (order.at(-1) ?? 0) + (r - order.length));
   const cellOf = (r: number, c: number) => sheet.rows[fileRow(r)]?.[c];
+
+  // O Kiwi Cat gravou (T21114): as células dele, das linhas do arquivo para as da grade (a vista ordenada ou filtrada
+  // tem outra ordem; a linha que o filtro esconde fica de fora). Só muda com um toque novo.
+  const kiwiInput = useMemo((): KiwiPlayInput | null => {
+    const play = session.kiwi;
+    if (!play) return null;
+    const s = kiwiSteps(play.ops, sheet.name);
+    const gridRow = (fr: number) => (fr === 0 ? 0 : order.indexOf(fr) + 1 || -1);
+    const was = !s.shifted ? play.before?.sheets.find((x) => x.name === sheet.name) : undefined;
+    const cells = s.cells
+      .map((c) => ({ row: gridRow(c.row), col: c.col, text: texts[c.row]?.[c.col] ?? "", before: was ? (was.rows[c.row]?.[c.col]?.text ?? "") : undefined }))
+      .filter((c) => c.row >= 0 && c.col < columns);
+    const recalc = s.recalc.map((c) => ({ row: gridRow(c.row), col: c.col })).filter((c) => c.row >= 0);
+    const rowsIn = s.rowsIn.map(gridRow).filter((r) => r >= 0);
+    if (!cells.length && !recalc.length && !rowsIn.length && !s.colsIn.length) return null;
+    return { cells, recalc, rowsIn, colsIn: s.colsIn };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.kiwi]);
+  const kiwi = useKiwiPlay(kiwiInput, { reduced: useMemo(reducedMotion, [session.kiwi]), face: session.kiwi ? kiwiFaceUrl(session.kiwi.cor) : "", onEnd: session.kiwiEnd });
 
   const edit: GridEdit | undefined = editable
     ? {
@@ -109,6 +132,7 @@ export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, cou
       edit={edit}
       view={view}
       foot={foot}
+      kiwi={kiwi}
     />
   );
 }

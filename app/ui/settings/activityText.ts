@@ -41,7 +41,7 @@ export function readsLine(reads: AgentActivityRequest["reads"]): string {
   /** Os arquivos lidos (spec #11549): a mesma planilha lida em várias partes conta uma vez. */
   const files = new Set<string>();
   for (const r of reads) {
-    if (r.tool === "files_read") files.add((r.target ?? `#${files.size}`).split(" › ")[0]!);
+    if (r.tool === "files_read" || r.tool === "sheets_read") files.add((r.target ?? `#${files.size}`).split(" › ")[0]!);
     else if (r.tool === "notes_read" || r.tool === "notes_outline") notes.add(r.target ?? `#${notes.size}`);
     else if (r.tool === "meetings_get") meetings.add(r.target ?? `#${meetings.size}`);
     else if (r.tool === "notes_search") searches++;

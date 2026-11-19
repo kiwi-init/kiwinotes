@@ -48,9 +48,16 @@ export function checkOp(op: SheetOp, sheets: readonly string[]): void {
   const has = (s: string) => sheets.some((t) => t.toLowerCase() === s.toLowerCase());
   const int = (n: number) => Number.isInteger(n) && n >= 0;
   switch (op.op) {
-    case "batch":
-      for (const o of op.ops) checkOp(o, sheets);
+    case "batch": {
+      // As abas mudam no meio do lote (T21114): a aba nova e o nome novo valem para as operações seguintes.
+      let names = [...sheets];
+      for (const o of op.ops) {
+        checkOp(o, names);
+        if (o.op === "addSheet") names = [...names, o.name];
+        else if (o.op === "renameSheet") names = names.map((n) => (n.toLowerCase() === o.sheet.toLowerCase() ? o.name : n));
+      }
       return;
+    }
     case "addSheet": {
       const p = sheetNameProblem(op.name, sheets);
       if (p) throw new SheetOpError(p);
