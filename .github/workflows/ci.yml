@@ -61,7 +61,8 @@ jobs:
     name: bun test
     needs: changes
     runs-on: ${{ needs.changes.outputs.bun == 'run' && 'macos-latest' || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    # 30 min do `bun test` e dos roteiros de UI, mais o helper (~8 min do zero, ~1 min do cache) e a CPU (~5 min).
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: app
@@ -193,6 +194,30 @@ jobs:
             bun scripts/cli.ts stop --data "$d/data"
             [ $code -eq 0 ] || exit $code
           done
+
+      # A CPU em repouso (spec #24228, caixa 4, T24486): `bun run cpu:scenarios` sobe o headless com o helper de verdade,
+      # abre o Hub, as Notas e os Ajustes no WebKit headless e mede a CPU pelo `ps`; sai 1 acima da régua (tela e
+      # helper < 1%, tudo < 2%). No mesmo Mac do `bun test`, e não num job à parte (spec #21331: uma máquina por PR).
+      # O helper sai do build de debug do `native/`, que o headless acha sozinho; o `.build` fica no cache, porque o
+      # FluidAudio leva ~8 min do zero. O `--require-helper` barra o roteiro pulado: o check não fica verde sem medir.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
+        with:
+          path: native/.build
+          key: helper-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/Package.resolved', 'native/Package.swift') }}-${{ hashFiles('native/Sources/**') }}
+          restore-keys: helper-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/Package.resolved', 'native/Package.swift') }}-
+
+      - name: kiwi-helper
+        id: helper
+        if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 15
+        working-directory: native
+        run: swift build --product kiwi-helper
+
+      - name: cpu-scenarios
+        if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.helper.outcome == 'success' }}
+        timeout-minutes: 10
+        run: bun run cpu:scenarios --require-helper --out "$RUNNER_TEMP/cpu.json"
 
   # No Linux (spec #21331): o devkit dos tipos sai do mesmo core fixado que o Hutch usa no Mac (scripts/devkit-types.ts,
   # e o devkit-types.test.ts confere no macOS que é igual).

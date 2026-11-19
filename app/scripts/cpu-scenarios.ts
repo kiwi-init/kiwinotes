@@ -7,7 +7,7 @@
 // - **webview:** os processos `WebContent` do WebKit do Playwright que abriram com as janelas;
 // - **gpu:** o processo `GPU` do mesmo WebKit (o WebGL do gato e a composição caem nele).
 //
-//   bun run cpu:scenarios [--only repouso,…] [--seconds 60] [--out <arquivo.json>] [--no-fail]
+//   bun run cpu:scenarios [--only repouso,…] [--seconds 60] [--out <arquivo.json>] [--no-fail] [--require-helper]
 //
 // | repouso      | o Hub, as Notas e os Ajustes abertos e parados, com o agente falso ligado (o gato aparece), o índice |
 // |              | pronto, e a pessoa em outro app (o `blur` em cada janela): tela e helper < 1%, tudo < 2%           |
@@ -18,7 +18,8 @@
 // - Os processos do WebKit do Playwright são filhos do launchd, não do navegador: entram os que apareceram depois que
 //   o navegador abriu (pelo caminho do `ms-playwright`). Outro agente com um WebKit aberto ao mesmo tempo se mistura:
 //   pegue `kiwi lock bench --ttl 10m` antes (AGENTS.md).
-// - Sai com exit 1 quando um roteiro passa da régua (`--no-fail` só mostra). Nada do mic, nada na tela, nada das notas
+// - Sai com exit 1 quando um roteiro passa da régua (`--no-fail` só mostra). Sem o helper, o roteiro sai pulado; com
+//   `--require-helper` (o CI, T24486), o pulado também sai com exit 1: o check não fica verde sem medir. Nada do mic, nada na tela, nada das notas
 //   de ninguém: só o app sem tela que o próprio script abre. A saída é só números. Os dados ficam numa pasta `.noindex`,
 //   fora do Spotlight, e saem no fim.
 
@@ -41,6 +42,7 @@ const opt = (f: string) => (argv.includes(f) ? argv[argv.indexOf(f) + 1] : undef
 const SECONDS = Number(opt("--seconds") ?? 60);
 const OUT = opt("--out");
 const FAIL = !argv.includes("--no-fail");
+const REQUIRE_HELPER = argv.includes("--require-helper");
 const HELPER = process.env.KIWI_HELPER || defaultHelper(APP);
 
 type Env = Record<string, string | undefined>;
@@ -272,4 +274,8 @@ if (import.meta.main) {
   }
   if (OUT) writeFileSync(OUT, JSON.stringify(results, null, 2));
   if (FAIL && results.some((r) => r.limits.some((l) => !l.ok))) process.exit(1);
+  if (REQUIRE_HELPER && results.some((r) => r.skipped)) {
+    console.log("--require-helper: um roteiro saiu pulado, e o CI não aceita pular a medida");
+    process.exit(1);
+  }
 }
