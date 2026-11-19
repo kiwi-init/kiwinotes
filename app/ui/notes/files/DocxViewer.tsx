@@ -96,6 +96,10 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
         ok = false;
       }
       if (engine.current !== e) return;
+      // O gato mudou o texto (o tocar não passa pelo `onEdit`): a busca e o `at` leem os parágrafos de novo.
+      paragraphs.current = null;
+      setMatches((m) => (m ? null : m));
+      setCurrent(-1);
       if (ok) {
         saver.adopt(version);
         saver.release();
