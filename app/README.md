@@ -110,6 +110,12 @@ bun run cli invoke agent.activity '{"limit":10}' --data /tmp/kn-test    # os ped
 bun run cli agent activity --limit 10 --data /tmp/kn-test               # o mesmo registro, lido direto dos dados
 ```
 
+**O Kiwi escrevendo ao vivo (T20868, spec #20843):** cada escrita aceita solta um `agent.wrote` logo antes do `notes.changed` dela (ou do `files.changed`, num `.txt`). Ele leva o `turnId` do pedido, o `baseVersion` e a `version`, e os `edits` (`{from, to, removed, inserted}`, no texto de antes). Um arquivo que não é nota vem sem `edits`. O `applyLiveEdits` (`src/shared/live-edits.ts`) aplica os trechos ao texto de antes:
+
+```sh
+bun run cli events --data /tmp/kn-test | grep -A1 '"agent.wrote"'     # o aviso e, logo depois, o notes.changed da mesma escrita
+```
+
 **O desfazer (T9398, spec #9353)** volta o que um pedido mudou, nota por nota, só se a nota está como o agente deixou. Vai pelo headless de pé, e a janela das Notas vê a nota voltar:
 
 ```sh

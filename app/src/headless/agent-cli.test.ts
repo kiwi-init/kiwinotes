@@ -8,6 +8,7 @@ import path from "node:path";
 
 import { fakeRegistry } from "../agent/fake/registry.ts";
 import { tempDir } from "../../test/tmp.ts";
+import { applyLiveEdits } from "../shared/live-edits.ts";
 
 const appDir = path.resolve(import.meta.dirname, "..", "..");
 const root = tempDir("kn-agent-cli-");
@@ -285,6 +286,17 @@ describe("o agente pela CLI headless (T8678)", () => {
     const { version } = await get("Projetos/Plano.md");
     const write = await ask(`/tool notes_write ${JSON.stringify({ path: "Projetos/Plano.md", section: "Prazo", text: "O prazo é abril.", version })}`);
     expect((await get("Projetos/Plano.md")).content).toBe("# Plano\n\n## Prazo\n\nO prazo é abril.\n");
+    // O Kiwi escrevendo ao vivo (spec #20843): o `agent.wrote` sai logo antes do `notes.changed` da escrita, com o
+    // pedido e os trechos que levam o texto de antes ao do disco.
+    {
+      const lines = (await cli(["events"])).out.split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l) as { event: string; payload: any });
+      const i = lines.findIndex((e) => e.event === "agent.wrote" && e.payload.turnId === write);
+      expect(i).toBeGreaterThanOrEqual(0);
+      const w = lines[i]!.payload;
+      expect(lines[i + 1]).toMatchObject({ event: "notes.changed", payload: { paths: ["Projetos/Plano.md"] } });
+      expect(w).toMatchObject({ path: "Projetos/Plano.md", baseVersion: version, version: (await get("Projetos/Plano.md")).version });
+      expect(applyLiveEdits(PLANO, w.edits)).toBe("# Plano\n\n## Prazo\n\nO prazo é abril.\n");
+    }
     const create = await ask(`/tool notes_create ${JSON.stringify({ folder: "Projetos", title: "Do agente", text: "criada pelo agente" })}`);
     await invoke("agent.disable");
 

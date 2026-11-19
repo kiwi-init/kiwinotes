@@ -253,6 +253,10 @@ stores.agent.startRoutines();
 const rpcs = new Map<WindowName, { send: { event(e: { name: string; payload: unknown }): void } }>();
 stores.folders.onNotesChanged((folder, paths, listing) => {
   const payload = { paths, folderId: folder.id, listing: listing() };
+  // O Kiwi escrevendo ao vivo (spec #20843): o `agent.wrote` da mesma escrita vai antes, no mesmo tick.
+  const versions = new Map((payload.listing?.notes ?? []).map((n) => [n.path, n.version]));
+  for (const wrote of stores.agent.liveWrites.take(paths, folder.id, (p) => versions.get(p)))
+    for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.wrote", payload: wrote });
   for (const rpc of rpcs.values()) rpc.send.event({ name: "notes.changed", payload });
 });
 // A tela de Início (T15847): uma nota, um ditado ou uma reunião que mudou vira um `home.changed` só, depois da rajada.
@@ -265,7 +269,16 @@ stores.folders.onNotesChanged(homeChanged);
 stores.history.onAdded(homeChanged);
 // Os outros arquivos do cofre (T3370): a árvore mostra todos.
 stores.folders.onFilesChanged((folder, paths) => {
+  // O `.txt` que o Kiwi escreveu (spec #20843): o `agent.wrote` vai antes, como no `notes.changed`.
+  for (const wrote of stores.agent.liveWrites.take(paths, folder.id))
+    for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.wrote", payload: wrote });
   for (const rpc of rpcs.values()) rpc.send.event({ name: "files.changed", payload: { paths, folderId: folder.id } });
+});
+// O arquivo novo do Kiwi (`files_create`): o aviso sai logo depois do `files.changed` dele, só com o caminho.
+stores.agent.liveWrites.onAnnounce((wrote) => {
+  void stores.folders.current().then((f) => {
+    for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.wrote", payload: { ...wrote, folderId: f.ref.id } });
+  }, () => {});
 });
 
 const preload = enginePreload(UI_CAPABILITIES, appEnginePageScript);
