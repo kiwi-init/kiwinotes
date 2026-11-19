@@ -195,9 +195,11 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
     const v = view.current;
     if (!v) return;
     let spellingPos: number | null = v.state.selection.main.head;
-    if (moveCursor) {
-      const pos = tablePos !== undefined && Number.isInteger(tablePos) && tablePos >= 0 && tablePos <= v.state.doc.length
-        ? tablePos : v.posAtCoords({ x, y });
+    // Uma célula da tabela desenhada (T19814): o menu vale para ela, e o cursor fica fora, para a tabela não virar texto.
+    const cellPos = tablePos !== undefined && Number.isInteger(tablePos) && tablePos >= 0 && tablePos <= v.state.doc.length ? tablePos : undefined;
+    if (cellPos !== undefined) spellingPos = null;
+    else if (moveCursor) {
+      const pos = v.posAtCoords({ x, y });
       spellingPos = pos;
       if (pos !== null && !v.state.selection.ranges.some((range) => pos >= range.from && pos <= range.to))
         v.dispatch({ selection: EditorSelection.cursor(pos) });
@@ -225,7 +227,7 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
         else latest.current.onError?.(`A nota mudou. A continuação foi copiada para ${result.path}; o original foi mantido.`);
       }).catch(() => latest.current.onError?.("Não foi possível criar a continuação. O texto original foi mantido."))
         .finally(() => { splitting.current = false; });
-    } : undefined, latest.current.onRenameHeading), ...viewModeItems()] });
+    } : undefined, latest.current.onRenameHeading, cellPos === undefined ? {} : { tablePos: cellPos }), ...viewModeItems()] });
   };
   const viewModeItems = (): MenuItem[] => {
     const m = modeMenu.current;

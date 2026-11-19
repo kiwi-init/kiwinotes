@@ -169,13 +169,19 @@ await step("checkbox marca a tarefa no .md", async () => {
   await saved("Projetos/Mudança de escritório.md", (c) => c.includes("- [x] Pedir o orçamento da mudança"));
 });
 
-await step("tabela: clicar na célula vira texto; Tab vai para a próxima e alinha", async () => {
+await step("tabela: clicar na célula edita só ela, sem desmanchar; Tab vai para a próxima e alinha", async () => {
   await page.click(".cm-md-table td >> text=Fio Certo");
-  await page.waitForSelector(".cm-md-table", { state: "detached" });
+  await page.waitForSelector(".cm-md-table .cm-md-table-input:focus");
   await page.keyboard.press("Tab");
-  const sel = await page.evaluate(() => getSelection()?.toString());
+  const sel = await page.evaluate(() => {
+    const input = document.activeElement as HTMLInputElement;
+    return input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0);
+  });
   expectEq(sel, "1.800");
   await page.keyboard.type("2.000");
+  // O clique fora (o blur) grava a célula; a tabela segue desenhada.
+  await page.locator(".cm-md-table-input").evaluate((el) => (el as HTMLInputElement).blur());
+  await page.waitForSelector(".cm-md-table td >> text=2.000");
   const c = await saved("Projetos/Mudança de escritório.md", (c) => /\| Rede +\| Fio Certo +\| 2\.000 \|/.test(c));
   const rows = c.slice(c.indexOf("| Item")).trim().split("\n");
   if (new Set(rows.map((r) => r.length)).size !== 1) throw new Error(`colunas desalinhadas:\n${rows.join("\n")}`);
@@ -245,7 +251,8 @@ await step("renomear pelo título para um nome com # | [ ]: troca por espaço e 
 });
 
 await step("edição de fora com edição pendente: aviso, e 'Manter a minha' grava", async () => {
-  await page.click(".cm-content");
+  // O foco sem clique: o meio do editor é a tabela, e o clique nela abre a célula (T19814).
+  await page.focus(".cm-content");
   await page.keyboard.press("Meta+ArrowDown");
   // Digita (fica pendente, o autosave espera 500 ms) e, antes de gravar, a nota muda no Obsidian.
   await page.keyboard.type("\nminha linha");
@@ -479,7 +486,8 @@ await step("o rascunho escrito pela janela leva o frontmatter da nota", async ()
       throw new Error("E_FAILED");
     };
   });
-  await page.click(".cm-content");
+  // O foco sem clique: o meio do editor é a tabela, e o clique nela abre a célula (T19814).
+  await page.focus(".cm-content");
   await page.keyboard.press("Meta+ArrowDown");
   await page.keyboard.type(" x");
   await page.waitForSelector(".kn-save-alert");
