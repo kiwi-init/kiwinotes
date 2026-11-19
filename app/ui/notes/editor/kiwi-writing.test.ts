@@ -5,9 +5,10 @@ import type { EditorView } from "@codemirror/view";
 import { history, undoDepth } from "@codemirror/commands";
 
 import {
-  applyKiwiEdits, bodyEdits, KIWI_PACE, type KiwiClock, type KiwiEdit, kiwiWriteFrames, kiwiWriting, kiwiWritingExtension, kiwiWritingState,
+  applyKiwiEdits, bodyEdits, KIWI_PACE, type KiwiEdit, kiwiWriteFrames, kiwiWriting, kiwiWritingExtension, kiwiWritingState,
   playKiwiWrite, typingChunks, writtenRanges,
 } from "./kiwi-writing.ts";
+import { fakeClock, fakeView } from "./kiwi-fakes.ts";
 
 const before = "# Lista de compras\n\nmaçã\nbanana\n\nFim.\n";
 /** Troca "banana" por "pera e uva" e acrescenta uma linha no fim. */
@@ -126,48 +127,6 @@ describe("o roteiro", () => {
 });
 
 /** Um relógio que só anda quando o teste manda. */
-function fakeClock() {
-  let now = 0;
-  const timers: { at: number; fn: () => void; id: number }[] = [];
-  let next = 1;
-  const clock: KiwiClock = {
-    set(fn, ms) {
-      const id = next++;
-      timers.push({ at: now + ms, fn, id });
-      return id;
-    },
-    clear(id) {
-      const i = timers.findIndex((t) => t.id === id);
-      if (i >= 0) timers.splice(i, 1);
-    },
-  };
-  const advance = (ms: number) => {
-    const end = now + ms;
-    for (;;) {
-      timers.sort((a, b) => a.at - b.at);
-      const t = timers[0];
-      if (!t || t.at > end) break;
-      timers.shift();
-      now = t.at;
-      t.fn();
-    }
-    now = end;
-  };
-  return { clock, advance };
-}
-
-/** Uma view de mentira: o estado, o dispatch e um alvo de eventos (o bun test não tem DOM). */
-function fakeView(doc: string) {
-  const dom = new EventTarget();
-  const v = {
-    state: EditorState.create({ doc, extensions: [kiwiWritingExtension(), history()] }),
-    dom,
-    dispatch(spec: TransactionSpec) {
-      v.state = v.state.update(spec).state;
-    },
-  };
-  return v;
-}
 const key = (k: string) => Object.assign(new Event("keydown", { cancelable: true }), { key: k, metaKey: false });
 
 describe("o tocador", () => {
