@@ -45,3 +45,5 @@ if (import.meta.main) {
   console.log(`ci-changes: ${files.length} arquivos (${event})\n${lines.join("\n")}`);
   if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join("\n")}\n`);
 }
+
+// ensaio T21438: um comentário no app (não entra)
