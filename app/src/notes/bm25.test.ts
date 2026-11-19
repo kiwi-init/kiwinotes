@@ -69,3 +69,20 @@ test("separate vaults never share postings, aliases can be found, and reopening 
   expect(paths(one.v,'organizar')).toEqual(['A.md']);expect(paths(two.v,'organizar')).toEqual([]);
   one.v.close();const reopened=new Vault({root:one.root});opened.push(reopened);await reopened.open();expect(paths(reopened,'organizar')).toEqual(['A.md']);
 });
+test("opening fills the search index after the scan, without a search, and a search then retokenizes nothing (T24286)",async()=>{
+  const files:Record<string,string>={};
+  for(let i=0;i<40;i++)files[`P/N${i}.md`]=i===9?'caju maduro':'nota de exemplo';
+  const {v}=await vault(files);
+  await v.searchWarm();
+  const index=(v as any).searchIndex;
+  expect(index.updates).toBe(40);expect(index.slices).toBeGreaterThan(0);
+  expect(paths(v,'caju')).toEqual(['P/N9.md']);expect(index.updates).toBe(40);
+});
+test("a search before the warm ends finishes the index at once, as before (T24286)",async()=>{
+  const files:Record<string,string>={};
+  for(let i=0;i<40;i++)files[`P/N${i}.md`]=i===9?'caju maduro':'nota de exemplo';
+  const {v}=await vault(files);
+  expect(paths(v,'caju')).toEqual(['P/N9.md']);
+  await v.searchWarm();
+  expect((v as any).searchIndex.updates).toBe(40);
+});

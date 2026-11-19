@@ -38,3 +38,21 @@ test("canonical and decomposed Unicode accents produce the same lexical terms",(
   expect(i.search(['organizar'],[]).map(h=>h.path)).toEqual(['A.md']);
   expect(i.search(['organizações'.normalize('NFD')],[]).map(h=>h.path)).toEqual(['A.md']);
 });
+const doc=(path:string,content:string)=>({meta:{path,title:path.replace('.md',''),version:content},aliases:[] as string[],content});
+test("warm fills the index in slices, yielding between them, and the sync after it retokenizes nothing (T24286)",async()=>{
+  const i=new NoteSearchIndex();opened.push(i);
+  const docs=Array.from({length:30},(_,n)=>doc(`N${n}.md`,`nota ${n} ${n===7?'jabuticaba':'exemplo'}`));
+  let yields=0;
+  expect(await i.warm(docs,{sliceMs:0,yieldTo:async()=>void yields++})).toBe(true);
+  expect(i.slices).toBe(30);expect(yields).toBe(29);expect(i.updates).toBe(30);
+  expect(i.search(['jabuticaba'],[]).map(h=>h.path)).toEqual(['N7.md']);
+  i.sync(docs.slice(1));expect(i.updates).toBe(30);expect(i.search(['nota'],[]).map(h=>h.path)).not.toContain('N0.md');
+});
+test("warm stops when told to, and a later sync finishes it (T24286)",async()=>{
+  const i=new NoteSearchIndex();opened.push(i);
+  const docs=Array.from({length:10},(_,n)=>doc(`N${n}.md`,`nota ${n}`));
+  let slices=0;
+  expect(await i.warm(docs,{sliceMs:0,stop:()=>slices>=3,yieldTo:async()=>void slices++})).toBe(false);
+  expect(i.updates).toBe(3);
+  i.sync(docs);expect(i.updates).toBe(10);expect(i.search(['nota'],[])).toHaveLength(10);
+});

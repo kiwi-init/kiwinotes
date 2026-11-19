@@ -21,10 +21,10 @@ import type { VaultFile } from "./vault.ts";
 export type TextIndexApi = Pick<TextIndex, "sync" | "update" | "search" | "idle" | "close" | "destroy">;
 
 /** As opções que vão ao worker: as do `TextIndex`, sem a função da pausa (`pauseMs: 0` é sem pausa, nos testes). */
-export type WorkerOptions = Omit<TextIndexOptions, "pause">;
+export type WorkerOptions = Omit<TextIndexOptions, "pause" | "gate">;
 
 export type WorkerRequest = { id: number } & (
-  | { op: "init"; options: WorkerOptions; pauseMs?: number }
+  | { op: "init"; options: WorkerOptions; pauseMs?: number; gated?: boolean }
   /** `json`: `VaultFile[]`, só com `path`, `size` e `mtime`. */
   | { op: "sync"; json: string }
   | { op: "update"; now: VaultFile[]; gone: string[] }
@@ -37,6 +37,14 @@ export type WorkerReply = { id: number; value?: unknown; error?: string };
 /** Um `console.error` ou `console.warn` do worker: o `console` dele não passa pela cópia para o `kiwi.log` (`teeConsole`),
  *  e o main o escreve pelo dele (revisão do #246). */
 export type WorkerLog = { log: "error" | "warn"; args: string[] };
+/** O worker pergunta se o próximo lote pode andar (spec #24228); o main responde `gateOk` com o mesmo número. */
+export type WorkerGate = { gate: number };
+export type WorkerGateOk = { gateOk: number };
+
+/** O portão do trabalho de fundo (`BackgroundGate` do #248): espera a pessoa parar de usar o Mac. */
+export interface IndexGate {
+  wait(stop?: () => boolean): Promise<void>;
+}
 
 /** `mainThread`: onde o índice rodou (o teste confere que não foi no main). */
 export type WorkerStats = TextIndex["stats"] & { lastSearchBytes: number; heapBytes: number; mainThread: boolean };
@@ -50,16 +58,21 @@ export function textIndexWorkerScript(dir = import.meta.dir): string | null {
 }
 
 /** O índice no worker, ou no main se não houver worker (`KIWI_TEXT_INDEX_WORKER=0`, ou um build sem ele). */
-export function createTextIndex(o: WorkerOptions, dir = import.meta.dir): TextIndexApi {
+export function createTextIndex(o: WorkerOptions, dir = import.meta.dir, gate?: IndexGate): TextIndexApi {
+  const inMain = () => {
+    let index: TextIndex | null = null;
+    index = new TextIndex({ ...o, ...(gate ? { gate: () => gate.wait(() => index?.isClosed ?? false) } : {}) });
+    return index;
+  };
   if (process.env.KIWI_TEXT_INDEX_WORKER === "0") {
     console.warn("[text-index] KIWI_TEXT_INDEX_WORKER=0: o índice roda na thread do main");
-    return new TextIndex(o);
+    return inMain();
   }
   const script = textIndexWorkerScript(dir);
-  if (script) return new TextIndexWorker(o, script);
+  if (script) return new TextIndexWorker(o, script, undefined, gate);
   // Um build sem o `workers/` volta ao problema do P0 #23988: que fique no log, não calado.
   console.warn("[text-index] o worker do índice não está no app (falta workers/text-index-worker.js): o índice roda na thread do main");
-  return new TextIndex(o);
+  return inMain();
 }
 
 export class TextIndexWorker implements TextIndexApi {
@@ -74,6 +87,7 @@ export class TextIndexWorker implements TextIndexApi {
     private readonly o: WorkerOptions,
     private readonly script: string,
     private readonly pauseMs?: number,
+    private readonly gate?: IndexGate,
   ) {}
 
   private worker(): Worker {
@@ -81,9 +95,18 @@ export class TextIndexWorker implements TextIndexApi {
     const w = new Worker(this.script);
     // O worker não segura o processo aberto: quem fecha é o `close()`.
     (w as Worker & { unref(): void }).unref();
-    w.onmessage = (e: MessageEvent<WorkerReply | WorkerLog>) => {
+    w.onmessage = (e: MessageEvent<WorkerReply | WorkerLog | WorkerGate>) => {
       if ("log" in e.data) {
         console[e.data.log](...e.data.args);
+        return;
+      }
+      if ("gate" in e.data) {
+        const gateOk = e.data.gate;
+        void Promise.resolve(this.gate?.wait(() => this.closed || this.w !== w))
+          .catch(() => {})
+          .then(() => {
+            if (this.w === w) w.postMessage({ gateOk } satisfies WorkerGateOk);
+          });
         return;
       }
       const p = this.pending.get(e.data.id);
@@ -99,7 +122,7 @@ export class TextIndexWorker implements TextIndexApi {
     w.addEventListener("close", () => this.lost(w));
     this.w = w;
     this.starts++;
-    this.send(w, { op: "init", options: this.o, ...(this.pauseMs !== undefined ? { pauseMs: this.pauseMs } : {}) }).catch(() => {});
+    this.send(w, { op: "init", options: this.o, ...(this.pauseMs !== undefined ? { pauseMs: this.pauseMs } : {}), ...(this.gate ? { gated: true } : {}) }).catch(() => {});
     return w;
   }
 

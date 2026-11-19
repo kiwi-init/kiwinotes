@@ -55,6 +55,11 @@ export interface BackgroundGateOptions {
   quietMs?: number;
 }
 
+/** O que segura a espera: `battery: false` pula a bateria (só o uso segura). */
+export interface WaitOptions {
+  battery?: boolean;
+}
+
 export class BackgroundGate {
   private readonly holds = new Set<string>();
   private lastActive = -Infinity;
@@ -90,8 +95,11 @@ export class BackgroundGate {
     this.lastActive = this.now();
   }
 
-  /** Por que o modelo está parado agora, ou `null` se pode andar. */
-  async blocked(): Promise<string | null> {
+  /**
+   * Por que o modelo está parado agora, ou `null` se pode andar. `battery: false`: a bateria não segura (o índice do
+   * conteúdo, leve, segue na bateria com o teto dele; lead #24453).
+   */
+  async blocked(o: WaitOptions = {}): Promise<string | null> {
     if (this.holds.size) return [...this.holds][0]!;
     if (this.now() - this.lastActive < this.quietMs) return "active";
     if (this.readIdle) {
@@ -101,7 +109,7 @@ export class BackgroundGate {
       // Entre leituras, o parado cresce com o relógio; um uso novo aparece na próxima leitura.
       if (this.idle.ms + (this.now() - this.idle.at) < SYSTEM_IDLE_MS) return "system";
     }
-    if (this.readBattery) {
+    if (this.readBattery && o.battery !== false) {
       if (this.now() - this.battery.at >= BATTERY_EVERY_MS) {
         this.battery = { at: this.now(), on: onBattery(await this.readBattery().catch(() => "")) };
       }
@@ -111,10 +119,10 @@ export class BackgroundGate {
   }
 
   /** Espera até poder andar. `stop()` corta a espera (o índice fechando). */
-  async wait(stop: () => boolean = () => false): Promise<void> {
+  async wait(stop: () => boolean = () => false, o: WaitOptions = {}): Promise<void> {
     for (;;) {
       if (stop()) return;
-      const why = await this.blocked();
+      const why = await this.blocked(o);
       if (!why) return;
       const left =
         why === "active" ? this.lastActive + this.quietMs - this.now()

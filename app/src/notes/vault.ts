@@ -494,6 +494,8 @@ export class Vault {
   private resolver: Resolver | null = null;
   private searchIndex: NoteSearchIndex | null = null;
   private searchDirty = true;
+  /** O `warm` do índice da busca, enquanto anda. */
+  private warming: Promise<void> | null = null;
   /** Só para os testes: roda entre gravar o arquivo temporário e conferir a versão (uma edição de fora bem ali). */
   private beforeReplace?: () => void;
   /** O que foi apagado e ainda dá para desfazer, pelo caminho original (T2468). */
@@ -563,6 +565,34 @@ export class Vault {
   onChanged(fn: (paths: string[]) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
+  }
+
+  /**
+   * Põe o índice da busca em dia em fatias, sem prender o laço (T24286). Para se a pasta fecha, se o índice muda ou se
+   * uma busca já pôs tudo em dia. Terminado, o `sync` tira o que saiu e acerta o que mudou no meio.
+   */
+  private warmSearch(): void {
+    if (this.warming) return;
+    const idx = this.searchIndex;
+    if (!idx) return;
+    this.warming = (async () => {
+      try {
+        const done = await idx.warm([...this.notes.values()], { stop: () => this.closed || this.searchIndex !== idx || !this.searchDirty });
+        if (done && !this.closed && this.searchIndex === idx && this.searchDirty) {
+          idx.sync(this.notes.values());
+          this.searchDirty = false;
+        }
+      } catch (e) {
+        console.error("[notes] search warm failed:", e instanceof Error ? e.message : e);
+      } finally {
+        this.warming = null;
+      }
+    })();
+  }
+
+  /** O índice da busca pronto (testes e a medição). */
+  async searchWarm(): Promise<void> {
+    while (this.warming) await this.warming;
   }
 
   /** Começa a olhar o disco (o Obsidian, o Finder, um git pull). */
@@ -2364,10 +2394,12 @@ export class Vault {
       if (now) notes.set(p, now);
       else notes.delete(p);
     }
+    // O índice da busca se põe em dia em fatias, depois (spec #24228, T24286): de uma vez, ele prendia o main uns 7 s com
+    // 90 mil notas, a cada abertura. Uma busca antes do fim termina o que falta, como antes.
     this.searchIndex ??= new NoteSearchIndex();
-    this.searchIndex.sync(notes.values());
-    this.searchDirty = false;
+    this.searchDirty = true;
     this.notes = notes;
+    this.warmSearch();
     this.folders = folders;
     const diff = filesDiff(this.files, files);
     if (diff === null || diff.length) this.filesChanged(diff);

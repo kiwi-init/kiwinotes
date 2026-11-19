@@ -43,27 +43,72 @@ export class NoteSearchIndex {
   constructor() {
     this.db.exec("PRAGMA temp_store=MEMORY; CREATE VIRTUAL TABLE notes USING fts5(path UNINDEXED, title, aliases, body, stem_title, stem_aliases, stem_body, tokenize='unicode61 remove_diacritics 2')");
   }
+  /** Fatias que o `warm` gravou (o teste e a medição). */
+  slices = 0;
+  private statements() {
+    return {
+      insert: this.db.query("INSERT INTO notes(rowid,path,title,aliases,body,stem_title,stem_aliases,stem_body) VALUES (?,?,?,?,?,?,?,?)"),
+      remove: this.db.query("DELETE FROM notes WHERE rowid=?"),
+    };
+  }
+  /** Põe ou troca uma nota, se mudou; `true` quando tokenizou. */
+  private put(e: SearchDocument, st: ReturnType<NoteSearchIndex["statements"]>, cache: Map<string, string[]>, next: Map<string, { id: number; version: string }>): boolean {
+    const path = e.meta.path, version = JSON.stringify([e.meta.version, e.meta.title, e.aliases]);
+    const old = next.get(path);
+    if (old?.version === version)
+      return false;
+    const [title, stemTitle] = fields(e.meta.title, cache), [aliases, stemAliases] = fields(e.aliases.join(" "), cache), [body, stemBody] = fields(e.content, cache);
+    if (old)
+      st.remove.run(old.id);
+    const id = old?.id ?? ++this.serial;
+    st.insert.run(id, path, title!, aliases!, body!, stemTitle!, stemAliases!, stemBody!);
+    next.set(path, { id, version });
+    return true;
+  }
+  /**
+   * Põe em dia sem prender o laço do Bun (spec #24228, T24286): com 90 mil notas, o `sync` de uma vez tokenizava tudo
+   * numa transação só, uns 7 s com o main parado, a cada abertura (o índice é só da memória). Aqui, fatias de
+   * ~`sliceMs`, cada uma na sua transação, com uma volta do laço entre elas. Só põe e troca: o `sync` de depois tira o
+   * que saiu, e o que já está em dia ele não tokeniza de novo. `false` se o `stop` cortou.
+   */
+  async warm(documents: readonly SearchDocument[], o: { sliceMs?: number; stop?(): boolean; yieldTo?(): Promise<void> } = {}): Promise<boolean> {
+    const sliceMs = o.sliceMs ?? 12;
+    const yieldTo = o.yieldTo ?? (() => new Promise<void>(r => setImmediate(r)));
+    const st = this.statements();
+    const cache = new Map<string, string[]>();
+    let i = 0;
+    while (i < documents.length) {
+      if (o.stop?.())
+        return false;
+      const until = performance.now() + sliceMs;
+      const next = new Map(this.known);
+      let updates = 0;
+      this.db.transaction(() => {
+        do {
+          if (this.put(documents[i++]!, st, cache, next))
+            updates++;
+        } while (i < documents.length && performance.now() < until);
+      })();
+      this.known = next;
+      this.updates += updates;
+      this.slices++;
+      if (i < documents.length)
+        await yieldTo();
+    }
+    return true;
+  }
   sync(documents: Iterable<SearchDocument>): void {
-    const insert = this.db.query("INSERT INTO notes(rowid,path,title,aliases,body,stem_title,stem_aliases,stem_body) VALUES (?,?,?,?,?,?,?,?)");
-    const remove = this.db.query("DELETE FROM notes WHERE rowid=?");
+    const st = this.statements();
+    const remove = st.remove;
     const present = new Set<string>();
     const cache = new Map<string, string[]>();
     const next = new Map(this.known);
     let updates = 0;
     this.db.transaction(() => {
       for (const e of documents) {
-        const path = e.meta.path, version = JSON.stringify([e.meta.version, e.meta.title, e.aliases]);
-        present.add(path);
-        const old = this.known.get(path);
-        if (old?.version === version)
-          continue;
-        const [title, stemTitle] = fields(e.meta.title, cache), [aliases, stemAliases] = fields(e.aliases.join(" "), cache), [body, stemBody] = fields(e.content, cache);
-        if (old)
-          remove.run(old.id);
-        const id = old?.id ?? ++this.serial;
-        insert.run(id, path, title!, aliases!, body!, stemTitle!, stemAliases!, stemBody!);
-        next.set(path, { id, version });
-        updates++;
+        present.add(e.meta.path);
+        if (this.put(e, st, cache, next))
+          updates++;
       }
       for (const [path, old] of this.known)
         if (!present.has(path)) {
