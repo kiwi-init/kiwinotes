@@ -287,6 +287,11 @@ export class TextIndex {
     });
   }
 
+  /** O arquivo como o índice o leu (o caminho, o tamanho e o mtime), ou `undefined`: o `stat` da busca no worker (P0 #23988). */
+  stored(rel: string): VaultFile | undefined {
+    return (this.db?.query("SELECT path, size, mtime FROM files WHERE path=?").get(rel) as FileRow | null) ?? undefined;
+  }
+
   /** Espera as passadas da fila (testes e a medição). */
   idle(): Promise<void> {
     return this.chain;

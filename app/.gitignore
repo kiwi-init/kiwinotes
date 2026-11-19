@@ -7,5 +7,6 @@ livewire-screenshot.png
 .cottontail-tmp/
 .helper/
 .onnxruntime/
+.workers/
 .ui-channel/
 out/

@@ -23,6 +23,8 @@ export default {
       ".helper": "bin",
       // O ONNX Runtime da busca semântica, posto em app/.onnxruntime/ pelo preBuild (scripts/onnxruntime.ts, T6318).
       ".onnxruntime": "bin/napi-v6/darwin/arm64",
+      // O worker do índice do conteúdo (P0 #23988), junto pelo preBuild (scripts/build-workers.ts).
+      ".workers": "workers",
     },
     watchIgnore: ["dist/**"],
     mac: {

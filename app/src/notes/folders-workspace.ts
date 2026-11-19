@@ -17,7 +17,7 @@ import { DictationNotes } from "./fromDictation.ts";
 import { MeetingNotes } from "./meetings.ts";
 import { Attachments } from "./attachments.ts";
 import { OcrIndex, type OcrRunner } from "./ocr.ts";
-import { TextIndex } from "./text-index.ts";
+import { createTextIndex, type TextIndexApi } from "./text-index-client.ts";
 import { NoteExporter } from "./export.ts";
 import { SemanticIndex } from "./semantic/index.ts";
 import type { SemanticEngine } from "./semantic/engine.ts";
@@ -171,8 +171,8 @@ export interface FolderBundle {
   meetingNotes: MeetingNotes;
   attachments: Attachments;
   ocr: OcrIndex;
-  /** O texto dos arquivos de texto (T21240), em `folders/<chave>/text-index/`, fora do cofre. */
-  text: TextIndex;
+  /** O texto dos arquivos de texto (T21240), em `folders/<chave>/text-index/`, fora do cofre; roda num Worker (P0 #23988). */
+  text: TextIndexApi;
   exporter: NoteExporter;
   /** A busca pelo sentido desta pasta (T6013): os vetores em `folders/<chave>/semantic/`, fora do cofre. */
   semantic?: SemanticIndex;
@@ -252,7 +252,7 @@ export class NotesFolders {
       runner: this.ocrRunner,
       enabled: async () => (await settings.load()).ocr,
     });
-    const text = new TextIndex({
+    const text = createTextIndex({
       root,
       dir: internal ? path.join(this.options.dir, "text-index") : path.join(this.options.dir, "folders", key, "text-index"),
     });

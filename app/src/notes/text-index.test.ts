@@ -358,6 +358,18 @@ describe("o lote cabe num teto de texto (P0 #23988)", () => {
   const KB = 1024;
   const cap = 64 * KB;
 
+  test("a pausa vem depois de cada lote, menos do último (revisão do #243)", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 6; i++) files[`logs/dia-${i}.log`] = `linha de exemplo ${i} caju\n`.repeat((20 * KB) / 24);
+    const f = folder(files);
+    let pauses = 0;
+    const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), pause: async () => void pauses++, batchText: 30 * KB });
+    open.push(t);
+    await t.sync(f.all());
+    expect(t.stats.batches).toBe(6);
+    expect(pauses).toBe(5);
+  });
+
   test("nenhuma transação passa do teto, no texto e no docx, e tudo entra na busca", async () => {
     const files: Record<string, string | Uint8Array> = {};
     for (let i = 0; i < 12; i++) files[`logs/dia-${i}.log`] = `linha de exemplo ${i} caju\n`.repeat((20 * KB) / 24);
