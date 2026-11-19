@@ -51,7 +51,9 @@ function TypedBubble({ reduced, onTyped }: { reduced: boolean; onTyped: () => vo
   }, [typed]);
   return (
     <div className="kn-bubble-shell kn-welcome-bubble" data-typed={typed} onClick={() => setShown(WELCOME_TEXT.length)}>
-      <p className="kn-welcome-text" aria-label={WELCOME_TEXT}>
+      <p className="kn-welcome-text">
+        {/* O leitor de tela lê o texto inteiro de uma vez (um aria-label num parágrafo o WebKit ignora). */}
+        <span className="kn-visually-hidden">{WELCOME_TEXT}</span>
         <span aria-hidden="true">{WELCOME_TEXT.slice(0, shown)}</span>
         {/* O resto, invisível, segura o tamanho do balão desde o começo (ele não cresce enquanto escreve). */}
         <span className="kn-welcome-rest" aria-hidden="true">{WELCOME_TEXT.slice(shown)}</span>

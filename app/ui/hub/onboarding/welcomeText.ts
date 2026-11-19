@@ -8,7 +8,7 @@ export const WELCOME_TEXT =
 export const WELCOME_YES = "Vamos lá";
 export const WELCOME_NO = "Agora não";
 
-/** Letras por segundo do balão: o texto inteiro em uns 5 s. */
+/** Letras por segundo do balão: o texto inteiro em uns 6,5 s (`typingDuration`). */
 export const TYPE_CPS = 40;
 /** A pausa a mais depois de um ponto, uma exclamação ou uma interrogação, como quem respira. */
 export const TYPE_PAUSE_MS = 350;

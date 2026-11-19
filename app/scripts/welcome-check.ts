@@ -16,6 +16,7 @@ import { join, resolve } from "node:path";
 import { type Browser, type Page, webkit } from "playwright-core";
 import { connect, request } from "./cli";
 import { openWindow, type UiContext } from "./ui-page";
+import { WELCOME_TEXT } from "../ui/hub/onboarding/welcomeText.ts";
 
 const app = resolve(import.meta.dir, "..");
 const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T20795-welcome"));
@@ -81,7 +82,10 @@ try {
     await Bun.sleep(1600);
     const partial = (await p.locator(".kn-welcome-text > span").first().textContent()) ?? "";
     assert.ok(partial.length > 10 && partial.length < 120, `no meio, um pedaço: ${partial.length}`);
-    assert.match((await p.locator(".kn-welcome-text").getAttribute("aria-label")) ?? "", /^Olá, tudo bem\?.*Vamos lá\?$/);
+    // O leitor de tela ouve o texto inteiro desde o começo, e uma vez só (o pedaço que se escreve fica de fora).
+    const tree = await p.locator(".kn-welcome").ariaSnapshot();
+    assert.ok(tree.includes(WELCOME_TEXT), `o balão no leitor de tela:\n${tree}`);
+    assert.equal(tree.split("Olá, tudo bem?").length - 1, 1, `o texto uma vez só:\n${tree}`);
     await p.screenshot({ path: join(out, "boas-vindas-escrevendo.png") });
     await p.waitForSelector('.kn-welcome-bubble[data-typed="true"]', { timeout: 15000 });
     assert.equal(await p.evaluate(() => (document.activeElement as HTMLElement | null)?.textContent), "Vamos lá");
