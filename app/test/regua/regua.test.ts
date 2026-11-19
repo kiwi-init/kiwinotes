@@ -109,6 +109,8 @@ describe("o teste do teste", () => {
 
     const rapido = await medir(async () => (leva(5), "aberto"));
     expect(rapido).toMatchObject({ r: "aberto", ok: true, ms: [5] });
+    // Exatamente no máximo ainda passa.
+    expect(await medir(async () => leva(40))).toMatchObject({ ok: true, ms: [40] });
 
     const sempreLento = await medir(async () => leva(60), 3);
     expect(sempreLento).toMatchObject({ ok: false, fria: false, ms: [60, 60, 60] });
