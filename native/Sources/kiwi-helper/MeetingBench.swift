@@ -2,6 +2,8 @@ import AVFoundation
 import Darwin
 import FluidAudio
 import Foundation
+import KiwiHelperCore
+import TranscribeCpp
 
 /// `kiwi-helper --meeting <wav>` (T4926, R0 do spec #4823): mede o pipeline de reunião sobre um WAV de dois canais a
 /// 16 kHz (canal 0 = você, o mic; canal 1 = sistema, os outros), sem mic e sem som. Escreve JSON por linha:
@@ -11,7 +13,7 @@ import Foundation
 /// - `{"type":"stats", …}`: tempo de parede, CPU e memória de pico.
 /// É um spike de medida: o pipeline de verdade da reunião é o R3 (#196).
 enum MeetingBench {
-    enum ASRMode: String { case stream, batch, none }
+    enum ASRMode: String { case stream, batch, whisper, none }
     enum DiarizerKind: String { case sortformer, lseend, vbx, none }
 
     struct Options {
@@ -22,6 +24,11 @@ enum MeetingBench {
         var realtime = false
         /// Quanto áudio entra por vez no streaming.
         var feedSeconds: Double = 0.5
+        /// O GGUF do Whisper para `--asr whisper` (T20237): um candidato a modelo de reunião, em batch no fim.
+        var whisperModel: String?
+        /// No batch e no Whisper, só a fala que o Silero acha (o VAD do ditado), um pedaço por vez. Sem isso, nos silêncios
+        /// longos de cada canal, o Whisper pula trechos e inventa texto; o Parakeet roda igual, para comparar (#20668).
+        var chunkVAD = false
     }
 
     static let sampleRate = 16_000.0
@@ -65,14 +72,19 @@ enum MeetingBench {
     private static func runASR(_ o: Options, channels: [[Float]], names: [String]) async throws -> Double {
         guard o.asr != .none else { return 0 }
         let start = Date()
+        if o.asr == .whisper {
+            try await whisperChannels(channels, names: names, model: o.whisperModel, vad: o.chunkVAD)
+            return Date().timeIntervalSince(start)
+        }
         let models = try await AsrModels.downloadAndLoad(version: .ultra)
+        let vad = o.chunkVAD ? try await VadManager(config: VadConfig(defaultThreshold: 0.7)) : nil
         try await withThrowingTaskGroup(of: Void.self) { group in
             for (i, samples) in channels.enumerated() {
                 group.addTask {
                     switch o.asr {
                     case .stream: try await streamChannel(samples, name: names[i], models: models, o: o)
-                    case .batch: try await batchChannel(samples, name: names[i], models: models)
-                    case .none: break
+                    case .batch: try await batchChannel(samples, name: names[i], models: models, vad: vad)
+                    case .none, .whisper: break
                     }
                 }
             }
@@ -81,14 +93,57 @@ enum MeetingBench {
         return Date().timeIntervalSince(start)
     }
 
-    private static func batchChannel(_ samples: [Float], name: String, models: AsrModels) async throws {
+    private static func batchChannel(_ samples: [Float], name: String, models: AsrModels, vad: VadManager?) async throws {
         let manager = AsrManager(config: .default)
         try await manager.loadModels(models)
-        var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-        let result = try await manager.transcribe(samples, decoderState: &state)
-        for w in words(result.tokenTimings ?? []) {
-            emit(["type": "word", "channel": name, "start": w.start, "end": w.end, "text": w.text])
+        for (offset, piece) in try await speechPieces(samples, vad: vad) {
+            var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
+            let result = try await manager.transcribe(piece, decoderState: &state)
+            let base = Double(offset) / sampleRate
+            for w in words(result.tokenTimings ?? []) {
+                emit(["type": "word", "channel": name, "start": base + w.start, "end": base + w.end, "text": w.text])
+            }
         }
+    }
+
+    /// Os pedaços do canal (começo em amostras, áudio): ele inteiro, ou cada fala que o VAD achou.
+    private static func speechPieces(_ samples: [Float], vad: VadManager?) async throws -> [(Int, [Float])] {
+        guard let vad else { return [(0, samples)] }
+        return try await vad.segmentSpeech(samples).compactMap { seg in
+            let a = max(0, Int(seg.startTime * sampleRate)), b = min(samples.count, Int(seg.endTime * sampleRate))
+            return b > a ? (a, Array(samples[a..<b])) : nil
+        }
+    }
+
+    /// Um candidato a modelo de reunião (T20237): o Whisper (GGUF, pelo transcribe.cpp em Metal, como o modo preciso) no
+    /// canal inteiro, um canal depois do outro, com a língua fixa em `pt`. Cada segmento vira palavras espalhadas pelo
+    /// tempo dele (o Whisper dá o tempo por segmento).
+    private static func whisperChannels(_ channels: [[Float]], names: [String], model path: String?, vad useVAD: Bool) async throws {
+        guard let path else { throw NSError(domain: "meeting", code: 2, userInfo: [NSLocalizedDescriptionKey: "--asr whisper precisa de --whisper <gguf>"]) }
+        try Transcribe.initBackends()
+        // O modelo morre antes do fim do processo: vivo no exit, o Metal aborta num assert (PreciseTranscriber).
+        try await {
+            let model = try TranscribeCpp.Model(path: path, options: ModelOptions(backend: .metal))
+            let vad = useVAD ? try await VadManager(config: VadConfig(defaultThreshold: 0.7)) : nil
+            for (i, samples) in channels.enumerated() {
+                for (offset, piece) in try await speechPieces(samples, vad: vad) {
+                let session = try model.session()
+                let options = RunOptions(timestamps: .segment, language: "pt", keepSpecialTags: false,
+                                         family: .whisper(WhisperRunOptions(seed: 1)))
+                let result = try await session.run(piece, options: options)
+                let base = Double(offset) / sampleRate
+                for seg in result.segments {
+                    let text = RepetitionGuard.collapse(seg.text.trimmingCharacters(in: .whitespacesAndNewlines))
+                    let ws = text.split(whereSeparator: \.isWhitespace)
+                    guard !ws.isEmpty else { continue }
+                    let s0 = base + Double(seg.t0Ms) / 1000, step = (base + Double(seg.t1Ms) / 1000 - s0) / Double(ws.count)
+                    for (j, w) in ws.enumerated() {
+                        emit(["type": "word", "channel": names[i], "start": s0 + Double(j) * step, "end": s0 + Double(j + 1) * step, "text": String(w)])
+                    }
+                }
+                }
+            }
+        }()
     }
 
     /// Quanto áudio já entrou, por canal, para o `firmAt`.

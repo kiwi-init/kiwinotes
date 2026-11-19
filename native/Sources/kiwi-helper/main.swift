@@ -7,7 +7,7 @@ let usage = """
 usage: kiwi-helper --socket <path> [--dump-wav <dir>]
        kiwi-helper --stdio [--dump-wav <dir>]
        kiwi-helper --transcribe <file.wav>… [--dictionary <file>] [--language auto|pt|en] [--vad] [--ctc]
-       kiwi-helper --meeting <file.wav> [--asr stream|batch|none] [--diarizer sortformer|lseend|vbx|none] [--realtime]
+       kiwi-helper --meeting <file.wav> [--asr stream|batch|none | --whisper <model.gguf>] [--chunk-vad] [--diarizer sortformer|lseend|vbx|none] [--realtime]
 
   --socket <path>   connect to the app's unix socket (the app listens; NDJSON v1, see docs/adr/0001-ipc.md)
   --stdio           talk NDJSON over stdin/stdout instead, for manual testing
@@ -158,6 +158,13 @@ while let arg = args.next() {
     case "--asr":
         guard let v = args.next(), let mode = MeetingBench.ASRMode(rawValue: v), meeting != nil else { fail("--asr stream|batch|none, after --meeting") }
         meeting?.asr = mode
+    case "--whisper":
+        guard let v = args.next(), meeting != nil else { fail("--whisper <model.gguf>, after --meeting") }
+        meeting?.asr = .whisper
+        meeting?.whisperModel = v
+    case "--chunk-vad":
+        guard meeting != nil else { fail("--chunk-vad, after --meeting (batch or --whisper)") }
+        meeting?.chunkVAD = true
     case "--diarizer":
         guard let v = args.next(), let kind = MeetingBench.DiarizerKind(rawValue: v), meeting != nil else { fail("--diarizer sortformer|lseend|vbx|none, after --meeting") }
         meeting?.diarizer = kind

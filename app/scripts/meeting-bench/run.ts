@@ -12,6 +12,11 @@
 // - live48k: o mesmo, com a captura no meio: cada canal sobe a 48 kHz e volta pelo `Resampler` do app, em 10 ms.
 // - livept:  o mesmo, com a língua (`--language pt`) que o app não passa.
 // - nota:    os `segment` do `live` pela escrita da nota (`nota.ts`).
+// - wsmall, wturbo: os candidatos a modelo de reunião (#20494), em batch no fim, no canal inteiro (`--meeting --whisper`):
+//            o Whisper small do modo preciso e o Whisper large-v3 turbo. Rodam no limpo, no eco e no ruído.
+// - batchvad, wsmallvad, wturbovad: os mesmos, só na fala que o Silero acha (`--chunk-vad`), um pedaço por vez. Sem o
+//            VAD, nos silêncios longos de cada canal, o Whisper pula trechos e inventa texto (no MLS, o turbo vai de 6,7% a
+//            12,6%); o Parakeet em batch roda com e sem, para a diferença ser do modelo e não do VAD (#20668).
 // No `limpo` rodam todas; nas variantes de captura (eco, ruído, baixo), só o caminho do app (live e nota). O `eco` roda
 // com `--output speaker` (o filtro de eco ligado, como sem fone); o resto com `headphones`.
 // Tudo fica em `<banco>/resultados/`, fora do repo; o relatório também (`relatorio.md`), e só ele se cola no thread.
@@ -20,7 +25,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join, resolve } from "node:path";
 
 import type { Truth } from "./build.ts";
-import { BENCH } from "./prepare.ts";
+import { BENCH, CANDIDATES, MODELS } from "./prepare.ts";
 import { score, type TurnScore } from "./score.ts";
 
 const args = process.argv.slice(2);
@@ -33,20 +38,26 @@ const MEETINGS = join(BENCH, "reunioes");
 const OUT = join(BENCH, "resultados");
 mkdirSync(OUT, { recursive: true });
 
-const STAGES = ["batch", "stream", "live", "live48k", "livept", "nota"] as const;
+const STAGES = ["batch", "stream", "live", "live48k", "livept", "nota", "wsmall", "wturbo", "batchvad", "wsmallvad", "wturbovad"] as const;
 type Stage = (typeof STAGES)[number];
 const helperArgs = (stage: Stage, wav: string, variant: string): string[] | null => {
   const output = ["--output", variant === "eco" ? "speaker" : "headphones"];
   switch (stage) {
     case "batch": return ["--meeting", wav, "--asr", "batch", "--diarizer", "none"];
+    case "batchvad": return ["--meeting", wav, "--asr", "batch", "--chunk-vad", "--diarizer", "none"];
     case "stream": return ["--meeting", wav, "--asr", "stream", "--diarizer", "none"];
     case "live": return ["--meeting-live", wav, ...output];
     case "live48k": return ["--meeting-live", wav, ...output, "--capture", "48000"];
     case "livept": return ["--meeting-live", wav, ...output, "--language", "pt"];
     case "nota": return null;
+    case "wsmall": case "wturbo": case "wsmallvad": case "wturbovad": {
+      const m = CANDIDATES.find((c) => c.stage === stage.replace(/vad$/, ""))!;
+      return ["--meeting", wav, "--whisper", join(MODELS, m.file), ...(stage.endsWith("vad") ? ["--chunk-vad"] : []), "--diarizer", "none"];
+    }
   }
 };
-const stagesFor = (variant: string): Stage[] => (variant === "limpo" ? [...STAGES] : ["live", "nota"]);
+const stagesFor = (variant: string): Stage[] =>
+  variant === "limpo" ? [...STAGES] : variant === "baixo" ? ["live", "nota"] : ["live", "nota", "batch", "wsmall", "wturbo", "batchvad", "wsmallvad", "wturbovad"];
 
 const names = readdirSync(MEETINGS).filter((f) => f.endsWith(".truth.json")).map((f) => f.replace(/\.truth\.json$/, ""))
   .filter((n) => !only || only.includes(n.split(".")[0]!) || only.includes(n.split(".")[0]!.replace(/-\d+$/, "")))
@@ -97,12 +108,32 @@ const LABEL: Record<string, string> = { say: "say (roteiro, sintético)", mls: "
 
 const md: string[] = [];
 md.push("**WER por etapa** (limpo; erros somados sobre as palavras de cada fonte)", "");
-md.push(`| Fonte | min | ${STAGES.join(" | ")} |`, `|---|---|${STAGES.map(() => "---").join("|")}|`);
-for (const s of sources) md.push(`| ${LABEL[s] ?? s} | ${minutes(s).toFixed(1)} | ${STAGES.map((st) => werOf(s, "limpo", st)).join(" | ")} |`);
+const PATH = STAGES.filter((st) => !st.startsWith("w") && !st.endsWith("vad"));
+md.push(`| Fonte | min | ${PATH.join(" | ")} |`, `|---|---|${PATH.map(() => "---").join("|")}|`);
+for (const s of sources) md.push(`| ${LABEL[s] ?? s} | ${minutes(s).toFixed(1)} | ${PATH.map((st) => werOf(s, "limpo", st)).join(" | ")} |`);
 md.push("", "**Captura** (live → nota; e as palavras de eco no canal você)", "");
 const variants = ["limpo", "eco", "ruido", "baixo"];
 md.push(`| Fonte | ${variants.join(" | ")} | eco: palavras |`, `|---|${variants.map(() => "---").join("|")}|---|`);
 for (const s of sources) md.push(`| ${LABEL[s] ?? s} | ${variants.map((v) => `${werOf(s, v, "live")} → ${werOf(s, v, "nota")}`).join(" | ")} | ${werOf(s, "limpo", "live", "echo_words")} → ${werOf(s, "eco", "live", "echo_words")} |`);
+md.push("", "**Modelo de reunião** (batch no fim; WER limpo / eco / ruído; o tempo é o de processamento sobre o de áudio, os dois canais)", "");
+const statsOf = (stage: Stage) => names.filter((n) => n.endsWith(".limpo")).map((n) => join(OUT, `${n}.${stage}.jsonl`)).filter(existsSync)
+  .map((f) => readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((l) => l.type === "stats")).filter(Boolean);
+const cands: { stage: Stage; label: string; mb: number }[] = [
+  { stage: "live", label: "Parakeet ao vivo (o de hoje)", mb: 0 },
+  { stage: "batch", label: "Parakeet, batch", mb: 0 },
+  { stage: "batchvad", label: "Parakeet, batch + VAD", mb: 0 },
+  ...CANDIDATES.flatMap((c) => ["", "vad"].map((v) => ({ stage: `${c.stage}${v}` as Stage, label: `${c.file.replace(/\.gguf$/, "")}${v ? " + VAD" : ""}`,
+    mb: existsSync(join(MODELS, c.file)) ? Bun.file(join(MODELS, c.file)).size / 1e6 : NaN }))),
+];
+md.push(`| Modelo | download | ${sources.map((s) => LABEL[s] ?? s).join(" | ")} | tempo/áudio | memória |`, `|---|---|${sources.map(() => "---").join("|")}|---|---|`);
+for (const c of cands) {
+  const st = statsOf(c.stage);
+  const audio = st.reduce((a, x) => a + x.audioSeconds, 0), wall = st.reduce((a, x) => a + x.wallSeconds, 0);
+  const peak = Math.max(0, ...st.map((x) => x.peakFootprintMB ?? 0));
+  const cells = sources.map((s) => ["limpo", "eco", "ruido"].map((v) => werOf(s, v, c.stage)).join(" / "));
+  const time = c.stage === "live" ? "ao vivo" : audio ? (wall / audio).toFixed(3) : "—";
+  md.push(`| ${c.label} | ${c.mb ? `${c.mb.toFixed(0)} MB` : "já vem"} | ${cells.join(" | ")} | ${time} | ${peak ? `${peak.toFixed(0)} MB` : "—"} |`);
+}
 const say = STAGES.map((st) => rows.get(`say.limpo.${st}`)).filter(Boolean) as Row[];
 if (say.length) {
   md.push("", "**Termos do roteiro** (nomes, números, palavras de padaria)", "");
