@@ -1315,7 +1315,8 @@ export function uiCapabilities(deps: CapabilityDeps,
         const files = await deps.textIndex.search(a.query as string, max - hits.length, info).catch(() => []);
         if (files.length) {
           const exact = hits.filter((h) => !h.approx && !h.semantic);
-          hits = [...exact, ...files, ...hits.filter((h) => h.approx || h.semantic)];
+          // O arquivo aproximado (passou do que a busca lê) vai com o aproximado das notas.
+          hits = [...exact, ...files.filter((h) => !h.approx), ...hits.filter((h) => h.approx || h.semantic), ...files.filter((h) => h.approx)];
         }
       }
       // O texto das imagens e dos PDFs (T2709) completa a lista, depois do que achou nas notas.

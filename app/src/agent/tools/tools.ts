@@ -1306,6 +1306,14 @@ async function run(
       for (const h of hits) {
         let trecho = h.snippet;
         let linha = h.line;
+        // O arquivo de texto aproximado (T21240) veio do índice sem ser lido, porque passou do que a busca lê: o gato
+        // também não o lê aqui. Com a guarda, ele só volta se o nome tem a palavra, para a busca não confirmar um
+        // segredo que estaria dentro dele.
+        if (h.file && h.approx) {
+          if (guard && !terms.some((t) => fold(h.path).includes(t))) continue;
+          resultados.push({ path: h.path, titulo: h.title, trecho: "", formato: h.file.format, como: "aproximado" });
+          continue;
+        }
         if (guard) {
           // O trecho sai da nota já filtrada, para um segredo partido na borda não escapar. E a busca não confirma
           // segredo: um achado cujas palavras só aparecem dentro de um segredo não volta.

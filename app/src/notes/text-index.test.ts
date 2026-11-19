@@ -49,6 +49,17 @@ describe("o que entra no índice", () => {
     expect(lineOf("um\ndois\n  Três maçãs aqui\n", ["macas"])).toEqual({ line: 3, snippet: "Três maçãs aqui" });
     expect(lineOf("nada", ["outra"])).toBeNull();
   });
+
+  test("numa linha com recuo e espaços no meio, o trecho tem o termo (revisão do T21240)", () => {
+    const line = `    x = 1${" ".repeat(80)}# pedido de exemplo`;
+    const at = lineOf(`import os\n${line}\n`, ["pedido"])!;
+    expect(at.line).toBe(2);
+    expect(at.snippet).toContain("pedido de exemplo");
+    expect(at.snippet).toContain("x = 1");
+    // Longe do começo, o corte em volta do termo também acerta.
+    const far = lineOf(`${"\t".repeat(30)}${"palavra ".repeat(40)}  Ação final`, ["acao"])!;
+    expect(far.snippet).toContain("Ação final");
+  });
 });
 
 describe("a busca no conteúdo (spec #21165)", () => {
@@ -184,6 +195,31 @@ describe("arquivos estranhos (spec #21165)", () => {
     expect(t.stats).toMatchObject({ read: 1, nameOnly: 1 });
     expect(paths(await t.search("mamao", 10, f.stat))).toEqual(["antigo.txt"]);
     expect((await t.search("maca", 10, f.stat))[0]!.snippet).toBe("maçã e mamão");
+  });
+
+  test("a busca lê no máximo o orçamento; o resto vem aproximado, sem trecho (revisão do T21240, como o #524)", async () => {
+    const files: Record<string, string> = {};
+    const big = `${"linha de registro qualquer\n".repeat(2000)}pedido 7\n`; // ~54 KB
+    for (let i = 0; i < 30; i++) files[`Logs/l${i}.log`] = big;
+    files["Logs/enorme.log"] = `pedido\n${"x".repeat(200 * 1024)}\n`;
+    const f = folder(files);
+    const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), pause: async () => {}, readTotal: 256 * 1024, readFile: 128 * 1024 });
+    open.push(t);
+    await t.sync(f.all());
+    const hits = await t.search("pedido", 31, f.stat);
+    expect(hits).toHaveLength(31);
+    expect(t.lastSearchBytes).toBeLessThanOrEqual(256 * 1024);
+    const read = hits.filter((h) => !h.approx);
+    expect(read.length).toBeGreaterThan(0);
+    expect(read.every((h) => h.snippet.includes("pedido") && h.line)).toBe(true);
+    const approx = hits.filter((h) => h.approx);
+    expect(approx.map((h) => h.path)).toContain("Logs/enorme.log");
+    expect(approx.every((h) => h.snippet === "" && h.line === undefined)).toBe(true);
+    // A frase que não está no texto: a busca para no orçamento em vez de ler todos os candidatos.
+    await t.search('"pedido 8"', 31, f.stat);
+    expect(t.lastSearchBytes).toBeLessThanOrEqual(256 * 1024);
+    // O -palavra vale também no aproximado: vai ao índice.
+    expect(paths(await t.search("pedido -registro", 31, f.stat))).toEqual(["Logs/enorme.log"]);
   });
 
   test("um índice estragado é refeito, sem erro", async () => {

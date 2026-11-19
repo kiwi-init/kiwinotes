@@ -245,4 +245,17 @@ describe("a busca no conteúdo e o filtro (T21240)", () => {
     const t = setup({ "Loja/.env": "LOJA=pitomba\n", "Loja/prod.env": "LOJA=pitomba\n" });
     expect((await t.tool("notes_search", { query: "pitomba" })).resultados).toEqual([]);
   });
+
+  test("o arquivo grande demais para a busca ler vem aproximado, sem trecho; com o filtro, só se o nome tem a palavra", async () => {
+    // Acima do que a busca lê por arquivo (512 KB): o índice acha, mas ninguém o lê de novo, nem o gato.
+    const big = `${"2026-11-02 09:00 registro qualquer\n".repeat(20_000)}vendeu rapadura\n`;
+    const files = { "Loja/vendas.log": big, "Loja/rapadura.log": big };
+    const sem = setup(files);
+    const r = (await sem.tool("notes_search", { query: "rapadura" })).resultados as Record<string, unknown>[];
+    expect(r.map((x) => x.path).sort()).toEqual(["Loja/rapadura.log", "Loja/vendas.log"]);
+    expect(r.every((x) => x.trecho === "" && x.como === "aproximado" && x.formato === "log" && !("linha" in x))).toBe(true);
+    // Com o filtro, o que achou só pelo conteúdo não lido some: a busca não confirma o que nem foi filtrado.
+    const com = setup(files, new SecretGuard());
+    expect(((await com.tool("notes_search", { query: "rapadura" })).resultados as { path: string }[]).map((x) => x.path)).toEqual(["Loja/rapadura.log"]);
+  });
 });

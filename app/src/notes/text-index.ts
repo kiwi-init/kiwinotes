@@ -17,7 +17,7 @@ import path from "node:path";
 import { isSecretFile, textNoteTitle } from "../agent/tools/reader.ts";
 import { isEditableText, MAX_VIEW_TEXT_BYTES } from "../shared/file-view.ts";
 import { parseQuery } from "../shared/query.ts";
-import { fold } from "../store/text.ts";
+import { fold, foldWithMap } from "../store/text.ts";
 import { inside } from "./paths.ts";
 import type { VaultFile } from "./vault.ts";
 
@@ -33,6 +33,13 @@ const SCHEMA = 2;
 const BATCH = 40;
 /** O cache de páginas do SQLite, em KB (o padrão é 2 MB por conexão; aqui 512 KB). */
 const CACHE_KB = 512;
+/**
+ * O que uma busca lê do disco para conferir os candidatos (revisão do T21240, como o #524 pôs na busca antiga dos
+ * `.txt`): no total e por arquivo. Passado um deles, o candidato vem só pelo índice: aproximado, sem trecho nem linha.
+ * Sem isso, 80 logs de 4,8 MB davam meio segundo e +230 MB a cada tecla.
+ */
+export const SEARCH_READ_TOTAL = 4 * 1024 * 1024;
+export const SEARCH_READ_FILE = 512 * 1024;
 
 export interface TextHit {
   path: string;
@@ -41,6 +48,8 @@ export interface TextHit {
   score: number;
   /** A linha do 1º termo achado, contada de 1. Sem ela (achou só pelo nome), o arquivo abre no começo. */
   line?: number;
+  /** Veio só pelo índice, sem ler o arquivo (passou do que a busca lê): as palavras estão nele, a frase não é conferida. */
+  approx?: boolean;
   file: { format: string; size: number; mtime: string };
 }
 
@@ -53,6 +62,9 @@ export interface TextIndexOptions {
   maxBytes?: number;
   /** A pausa entre os lotes (nos testes, nenhuma). */
   pause?(): Promise<void>;
+  /** O que uma busca lê no total e por arquivo (testes usam menos). */
+  readTotal?: number;
+  readFile?: number;
 }
 
 interface FileRow {
@@ -75,17 +87,25 @@ function decode(b: Uint8Array): string {
   }
 }
 
-/** A linha (de 1) e o trecho em volta do 1º termo que aparece numa linha, sem diferenciar maiúscula nem acento. */
+/**
+ * A linha (de 1) e o trecho em volta do 1º termo que aparece numa linha, sem diferenciar maiúscula nem acento. A posição
+ * vem do mesmo texto que o trecho corta (os espaços já juntados), pelo mapa da dobra: numa linha com recuo ou com
+ * espaços no meio, o trecho não se perde (revisão do T21240).
+ */
 export function lineOf(text: string, terms: readonly string[]): { line: number; snippet: string } | null {
   const lines = text.split(/\r?\n/);
   for (const t of terms) {
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i]!;
-      const at = fold(raw).indexOf(t);
-      if (at < 0) continue;
+      if (!fold(raw).includes(t)) continue;
       const flat = raw.replace(/\s+/g, " ");
+      const { folded, map } = foldWithMap(flat);
+      const k = folded.indexOf(t);
+      if (k < 0) continue;
+      const at = map[k] ?? 0;
+      const to = (map[k + t.length - 1] ?? at) + 1;
       const start = Math.max(0, at - 60);
-      const end = Math.min(flat.length, at + t.length + 100);
+      const end = Math.min(flat.length, to + 100);
       return { line: i + 1, snippet: `${start > 0 ? "…" : ""}${flat.slice(start, end).trim()}${end < flat.length ? "…" : ""}` };
     }
   }
@@ -102,6 +122,8 @@ export class TextIndex {
   private readonly pause: () => Promise<void>;
   /** O que a sessão fez (o teste da 2ª abertura e a medição). */
   readonly stats = { read: 0, nameOnly: 0, removed: 0, skipped: 0 };
+  /** Os bytes que a última busca leu do disco (o teste do orçamento). */
+  lastSearchBytes = 0;
 
   constructor(private readonly o: TextIndexOptions) {
     this.maxBytes = o.maxBytes ?? MAX_VIEW_TEXT_BYTES;
@@ -271,7 +293,9 @@ export class TextIndex {
     // O índice não guarda posições (`detail=column`): a "frase" entra palavra por palavra, e a conferência pede a frase.
     const tokens = [...new Set(terms.flatMap((t) => t.split(/[^\p{L}\p{N}]+/u)).filter(Boolean))];
     if (!tokens.length) return [];
-    const match = tokens.map((t) => `{name text}: ${quote(t)}${/^\d+$/.test(t) ? "" : "*"}`).join(" AND ");
+    // O `-palavra` também vai ao índice, para o candidato aproximado (que não é lido) já vir sem ela.
+    const not = [...new Set(q.notText.map((t) => t.split(/[^\p{L}\p{N}]+/u).filter(Boolean)).filter((w) => w.length === 1).map((w) => w[0]!))];
+    const match = tokens.map((t) => `{name text}: ${quote(t)}${/^\d+$/.test(t) ? "" : "*"}`).join(" AND ") + not.map((t) => ` NOT {name text}: ${quote(t)}`).join("");
     let rows: { path: string; nameOnly: number; rank: number }[];
     try {
       rows = db
@@ -281,6 +305,9 @@ export class TextIndex {
       return [];
     }
     const out: TextHit[] = [];
+    let budget = this.o.readTotal ?? SEARCH_READ_TOTAL;
+    const perFile = this.o.readFile ?? SEARCH_READ_FILE;
+    this.lastSearchBytes = 0;
     for (const r of rows) {
       if (out.length >= limit) break;
       const where = fold(r.path);
@@ -288,27 +315,30 @@ export class TextIndex {
       if (q.notPaths.some((p) => where.startsWith(`${p}/`) || where === p)) continue;
       const f = stat(r.path);
       if (!f) continue; // saiu e o aviso ainda não chegou
+      const hit = { path: r.path, title: textNoteTitle(r.path), score: -r.rank, file: { format: formatOf(r.path), size: f.size, mtime: f.mtime } };
+      // Passou do que a busca lê: vem pelo índice só, aproximado (o FTS já tem todas as palavras e nenhuma do `-`).
+      if (!r.nameOnly && (f.size > perFile || f.size > budget)) {
+        out.push({ ...hit, snippet: "", approx: true });
+        continue;
+      }
       // O texto vem do disco (o índice só tem as palavras); o arquivo grande demais ou binário fica só pelo nome.
-      const raw = r.nameOnly ? "" : await this.readText(r.path);
+      const raw = r.nameOnly ? "" : await this.readText(r.path, perFile);
+      if (!r.nameOnly) {
+        budget -= f.size;
+        this.lastSearchBytes += f.size;
+      }
       if (raw === null) continue;
       const body = fold(raw).replace(/\s+/g, " ");
       if (q.notText.some((t) => body.includes(t))) continue;
       if (!terms.every((t) => body.includes(t) || where.includes(t))) continue;
       const at = raw ? lineOf(raw, terms) : null;
-      out.push({
-        path: r.path,
-        title: textNoteTitle(r.path),
-        snippet: at?.snippet ?? "",
-        score: -r.rank,
-        ...(at ? { line: at.line } : {}),
-        file: { format: formatOf(r.path), size: f.size, mtime: f.mtime },
-      });
+      out.push({ ...hit, snippet: at?.snippet ?? "", ...(at ? { line: at.line } : {}) });
     }
     return out;
   }
 
   /** O texto de um arquivo indexado, para a busca conferir; `null` se sumiu ou saiu da pasta por um link. */
-  private async readText(rel: string): Promise<string | null> {
+  private async readText(rel: string, max: number): Promise<string | null> {
     let abs: string;
     try {
       abs = inside(this.o.root, rel);
@@ -317,7 +347,7 @@ export class TextIndex {
     }
     const bytes = await readFile(abs).catch(() => undefined);
     if (bytes === undefined) return null;
-    return bytes.byteLength <= this.maxBytes && !looksBinary(bytes) ? decode(bytes) : "";
+    return bytes.byteLength <= Math.min(max, this.maxBytes) && !looksBinary(bytes) ? decode(bytes) : "";
   }
 
   /** Fecha o banco (a pasta saiu de cena). */

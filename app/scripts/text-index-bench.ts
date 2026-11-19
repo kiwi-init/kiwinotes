@@ -1,7 +1,7 @@
 // A busca no texto dos arquivos com 2.000 arquivos inventados (T21240, spec #21165): quanto a primeira indexação leva, a
 // RAM do principal pelo `cli mem` (o medidor do #149: antes, o pico e depois), o tempo de uma busca, o tamanho do índice
 // em disco e a 2ª abertura (que não lê de novo o que não mudou). Tudo num tmp, num app sem tela que o script abre e
-// fecha. Pegue o bench antes, como manda o AGENTS.md:
+// fecha. E o orçamento da busca: 60 logs de 4,8 MB com uma palavra comum, o tempo e o RSS. Pegue o bench antes, como manda o AGENTS.md:
 //
 //   kiwi lock bench --ttl 10m && bun scripts/text-index-bench.ts [--out arquivo.json]; kiwi unlock bench
 //
@@ -134,10 +134,47 @@ async function direct(root: string, dir: string) {
   return { seconds, ...stats };
 }
 
+/**
+ * O orçamento da busca (revisão do T21240): 60 logs de 4,8 MB com uma palavra comum. A busca não pode ler todos a cada
+ * tecla: medimos o tempo e o RSS deste processo em 10 buscas.
+ */
+async function heavy(base: string) {
+  const root = path.join(base, "pesados");
+  mkdirSync(root, { recursive: true });
+  const line = "2026-11-01T10:00:00 info pedido de exemplo processado\n";
+  const text = line.repeat(Math.floor((4.8 * 1024 * 1024) / line.length));
+  const files: VaultFile[] = [];
+  for (let i = 0; i < 60; i++) {
+    const rel = `log-${i}.log`;
+    writeFileSync(path.join(root, rel), text);
+    const st = statSync(path.join(root, rel));
+    files.push({ path: rel, size: st.size, mtime: st.mtime.toISOString() });
+  }
+  const t = new TextIndex({ root, dir: path.join(base, "pesados-indice"), pause: async () => {} });
+  await t.sync(files);
+  const info = (rel: string) => files.find((f) => f.path === rel);
+  Bun.gc(true);
+  const rss0 = process.memoryUsage().rss;
+  const times: number[] = [];
+  let read = 0;
+  for (let i = 0; i < 10; i++) {
+    const t0 = performance.now();
+    await t.search(i % 2 ? "pedido" : '"pedido cancelado"', 20, info);
+    times.push(performance.now() - t0);
+    read = Math.max(read, t.lastSearchBytes);
+  }
+  const rss1 = process.memoryUsage().rss;
+  await t.close();
+  rmSync(root, { recursive: true, force: true });
+  times.sort((a, b) => a - b);
+  return { files: 60, fileMB: 4.8, searchMs: { median: Math.round(times[5]!), max: Math.round(times[9]!) }, maxReadMB: MB(read), rssDeltaMB: MB(rss1 - rss0) };
+}
+
 const data = mkdtempSync(path.join(tmpdir(), "kn-text-index-"));
 try {
   const made = vault(path.join(data, "vault"));
   const inProcess = await direct(path.join(data, "vault"), path.join(data, "direto"));
+  const bigFiles = await heavy(data);
   let app = await open(data);
   await Bun.sleep(1000);
   const before = await app.mem();
@@ -181,6 +218,7 @@ try {
     searchMs: { median: Math.round(times[10]!), p95: Math.round(times[18]!), max: Math.round(times[19]!) },
     indexDiskMB: MB(disk),
     reopenSeconds: second,
+    bigFiles,
     mainMB: { before: MB(before.main.now), peak: MB(peak.main.peak), after: MB(after.main.now), heapAfter: MB(after.main.heapUsed), reopenPeak: MB(reopenPeak.main.peak) },
     tookMs: ms(t0),
   };
