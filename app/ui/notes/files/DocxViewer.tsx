@@ -23,7 +23,7 @@ export function DocxViewer({ path, file }: FileViewerProps) {
   const [zoom, setZoom] = useState<number | null>(() => recallZoom(path));
   useEffect(() => setZoom(recallZoom(path)), [path]);
   const z = zoom ?? 1;
-  useViewerZoom({ path, target: scroller, scale: z, set: setZoom, min: 0.5, max: 3, enabled: state.kind === "ready" });
+  useViewerZoom({ path, target: scroller, scale: z, set: setZoom, min: 0.5, max: 3, anchor: ".kn-file-docx-page", enabled: state.kind === "ready" });
 
   useEffect(() => {
     let alive = true;

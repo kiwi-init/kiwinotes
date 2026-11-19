@@ -190,8 +190,8 @@ const CASES: Case[] = [
   { file: "Docs/exemplo.ts", area: ".kn-file-text-editor .cm-scroller", under: ".cm-line", at: [0.3, 0.5], axis: "y", ready: ".cm-line" },
 ];
 
-/** Quanto o ponto pode andar dentro do elemento (fração): a tolerância do arredondamento e da margem que não cresce. */
-const DRIFT = 0.08;
+/** Quanto o ponto embaixo dos dedos pode andar, em px da tela: só o arredondamento. */
+const DRIFT_PX = 3;
 /** O vídeo do PR: a pinça devagar, para ver. */
 const video = process.env.VIDEO ? join(out, "video") : undefined;
 
@@ -217,8 +217,9 @@ try {
       const grow = c.axis === "y" ? b1.h / b0.h : b1.w / b0.w;
       assert.ok(grow > 1.6 && grow < 2.4, `${c.file}: a pinça para 2× cresceu ${grow.toFixed(2)}×`);
       // Centrada nos dedos: o ponto cai no mesmo elemento, quase no mesmo lugar dele.
-      const drift = Math.max(c.axis === "y" ? 0 : Math.abs(b1.fx - b0.fx) * (b0.w / Math.max(b0.w, 40)), Math.abs(b1.fy - b0.fy));
-      assert.ok(b1.fx >= -0.05 && b1.fx <= 1.05 && b1.fy >= -0.05 && b1.fy <= 1.05 && drift < DRIFT, `${c.file}: o ponto saiu de baixo dos dedos (${JSON.stringify({ b0, b1 })})`);
+      // Onde o ponto do elemento que estava embaixo dos dedos foi parar, em px da tela.
+      const drift = Math.max(c.axis === "y" ? 0 : Math.abs(b1.fx - b0.fx) * b1.w, Math.abs(b1.fy - b0.fy) * b1.h);
+      assert.ok(drift <= DRIFT_PX, `${c.file}: o ponto andou ${drift.toFixed(1)} px de baixo dos dedos (${JSON.stringify({ b0, b1 })})`);
       await p.screenshot({ path: join(out, `${c.file.split("/").at(-1)!.replace(/\W/g, "-")}-pinca.png`) });
       // Fechar os dedos volta (a pinça dos outros navegadores, pela roda com ctrl).
       await ctrlWheel(p, c.area, at, 100 * Math.log(2));
@@ -239,7 +240,30 @@ try {
       const size = (x: Probe | null) => (x ? (c.axis === "y" ? x.h : x.w) : 0);
       assert.ok(size(k2) > size(b0) * 1.1, `${c.file}: ⌘+ não aumentou`);
       assert.ok(k0 && Math.abs(size(k0) / size(b0) - 1) < 0.08, `${c.file}: ⌘0 não voltou (${size(k0)} vs ${size(b0)})`);
-      report.push(`ok     ${c.file}: pinça 2× (${grow.toFixed(2)}×, o ponto andou ${(drift * 100).toFixed(1)}% do elemento), ctrl+roda volta, ⌘+ ⌘− ⌘0`);
+      // A imagem começa no ajuste à janela, com sobra dos lados. Fechar a pinça abaixo do ajuste: ela volta ao meio da
+      // área (como no Preview), e abrir de novo, já no canto, deixa o ponto embaixo dos dedos.
+      if (c.file.endsWith(".svg")) {
+        const center = async () => {
+          const area = (await p.locator(c.area).first().boundingBox())!;
+          const img = (await p.locator(c.under).first().boundingBox())!;
+          return { dx: img.x + img.width / 2 - (area.x + area.width / 2), w: img.width, side: img.x - area.x };
+        };
+        const fit = await center();
+        assert.ok(fit.side > 40, `${c.file}: no ajuste, a imagem tem sobra dos lados (${fit.side.toFixed(0)} px)`);
+        await pinch(p, c.area, at, 0.6);
+        const small = await center();
+        assert.ok(small.w < fit.w * 0.7 && Math.abs(small.dx) <= DRIFT_PX, `${c.file}: abaixo do ajuste, a imagem no meio (${JSON.stringify(small)})`);
+        await p.keyboard.press("Meta+Digit0");
+        await p.waitForTimeout(300);
+        const s0 = await probe(p, at, c.under);
+        // 2×: com 1,7×, a imagem sobra pouco da área, e a rolagem acaba antes (o ponto não tem para onde ir, como no Preview).
+        await pinch(p, c.area, at, 2);
+        const s1 = await again(p, at, c.under, s0);
+        const fromFit = Math.max(Math.abs(s1.fx - s0.fx) * s1.w, Math.abs(s1.fy - s0.fy) * s1.h);
+        assert.ok(fromFit <= DRIFT_PX, `${c.file}: do ajuste (centrada) para o zoom, o ponto andou ${fromFit.toFixed(1)} px`);
+        report.push(`ok     ${c.file}: do ajuste centrado, o ponto andou ${fromFit.toFixed(1)} px; abaixo do ajuste, a imagem volta ao meio`);
+      }
+      report.push(`ok     ${c.file}: pinça 2× (${grow.toFixed(2)}×, o ponto andou ${drift.toFixed(1)} px), ctrl+roda volta, ⌘+ ⌘− ⌘0`);
     } catch (e) {
       failed = true;
       report.push(`FALHOU ${c.file}: ${(e as Error).message}`);

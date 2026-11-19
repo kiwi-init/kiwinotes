@@ -12,6 +12,13 @@ interface GestureLike extends UIEvent {
   clientY: number;
 }
 
+/** Um ponto preso num elemento que cresce: `u` e `v` são a fração da largura e da altura dele. */
+interface Hold {
+  el: HTMLElement;
+  u: number;
+  v: number;
+}
+
 export interface ViewerZoom {
   /** O arquivo: o zoom fica guardado por ele enquanto o app está aberto. */
   path: string;
@@ -26,6 +33,12 @@ export interface ViewerZoom {
   /** A margem do lugar que rola que não cresce com o zoom (o `padding`). */
   pad?: Point;
   /**
+   * O que cresce com o zoom (a folha do pdf, a imagem), num seletor dentro do `target`. Com ele, o ponto embaixo dos
+   * dedos é medido nesse elemento, antes e depois: vale com o conteúdo centrado, com a sobra dos lados e com a troca de
+   * centrado para o canto. Sem ele, a conta usa o `pad`.
+   */
+  anchor?: string;
+  /**
    * Quando o zoom muda o tamanho de outra forma (a letra do CodeMirror): quem mede de novo e deixa parado o ponto `at`.
    * Devolve `true` se já cuidou da rolagem.
    */
@@ -38,11 +51,13 @@ export interface ViewerZoom {
  * Liga o zoom. Devolve `zoomBy(factor, at)`, para os botões dos visualizadores darem o mesmo zoom que a pinça (o `at`
  * no meio da área, sem ele).
  */
-export function useViewerZoom({ path, target, scale, set, min, max, pad, onApplied, enabled = true }: ViewerZoom) {
+export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor, onApplied, enabled = true }: ViewerZoom) {
   const live = useRef({ scale, set, min, max, path });
   live.current = { scale, set, min, max, path };
   /** O zoom pedido que ainda não chegou à tela, com o ponto que fica parado. */
-  const pending = useRef<{ at: Point; from: number; to: number; scroll: Scroll } | null>(null);
+  const pending = useRef<{ at: Point; from: number; to: number; scroll: Scroll; on?: Hold } | null>(null);
+  /** O elemento embaixo dos dedos e onde nele (em fração), guardado durante a pinça: os passos não somam erro. */
+  const held = useRef<(Hold & { at: Point; t: number }) | null>(null);
   /** Os fatores da pinça juntados num quadro: um render por quadro, e não um por evento. */
   const frame = useRef<{ id: number; factor: number; at: Point } | null>(null);
   /**
@@ -56,6 +71,32 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, onAppli
     return el ? { x: el.clientWidth / 2, y: el.clientHeight / 2 } : { x: 0, y: 0 };
   }, [target]);
 
+  /** O elemento do `anchor` embaixo do ponto (ou o mais perto dele), e onde o ponto cai nele. */
+  const hold = (el: HTMLElement, sel: string, at: Point): Hold | undefined => {
+    const now = performance.now();
+    const h = held.current;
+    if (h && now - h.t < 400 && Math.abs(h.at.x - at.x) < 2 && Math.abs(h.at.y - at.y) < 2 && h.el.isConnected) {
+      h.t = now;
+      return h;
+    }
+    const box = el.getBoundingClientRect();
+    const x = box.left + at.x;
+    const y = box.top + at.y;
+    let best: HTMLElement | undefined;
+    let dist = Infinity;
+    for (const c of el.querySelectorAll<HTMLElement>(sel)) {
+      const r = c.getBoundingClientRect();
+      const d = Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom));
+      if (d < dist) [best, dist] = [c, d];
+      if (d === 0) break;
+    }
+    if (!best) return undefined;
+    const r = best.getBoundingClientRect();
+    const next = { el: best, u: r.width ? (x - r.left) / r.width : 0.5, v: r.height ? (y - r.top) / r.height : 0.5, at, t: now };
+    held.current = next;
+    return next;
+  };
+
   const zoomTo = useCallback(
     (next: number | null, at: Point = middle()) => {
       const el = target.current;
@@ -68,12 +109,12 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, onAppli
         // Só o arredondamento: a rolagem que o navegador cortou (no começo ou no fim) fica como está.
         if (w && near(scroll.left, w.got.left) && Math.abs(w.want.left - w.got.left) < 1) scroll.left = w.want.left;
         if (w && near(scroll.top, w.got.top) && Math.abs(w.want.top - w.got.top) < 1) scroll.top = w.want.top;
-        pending.current = { at, from, to, scroll };
+        pending.current = { at, from, to, scroll, on: anchor ? hold(el, anchor, at) : undefined };
       }
       rememberZoom(file, to);
       apply(to);
     },
-    [middle, target],
+    [middle, target, anchor],
   );
 
   const zoomBy = useCallback((factor: number, at?: Point) => zoomTo(live.current.scale * factor, at), [zoomTo]);
@@ -86,6 +127,15 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, onAppli
     if (Math.abs(scale - p.to) > 1e-4) return;
     pending.current = null;
     if (onApplied?.(p)) return;
+    if (p.on) {
+      // Onde o ponto do elemento foi parar, e a rolagem que o põe de volta embaixo dos dedos.
+      const box = el.getBoundingClientRect();
+      const r = p.on.el.getBoundingClientRect();
+      el.scrollLeft += r.left + p.on.u * r.width - (box.left + p.at.x);
+      el.scrollTop += r.top + p.on.v * r.height - (box.top + p.at.y);
+      wrote.current = null;
+      return;
+    }
     const to = anchorScroll(p.scroll, p.at, p.from, p.to, pad);
     el.scrollLeft = to.left;
     el.scrollTop = to.top;
@@ -118,6 +168,7 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, onAppli
     let gesture = false;
     const start = (e: Event) => {
       e.preventDefault();
+      held.current = null;
       gesture = true;
       last = 1;
     };
@@ -162,6 +213,7 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, onAppli
       if (!command) return;
       e.preventDefault();
       const { scale: now, min: lo, max: hi } = live.current;
+      held.current = null;
       if (command === "reset") zoomTo(null);
       else zoomTo(stepZoom(now, command === "in" ? 1 : -1, lo, hi));
     };

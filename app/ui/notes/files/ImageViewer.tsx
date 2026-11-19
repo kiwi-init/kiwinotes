@@ -41,7 +41,7 @@ export function ImageViewer({ path, file }: FileViewerProps) {
   const size = natural ?? (info?.width && info.height ? { width: info.width, height: info.height } : null);
   const fit = size ? fitScale(size.width, size.height, area.width, area.height) : 1;
   const scale = zoom ?? fit;
-  const { zoomTo } = useViewerZoom({ path, target: box, scale, set: setZoom, min: IMAGE_ZOOM[0], max: IMAGE_ZOOM.at(-1)!, pad: PAD, enabled: !problem && !failed && !!info });
+  const { zoomTo } = useViewerZoom({ path, target: box, scale, set: setZoom, min: IMAGE_ZOOM[0], max: IMAGE_ZOOM.at(-1)!, pad: PAD, anchor: ".kn-file-image-img", enabled: !problem && !failed && !!info });
 
   if (problem || failed || !info) {
     return (

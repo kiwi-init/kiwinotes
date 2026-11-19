@@ -110,7 +110,7 @@ export function PdfViewer({ path, file }: FileViewerProps) {
   const widest = useMemo(() => sizes.reduce((w, s) => Math.max(w, s.width), 0), [sizes]);
   const scale = zoom ?? Math.min(FIT_MAX, fitWidth(widest, width - GUTTER * 2));
   // A pinça e o ⌘+/⌘−/⌘0 (T21238): o ponto embaixo dos dedos fica parado; o `padding` da rolagem não cresce.
-  const { zoomTo } = useViewerZoom({ path, target: scroller, scale, set: setZoom, min: ZOOM_STEPS[0], max: ZOOM_STEPS.at(-1)!, pad: { x: GUTTER, y: GUTTER }, enabled: !!doc });
+  const { zoomTo } = useViewerZoom({ path, target: scroller, scale, set: setZoom, min: ZOOM_STEPS[0], max: ZOOM_STEPS.at(-1)!, pad: { x: GUTTER, y: GUTTER }, anchor: ".kn-file-pdf-sheet", enabled: !!doc });
 
   // A página que está na tela, pela rolagem.
   const tops = useMemo(() => {
