@@ -14,8 +14,11 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 /** As abas, na ordem do arquivo. */
 export const ABAS = ["Pedidos", "Resumo", "Observações"];
 
-/** A edição pela grade no xlsx: a quantidade de cadernos (B3, na aba Pedidos) passa de 10 para 12. */
-export const EDICAO_XLSX = { aba: "Pedidos", linha: 2, coluna: 1, antes: 10, depois: 12 };
+/**
+ * A edição pela grade no xlsx: o preço do caderno (C3, na aba Pedidos, com o formato de moeda) passa de 18,50 para 20.
+ * Uma célula com estilo: o gravador que perde o estilo do que a pessoa editou não passa.
+ */
+export const EDICAO_XLSX = { aba: "Pedidos", linha: 2, coluna: 2, antes: 18.5, depois: 20 };
 
 /** O xlsx difícil. */
 export function xlsxDificil(): Uint8Array {

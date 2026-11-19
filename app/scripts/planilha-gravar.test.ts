@@ -124,8 +124,8 @@ describe.skipIf(!hasWebkit)("a planilha gravada reabre no Kiwi e por outra bibli
     if (dist) rmSync(dist, { recursive: true, force: true });
   });
 
-  // O que a edição muda: a quantidade, o total da linha, a soma das quantidades, a soma dos totais e o total do Resumo.
-  const MUDA = ["Pedidos!B3.v", "Pedidos!B6.v", "Pedidos!D3.v", "Pedidos!D6.v", "Resumo!B1.v"];
+  // O que a edição muda: o preço (com o formato de moeda igual), o total da linha, a soma dos totais e o total do Resumo.
+  const MUDA = ["Pedidos!C3.v", "Pedidos!D3.v", "Pedidos!D6.v", "Resumo!B1.v"];
 
   describe("o xlsx", () => {
     test("o inventado é difícil: três abas, fórmulas (uma de outra aba), moeda, data e mesclagem; as duas bibliotecas o leem igual", () => {
@@ -142,10 +142,10 @@ describe.skipIf(!hasWebkit)("a planilha gravada reabre no Kiwi e por outra bibli
       const a = pelaSegunda(ARQUIVOS["pedidos.xlsx"]!);
       const b = pelaSegunda(gravado["pedidos.xlsx"]!);
       expect(diferencas(a, b)).toEqual(MUDA);
-      expect(b.celulas["Pedidos!B3"]!.v).toBe(EDICAO_XLSX.depois);
-      expect(b.celulas["Pedidos!D3"]).toEqual({ v: 222, f: "B3*C3", z: a.celulas["Pedidos!D3"]!.z! });
-      expect(b.celulas["Pedidos!D6"]!.v).toBe(309);
-      expect(b.celulas["Resumo!B1"]).toEqual({ v: 309, f: "Pedidos!D6", z: a.celulas["Resumo!B1"]!.z! });
+      expect(b.celulas["Pedidos!C3"]).toEqual({ v: EDICAO_XLSX.depois, z: a.celulas["Pedidos!C3"]!.z! });
+      expect(b.celulas["Pedidos!D3"]).toEqual({ v: 200, f: "B3*C3", z: a.celulas["Pedidos!D3"]!.z! });
+      expect(b.celulas["Pedidos!D6"]!.v).toBe(287);
+      expect(b.celulas["Resumo!B1"]).toEqual({ v: 287, f: "Pedidos!D6", z: a.celulas["Resumo!B1"]!.z! });
     });
 
     test("pelo leitor do Kiwi: o mesmo, e as duas bibliotecas leem o gravado igual", () => {
@@ -162,9 +162,9 @@ describe.skipIf(!hasWebkit)("a planilha gravada reabre no Kiwi e por outra bibli
         // O print do PR: `PLANILHA_PRINT=<arquivo.png>`.
         if (process.env.PLANILHA_PRINT) await page.screenshot({ path: process.env.PLANILHA_PRINT });
         const rows = await screen(page);
-        expect(rows[2]![EDICAO_XLSX.coluna]).toBe(String(EDICAO_XLSX.depois));
-        expect(rows[2]!.join(" ")).toContain("222");
-        expect(rows[5]!.join(" ")).toContain("309");
+        expect(rows[2]![EDICAO_XLSX.coluna]).toMatch(/R\$ ?20[.,]00/);
+        expect(rows[2]!.join(" ")).toMatch(/R\$ ?200[.,]00/);
+        expect(rows[5]!.join(" ")).toMatch(/R\$ ?287[.,]00/);
         expect(await page.locator(".kn-file-sheet [role='tab']").allTextContents()).toEqual(ABAS);
       } finally {
         await page.close();
