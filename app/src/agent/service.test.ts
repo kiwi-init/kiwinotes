@@ -1332,24 +1332,45 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect((fresh.at(-1) as { text: string }).text).toContain("O prazo do Kiwi é março.");
   });
 
-  test("as trilhas (T14682): o faro errou e o agente achou a nota; no próximo pedido, ela sobe; apagada, não", async () => {
-    const m = make({ reader: memoryReader(NOTES) });
+  test("as trilhas (T14682, T21325): o faro errou e o agente achou a nota; na segunda vez ela aprende, na terceira sobe; apagada, não", async () => {
+    const notas = { "Projetos/Kiwi.md": "# Kiwi\n\nO cronograma do lançamento fica para março.\n", "Ideias.md": "gatos" };
+    const m = make({ reader: memoryReader(notas) });
     await readyNow(m);
-    await askAndWait(m, "o que tem sobre março?");
+    await askAndWait(m, "na verdade, como anda o cronograma do lançamento?");
     expect(m.svc.usageView().placar!.ultimos[0]!.faro).toMatchObject({ kind: "nada", searched: true });
+    // A primeira vez fica aprendendo: o enchimento ("verdade") nem entra, e a trilha não casa.
     const [t] = m.svc.trails().trilhas;
-    expect(t).toMatchObject({ palavras: ["março"], path: "Projetos/Kiwi.md", titulo: "Kiwi", vezes: 1 });
+    expect(t).toMatchObject({ palavras: ["cronograma", "lançamento"], path: "Projetos/Kiwi.md", titulo: "Kiwi", vezes: 1, aprendendo: true });
     // O arquivo é só do Mac, 0600.
     expect(statSync(path.join(agentDir(m.data), "trilhas.json")).mode & 0o777).toBe(0o600);
     m.svc.newConversation();
-    await askAndWait(m, "e março, como fica?");
+    await askAndWait(m, "beleza, e o cronograma do lançamento?");
+    expect(m.svc.usageView().placar!.ultimos[0]!.faro).toMatchObject({ kind: "nada" });
+    expect(m.svc.trails().trilhas[0]).toMatchObject({ palavras: ["cronograma", "lançamento"], vezes: 2 });
+    expect(m.svc.trails().trilhas[0]!.aprendendo).toBeUndefined();
+    m.svc.newConversation();
+    await askAndWait(m, "realmente, o cronograma do lançamento, como fica?");
     expect(m.svc.usageView().placar!.ultimos[0]!.faro).toMatchObject({ kind: "certo", how: "trilha" });
     // A trilha que acertou conta mais uma vez.
-    expect(m.svc.trails().trilhas[0]!.vezes).toBe(2);
+    expect(m.svc.trails().trilhas[0]!.vezes).toBe(3);
     expect(m.svc.trailDelete(t!.id).trilhas).toEqual([]);
     m.svc.newConversation();
-    await askAndWait(m, "e março, como fica?");
+    await askAndWait(m, "e o cronograma do lançamento, como fica?");
     expect(m.svc.usageView().placar!.ultimos[0]!.faro).toMatchObject({ kind: "nada" });
+  });
+
+  test("as trilhas pela pasta da maioria (T21325): o agente leu notas de pastas diferentes, e a trilha vai para a pasta com mais delas", async () => {
+    const notas = { "Ideias.md": "gatos", "Horta Norte/Plantio.md": "canteiro", "Horta Norte/Colheita.md": "canteiro", "Horta Sul/Plantio.md": "x" };
+    const m = make({ reader: memoryReader(notas) });
+    await readyNow(m);
+    const ler = (p: string) => `\n/tool notes_read ${JSON.stringify({ path: p })}`;
+    await askAndWait(m, `na verdade, e o norte?${ler("Ideias.md")}${ler("Horta Norte/Colheita.md")}${ler("Horta Norte/Plantio.md")}`);
+    const [t] = m.svc.trails().trilhas;
+    // A primeira lida na pasta da maioria. O "norte" está no nome da pasta: vale na hora. (As linhas `/tool` do agente
+    // falso fazem parte do pedido, e as palavras do caminho entram junto.)
+    expect(t).toMatchObject({ path: "Horta Norte/Colheita.md", vezes: 1 });
+    expect(t!.palavras).toContain("norte");
+    expect(t!.aprendendo).toBeUndefined();
   });
 
   test("as trilhas pela leitura de uma seção (T14682): o faro certo não aprende; o errado aprende o caminho da nota", async () => {

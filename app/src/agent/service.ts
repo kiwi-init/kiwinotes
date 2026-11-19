@@ -60,7 +60,11 @@ import type {
 } from "../shared/ui-contract.ts";
 import { type BubbleLinkResolver, findBubbleLinks } from "./bubble-links.ts";
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
-import { TrilhaStore, trilhasDaPasta } from "./trilhas.ts";
+import { aprendendo, type LugarDaNota, notaDaMaioria, palavrasDoPedido, TrilhaStore, trilhasDaPasta } from "./trilhas.ts";
+
+/** Uma palavra está em muitas notas (T21325) a partir de tantas, e de tal parte do cofre. */
+const MUITAS_MIN = 3;
+const MUITAS_PARTE = 0.1;
 import { type LimitSnapshot, UsageStore } from "./usage-store.ts";
 import { faroDoPlacar, PlacarTurno } from "./placar.ts";
 import { RegistroEntrega } from "./entrega.ts";
@@ -392,8 +396,11 @@ export class AgentService {
   private placar: PlacarTurno | null = null;
   /** O que o faro achou no pedido de agora (o "nada" também), para o placar. */
   private turnFaro: FaroResult | null = null;
-  /** A primeira nota que o agente leu no pedido (T14682): se o faro não a deu, as palavras do pedido viram trilha. */
-  private turnRead: string | null = null;
+  /**
+   * As notas que o agente leu no pedido, na ordem (T14682, T21325): se o faro não deu a nota, as palavras do pedido
+   * viram trilha para a primeira lida na pasta da maioria.
+   */
+  private turnReads: string[] = [];
   /** A pasta de notas aberta no pedido de agora (T16650): a trilha aprendida é dela, e o faro só segue as dela. */
   private turnPasta: string | null = null;
   private readonly trilhas: TrilhaStore;
@@ -802,7 +809,7 @@ export class AgentService {
     // O resultado fica na conversa da janela (T13835), certo ou com erro.
     if (e.chars !== undefined) this.turnToolTokens += modelTokensOfChars(e.chars);
     if (e.chars !== undefined) this.placar?.resultado(e.tool, e.ok, modelTokensOfChars(e.chars));
-    if (e.ok && e.notePath && this.placar && !this.turnRead) this.turnRead = e.notePath;
+    if (e.ok && e.notePath && this.placar && !this.turnReads.includes(e.notePath)) this.turnReads.push(e.notePath);
     if (e.ok) {
       const id = this.activityId();
       const done = e.change
@@ -1992,7 +1999,7 @@ export class AgentService {
       // O faro e o pacote (ADR 0013 peças 1 e 2): o que o pedido cita vai junto, e o agente não precisa procurar. Um erro
       // aqui não derruba o pedido: ele vai sem o pacote.
       this.turnFaro = null;
-      this.turnRead = null;
+      this.turnReads = [];
       const pkg = await this.faroPackage(text).catch((err) => {
         this.d.log?.(`[agent] faro: ${String((err as Error)?.message ?? err)}`);
         return null;
@@ -2056,7 +2063,7 @@ export class AgentService {
         this.safely(() => this.usage.record(turn.id, decided.text, answer.usage!, placar));
         this.emitUsage();
       }
-      if (answer.stopReason !== "cancelled" && !turn.cancelled && !isRoutinePrompt(text)) this.safely(() => this.learnTrail(decided.text));
+      if (answer.stopReason !== "cancelled" && !turn.cancelled && !isRoutinePrompt(text)) await this.learnTrail(decided.text).catch((err) => this.d.log?.(`[agent] trilha: ${String((err as Error)?.message ?? err)}`));
       const links = answer.stopReason === "cancelled" ? undefined : await this.bubbleLinks(answer.text);
       this.emitTurn({ id: turn.id, type: "done", stopReason: answer.stopReason, text: answer.text, ...(links ? { links } : {}) });
       succeeded = answer.stopReason !== "cancelled" && !turn.cancelled;
@@ -2130,11 +2137,12 @@ export class AgentService {
 
   /**
    * As trilhas (ADR 0013 decisão 4, T14682): o agente leu uma nota que o faro não deu como certa. As palavras do pedido
-   * (já pelo filtro de segredos) passam a levar a ela. Só a primeira nota lida, e nunca num comando ("/usage").
+   * (já pelo filtro de segredos) passam a levar a ela. Nunca num comando ("/usage"). Leu várias: a pasta da maioria
+   * conta, e nela a primeira nota lida (T21325).
    */
-  private learnTrail(request: string): void {
-    const read = this.turnRead;
-    this.turnRead = null;
+  private async learnTrail(request: string): Promise<void> {
+    const read = notaDaMaioria(this.turnReads);
+    this.turnReads = [];
     if (!read || request.trimStart().startsWith("/")) return;
     const f = this.turnFaro;
     if (!f) return;
@@ -2144,14 +2152,53 @@ export class AgentService {
       // A trilha que acertou conta mais uma vez; o nome que acertou não precisa de trilha.
       if (f.hit.how === "apontado" || (same && f.hit.how !== "trilha")) return;
     }
-    const learned = this.trilhas.aprender(request, read, this.turnPasta);
+    const pasta = this.turnPasta;
+    const lugar = await this.lugarDaNota(read, request).catch(() => undefined);
+    const learned = this.trilhas.aprender(request, read, pasta, lugar);
     if (learned) this.d.log?.(`[agent] trilha: ${learned.vezes}× para a nota`);
   }
 
-  /** As trilhas, para Ajustes › Agente. */
+  /**
+   * Onde está a nota (T21325): o nome da pasta e o título, os vizinhos que dividem pedaços do nome (as pastas irmãs e
+   * as outras notas da pasta), e as palavras raras do pedido que aparecem em muitas notas.
+   */
+  private async lugarDaNota(nota: string, request: string): Promise<LugarDaNota | undefined> {
+    const reader = this.reader;
+    if (!reader) return undefined;
+    const list = await reader.list();
+    const pastaDe = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+    const base = (p: string) => p.slice(p.lastIndexOf("/") + 1);
+    const titulo = (p: string) => base(p).replace(/\.(md|txt)$/i, "");
+    const dir = pastaDe(nota);
+    const mae = pastaDe(dir);
+    const vizinhos = [
+      ...(dir ? list.folders.filter((f) => f !== dir && pastaDe(f) === mae).map(base) : []),
+      ...list.notes.filter((n) => n.path !== nota && pastaDe(n.path) === dir).map((n) => titulo(n.path)),
+    ];
+    // Uma palavra que aparece em muitas notas não diz qual delas é: pelo menos 3 e um décimo das notas.
+    const corte = Math.max(MUITAS_MIN, Math.ceil(list.notes.length * MUITAS_PARTE));
+    const muitas = new Set<string>();
+    const raras = palavrasDoPedido(request);
+    for (const [i, k] of raras.chaves.entries()) {
+      const w = raras.palavras[i]!;
+      const hits = await reader.search(w, Math.min(corte, 200)).catch(() => []);
+      if (hits.filter((h) => !h.approx && !h.semantic).length >= Math.min(corte, 200)) muitas.add(k);
+    }
+    return { nomes: [dir ? base(dir) : "", titulo(nota)], vizinhos, muitas };
+  }
+
+  /** As trilhas, para Ajustes › Agente: as que esperam a segunda vez vão com `aprendendo` e as palavras candidatas. */
   trails(): AgentTrailsView {
     return {
-      trilhas: this.trilhas.list().map((t) => ({ id: t.id, palavras: t.palavras, path: t.path, titulo: path.basename(t.path).replace(/\.(md|txt)$/i, ""), vezes: t.vezes, em: t.em })),
+      trilhas: this.trilhas.list().map((t) => ({
+        id: t.id,
+        palavras: aprendendo(t) ? (t.candidatas?.palavras ?? []) : t.palavras,
+        path: t.path,
+        titulo: path.basename(t.path).replace(/\.(md|txt)$/i, ""),
+        vezes: t.vezes,
+        em: t.em,
+        ...(aprendendo(t) ? { aprendendo: true } : {}),
+      })),
     };
   }
 

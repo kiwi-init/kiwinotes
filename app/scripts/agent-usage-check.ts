@@ -78,10 +78,10 @@ try {
   await invoke("agent.download");
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
   // Uma nota, para o faro achar pelo nome (o placar, T14671).
-  await invoke("notes.create", { folder: "Projetos", title: "Kiwi", content: "# Kiwi\n\n## Prazo\n\nO prazo do Kiwi é março.\n" });
+  await invoke("notes.create", { folder: "Projetos", title: "Kiwi", content: "# Kiwi\n\n## Prazo\n\nO prazo do Kiwi é março, pelo cronograma.\n" });
   // Três pedidos, de tamanhos diferentes: o gasto que o agente falso informa. O 1º, o faro acha; o 2º não cita nada; o
   // 3º, o faro não acha, e o agente busca e lê.
-  for (const text of ["Qual é o prazo do Kiwi?", `Resuma as reuniões da semana. ${"Com detalhes. ".repeat(80)}`, "o que tem sobre março?"]) {
+  for (const text of ["Qual é o prazo do Kiwi?", `Resuma as reuniões da semana. ${"Com detalhes. ".repeat(80)}`, "o que tem sobre o cronograma de março?"]) {
     await invoke("agent.ask", { text });
     await idle();
   }
@@ -114,17 +114,27 @@ try {
   await shot(p, placar, "1b-placar.png");
   report.checks.push("the scoreboard: today's requests, idas, tokens in five parts, the Bússola badge per request");
 
-  // 1c. As trilhas (T14682): no 3º pedido o faro não achou e o agente leu Projetos/Kiwi.md; numa conversa nova, as mesmas
-  // palavras sobem a nota pela trilha. A seção mostra a trilha, e o Apagar a tira.
+  // 1c. As trilhas (T14682, T21325): no 3º pedido o faro não achou e o agente leu Projetos/Kiwi.md; as palavras raras
+  // ficam "aprendendo". Numa conversa nova, as mesmas palavras levam à nota de novo e viram trilha; na terceira, a nota
+  // sobe pela trilha. A seção mostra a trilha, e o Apagar a tira.
   const trilhas = ".kn-section:has(h2:text-is('As trilhas'))";
+  const aprendendo = ".kn-section:has(h2:text-is('Aprendendo'))";
+  await p.waitForSelector(`${aprendendo} button:text-is('Apagar')`, { timeout: 15000 });
+  const atext = (await p.locator(aprendendo).textContent()) ?? "";
+  for (const want of ["cronograma · março", "leva a Kiwi (Projetos/Kiwi.md)", "1 vez"]) assert.ok(atext.includes(want), `aprendendo mostra "${want}": ${atext}`);
+  await shot(p, aprendendo, "1c-aprendendo.png");
+  await invoke("agent.newConversation");
+  await invoke("agent.ask", { text: "beleza, e o cronograma de março?" });
+  await idle();
   await p.waitForSelector(`${trilhas} button:text-is('Apagar')`, { timeout: 15000 });
   const ttext = (await p.locator(trilhas).textContent()) ?? "";
-  for (const want of ["março", "leva a Kiwi (Projetos/Kiwi.md)", "1 vez"]) assert.ok(ttext.includes(want), `as trilhas mostram "${want}": ${ttext}`);
+  for (const want of ["cronograma · março", "leva a Kiwi (Projetos/Kiwi.md)", "2 vezes"]) assert.ok(ttext.includes(want), `as trilhas mostram "${want}": ${ttext}`);
+  assert.ok(!ttext.includes("beleza"), `o enchimento não vira palavra-chave: ${ttext}`);
   await invoke("agent.newConversation");
-  await invoke("agent.ask", { text: "e março, como fica?" });
+  await invoke("agent.ask", { text: "e o cronograma de março, como fica?" });
   await idle();
   await p.waitForFunction(() => document.querySelector("[data-testid=placar]")?.textContent?.includes("achou · pela trilha"), undefined, { timeout: 15000 });
-  await p.waitForFunction(() => [...document.querySelectorAll(".kn-section")].find((s) => s.querySelector("h2")?.textContent === "As trilhas")?.textContent?.includes("2 vezes"), undefined, { timeout: 15000 });
+  await p.waitForFunction(() => [...document.querySelectorAll(".kn-section")].find((s) => s.querySelector("h2")?.textContent === "As trilhas")?.textContent?.includes("3 vezes"), undefined, { timeout: 15000 });
   await shot(p, placar, "1c-placar-trilha.png");
   await shot(p, trilhas, "1d-trilhas.png");
   await p.locator(`${trilhas} button:text-is('Apagar')`).click();
