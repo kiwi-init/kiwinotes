@@ -127,6 +127,16 @@ describe("apagar e mostrar um arquivo", () => {
     expect(v.list().files?.map((f) => f.path)).toEqual(["docs/exemplo.pdf"]);
   });
 
+  // O Desfazer sem o scan inteiro (T20166): o arquivo volta para a lista de arquivos, nunca para a das notas.
+  test("o Desfazer de um arquivo não vira nota", async () => {
+    const { v } = await vault({ "docs/exemplo.pdf": "%PDF", "Nota.md": "# Nota\n" });
+    expect(await v.deleteFile("docs/exemplo.pdf")).toBe(true);
+    await v.restore("docs/exemplo.pdf");
+    expect(v.list().files?.map((f) => f.path)).toEqual(["docs/exemplo.pdf"]);
+    expect(v.list().notes.map((n) => n.path)).toEqual(["Nota.md"]);
+    expect(v.list().folders).toEqual(["docs"]);
+  });
+
   test("um PDF de vários MB volta com os mesmos bytes", async () => {
     const big = Buffer.alloc(6 * 1024 * 1024);
     for (let i = 0; i < big.length; i++) big[i] = (i * 31 + (i >> 11)) & 0xff;

@@ -1567,7 +1567,18 @@ export class Vault {
     await rm(path.dirname(item.abs), { recursive: true, force: true });
     // A nota volta sozinha, sem o scan (T20166). A pasta traz o que tinha dentro: só a subárvore que voltou é lida
     // (T20227), e as pastas de cima que o `mkdir` recriou (a mãe apagada depois dela) voltam para o índice.
-    if (item.kind === "note") await this.index(p, await readFile(abs, "utf8"), abs);
+    // Um arquivo que não é nota (T19878) volta como "note" da Lixeira: entra na lista de arquivos, nunca no índice das
+    // notas. Um pacote (`.pages`) é pasta no disco e arquivo na árvore.
+    if (item.kind === "note" && !/\.md$/i.test(p)) {
+      for (let up = parentOf(p); up; up = parentOf(up)) this.folders.add(up);
+      const s = await lstat(abs);
+      if (s.isDirectory()) {
+        this.packages.add(p);
+        this.files.set(p, fileEntry(p, s));
+        this.filesChanged([p]);
+      }
+      await this.fileWritten(p);
+    } else if (item.kind === "note") await this.index(p, await readFile(abs, "utf8"), abs);
     else {
       for (let up = parentOf(p); up; up = parentOf(up)) this.folders.add(up);
       await this.catchUpTree(p);
