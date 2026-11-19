@@ -15,6 +15,7 @@ import { TreeIcon, Twisty } from "./treeIcons.tsx";
 import { type SavedSearch, SEARCH_TOO_LONG, searchTooLong } from "../../src/shared/query.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { SectionId } from "./sidebarState.ts";
+import { canDrop, type Dragged, dropEdge, dropFolder, type DropRow, springFolder, springOpener } from "./treeDrop.ts";
 import type { NoteMeta, TagNode } from "./types.ts";
 
 /** Em que o botão direito (ou o arrastar) caiu. */
@@ -221,6 +222,18 @@ function RenameInput({ initial, depth, fresh, onDone }: { initial: string; depth
 
 export function Sidebar(p: SidebarProps) {
   const [dropOn, setDropOn] = useState<string | null>(null);
+  // O que está sendo arrastado (T19937): o `dragover` não lê o `dataTransfer`, e o destino depende do que se arrasta.
+  const dragged = useRef<Dragged | null>(null);
+  const [dragging, setDragging] = useState(false);
+  // A linha fina onde o item cai: a linha sob o mouse (`kind:path`) e a borda dela.
+  const [dropLine, setDropLine] = useState<{ row: string; edge: "top" | "bottom" } | null>(null);
+  // Segurar sobre uma pasta fechada abre ela (spec #19261). O `latest` dá ao timer as props de quando ele dispara.
+  const latest = useRef(p);
+  latest.current = p;
+  const spring = useMemo(() => springOpener((folder) => {
+    if (!latest.current.open.has(folder)) latest.current.onToggle(folder);
+  }), []);
+  useEffect(() => () => spring.cancel(), [spring]);
   // A janela da rolagem, para a lista virtual (T7875): o `nav` é quem rola.
   const navRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -269,35 +282,91 @@ export function Sidebar(p: SidebarProps) {
     e.stopPropagation();
     p.onMenu({ x: e.clientX, y: e.clientY }, target);
   };
-  const drag = (target: SideTarget) =>
+  const drag = (target: Exclude<SideTarget, { kind: "empty" }>) =>
     p.onDrop
       ? {
           draggable: true,
           onDragStart: (e: DragEvent) => {
             e.dataTransfer.setData(DRAG, JSON.stringify(target));
             e.dataTransfer.effectAllowed = "move";
+            dragged.current = target;
+            // A faixa "Raiz" entra depois do início do arrasto: mexer no DOM dentro do dragstart cancela o arrasto no WebKit.
+            requestAnimationFrame(() => dragged.current && setDragging(true));
+          },
+          onDragEnd: () => {
+            dragged.current = null;
+            spring.cancel();
+            setDragging(false);
+            setDropOn(null);
+            setDropLine(null);
           },
         }
       : {};
+  const dropped = (e: DragEvent, folder: string | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const what = dragged.current;
+    dragged.current = null;
+    spring.cancel();
+    setDragging(false);
+    setDropOn(null);
+    setDropLine(null);
+    if (what && folder !== null) p.onDrop?.(what, folder);
+  };
+  /** O fundo da árvore e a faixa "Raiz": soltar ali põe na pasta dada (a raiz). */
   const dropZone = (folder: string) =>
     p.onDrop
       ? {
           onDragOver: (e: DragEvent) => {
             if (!e.dataTransfer.types.includes(DRAG)) return;
+            spring.cancel();
+            setDropLine(null);
+            if (!canDrop(dragged.current, folder)) return;
             e.preventDefault();
             e.stopPropagation();
             setDropOn(folder);
           },
           onDragLeave: () => setDropOn((d) => (d === folder ? null : d)),
-          onDrop: (e: DragEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setDropOn(null);
-            const raw = e.dataTransfer.getData(DRAG);
-            if (raw) p.onDrop?.(JSON.parse(raw) as SideTarget, folder);
-          },
+          onDrop: (e: DragEvent) => dropped(e, canDrop(dragged.current, folder) ? folder : null),
         }
       : {};
+  /**
+   * Uma linha da árvore (T19937, spec #19261): soltar numa nota ou num arquivo põe na pasta deles; numa pasta, no meio
+   * põe dentro, e nas bordas põe ao lado. Onde não muda nada, o cursor diz que não pode.
+   */
+  const rowDrop = (row: DropRow) => {
+    if (!p.onDrop) return {};
+    const at = (e: DragEvent) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      return r.height ? (e.clientY - r.top) / r.height : 0.5;
+    };
+    const target = (e: DragEvent) => dropFolder(row, at(e), dragged.current);
+    const key = `${row.kind}:${row.path}`;
+    return {
+      "data-drop-line": dropLine?.row === key ? dropLine.edge : undefined,
+      onDragOver: (e: DragEvent) => {
+        if (!e.dataTransfer.types.includes(DRAG)) return;
+        // A linha decide sozinha: o fundo (a raiz) não pega o que ela recusou.
+        e.stopPropagation();
+        const y = at(e);
+        const folder = dropFolder(row, y, dragged.current);
+        const edge = dropEdge(row, y, folder);
+        spring.over(springFolder(row, y, dragged.current));
+        setDropOn(folder);
+        setDropLine((d) => (edge ? (d?.row === key && d.edge === edge ? d : { row: key, edge }) : null));
+        if (folder === null) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      },
+      onDragLeave: (e: DragEvent) => {
+        // Sair da linha (não para um filho dela) desliga o timer e a linha fina.
+        if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+        spring.over(null);
+        setDropLine((d) => (d?.row === key ? null : d));
+      },
+      onDrop: (e: DragEvent) => dropped(e, target(e)),
+    };
+  };
 
   const pinned = new Set(p.pinned.map((note) => note.path));
   const mains = new Set([...(p.projects?.values() ?? [])].flatMap((x) => (x.main ? [x.main] : [])));
@@ -358,6 +427,7 @@ export function Sidebar(p: SidebarProps) {
           onClick={(e) => !e.ctrlKey && p.onOpen(n.path)}
           onContextMenu={(e) => menu(e, { kind: "note", path: n.path })}
           {...drag({ kind: "note", path: n.path })}
+          {...(inTree ? rowDrop({ kind: "note", path: n.path }) : {})}
         >
           {inTree ? <Twisty /> : null}
           <TreeIcon name={isDailyNote(n.path, p.dailyFolder) ? "daily" : "note"} />
@@ -391,6 +461,8 @@ export function Sidebar(p: SidebarProps) {
           // ⌃-clique é o menu, como nas notas (T2693).
           onClick={(e) => !e.ctrlKey && p.onOpenFile?.(f.path)}
           onContextMenu={(e) => menu(e, target)}
+          {...drag(target)}
+          {...rowDrop({ kind: "file", path: f.path })}
         >
           <Twisty />
           <TreeIcon name={f.type} />
@@ -436,7 +508,7 @@ export function Sidebar(p: SidebarProps) {
               }}
               onContextMenu={(e) => menu(e, { kind: "folder", path: n.path })}
               {...drag({ kind: "folder", path: n.path })}
-              {...dropZone(n.path)}
+              {...rowDrop({ kind: "folder", path: n.path, expanded })}
             >
               <Twisty open={expanded} />
               <TreeIcon name={expanded ? "folder-open" : "folder"} />
@@ -645,6 +717,13 @@ export function Sidebar(p: SidebarProps) {
           <TreeIcon name="expand-all" />
           <HoverLabel>Expandir</HoverLabel>
         </button>
+      ) : null}
+      {dragging ? (
+        // A faixa "Raiz" (T19937): enquanto arrasta, presa embaixo da busca, por cima da árvore (não empurra as linhas).
+        <div className="kn-side-rootdrop" data-drop={dropOn === "" || undefined} data-off={!canDrop(dragged.current, "") || undefined} {...dropZone("")}>
+          <TreeIcon name="folder" />
+          <span>{p.root ? `Raiz: ${p.root.name}` : "Raiz"}</span>
+        </div>
       ) : null}
       </div>
       {!searching && p.root ? <RootFolder root={p.root} selected={p.selectedFolder === ""} onSelect={() => p.onSelectFolder("")} /> : null}

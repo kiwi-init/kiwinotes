@@ -69,6 +69,9 @@ describe("passos", () => {
     expect(() => parseScript([{ expectNoHScroll: ".a", allow: 3 }])).toThrow("allow");
     expect(() => parseScript([{ drag: ".h" }])).toThrow("drag precisa de x");
     expect(() => parseScript([{ drag: ".h", x: 1e9 }])).toThrow("drag.x");
+    expect(parseScript([{ dragTo: ".a", from: ".b", at: 0.1, hold: true }, { dragTo: ".c" }]).steps).toHaveLength(2);
+    expect(() => parseScript([{ dragTo: ".a", at: 2 }])).toThrow("dragTo.at");
+    expect(() => parseScript([{ dragTo: ".a", hold: "sim" }])).toThrow("dragTo.hold");
     expect(() => parseScript([{ expectWidth: ".p" }])).toThrow("min ou max");
     expect(() => parseScript([{ expectSame: ".a" }])).toThrow("as: precisa de um texto");
     expect(() => parseScript([{ expectSame: ".a", as: "" }])).toThrow("as: precisa de um texto");
