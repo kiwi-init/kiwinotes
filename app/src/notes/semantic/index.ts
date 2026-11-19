@@ -55,6 +55,11 @@ export const DUTY = 0.25;
 /** Muda quando o formato do arquivo ou o modelo muda: um arquivo de outro formato é jogado fora e refeito. */
 const FORMAT = "kiwi-semantic-1:multilingual-e5-small@761b726";
 const BATCH = 8;
+/**
+ * Trechos por chamada ao modelo. A inferência do ONNX segura a thread do Bun enquanto roda: com 1 thread, 8 trechos
+ * prendiam o laço de 100 a 140 ms; 1, de 30 a 50, no mesmo ritmo de trechos por segundo (spec #24228).
+ */
+export const PER_CALL = 1;
 const SAVE_EVERY_MS = 5_000;
 
 /**
@@ -258,7 +263,7 @@ export class SemanticIndex {
     if (!d || this.notes.get(p)?.version === d.version) return;
     const chunks = noteChunks(d.title, d.content);
     const vectors: Float32Array[] = [];
-    for (let i = 0; i < chunks.length; i += BATCH) vectors.push(...(await model.embed(chunks.slice(i, i + BATCH), "passage")));
+    for (let i = 0; i < chunks.length; i += PER_CALL) vectors.push(...(await model.embed(chunks.slice(i, i + PER_CALL), "passage")));
     this.embedded += chunks.length;
     // A nota pode ter mudado enquanto o modelo rodava: só fica se ainda é a mesma versão.
     if (this.wanted.get(p)?.version !== d.version || this.closed) return;

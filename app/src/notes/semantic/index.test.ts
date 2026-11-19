@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { noteChunks, plainText } from "./chunks.ts";
 import { DIM, fakeEmbedder } from "./fake.ts";
-import { applyJournal, decodeIndex, DUTY, encodeIndex, type SemanticDocument, SemanticIndex } from "./index.ts";
+import { applyJournal, decodeIndex, DUTY, PER_CALL, encodeIndex, type SemanticDocument, SemanticIndex } from "./index.ts";
 import { meanPool } from "./embedder.ts";
 import { tempDir } from "../../../test/tmp.ts";
 
@@ -280,4 +280,14 @@ test("o vectors.add grande vira um retrato novo, e sai", async () => {
 test("o e5 roda com 1 thread", () => {
   const src = readFileSync(path.join(import.meta.dir, "embedder.ts"), "utf8");
   expect(src).toContain("intraOpNumThreads: o.threads ?? 1,");
+});
+
+test("um trecho por chamada ao modelo: a inferência segura o laço do Bun enquanto roda", async () => {
+  const { index, model } = setup();
+  index.sync([doc("Longa.md", Array.from({ length: 5 }, (_, i) => `backup do servidor ${i} `.repeat(60)).join("\n\n"))]);
+  await index.idle();
+  expect(PER_CALL).toBe(1);
+  const passages = model.calls.filter((c) => c.kind === "passage");
+  expect(passages.length).toBeGreaterThan(1);
+  for (const c of passages) expect(c.texts).toHaveLength(1);
 });
