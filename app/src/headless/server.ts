@@ -297,7 +297,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.recoveries.onChanged(homeChanged),
     meetings?.onChange(homeChanged) ?? (() => {}),
     () => home.stop(),
-    stores.folders.onNotesChanged((folder, paths) => event("notes.changed", { paths, folderId:folder.id })),
+    stores.folders.onNotesChanged((folder, paths, listing) => event("notes.changed", { paths, folderId:folder.id, listing: listing() })),
     stores.folders.onFilesChanged((folder, paths) => event("files.changed", { paths, folderId:folder.id })),
     stores.folders.onChange(view=>event("notes.folderChanged",view)),
     stores.history.onAdded((entry) => event("history.added", entry)),

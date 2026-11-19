@@ -115,6 +115,18 @@ export interface VaultFile {
 }
 
 /**
+ * O pedaço da lista que mudou (spec #20118, U2): `roots` são os caminhos do aviso, sem os que estão debaixo de outro; o
+ * resto é o que existe agora neles e debaixo deles. Quem tem a lista tira tudo de `roots` e põe isto no lugar.
+ */
+export interface ListingPatch {
+  roots: string[];
+  folders: string[];
+  notes: NoteMeta[];
+  /** Os contadores de arquivos das pastas acima (só as que têm algum). */
+  fileCounts: Record<string, number>;
+}
+
+/**
  * O que o `list` devolve. `filesVersion` (spec #13384): a versão dos arquivos que não são nota; com ela no pedido, vem
  * nada (`files` e `filesDelta` ausentes: não mudou), só a diferença, ou a lista inteira.
  */
@@ -620,6 +632,44 @@ export class Vault {
 
   folderList(): string[] {
     return [...this.folders].sort((a, b) => a.localeCompare(b));
+  }
+
+  /**
+   * O estado de agora de uns caminhos e de tudo debaixo deles (spec #20118, U2): vai junto do `notes.changed`, e a
+   * janela troca esse pedaço da lista que já tem, sem pedir a lista inteira. `null` quando o pedaço é grande demais
+   * (a raiz, uma pasta com milhares de notas): a janela pede a lista, como antes.
+   */
+  listingPatch(paths: readonly string[], max = 2000): ListingPatch | null {
+    const roots = [...new Set(paths.map((p) => p.replace(/^\/+|\/+$/g, "")))].sort((a, b) => a.length - b.length);
+    if (!roots.length || roots.includes("")) return null;
+    const top = roots.filter((r, i) => !roots.slice(0, i).some((o) => r.startsWith(`${o}/`)));
+    const folderRoots = top.filter((r) => this.folders.has(r));
+    const under = (p: string) => folderRoots.some((r) => p === r || p.startsWith(`${r}/`));
+    const folders = new Set<string>();
+    const notes: NoteMeta[] = [];
+    for (const r of top) {
+      const n = this.notes.get(r);
+      if (n) notes.push(n.meta);
+    }
+    if (folderRoots.length) {
+      for (const f of this.folders) if (under(f)) folders.add(f);
+      for (const [p, e] of this.notes) {
+        if (!under(p)) continue;
+        notes.push(e.meta);
+        if (notes.length > max) return null;
+      }
+    }
+    // As pastas de cima de cada raiz que existem: uma nota numa pasta nova traz a pasta junto.
+    for (const r of top) for (let p = parentOf(r); p && this.folders.has(p) && !folders.has(p); p = parentOf(p)) folders.add(p);
+    const counts = folderRoots.length ? this.fileCounts() : {};
+    const fileCounts: Record<string, number> = {};
+    for (const f of folders) if (counts[f]) fileCounts[f] = counts[f]!;
+    return {
+      roots: top,
+      folders: [...folders].sort((a, b) => a.localeCompare(b)),
+      notes: notes.sort((a, b) => a.path.localeCompare(b.path)),
+      fileCounts,
+    };
   }
 
   /**

@@ -15,6 +15,9 @@ import { TopBar } from "../src/topbar.tsx";
 import { useShortcuts } from "../src/useShortcuts.ts";
 import { DEFAULT_SHORTCUTS, matchesKeyEvent, shortcutLabel } from "../../src/shared/shortcuts.ts";
 import { Popover } from "./Popover.tsx";
+import type { ListingPatch } from "../../src/shared/ui-contract.ts";
+import { applyListingPatch } from "./listing-patch.ts";
+import { useWhenShown } from "./when-shown.ts";
 import { ReloadQueue } from "./reload-queue.ts";
 import { TreePopover } from "./TreePopover.tsx";
 import { NoteWidthHandles } from "./NoteWidth.tsx";
@@ -318,24 +321,35 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
    * A lista inteira, uma por vez (spec #20118, T20167): um pedido durante outra espera uma só no fim, e a operação da
    * própria janela usa a recarga do `notes.changed` dela (`ReloadQueue`), sem pedir de novo.
    */
+  /**
+   * Os pedaços do `notes.changed` (U2) que chegaram com uma lista inteira a caminho: ela pode ter saído do engine antes
+   * deles, então eles vão de novo por cima dela, na ordem (é o estado, não a diferença: repetir não estraga).
+   */
+  const patchesSince = useRef<ListingPatch[] | null>(null);
   const lists = useMemo(
     () =>
-      new ReloadQueue<VaultListing | null>(() =>
-        api.list().then(
-          (l) => {
+      new ReloadQueue<VaultListing | null>(() => {
+        const since: ListingPatch[] = [];
+        patchesSince.current = since;
+        const done = () => {
+          if (patchesSince.current === since) patchesSince.current = null;
+        };
+        return api.list().then(
+          (fetched) => {
+            done();
+            const l = fetched && since.reduce(applyListingPatch, fetched);
             listingRef.current = l;
             setListing(l);
             setFailed(false);
-            // As tags andam com a lista (T2619): o mesmo notes.changed refaz as duas.
-            api.tags?.().then(setTagList, () => {});
             return l;
           },
           () => {
+            done();
             setFailed(true);
             return null;
           },
-        ),
-      ),
+        );
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [api],
   );
@@ -364,7 +378,6 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       const next = { ...l, notes };
       listingRef.current = next;
       setListing(next);
-      api.tags?.().then(setTagList, () => {});
       return next;
     },
     [api],
@@ -663,12 +676,23 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   // recarrega se não tem nada pendente; com edição pendente, o próximo save mostra o conflito.
   useEffect(
     () =>
-      api.onChanged((paths) => {
+      api.onChanged((paths, patch) => {
         // O rascunho do que foi digitado antes de olhar o disco (T7876): a nota pode ter sumido fora (T7513).
         settleRef.current();
         setVaultVersion((n) => n + 1);
         // Anotado na hora (T20167): a resposta da operação da janela chega depois deste aviso, e o after() dela usa esta.
-        void lists.track(paths, (async () => (await patchListing(paths)) ?? (await lists.request()))()).then((l) => {
+        // Com o pedaço da lista no aviso (U2, T20249), nada se pede ao engine: a janela troca só ele.
+        const update = (): Promise<VaultListing | null> => {
+          patchesSince.current?.push(patch!);
+          const l = listingRef.current;
+          if (!l) return lists.request();
+          const next = applyListingPatch(l, patch!);
+          listingRef.current = next;
+          setListing(next);
+          return Promise.resolve(next);
+        };
+        const load = patch ? update() : (async () => (await patchListing(paths)) ?? (await lists.request()))();
+        void lists.track(paths, load).then((l) => {
           if (!l) return;
           // Nota que sumiu (apagada ou renomeada fora) leva o rascunho junto (#1525). A aberta com edição pendente fica:
           // o texto ainda está no editor, e o aviso de erro do save deixa a pessoa decidir.
@@ -898,11 +922,11 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   }, [api, leave, refresh, show]);
   openDailyRef.current = openDaily;
 
-  // O número da Lixeira, na lateral.
-  useEffect(() => {
-    api.extras?.trashList().then((items) => setTrashCount(items.length), () => {},
-    );
-  }, [api, vaultVersion]);
+  // O número da Lixeira e as tags (T2619), na árvore: só com ela aberta, e só se o cofre mudou desde a última vez (U4).
+  useWhenShown(treeOpen, vaultVersion, () => {
+    api.extras?.trashList().then((items) => setTrashCount(items.length), () => {});
+    api.tags?.().then(setTagList, () => {});
+  });
 
   const rename = async () => {
     const typed = title.trim().replace(/[\\/:]/g, "-");
@@ -1009,16 +1033,17 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     () => projectsApi && new ReloadQueue(() => projectsApi.list().then(setProjectList, () => {})),
     [projectsApi],
   );
-  const reloadProjects = () => void projectLists?.request();
   // Relê quando os projetos mudam por outro lugar (a CLI, outra janela), e quando as notas mudam: a nota principal
-  // apagada ou a pasta renomeada por fora o engine já corrigiu.
+  // apagada ou a pasta renomeada por fora o engine já corrigiu. Só com a árvore, um menu dela ou um seletor na tela
+  // (U4): é onde os projetos aparecem.
+  const [projectsVersion, setProjectsVersion] = useState(0);
   useEffect(() => {
-    if (!projectsApi || !projectLists) return;
-    reloadProjects();
-    const offs = [projectsApi.onChanged(reloadProjects), api.onChanged((paths) => void projectLists.changed(paths))];
+    if (!projectsApi) return;
+    const bump = () => setProjectsVersion((n) => n + 1);
+    const offs = [projectsApi.onChanged(bump), api.onChanged(bump)];
     return () => offs.forEach((off) => off());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectsApi, projectLists, api]);
+  }, [projectsApi, api]);
+  useWhenShown(treeOpen || Boolean(moving || picking || projectPick), projectsVersion, () => void projectLists?.request());
   const projectByFolder = useMemo(() => new Map(projectList.projects.map((x) => [x.folder, x] as const)), [projectList]);
   const projectMains = useMemo(() => new Set(projectList.projects.flatMap((x) => (x.main ? [x.main] : []))), [projectList]);
   const insideOrIs = (folder: string, p: string) => p === folder || p.startsWith(`${folder}/`);
@@ -1029,7 +1054,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     !projectList.projects.some((x) => insideOrIs(x.folder, folder) || insideOrIs(folder, x.folder));
   const projectAction = (what: string, run: () => Promise<unknown>) =>
     void run().then(
-      () => reloadProjects(),
+      () => void projectLists?.request(),
       (e) => {
         const code = errorCode(e);
         say(
@@ -1047,8 +1072,9 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     );
 
   /**
-   * Depois de mexer no vault: a lista de novo, e a nota aberta reaberta no lugar novo, se ela mudou de path. A lista e
-   * os projetos são os do `notes.changed` da operação, que chega antes da resposta (T20167); sem ele, pedidos agora.
+   * Depois de mexer no vault: a lista de novo, e a nota aberta reaberta no lugar novo, se ela mudou de path. A lista é
+   * a do `notes.changed` da operação, que chega antes da resposta (T20167); sem ele, pedida agora. Os projetos andam
+   * com o mesmo aviso, quando estão na tela (U4).
    * As fixadas vêm do `settings.changed`, quando o engine as corrige.
    */
   const after = async (change: string[] | { from: string; to: string }) => {
@@ -1057,7 +1083,6 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     await lists.after(paths);
     links.clear();
     if (!pins?.onChanged) pins?.list().then(setPinned, () => {});
-    void projectLists?.after(paths);
     // A pasta escolhida acompanha o renomear e o mover (T3371): a "Nova pasta" que virou "Ideias" continua sendo onde
     // o + Nota e o + Pasta criam.
     if (moved) {

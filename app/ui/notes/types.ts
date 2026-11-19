@@ -19,7 +19,7 @@ export type { Backlink, Note, NoteMeta, SaveResult, SearchHit, TagNode,
 } from "../../src/shared/ui-contract.ts";
 import type { TagNode } from "../../src/shared/ui-contract.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
-import type { Note, NoteMeta } from "../../src/shared/ui-contract.ts";
+import type { ListingPatch, Note, NoteMeta } from "../../src/shared/ui-contract.ts";
 
 /**
  * As pastas e as notas do vault (`notes.list`). A UI pode rodar num engine mais velho (o `requiresContract` é ^1.0.0):
@@ -109,8 +109,11 @@ export interface NotesApi {
   resolve(link: string): Result<"notes.resolve">;
   /** O pedaço de nota de um `![[nota]]` (T6594, 1.36.0). Num engine sem ele, o embed de nota fica como texto. */
   embed?(link: string): Result<"notes.embed">;
-  /** Uma nota foi criada, mudada, apagada ou renomeada, inclusive fora do app. Devolve a função que desliga. */
-  onChanged(fn: (paths: string[]) => void): () => void;
+  /**
+   * Uma nota foi criada, mudada, apagada ou renomeada, inclusive fora do app. Devolve a função que desliga. `listing`
+   * (spec #20118): o estado de agora desses caminhos, para trocar só esse pedaço da lista; sem ele, a lista inteira.
+   */
+  onChanged(fn: (paths: string[], listing?: ListingPatch | null) => void): () => void;
   /** As de pastas (T2468). Num engine sem elas, a janela esconde o que depende delas (`has`). */
   folders?: FoldersApi;
   /**

@@ -64,7 +64,11 @@ export class ReloadQueue<T> {
     for (const [p, e] of this.echoes) if (now - e.at > this.ttl) this.echoes.delete(p);
     for (const p of paths) {
       const e = this.echoes.get(p);
-      if (e) return e.load;
+      if (!e) continue;
+      // Usado, sai (nimble-heron, #20246): os caminhos do mesmo aviso também. Uma operação seguinte do mesmo caminho
+      // que não avise não pega esta recarga velha.
+      for (const [q, o] of this.echoes) if (o.load === e.load) this.echoes.delete(q);
+      return e.load;
     }
     return null;
   }

@@ -1,11 +1,14 @@
-// T20167 (spec #20118): a janela das Notas recarrega uma vez só por operação, e as fixadas acompanham o que o engine
-// corrige, venha de onde vier. Headless (WebKit), nada na tela; o cofre é inventado (spec #17952).
+// T20167 e T20249 (spec #20118): a janela das Notas pede só o que mudou e só o que está na tela, e as fixadas
+// acompanham o que o engine corrige, venha de onde vier. Headless (WebKit), nada na tela; o cofre é inventado (#17952).
 //
-// - renomear uma nota, criar e renomear uma pasta, apagar e desfazer pela janela: uma `notes.list` por operação (antes
-//   eram duas: o `after()` e o `notes.changed` da mesma operação);
+// - renomear uma nota, criar uma pasta, apagar e desfazer pela janela: nenhuma `notes.list` (o pedaço da lista vem no
+//   `notes.changed`, U2); renomear uma pasta: uma (o eco do watcher no engine, E0b);
 // - o agente (a capacidade direta no engine) renomeia uma nota fixada: as Fixadas mostram o nome novo, sem a janela
 //   fazer nada (o `settings.changed` traz as fixadas corrigidas);
-// - a rolagem da árvore fica onde estava depois de renomear uma pasta.
+// - a rolagem da árvore fica onde estava depois de renomear uma pasta;
+// - com a árvore fechada, uma mudança não pede Lixeira, tags nem projetos; abrir pede uma vez, e de novo sem mudança,
+//   nada (U4);
+// - uma nota escrita por fora, no disco, aparece na árvore.
 //
 //   bun scripts/notes-reload-check.ts [pasta dos prints]
 import assert from "node:assert/strict";
@@ -79,8 +82,8 @@ async function lists(act: () => Promise<void>) {
 
 const TREE = ".kn-tree-pop";
 async function openTree(p: Page) {
-  if (!(await p.locator(`${TREE}:visible`).count())) await p.click(".kn-crumb-bt");
-  await p.waitForSelector(`${TREE}:visible .kn-side-item`);
+  if (!(await p.locator(`${TREE}[data-open]`).count())) await p.click(".kn-crumb-bt");
+  await p.waitForSelector(`${TREE}[data-open] .kn-side-item`);
   await Bun.sleep(250);
 }
 const item = (kind: "note" | "folder", path: string) => `${TREE} .kn-side-item[data-kind='${kind}'][data-path='${path}']`;
@@ -119,16 +122,18 @@ try {
     await openTree(p);
     assert.deepEqual(await pinnedInTree(p), ["Projeto X/Plano.md", "Ideias.md"]);
 
-    assert.equal(await lists(() => rename(p, item("note", "Lista.md"), "Lista dois")), 1, "renomear nota: uma lista");
+    assert.equal(await lists(() => rename(p, item("note", "Lista.md"), "Lista dois")), 0, "renomear nota: nenhuma lista");
     await p.waitForSelector(item("note", "Lista dois.md"));
-    checks.push("renomear uma nota pela janela: 1 notes.list (eram 2)");
+    checks.push("renomear uma nota pela janela: 0 notes.list (eram 2; o pedaço vem no notes.changed)");
 
-    assert.equal(await lists(async () => { await openTree(p); await p.locator(`${TREE} .kn-side-new[data-new='folder']`).first().click(); await p.keyboard.press("Escape"); }), 1, "criar pasta: uma lista");
-    checks.push("criar uma pasta: 1 notes.list (eram 2)");
+    assert.equal(await lists(async () => { await openTree(p); await p.locator(`${TREE} .kn-side-new[data-new='folder']`).first().click(); await p.keyboard.press("Escape"); }), 0, "criar pasta: nenhuma lista");
+    checks.push("criar uma pasta: 0 notes.list (eram 2)");
 
-    assert.equal(await lists(() => menu(p, item("note", "Rascunho.md"), "Apagar")), 1, "apagar: uma lista");
-    assert.equal(await lists(async () => { await p.click(".kn-toast button:has-text('Desfazer')"); }), 1, "desfazer: uma lista");
-    checks.push("apagar uma nota e desfazer: 1 notes.list cada (eram 2)");
+    assert.equal(await lists(() => menu(p, item("note", "Rascunho.md"), "Apagar")), 0, "apagar: nenhuma lista");
+    assert.equal(await lists(async () => { await p.click(".kn-toast button:has-text('Desfazer')"); }), 0, "desfazer: nenhuma lista");
+    await openTree(p);
+    await p.waitForSelector(item("note", "Rascunho.md"));
+    checks.push("apagar uma nota e desfazer: 0 notes.list cada (eram 2)");
 
     // A rolagem: abre duas áreas, desce até o meio e renomeia uma pasta que está à vista.
     await openTree(p);
@@ -142,6 +147,7 @@ try {
     assert.ok(top > 0, "a árvore tem rolagem");
     const folderLists = await lists(() => rename(p, item("folder", "Área 4/Grupo 2"), "Grupo dois"));
     await p.waitForSelector(item("folder", "Área 4/Grupo dois"));
+    console.log(`renomear pasta: ${folderLists} notes.list; ${calls.slice(-12).join(" ")}`);
     assert.ok(folderLists <= 2, `renomear pasta: ${folderLists} listas`);
     assert.equal(await scrollTop(p), top, "a rolagem não pulou");
     checks.push(`renomear uma pasta: ${folderLists} notes.list (eram 4; o que sobra é o eco do watcher no engine), e a rolagem fica em ${top}`);
@@ -157,6 +163,45 @@ try {
     await Bun.sleep(300);
     await p.screenshot({ path: join(out, "01-fixada-renomeada-pelo-agente.png") });
     checks.push("o agente renomeia uma nota fixada: as Fixadas mostram o nome novo (pelo settings.changed)");
+
+    // U4 (T20249): a Lixeira, as tags e os projetos só se pedem com a árvore aberta, e só se o cofre mudou.
+    // Como o tree-hover-ui-check: o mouse sai da árvore, e o Esc a fecha.
+    const closeTree = async () => {
+      await p.mouse.move(1050, 650);
+      for (let i = 0; i < 3 && (await p.locator(`${TREE}[data-open]`).count()); i++) {
+        await p.keyboard.press("Escape");
+        await Bun.sleep(120);
+      }
+      await p.waitForFunction((tree) => !document.querySelector(`${tree}[data-open]`), TREE);
+    };
+    const extras = (from: number) => {
+      const got = calls.slice(from);
+      return ["notes.list", "trash.list", "notes.tags", "projects.list"].map((c) => `${c}=${got.filter((x) => x === c).length}`).join(" ");
+    };
+    await closeTree();
+    await quiet();
+    let from = calls.length;
+    await invoke("notes.rename", { path: "Lista dois.md", newPath: "Lista três.md" });
+    await quiet();
+    assert.equal(extras(from), "notes.list=0 trash.list=0 notes.tags=0 projects.list=0", "árvore fechada: nada pedido");
+    from = calls.length;
+    await openTree(p);
+    await p.waitForSelector(item("note", "Lista três.md"));
+    await quiet();
+    assert.equal(extras(from), "notes.list=0 trash.list=1 notes.tags=1 projects.list=1", "abrir a árvore depois da mudança");
+    await closeTree();
+    from = calls.length;
+    await openTree(p);
+    await quiet();
+    assert.equal(extras(from), "notes.list=0 trash.list=0 notes.tags=0 projects.list=0", "abrir de novo sem mudança");
+    checks.push("árvore fechada: o agente renomeia uma nota e a janela não pede nada; ao abrir, Lixeira, tags e projetos uma vez cada; de novo sem mudança, nada");
+
+    // Uma mudança de fora (outro app no cofre) ainda aparece.
+    writeFileSync(join(vault, "Projeto X", "De fora.md"), "# De fora\n\nTexto de exemplo.\n");
+    await p.waitForSelector(`${TREE} .kn-side-item[data-kind='folder'][data-path='Projeto X']`);
+    await p.evaluate((sel) => { const el = document.querySelector(sel) as HTMLElement | null; if (el?.getAttribute("aria-expanded") !== "true") el?.click(); }, item("folder", "Projeto X"));
+    await p.waitForSelector(item("note", "Projeto X/De fora.md"), { timeout: 15_000 });
+    checks.push("uma nota criada por fora, no disco, aparece na árvore");
     assert.deepEqual(w.report.problems, [], "problemas na página");
   } finally {
     await w.close();

@@ -79,6 +79,17 @@ describe("ReloadQueue (spec #20118)", () => {
     expect(f.calls).toBe(2);
   });
 
+  test("o aviso usado sai, com os outros caminhos dele: a operação seguinte sem aviso pede", async () => {
+    const f = fake();
+    const q = new ReloadQueue(f.fetch);
+    q.changed(["Velha.md", "Nova.md"]);
+    await f.finish();
+    void q.after(["Velha.md", "Nova.md"]);
+    expect(f.calls).toBe(1);
+    void q.after(["Nova.md"]);
+    expect(f.calls).toBe(2);
+  });
+
   test("a recarga que falha não trava a fila", async () => {
     let n = 0;
     const q = new ReloadQueue(() => (++n === 1 ? Promise.reject(new Error("x")) : Promise.resolve(n)));

@@ -8,6 +8,7 @@ import { MockVault } from "./mock.ts";
 import { applyFilesDelta, type FilesDelta } from "./files-delta.ts";
 import type { AttachmentFile, AttachmentSource } from "./editor/attachments.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
+import type { ListingPatch } from "../../src/shared/ui-contract.ts";
 import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode, ExportFormat, TreePrefs, VaultFile, VaultListing,
 } from "./types.ts";
 
@@ -266,7 +267,7 @@ export function engineNotes(
     backlinks: (path) => call("notes.backlinks", { path }),
     resolve: (link) => call("notes.resolve", { link }),
     ...(has("notes.embed") ? { embed: (link: string) => call("notes.embed", { link }) } : {}),
-    onChanged: (fn) => on("notes.changed", (payload) => {const e=payload as {paths:string[];folderId?:string};if(!folderId||!e.folderId||e.folderId===folderId)fn(e.paths);}),
+    onChanged: (fn) => on("notes.changed", (payload) => {const e=payload as {paths:string[];folderId?:string;listing?:ListingPatch|null};if(!folderId||!e.folderId||e.folderId===folderId)fn(e.paths,e.listing);}),
   };
 }
 
