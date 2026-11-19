@@ -56,6 +56,13 @@ interface KiwiView {
 
 const IDLE: KiwiView = { phase: "idle", cursor: null, removing: null, highlights: Decoration.none };
 
+/**
+ * Quando a última etiqueta saiu da tela. O CodeMirror refaz o widget a cada linha nova e a cada troca de fase; a entrada
+ * da etiqueta só anima na primeira vez, senão ela pisca a cada quebra de linha (#21354).
+ */
+let tagGoneAt = -Infinity;
+const TAG_STILL_MS = 600;
+
 class KiwiCursorWidget extends WidgetType {
   constructor(readonly writing: boolean) {
     super();
@@ -70,13 +77,16 @@ class KiwiCursorWidget extends WidgetType {
     const caret = document.createElement("span");
     caret.className = "kn-kiwi-caret";
     const tag = document.createElement("span");
-    tag.className = "kn-kiwi-tag";
+    tag.className = performance.now() - tagGoneAt < TAG_STILL_MS ? "kn-kiwi-tag kn-kiwi-tag-still" : "kn-kiwi-tag";
     tag.append(kiwiFace(), document.createTextNode("Kiwi"));
     root.append(caret, tag);
     return root;
   }
   override ignoreEvent(): boolean {
     return true;
+  }
+  override destroy(): void {
+    tagGoneAt = performance.now();
   }
 }
 
