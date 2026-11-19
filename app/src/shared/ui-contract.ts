@@ -266,7 +266,8 @@ export type { NoteModel };
 // 1.92.0 (T21152, spec #21080): o `files.save` com `base64` grava também o docx editado nas Notas. Só acréscimo.
 // 1.93.0 (T21231, spec #21155): as `docxOps` no `agent.wrote`, as mudanças que o Kiwi fez num docx, para o docx aberto
 //   mostrar cada uma, e o `paragraph` no `files.editing`, o parágrafo do docx com o cursor da pessoa. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.93.0";
+// 1.94.0 (T23627, spec #21155): o `insertRow` nas `docxOps`, a linha de tabela que o Kiwi insere num docx. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.94.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */

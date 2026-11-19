@@ -106,6 +106,52 @@ export class DocxDoc {
     return this.run<{ handle: Handle }>({ op: "insertParagraph", anchor, where: after ? "after" : "before", text }, where).handle;
   }
 
+  /**
+   * As células das tabelas, as de dentro de outra tabela também: o id de cada parágrafo de uma célula dá a tabela (a
+   * partir de 1, na ordem do documento), a linha e a coluna, e o handle da linha.
+   */
+  cells(): Map<string, { tabela: number; linha: number; coluna: number; row: Handle }> {
+    const out = new Map<string, { tabela: number; linha: number; coluna: number; row: Handle }>();
+    let n = 0;
+    const walk = (body: Handle) => {
+      for (const t of this.run<{ handles: Handle[] }>({ op: "getTables", scope: { body } }, "ler").handles) {
+        const tabela = ++n;
+        this.run<{ handles: Handle[] }>({ op: "getTableRows", table: t }, "ler").handles.forEach((row, l) => {
+          this.rowBodies(row).forEach((cb, c) => {
+            // O `getParagraphs` da célula traz também os da tabela de dentro: ela marca os dela primeiro.
+            walk(cb);
+            for (const p of this.run<{ handles: Handle[] }>({ op: "getParagraphs", body: cb }, "ler").handles) {
+              const id = this.id(p);
+              if (!out.has(id)) out.set(id, { tabela, linha: l + 1, coluna: c + 1, row });
+            }
+          });
+        });
+      }
+    };
+    walk(this.body);
+    return out;
+  }
+
+  private rowBodies(row: Handle): Handle[] {
+    return this.run<{ handles: Handle[] }>({ op: "getTableCells", row }, "ler").handles.map(
+      (cell) => this.run<{ handle: Handle }>({ op: "getTableCellBody", cell }, "ler").handle,
+    );
+  }
+
+  /** Quantas células a linha tem. */
+  rowWidth(row: Handle): number {
+    return this.rowBodies(row).length;
+  }
+
+  /** Uma linha nova logo abaixo de `row`, uma célula por texto; devolve o handle dela e o primeiro parágrafo de cada célula. */
+  insertRow(row: Handle, values: readonly string[], where: string): { row: Handle; cells: Handle[] } {
+    const v = this.run<{ handles: Handle[] }>({ op: "insertTableRows", row, location: "after", count: 1, values: [values] }, where);
+    const fresh = v.handles[0];
+    if (!fresh) throw new DocxToolError("E_FAILED", `${where}: o motor não devolveu a linha nova`);
+    const cells = this.rowBodies(fresh).map((cb) => this.run<{ handles: Handle[] }>({ op: "getParagraphs", body: cb }, where).handles[0]!);
+    return { row: fresh, cells };
+  }
+
   remove(p: Handle, where: string): void {
     this.run({ op: "deleteParagraph", paragraph: p }, where);
   }
@@ -144,13 +190,16 @@ export async function docxRead(reader: VaultReader, a: DocxReadArgs, filtrar: (t
     const de = Math.max(1, a.de ?? 1);
     if (de > Math.max(1, all.length)) throw new DocxToolError("E_BAD_ARGS", `${path} tem ${all.length} parágrafos`);
     const ate = Math.min(all.length, a.ate ?? de + DOCX_READ_PARAGRAPHS - 1);
-    const out: { n: number; texto: string }[] = [];
+    const out: { n: number; texto: string; tabela?: number; linha?: number; coluna?: number }[] = [];
+    const cells = doc.cells();
     let chars = 0;
     for (let n = de; n <= ate; n++) {
       const texto = doc.text(all[n - 1]!);
       if (out.length && chars + texto.length > DOCX_READ_CHARS) break;
       chars += texto.length;
-      out.push({ n, texto });
+      // O parágrafo de uma célula diz onde está: o inserir_linha pede um deles.
+      const c = cells.get(doc.id(all[n - 1]!));
+      out.push(c ? { n, texto, tabela: c.tabela, linha: c.linha, coluna: c.coluna } : { n, texto });
     }
     // O texto passa pelo filtro dos segredos de uma vez: um parágrafo por linha (a quebra de dentro vai num marcador).
     const NL = " ";
@@ -175,7 +224,8 @@ export type DocxChange =
   | { tipo: "trocar"; paragrafo: number; de: string; para: string }
   | { tipo: "reescrever"; paragrafo: number; texto: string }
   | { tipo: "inserir"; depois_de: number; texto: string }
-  | { tipo: "apagar"; paragrafo: number };
+  | { tipo: "apagar"; paragrafo: number }
+  | { tipo: "inserir_linha"; depois_de: number; celulas: string[] };
 
 export interface DocxEditArgs {
   caminho: string;
@@ -202,6 +252,9 @@ export function applyDocxChanges(doc: DocxDoc, mudancas: readonly DocxChange[], 
   const gone = new Set<number>();
   /** O último parágrafo inserido depois de cada número: o próximo inserido no mesmo lugar vai depois dele. */
   const tail = new Map<number, { h: Handle; id: string }>();
+  /** A última linha inserida abaixo de cada linha da tabela, e o primeiro parágrafo dela: a próxima vai depois. */
+  const tailRow = new Map<Handle, { row: Handle; id: string }>();
+  let cells: ReturnType<DocxDoc["cells"]> | null = null;
   const ops: DocxOp[] = [];
   const text = (m: { [k: string]: unknown }, k: string, where: string) => {
     if (typeof m[k] !== "string") throw new DocxToolError("E_BAD_ARGS", `${where}.${k} é um texto`);
@@ -250,6 +303,25 @@ export function applyDocxChanges(doc: DocxDoc, mudancas: readonly DocxChange[], 
           ops.push({ op: "insert", after: prev?.id ?? null, paragraphId: id, text: line });
           tail.set(n, { h, id });
         }
+        break;
+      }
+      case "inserir_linha": {
+        const n = para(mm, "depois_de", where);
+        const raw = mm.celulas;
+        if (!Array.isArray(raw) || !raw.length || raw.some((c) => typeof c !== "string"))
+          throw new DocxToolError("E_BAD_ARGS", `${where}.celulas é uma lista de textos, um por célula`);
+        cells ??= doc.cells();
+        const c = cells.get(ids[n - 1]!);
+        if (!c) throw new DocxToolError("E_BAD_ARGS", `${where}.depois_de: o parágrafo ${n} não está numa tabela; mande um parágrafo de uma célula da linha de cima (o docx_read diz a tabela, a linha e a coluna)`);
+        // Pela linha, não pelo número: duas células da mesma linha dão o mesmo lugar.
+        const at = tailRow.get(c.row) ?? { row: c.row, id: ids[n - 1]! };
+        const width = doc.rowWidth(at.row);
+        if (raw.length > width) throw new DocxToolError("E_BAD_ARGS", `${where}.celulas: a linha tem ${width} células e vieram ${raw.length}`);
+        const values = [...raw.map((c) => restore(c as string).replace(/\r?\n|\r/g, " ")), ...Array<string>(width - raw.length).fill("")];
+        const fresh = doc.insertRow(at.row, values, where);
+        const out = fresh.cells.map((h, i) => ({ paragraphId: doc.id(h), text: values[i]! }));
+        ops.push({ op: "insertRow", after: at.id, cells: out });
+        tailRow.set(c.row, { row: fresh.row, id: out[0]!.paragraphId });
         break;
       }
       case "apagar": {

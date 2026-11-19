@@ -56,4 +56,12 @@ describe("docxOpsResult", () => {
       ]),
     ).toEqual({ touched: ["A1", "N1"], gone: ["N2", "B2"] });
   });
+
+  test("a linha nova da tabela: cada célula dela fica realçada (T23627)", () => {
+    expect(
+      docxOpsResult([
+        { op: "insertRow", after: "C1", cells: [{ paragraphId: "R1", text: "Borrachas" }, { paragraphId: "R2", text: "30" }] },
+      ]),
+    ).toEqual({ touched: ["R1", "R2"], gone: [] });
+  });
 });

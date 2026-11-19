@@ -8,7 +8,7 @@
 // não acha, o início do documento), a tela abre o arquivo do disco, só com o realce. A tela nunca mostra o que não
 // está no arquivo.
 
-import type { PaginatedSurface, SemanticSelection } from "@docx-editor.dev/core/editor";
+import { type PaginatedSurface, type SemanticPosition, type SemanticSelection, tableCommandState } from "@docx-editor.dev/core/editor";
 import { forEachSemanticSpan, keyedRangeRects, type SemanticLayout } from "@docx-editor.dev/core/layout";
 
 import type { DocxOp } from "../../../src/shared/docx/ops.ts";
@@ -48,6 +48,8 @@ export function screenTexts(layout: SemanticLayout): Map<string, string> {
 export class DocxKiwi {
   private marks: Mark[] = [];
   private caret: { node: string; offset: number } | null = null;
+  /** O último lugar até onde a tela rolou nesta vez. */
+  private revealed: SemanticPosition | null = null;
   private fading = false;
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
   private face = "";
@@ -69,6 +71,7 @@ export class DocxKiwi {
     if (!s || !ids) return false;
     this.stopFade();
     this.face = o.face;
+    this.revealed = null;
     const before: SemanticSelection = s.state().selection;
     // Muitas mudanças de uma vez: as primeiras digitadas, as outras entram de uma vez, realçadas (como na planilha).
     let typed = o.reduced ? 0 : KIWI_TYPED_MAX;
@@ -93,6 +96,16 @@ export class DocxKiwi {
         } catch {
           // O parágrafo do cursor da pessoa saiu: o cursor fica onde o motor o pôs.
         }
+        // O motor rola até o cursor devolvido (o da pessoa, talvez páginas acima): a página fica onde o gato escreveu.
+        const at = this.revealed;
+        this.revealed = null;
+        if (at) {
+          try {
+            s.revealPosition(at, { block: "centerIfNeeded" });
+          } catch {
+            // O lugar saiu do documento (um parágrafo apagado): fica onde o motor deixou.
+          }
+        }
         this.fade();
       }
     }
@@ -112,7 +125,7 @@ export class DocxKiwi {
       if (node && len) this.marks.push({ node, from: 0, to: len });
     }
     const first = this.marks[0];
-    if (first) s.revealPosition({ paragraphId: first.node, offset: 0 }, { block: "centerIfNeeded" });
+    if (first) this.reveal(s, { paragraphId: first.node, offset: 0 }, { block: "centerIfNeeded" });
     this.fade();
   }
 
@@ -189,6 +202,12 @@ export class DocxKiwi {
     return el;
   }
 
+  /** Rola até onde o gato está, e guarda o lugar: devolver o cursor da pessoa no fim rola até ele, e a página volta para cá. */
+  private reveal(s: PaginatedSurface, at: SemanticPosition, o: { block: "nearest" | "centerIfNeeded" }): void {
+    this.revealed = at;
+    s.revealPosition(at, o);
+  }
+
   private repaint(s: PaginatedSurface): void {
     s.flushPendingInput();
     s.repaintHighlights();
@@ -220,7 +239,7 @@ export class DocxKiwi {
       mark.to = from + done;
       this.caret = { node, offset: from + done };
       this.repaint(s);
-      s.revealPosition({ paragraphId: node, offset: from + done }, { block: "nearest" });
+      this.reveal(s, { paragraphId: node, offset: from + done }, { block: "nearest" });
       if (stepMs) await wait(stepMs);
     }
   }
@@ -231,7 +250,7 @@ export class DocxKiwi {
       if (!node) return false;
       const len = this.textOf(s, node).length;
       if (op.from < 0 || op.to > len || op.from > op.to) return false;
-      s.revealPosition({ paragraphId: node, offset: op.from }, { block: "centerIfNeeded" });
+      this.reveal(s, { paragraphId: node, offset: op.from }, { block: "centerIfNeeded" });
       this.caret = { node, offset: op.to };
       if (op.to > op.from && animate) {
         // O trecho que sai fica marcado um instante antes de sair.
@@ -268,18 +287,19 @@ export class DocxKiwi {
       const node = s.state().selection.head.paragraphId;
       // O parágrafo novo tem de ganhar o mesmo id que ganhou no arquivo: as operações seguintes falam por ele.
       if (node === prev || ids.paraIdOf(node)?.toUpperCase() !== op.paragraphId.toUpperCase()) return false;
-      s.revealPosition({ paragraphId: node, offset: 0 }, { block: "centerIfNeeded" });
+      this.reveal(s, { paragraphId: node, offset: 0 }, { block: "centerIfNeeded" });
       if (op.text) await this.type(s, node, 0, op.text, animate, (piece) => s.insertPlainText(piece));
       else this.repaint(s);
       return this.textOf(s, node) === op.text;
     }
+    if (op.op === "insertRow") return this.row(s, ids, op, animate);
     const node = ids.nodeIdOf(op.paragraphId);
     if (!node) return false;
     const order = ids.order();
     const i = order.indexOf(node);
     if (i < 0) return false;
     const len = this.textOf(s, node).length;
-    s.revealPosition({ paragraphId: node, offset: 0 }, { block: "centerIfNeeded" });
+    this.reveal(s, { paragraphId: node, offset: 0 }, { block: "centerIfNeeded" });
     if (animate && len) {
       const out: Mark = { node, from: 0, to: len, gone: true };
       this.marks.push(out);
@@ -305,6 +325,37 @@ export class DocxKiwi {
     } else return false;
     this.repaint(s);
     return !ids.order().includes(node) || this.textOf(s, node) !== "";
+  }
+
+  /** A linha de tabela nova: o comando de inserir linha do próprio motor, abaixo da linha de `after`, e cada célula escrita. */
+  private async row(s: PaginatedSurface, ids: ParaIdSession, op: Extract<DocxOp, { op: "insertRow" }>, animate: boolean): Promise<boolean> {
+    const prev = ids.nodeIdOf(op.after);
+    if (!prev) return false;
+    const before = new Set(ids.order());
+    s.setSelection({ anchor: { paragraphId: prev, offset: 0 }, head: { paragraphId: prev, offset: 0 } });
+    const st = tableCommandState({ type: "insertRow", where: "below" }, s);
+    if (!st.can.ok || !st.plan.ok) return false;
+    const r = s.applyTableCommandPlan(st.plan);
+    if (!r.ok) return false;
+    s.flushPendingInput();
+    const fresh = ids.order().filter((n) => !before.has(n));
+    if (fresh.length !== op.cells.length) return false;
+    // O motor dá o id da célula nova pelo nó, e os nós que a tela já criou (a digitação animada cria alguns) mudam a
+    // conta: a célula pode ganhar na tela um id diferente do arquivo. A linha entra escrita do mesmo jeito, e no fim a
+    // tela diz `false`: o visualizador abre o do disco, com o realce, e os ids voltam a ser os do arquivo.
+    const same = fresh.every((node, i) => ids.paraIdOf(node)?.toUpperCase() === op.cells[i]!.paragraphId.toUpperCase());
+    this.reveal(s, { paragraphId: fresh[0]!, offset: 0 }, { block: "centerIfNeeded" });
+    for (const [i, node] of fresh.entries()) {
+      const text = op.cells[i]!.text;
+      if (!text) continue;
+      s.setSelection({ anchor: { paragraphId: node, offset: 0 }, head: { paragraphId: node, offset: 0 } });
+      await this.type(s, node, 0, text, animate, (piece) => s.insertPlainText(piece));
+      if (this.textOf(s, node) !== text) return false;
+      if (animate) await wait(KIWI_GAP_MS);
+    }
+    this.repaint(s);
+    if (!same && animate) await wait(KIWI_HOLD_MS);
+    return same;
   }
 
   private fade(): void {

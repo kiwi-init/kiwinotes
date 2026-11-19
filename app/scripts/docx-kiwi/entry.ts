@@ -4,7 +4,7 @@ import { mountDocx } from "../../ui/notes/files/docxEngine.ts";
 
 declare global {
   interface Window {
-    __play: { played: boolean; saved: string; edits: number; carets: (string | null)[] } | { error: string };
+    __play: { played: boolean; saved: string; edits: number; carets: (string | null)[]; top: number } | { error: string };
   }
 }
 
@@ -19,7 +19,9 @@ try {
   const saved = r.handle.save();
   let bin = "";
   for (const b of saved) bin += String.fromCharCode(b);
-  window.__play = { played, saved: btoa(bin), edits, carets };
+  // Onde a página ficou (T23627): o motor pode rolar depois do fim do play, então espera um instante.
+  await new Promise((d) => setTimeout(d, 300));
+  window.__play = { played, saved: btoa(bin), edits, carets, top: document.getElementById("doc")!.parentElement!.scrollTop };
 } catch (e) {
   window.__play = { error: (e as Error).stack ?? String(e) };
 }

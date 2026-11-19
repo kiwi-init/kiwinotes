@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { Document, Packer, Paragraph, TextRun } from "docx";
+import { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun } from "docx";
 import path from "node:path";
 
 import { uiCapabilities } from "../../bun/ui-capabilities.ts";
@@ -162,6 +162,26 @@ describe("o Kiwi Cat muda o docx no cofre (T21231)", () => {
     const lido = await t.tool("docx_read", { caminho: P });
     await t.tool("docx_edit", { caminho: P, versao: lido.versao, mudancas: [{ tipo: "apagar", paragrafo: 3 }] });
     expect(texts(t.bytes(P))).toHaveLength(2);
+    const r = await t.undo();
+    expect(r.notes.map((n: { path: string; result: string }) => `${n.path} ${n.result}`)).toEqual([`${P} restored`]);
+    expect(Buffer.compare(t.bytes(P), Buffer.from(doc))).toBe(0);
+  });
+
+  test("a linha de tabela nova (T23627): a janela recebe o insertRow, e o desfazer volta byte a byte", async () => {
+    const cell = (x: string) => new TableCell({ children: [new Paragraph(x)] });
+    const doc = new Uint8Array(
+      await Packer.toBuffer(
+        new Document({ sections: [{ children: [new Paragraph("Estoque"), new Table({ rows: [["Produto", "Qtd"], ["Canecas", "12"]].map((r) => new TableRow({ children: r.map(cell) })) })] }] }),
+      ),
+    );
+    const t = setup(doc);
+    await t.begin();
+    const lido = await t.tool("docx_read", { caminho: P });
+    expect(lido.paragrafos[4]).toEqual({ n: 5, texto: "12", tabela: 1, linha: 2, coluna: 2 });
+    await t.tool("docx_edit", { caminho: P, versao: lido.versao, mudancas: [{ tipo: "inserir_linha", depois_de: 5, celulas: ["Cadernos", "20"] }] });
+    // O último "" é o parágrafo que o docx põe depois de uma tabela no fim.
+    expect(texts(t.bytes(P))).toEqual(["Estoque", "Produto", "Qtd", "Canecas", "12", "Cadernos", "20", ""]);
+    expect(t.avisos[0]!.docxOps).toEqual([{ op: "insertRow", after: ids(doc)[4], cells: [{ paragraphId: expect.any(String), text: "Cadernos" }, { paragraphId: expect.any(String), text: "20" }] }]);
     const r = await t.undo();
     expect(r.notes.map((n: { path: string; result: string }) => `${n.path} ${n.result}`)).toEqual([`${P} restored`]);
     expect(Buffer.compare(t.bytes(P), Buffer.from(doc))).toBe(0);

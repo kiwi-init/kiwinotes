@@ -40,9 +40,15 @@ async function relatorio(): Promise<Uint8Array> {
   return new Uint8Array(await Packer.toBuffer(doc));
 }
 
+/** Três páginas de semanas, para a página ter de rolar até o gato (T23627). */
+async function semanas(): Promise<Uint8Array> {
+  const children = Array.from({ length: 130 }, (_, i) => new Paragraph(`Semana ${i + 1}: canecas conferidas na prateleira.`));
+  return new Uint8Array(await Packer.toBuffer(new Document({ sections: [{ children }] })));
+}
+
 /** O que o agente faz: as mudanças sobre o arquivo, os bytes gravados e as operações para a tela. */
-async function agent(mudancas: DocxChange[]): Promise<{ before: Uint8Array; after: Uint8Array; ops: DocxOp[] }> {
-  const before = await relatorio();
+async function agent(mudancas: DocxChange[], doc?: Uint8Array): Promise<{ before: Uint8Array; after: Uint8Array; ops: DocxOp[] }> {
+  const before = doc ?? (await relatorio());
   const d = DocxDoc.open(before, "x.docx");
   try {
     const ops = applyDocxChanges(d, mudancas, (s) => s);
@@ -150,6 +156,23 @@ describe.skipIf(!hasWebkit)("o gato toca no docx aberto", () => {
     expect(r.played).toBe(false);
   }, 60_000);
 
+  // T23627: o motor rola até o cursor devolvido à pessoa (no título); a página tem de ficar onde o gato escreveu.
+  describe("fora da tela, a página rola até lá e fica", () => {
+    for (const [nome, mudanca] of [
+      ["trocar", { tipo: "trocar", paragrafo: 100, de: "canecas", para: "xícaras" }],
+      ["inserir", { tipo: "inserir", depois_de: 100, texto: "Chegaram 20 cadernos." }],
+    ] as const) {
+      test(`${nome} três páginas abaixo`, async () => {
+        const a = await agent([mudanca], await semanas());
+        const r = await play(a.before, a.ops, false);
+        expect(r.played).toBe(true);
+        expect(same(r.saved, a.after)).toBe(true);
+        // A semana 100 começa perto dos 1800 px numa janela de 900: a página tem de ter descido até ela.
+        expect(r.top).toBeGreaterThan(1000);
+      }, 60_000);
+    }
+  });
+
   // Revisão #23268, item 3: a tabela. Cada caso termina com a tela igual ao disco: tocado, ou aberto do disco (false).
   describe("na tabela", () => {
     const ends = async (mudancas: DocxChange[]) => {
@@ -166,6 +189,24 @@ describe.skipIf(!hasWebkit)("o gato toca no docx aberto", () => {
     }, 60_000);
     test("inserir depois do último parágrafo de uma célula", async () => {
       expect(await ends([{ tipo: "inserir", depois_de: 4, texto: "unidades" }])).toBe(true);
+    }, 60_000);
+    // T23627: a linha nova pelo comando de inserir linha do motor da tela, com os ids que ela ganhou no arquivo.
+    test("inserir_linha: a tela toca a linha nova, célula por célula, com o mesmo texto do disco", async () => {
+      const a = await agent([{ tipo: "inserir_linha", depois_de: 3, celulas: ["Caneca", "40"] }]);
+      expect(a.ops.map((o) => o.op)).toEqual(["insertRow"]);
+      const r = await play(a.before, a.ops, false);
+      expect(r.played).toBe(true);
+      expect(docxBodyParagraphs(r.saved).map((p) => p.text)).toEqual(docxBodyParagraphs(a.after).map((p) => p.text));
+      expect(same(r.saved, a.after)).toBe(true);
+      expect(r.edits).toBe(0);
+    }, 60_000);
+    test("duas linhas no mesmo lote: a segunda ganha na tela outros ids que no arquivo; não toca, e abre o do disco", async () => {
+      expect(
+        await ends([
+          { tipo: "inserir_linha", depois_de: 4, celulas: ["Caneca", "40"] },
+          { tipo: "inserir_linha", depois_de: 3, celulas: ["Lápis"] },
+        ]),
+      ).toBe(false);
     }, 60_000);
   });
 });

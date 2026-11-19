@@ -509,7 +509,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "docx_edit",
     title: "Mudar um docx",
-    description: `Muda o texto de um docx do cofre na frente da pessoa: se ele está aberto, ela vê cada mudança. Leia antes com o docx_read e mande a versao; os números são os do docx_read, mesmo depois de inserir ou apagar. Mudanças: trocar (paragrafo, de: um trecho que aparece uma vez nele, para), reescrever (paragrafo, texto), inserir (depois_de: o número, 0 é o início; texto, uma linha por parágrafo novo) e apagar (paragrafo). O resto do arquivo (estilos, tabelas, imagens) fica como estava. Se a pessoa está escrevendo num parágrafo que você muda, o Kiwi espera ela sair; se demorar, nada é escrito e vem E_BUSY: mude os outros sem ele. Até ${DOCX_EDIT_CHANGES} mudanças por vez. Aparece na Atividade com [Desfazer].`,
+    description: `Muda o texto de um docx do cofre na frente da pessoa: se ele está aberto, ela vê cada mudança. Leia antes com o docx_read e mande a versao; os números são os do docx_read, mesmo depois de inserir ou apagar. Mudanças: trocar (paragrafo, de: um trecho que aparece uma vez nele, para), reescrever (paragrafo, texto), inserir (depois_de: o número, 0 é o início; texto, uma linha por parágrafo novo), apagar (paragrafo) e inserir_linha (depois_de: uma célula da linha de cima; celulas). O resto do arquivo (estilos, tabelas, imagens) fica como estava. Se a pessoa está escrevendo num parágrafo que você muda, o Kiwi espera ela sair; se demorar, nada é escrito e vem E_BUSY: mude os outros sem ele. Até ${DOCX_EDIT_CHANGES} mudanças por vez. Aparece na Atividade com [Desfazer].`,
     inputSchema: {
       type: "object",
       properties: {
@@ -522,12 +522,13 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
           items: {
             type: "object",
             properties: {
-              tipo: { type: "string", enum: ["trocar", "reescrever", "inserir", "apagar"] },
+              tipo: { type: "string", enum: ["trocar", "reescrever", "inserir", "apagar", "inserir_linha"] },
               paragrafo: { type: "integer", minimum: 1, description: "O número do parágrafo no docx_read." },
               de: { type: "string", description: "No trocar: o trecho de agora." },
               para: { type: "string", description: "No trocar: o trecho novo (vazio apaga)." },
               texto: { type: "string", description: "No reescrever e no inserir: o texto." },
-              depois_de: { type: "integer", minimum: 0, description: "No inserir: o parágrafo antes do novo (0 é o início)." },
+              depois_de: { type: "integer", minimum: 0, description: "No inserir: o parágrafo antes do novo (0 é o início). No inserir_linha: uma célula." },
+              celulas: { type: "array", items: { type: "string" }, description: "No inserir_linha: os textos, da esquerda para a direita." },
             },
             required: ["tipo"],
             additionalProperties: false,
