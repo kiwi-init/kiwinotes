@@ -20,6 +20,13 @@ enum MeetingLiveRun {
         /// T20237: the capture step, simulated. Each channel goes up to this rate and back to 16 kHz through the app's
         /// `Resampler`, in 10 ms buffers, as `SystemAudioTap` and the mic get it (`--capture 48000`).
         var captureRate: Double?
+        /// T21014 (spec #20953): each final `segment` goes out as soon as it is final, flushed, instead of all at the
+        /// end, so a process that writes the note (`mem:scenarios`, the meeting's RAM) gets them at the WAV's pace,
+        /// as the app's main does (`--segments-live`).
+        var segmentsLive = false
+        /// T21014: seconds to stay alive after the `stats` line, with the transcriber already gone, as the app's helper
+        /// stays up after a meeting: to read how much of the VBx peak it gives back (`--linger 40`).
+        var linger: Double = 0
     }
 
     private final class Collector: @unchecked Sendable {
@@ -60,6 +67,10 @@ enum MeetingLiveRun {
                         if collected.finals[id] == nil { collected.order.append(id) }
                         collected.finals[id] = fields
                         collected.firmAt[id] = o.realtime ? Date().timeIntervalSince(started) : collected.fed
+                        if o.segmentsLive {
+                            MeetingBench.emit(fields.merging(["type": "segment"]) { _, new in new })
+                            fflush(stdout)
+                        }
                     case "meeting.relabel":
                         collected.vbxFailed = fields["failed"] as? Bool == true
                         collected.vbx = (fields["turns"] as? [[String: Any]] ?? []).compactMap { t in
@@ -91,6 +102,8 @@ enum MeetingLiveRun {
             }
         }
         await t.finish()
+        // The meeting is over: the transcriber goes, as in the app, before the `--linger` reading.
+        _ = consume t
 
         let (finals, order, firmAt, vbx, vbxFailed, warnings) = collected.lock.withLock {
             (collected.finals, collected.order, collected.firmAt, collected.vbx, collected.vbxFailed, collected.warnings)
@@ -102,7 +115,7 @@ enum MeetingLiveRun {
         for id in order {
             guard let s = finals[id], let text = s["text"] as? String, let start = s["start"] as? Double, let end = s["end"] as? Double else { continue }
             // T20237: the segment as the app gets it, for the note step (`MeetingNotes`, in the bench).
-            MeetingBench.emit(s.merging(["type": "segment"]) { _, new in new })
+            if !o.segmentsLive { MeetingBench.emit(s.merging(["type": "segment"]) { _, new in new }) }
             let channel = s["channel"] as? String == "mine" ? "voce" : "sistema"
             let words = text.split(separator: " ").map(String.init)
             let each = (end - start) / Double(max(1, words.count))
@@ -123,6 +136,10 @@ enum MeetingLiveRun {
             "wallSeconds": Date().timeIntervalSince(started), "cpuSeconds": MeetingBench.cpuSeconds(),
             "peakFootprintMB": MeetingBench.peakFootprintMB(), "segments": order.count, "vbxSpeakers": Set(vbx.map(\.speaker)).count, "vbxFailed": vbxFailed, "warnings": warnings,
         ])
+        if o.linger > 0 {
+            fflush(stdout)
+            try? await Task.sleep(nanoseconds: UInt64(o.linger * 1e9))
+        }
         return 0
     }
 
