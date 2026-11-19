@@ -288,11 +288,14 @@ export function writtenRanges(edits: readonly KiwiEdit[]): { from: number; to: n
   return out;
 }
 
+/** Como uma escrita acabou: até o fim, ou pulada (pela pessoa, ou por outra escrita na mesma view). */
+export type KiwiWriteEnd = "end" | "skipped";
+
 export interface KiwiWriteHandle {
   /** Pula para o fim: o texto do disco na hora, com o realce. */
   skip(): void;
-  /** Resolve quando a escrita acabou (no fim ou no pulo); o realce ainda some depois. */
-  done: Promise<void>;
+  /** Resolve quando a escrita acabou: `"end"` no fim, `"skipped"` no pulo. O realce ainda some depois. */
+  done: Promise<KiwiWriteEnd>;
 }
 
 export interface KiwiClock {
@@ -312,8 +315,8 @@ export function playKiwiWrite(view: EditorView, edits: readonly KiwiEdit[], fina
   let timer: unknown = null;
   let fadeTimer: unknown = null;
   let finished = false;
-  let resolve!: () => void;
-  const done = new Promise<void>((r) => (resolve = r));
+  let resolve!: (how: KiwiWriteEnd) => void;
+  const done = new Promise<KiwiWriteEnd>((r) => (resolve = r));
 
   const dispatch = (spec: { changes?: ChangeSpec; effects: StateEffect<unknown>[]; scrollTo?: number }) => {
     const effects = [...spec.effects];
@@ -332,7 +335,7 @@ export function playKiwiWrite(view: EditorView, edits: readonly KiwiEdit[], fina
     }, KIWI_PACE.highlight);
   };
 
-  const settle = (highlights?: { from: number; to: number }[]) => {
+  const settle = (how: KiwiWriteEnd, highlights?: { from: number; to: number }[]) => {
     if (finished) return;
     finished = true;
     clock.clear(timer);
@@ -345,7 +348,7 @@ export function playKiwiWrite(view: EditorView, edits: readonly KiwiEdit[], fina
     else dispatch({ effects });
     fadeOut();
     opts.onEnd?.();
-    resolve();
+    resolve(how);
   };
 
   const skip = () => {
@@ -353,7 +356,7 @@ export function playKiwiWrite(view: EditorView, edits: readonly KiwiEdit[], fina
     // Os trechos já escritos ficam realçados; os que faltam entram realçados também.
     const remaining = kiwiWritingState(view.state).phase === "writing";
     dispatch({ effects: [setPhase.of("idle")] });
-    settle(remaining ? writtenRanges(edits).filter((r) => r.to <= final.length) : undefined);
+    settle("skipped", remaining ? writtenRanges(edits).filter((r) => r.to <= final.length) : undefined);
   };
 
   let i = 0;
@@ -362,7 +365,7 @@ export function playKiwiWrite(view: EditorView, edits: readonly KiwiEdit[], fina
     for (;;) {
       if (finished) return;
       const f = frames[i++];
-      if (!f) return settle();
+      if (!f) return settle("end");
       dispatch(f);
       if (f.wait > 0) {
         timer = clock.set(step, f.wait);

@@ -45,7 +45,7 @@ import { focusEditor, insertIntoEditor,
   updateEditorDocument,
   NoteEditor,
 } from "./NoteEditor.tsx";
-import { KiwiWrites, kiwiPlan, reducedMotion } from "./kiwiWrite.ts";
+import { type KiwiEditor, KiwiQueue, KiwiWrites, reducedMotion, startKiwiWrite } from "./kiwiWrite.ts";
 import { KiwiNotice } from "./KiwiNotice.tsx";
 import { setKiwiFace } from "./editor/kiwi-writing.ts";
 import { kiwiFaceElement } from "./editor/kiwi-face.ts";
@@ -297,6 +297,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   /** As escritas do Kiwi esperando a recarga da nota (T20869), e se uma está na tela agora (o aviso). */
   const kiwiWrites = useRef(new KiwiWrites());
   const [kiwiWriting, setKiwiWriting] = useState(false);
+  const kiwiQueue = useRef(new KiwiQueue(() => setKiwiWriting(false)));
   /** O arquivo que não é nota que o Kiwi acabou de mudar: o aviso no cartão, por alguns segundos. */
   const [kiwiTouched, setKiwiTouched] = useState<string | null>(null);
   const current = useRef<string | null>(null);
@@ -389,6 +390,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const show = useCallback(
     /** Mostra a nota. `stay`: uma recarga por fora (a nota mudou no disco) não tira a Lixeira da tela (T2593). */
     (n: Note, stay = false) => {
+      // Outra nota ou uma recarga: as escritas do Kiwi que esperavam não tocam mais (o editor fica no texto de `n`).
+      kiwiQueue.current.clear();
       if (!stay) setView("note");
       const split = splitFrontmatter(n.content);
       setFrontmatter(split.frontmatter);
@@ -431,10 +434,9 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
    * tem o texto do disco. `false` quando não dá para animar (a janela recarrega como antes, pelo `show`).
    */
   const showKiwiWrite = useCallback((n: Note): boolean => {
-    const plan = kiwiPlan({ content: baseContent.current, version: version.current }, n, kiwiWrites.current.take(n.path, n.version));
+    // Com uma escrita na tela, esta espera ela acabar (#21094): o editor chega no `plan.before` só no fim da anterior.
+    const plan = startKiwiWrite(kiwiQueue.current, kiwiWrites.current, { content: baseContent.current, version: version.current }, n, KIWI_EDITOR, reducedMotion());
     if (!plan) return false;
-    const handle = kiwiWriteInEditor(plan.before, plan.edits, plan.final, reducedMotion());
-    if (!handle) return false;
     // A nota é a do disco a partir daqui (o save seguinte parte desta versão); o editor chega nela pela animação.
     version.current = n.version;
     baseContent.current = n.content;
@@ -443,7 +445,6 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     setBody(plan.final);
     setWords(wordCount(plan.final));
     setKiwiWriting(true);
-    void handle.done.then(() => setKiwiWriting(false));
     return true;
   }, []);
 
@@ -2225,11 +2226,18 @@ function withHub(over: boolean, node: React.ReactNode) {
   return hub ? createPortal(node, hub) : node;
 }
 
+/** O editor da janela para as escritas do Kiwi: a animação, ou o texto do disco de vez (como a recarga). */
+const KIWI_EDITOR: KiwiEditor = {
+  play: (before, edits, final, reduced) => kiwiWriteInEditor(before, edits, final, reduced)?.done ?? null,
+  replace: (text) => updateEditorDocument(text),
+};
+
 /**
  * A janela Notas inteira: o vault, a nota e o "Citada em". A janela Notas e o hub (T2121) montam esta. `active`: as
  * Notas estão na tela. No hub, com outra seção à frente, elas ficam montadas e escondidas, e o ⌘N e o ⌘K delas não
  * agem sem ninguém ver (T2200); a busca que o hub pede (`searchRequest`) abre por cima da outra aba (spec #16821).
  */
+
 
 export function NotesApp({ active = true, openRequest = null, searchRequest = 0, searchSeen, onShow }: { active?: boolean; openRequest?: { path: string; n: number; internal?:boolean } | null; searchRequest?: number; searchSeen?: { current: number }; onShow?: () => void } = {}) {
   const request = openRequest?.n ?? 0;
