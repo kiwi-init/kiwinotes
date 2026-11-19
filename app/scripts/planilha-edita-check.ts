@@ -193,6 +193,57 @@ try {
       assert.equal(await text(p, 2, 1), "Caneca");
       console.log("ok     ordenar muda só a vista; o arquivo fica igual");
 
+      // 5b. Editar com a vista ordenada (Z a A: Soma, Lápis, Caneca, Caderno): a 2ª linha da vista é a do Lápis, a 4 do
+      // arquivo. O `fileRow` do SheetPane leva a edição para lá, e não para a 3ª linha do arquivo.
+      await p.click(cellAt(2, 1), { button: "right" });
+      await p.click(".kn-menu-item:has-text('Ordenar de Z a A')");
+      assert.equal(await text(p, 3, 1), "Lápis");
+      await p.click(cellAt(3, 2));
+      await p.keyboard.press("7");
+      await p.keyboard.press("Enter");
+      await until("B4 = 7 (o Lápis), e o Caderno igual", () => {
+        const s = onDisk();
+        return s.A4.v === "Lápis" && s.B4.v === 7 && s.D4.v === 21 && s.B3.v === 4 && s.D5.v === 150 + 100 + 21;
+      });
+      assert.equal(await text(p, 3, 4), "21", "a vista mostra o total novo na linha do Lápis");
+      await p.click(cellAt(2, 1), { button: "right" });
+      await p.click(".kn-menu-item:has-text('Mostrar todas as linhas')");
+      console.log("ok     editar na vista ordenada grava na linha certa do arquivo");
+
+      // 5c. Editar com o filtro "só Caneca": a única linha da vista é a 2 do arquivo.
+      await p.click(cellAt(2, 1), { button: "right" });
+      await p.click(".kn-menu-item:has-text('Mostrar só “Caneca”')");
+      assert.equal(await p.locator(".kn-grid-row[aria-rowindex='3'] .kn-grid-n").count(), 0, "o filtro deixa só a Caneca");
+      await p.click(cellAt(2, 2));
+      await p.keyboard.press("9");
+      await p.keyboard.press("Enter");
+      await until("B2 = 9 (a Caneca), e o resto igual", () => {
+        const s = onDisk();
+        return s.B2.v === 9 && s.D2.v === 270 && s.B3.v === 4 && s.B4.v === 7 && s.D5.v === 270 + 100 + 21;
+      });
+      await p.click(cellAt(2, 1), { button: "right" });
+      await p.click(".kn-menu-item:has-text('Mostrar todas as linhas')");
+      assert.equal(await text(p, 4, 1), "Lápis");
+      console.log("ok     editar com o filtro grava na linha certa do arquivo");
+
+      // 5d. Inserir uma coluna à esquerda da B pelo botão direito: Qtd vai para C, e as fórmulas andam junto. Apagar a
+      // coluna nova volta tudo para o lugar.
+      await p.click(cellAt(2, 2), { button: "right" });
+      await p.click(".kn-menu-item:has-text('Inserir coluna à esquerda')");
+      await until("a coluna nova em B, com as fórmulas andando", () => {
+        const s = onDisk();
+        return !s.B1 && s.C1.v === "Qtd" && s.C2.v === 9 && s.E2.f === "C2*D2" && s.E5.f === "SUM(E2:E4)" && s.E5.v === 391;
+      });
+      assert.equal(await text(p, 1, 3), "Qtd");
+      await p.click(cellAt(2, 2), { button: "right" });
+      await p.click(".kn-menu-item:has-text('Apagar coluna')");
+      await until("a coluna apagada, tudo de volta", () => {
+        const s = onDisk();
+        return s.B1.v === "Qtd" && s.B2.v === 9 && s.D2.f === "B2*C2" && s.D5.f === "SUM(D2:D4)" && s.D5.v === 391;
+      });
+      assert.equal(await text(p, 1, 2), "Qtd");
+      console.log("ok     inserir e apagar coluna pelo botão direito, e as fórmulas acompanham");
+
       // 6. ⌘F: "LAPIS" acha Lápis.
       await p.click(cellAt(2, 1));
       await p.keyboard.press("Meta+f");
@@ -221,7 +272,14 @@ try {
       assert.equal(await p.locator(".kn-grid-addr").textContent(), "B2:C4");
       assert.equal(await p.locator(".kn-grid-cell[data-area]").count(), 6);
       await shot(p, "04-area-escuro");
-      console.log("ok     Shift + clique seleciona a área");
+      // ⌘C (o `copy` do documento, sintético): a área sai com tabs e quebras, como o Excel lê.
+      const copied = await p.evaluate(() => {
+        const dt = new DataTransfer();
+        document.body.dispatchEvent(new ClipboardEvent("copy", { bubbles: true, cancelable: true, clipboardData: dt }));
+        return dt.getData("text/plain");
+      });
+      assert.equal(copied.replace(/\r\n/g, "\n").replace(/\n$/, ""), "9\t30\n4\t25\n7\t3");
+      console.log("ok     Shift + clique seleciona a área, e copiar leva o bloco com tabs");
     } finally {
       await w.close();
     }
