@@ -578,6 +578,7 @@ export class Vault {
   async reconcile(): Promise<void> {
     if (this.closed) return;
     const before = this.snapshot();
+    const foldersBefore = this.folders;
     const files = new Map(this.files);
     await this.scan();
     if (this.closed) return;
@@ -597,7 +598,7 @@ export class Vault {
       }
     }
     const r = reconcileMoves(before, after);
-    if (r.moves.size || r.gone.length) {
+    if (r.moves.size || r.gone.length || foldersDiffer(foldersBefore, this.folders)) {
       for (const fn of this.moveListeners) {
         try {
           fn(r);
@@ -2320,6 +2321,7 @@ export class Vault {
     const changed: string[] = [];
     const others: string[] = [];
     const before = this.snapshot();
+    const foldersBefore = this.folders;
     for (const rel of paths) {
       // Uma pasta conhecida com nome de pacote que acabou de ganhar a marca (o Keynote cria a pasta e, um instante
       // depois, o Index.zip): agora é documento, e a releitura a tira das pastas (revisão #3492).
@@ -2408,8 +2410,10 @@ export class Vault {
         }
       }
     }
+    // Também quando só as pastas mudaram (T21042): o FSEvents pode contar as notas que saíram num aviso e a pasta que
+    // sumiu em outro, já sem nota nenhuma mudando; sem este aviso, o projeto daquela pasta ficava para sempre.
     const r = reconcileMoves(before, this.snapshot());
-    if (r.moves.size || r.gone.length) {
+    if (r.moves.size || r.gone.length || foldersDiffer(foldersBefore, this.folders)) {
       for (const fn of this.moveListeners) {
         try {
           fn(r);
@@ -2470,6 +2474,14 @@ export class Vault {
       }
     }
   }
+}
+
+/** Se as pastas do índice mudaram (o scan troca o conjunto inteiro, nunca o muda no lugar). */
+function foldersDiffer(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a === b) return false;
+  if (a.size !== b.size) return true;
+  for (const f of a) if (!b.has(f)) return true;
+  return false;
 }
 
 async function exists(abs: string): Promise<boolean> {

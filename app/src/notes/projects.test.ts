@@ -521,6 +521,18 @@ describe("o projeto acompanha o que muda por fora (Finder, Obsidian)", () => {
     expect(await list()).toEqual([]);
   });
 
+  test("a pasta esvaziada e só depois apagada, em dois avisos do watcher: o projeto acaba (T21042)", async () => {
+    // O FSEvents pode contar as notas que saíram num aviso e a pasta que sumiu em outro, já sem nota nenhuma mudando.
+    const { root, list } = await watched({ "Kiwi/Kiwi.md": "# Kiwi\n", "Kiwi/ideia.md": "ideia", "Inbox/velha.md": "velha" });
+    renameSync(path.join(root, "Kiwi/ideia.md"), path.join(root, "Inbox/ideia.md"));
+    rmSync(path.join(root, "Kiwi/Kiwi.md"));
+    await until(async () => (await list())[0]?.main === null);
+    expect(await list()).toEqual([expect.objectContaining({ folder: "Kiwi", main: null })]);
+    rmSync(path.join(root, "Kiwi"), { recursive: true });
+    await until(async () => (await list()).length === 0);
+    expect(await list()).toEqual([]);
+  });
+
   test("a pasta apagada por fora acaba com o projeto", async () => {
     const { root, list } = await watched({ "Kiwi/Kiwi.md": "# Kiwi\n" });
     rmSync(path.join(root, "Kiwi"), { recursive: true });
