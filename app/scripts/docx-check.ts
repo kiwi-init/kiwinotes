@@ -69,6 +69,11 @@ const fromOutside = (text: string) => {
   assert.notEqual(next, xml, "o parágrafo de fora entrou");
   return writeZip(PROPOSTA, parts, new Map([["word/document.xml", new TextEncoder().encode(next)]]));
 };
+// O docx com controle de alterações (T21152): digitar logo depois da inserção do Bruno faz o motor gravar o parágrafo
+// novo com uma letra por trecho, e é o tidyDocx que junta.
+const EXTRAS = "Docs/extras.docx";
+const extras = Bun.spawnSync([process.execPath, join(import.meta.dir, "docx-prova/make-extras.ts"), join(vault, EXTRAS)], { cwd: app });
+assert.equal(extras.exitCode, 0, extras.stderr.toString());
 const disk = (rel: string) => new Uint8Array(readFileSync(join(vault, rel)));
 /** Espera o disco mudar (a gravação vem um instante depois da última tecla). */
 const diskChange = async (rel: string, from: string, ms = 8000) => {
@@ -370,6 +375,40 @@ try {
         const saved = await diskChange(EDITAR, start, 3000);
         assert.ok(/Proposta de mudança final\n/.test(bodyOf(saved).text), `no disco: ${bodyOf(saved).text.slice(0, 80)}`);
         assert.equal(await p.evaluate(() => window.__kiwiDocxLive), 0, "o motor solto");
+      });
+    } finally {
+      await w.close();
+    }
+  }
+
+  // Os trechos de uma letra (T21152): o caso em que o motor grava o parágrafo novo letra por letra.
+  {
+    const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1100, height: 760, motion: false, browser: "webkit", query: { note: EXTRAS } });
+    const p = w.page;
+    try {
+      await check("um parágrafo novo depois de uma inserção grava num trecho só, não uma letra por trecho", async () => {
+        await p.waitForSelector(".kn-file[data-state='ready'] .docx-page", { timeout: 30000 });
+        const start = sha(EXTRAS);
+        const box = (await p.locator(".docx-page").first().getByText("terça-feira").first().boundingBox())!;
+        await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await p.keyboard.press("End");
+        await p.keyboard.type(" A Ana conferiu a contagem de novo.", { delay: 5 });
+        await p.keyboard.press("Enter");
+        await p.keyboard.type("Linha nova escrita no Kiwi.", { delay: 5 });
+        await diskChange(EXTRAS, start);
+        // Espera a última gravação: o disco para de mudar.
+        let last = sha(EXTRAS);
+        for (let i = 0; i < 20; i++) {
+          await p.waitForTimeout(250);
+          const now = sha(EXTRAS);
+          if (now === last && i > 3) break;
+          last = now;
+        }
+        const { xml, text } = bodyOf(disk(EXTRAS));
+        assert.ok(text.includes("Linha nova escrita no Kiwi."), text.slice(0, 200));
+        const single = [...xml.matchAll(/<w:t(?: [^>]*)?>([^<]*)<\/w:t>/g)].filter((m) => m[1]!.length === 1).length;
+        assert.ok(xml.includes(">Linha nova escrita no Kiwi.</w:t>"), `o parágrafo novo saiu em ${single} trechos de uma letra`);
+        return `: o parágrafo novo num trecho só (${single} trechos de uma letra no documento)`;
       });
     } finally {
       await w.close();
