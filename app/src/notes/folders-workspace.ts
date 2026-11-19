@@ -21,6 +21,7 @@ import { createTextIndex, type TextIndexApi } from "./text-index-client.ts";
 import { NoteExporter } from "./export.ts";
 import { SemanticIndex } from "./semantic/index.ts";
 import type { SemanticEngine } from "./semantic/engine.ts";
+import type { BackgroundGate } from "./semantic/gate.ts";
 
 export interface FolderRef {
   id: string;
@@ -188,6 +189,8 @@ interface Options {
   guard?(path: string): void;
   /** O modelo da busca pelo sentido (T6013), um para todas as pastas. */
   semantic?: SemanticEngine;
+  /** Quando o modelo pode indexar (spec #24228): para com a pessoa usando o Mac e na bateria. */
+  gate?: Pick<BackgroundGate, "wait">;
   /** Para onde vai o apagado de cada pasta (T7681: o headless passa o dele); sem, o Lixo do macOS. */
   trash?: (abs: string) => Promise<void>;
 }
@@ -264,6 +267,7 @@ export class NotesFolders {
             ? path.join(this.options.dir, "semantic")
             : path.join(this.options.dir, "folders", key, "semantic"),
           engine: this.options.semantic,
+          ...(this.options.gate ? { gate: this.options.gate } : {}),
         })
       : undefined;
     const bundle = {

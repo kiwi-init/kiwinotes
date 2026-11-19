@@ -1,13 +1,18 @@
 // O índice da busca pelo sentido de uma pasta de notas (T6013): os vetores dos trechos de cada nota, pela versão
 // dela. Ficam em `<dados do app>/folders/<chave>/semantic/`, fora do cofre, e só os vetores: o texto das notas não é
 // copiado (o trecho do resultado é refeito da nota, no cofre). A fila anda em segundo plano, um lote por vez.
+//
+// A CPU (spec #24228): o modelo roda com 1 thread e no máximo `DUTY` do tempo (depois de um lote que levou t, espera
+// t × (1 − DUTY) / DUTY), e para enquanto a pessoa usa o Mac ou na bateria (`BackgroundGate`). O arquivo `vectors.bin`
+// é o retrato inteiro; o que muda vai para o fim de `vectors.add`, e o retrato só é refeito quando o `.add` cresce.
 
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { noteChunks } from "./chunks.ts";
 import type { SemanticEngine } from "./engine.ts";
 import type { Embedder } from "./embedder.ts";
+import type { BackgroundGate } from "./gate.ts";
 
 export interface SemanticDocument {
   path: string;
@@ -41,15 +46,29 @@ interface Stored {
 }
 
 const FILE = "vectors.bin";
+/** O que mudou desde o retrato: blocos do mesmo formato, um atrás do outro, com as notas que saíram (`gone`). */
+const JOURNAL = "vectors.add";
+/** O retrato é refeito quando o `.add` passa disto e da metade do retrato. */
+const COMPACT_MIN_BYTES = 8 * 1024 * 1024;
+/** A fração do tempo em que o modelo roda, em média, durante a indexação. */
+export const DUTY = 0.25;
 /** Muda quando o formato do arquivo ou o modelo muda: um arquivo de outro formato é jogado fora e refeito. */
 const FORMAT = "kiwi-semantic-1:multilingual-e5-small@761b726";
 const BATCH = 8;
+/**
+ * Trechos por chamada ao modelo. A inferência do ONNX segura a thread do Bun enquanto roda: com 1 thread, 8 trechos
+ * prendiam o laço de 100 a 140 ms; 1, de 30 a 50, no mesmo ritmo de trechos por segundo (spec #24228).
+ */
+export const PER_CALL = 1;
 const SAVE_EVERY_MS = 5_000;
 
-/** O que fica no arquivo: o cabeçalho JSON (caminho, versão e quantos vetores) e os vetores em Float32, em ordem. */
-export function encodeIndex(dim: number, notes: ReadonlyMap<string, Stored>): Uint8Array {
+/**
+ * O que fica no arquivo: o cabeçalho JSON (caminho, versão e quantos vetores) e os vetores em Float32, em ordem. No
+ * `.add`, o bloco leva também as notas que saíram (`gone`).
+ */
+export function encodeIndex(dim: number, notes: ReadonlyMap<string, Stored>, gone: readonly string[] = []): Uint8Array {
   const entries = [...notes].map(([p, s]) => [p, s.version, s.vectors.length] as const);
-  const header = new TextEncoder().encode(JSON.stringify({ format: FORMAT, dim, entries }));
+  const header = new TextEncoder().encode(JSON.stringify(gone.length ? { format: FORMAT, dim, entries, gone } : { format: FORMAT, dim, entries }));
   const count = entries.reduce((sum, [, , n]) => sum + n, 0);
   const pad = (4 - ((4 + header.length) % 4)) % 4;
   const out = new Uint8Array(4 + header.length + pad + count * dim * 4);
@@ -97,6 +116,35 @@ export function decodeIndex(bytes: Uint8Array, dim: number): Map<string, Stored>
   }
 }
 
+/**
+ * Aplica os blocos do `.add` sobre `into`, em ordem. Um bloco cortado no fim (o app caiu no meio de gravar) e o que vem
+ * depois dele ficam de fora; o que veio antes vale. Devolve quantos bytes valeram.
+ */
+export function applyJournal(bytes: Uint8Array, dim: number, into: Map<string, Stored>): number {
+  let at = 0;
+  while (at + 4 <= bytes.length) {
+    const headerLength = new DataView(bytes.buffer, bytes.byteOffset + at).getUint32(0, true);
+    let header: { format?: unknown; dim?: unknown; entries?: unknown; gone?: unknown };
+    try {
+      header = JSON.parse(new TextDecoder().decode(bytes.subarray(at + 4, at + 4 + headerLength)));
+    } catch {
+      break;
+    }
+    if (header.format !== FORMAT || header.dim !== dim || !Array.isArray(header.entries)) break;
+    const entries = header.entries as unknown[];
+    if (!entries.every((e) => Array.isArray(e) && typeof e[0] === "string" && typeof e[1] === "string" && typeof e[2] === "number")) break;
+    const count = (entries as [string, string, number][]).reduce((sum, e) => sum + e[2], 0);
+    const end = at + 4 + headerLength + count * dim * 4;
+    if (end > bytes.length) break;
+    const block = decodeIndex(bytes.subarray(at, end), dim);
+    if (!block) break;
+    for (const p of Array.isArray(header.gone) ? header.gone : []) if (typeof p === "string") into.delete(p);
+    for (const [p, s] of block) into.set(p, s);
+    at = end;
+  }
+  return at;
+}
+
 function dot(a: Float32Array, b: Float32Array): number {
   let s = 0;
   for (let i = 0; i < a.length; i++) s += a[i]! * b[i]!;
@@ -107,9 +155,16 @@ export interface SemanticIndexOptions {
   dir: string;
   engine: Pick<SemanticEngine, "start" | "loaded">;
   dim?: number;
-  /** Entre um lote e outro: a indexação cede a vez (os testes passam um que não espera). */
-  pause?(): Promise<void>;
+  /**
+   * Entre um lote e outro: a indexação cede a vez, `ms` é a espera para o modelo ficar em `DUTY` do tempo (os testes
+   * passam um que não espera).
+   */
+  pause?(ms: number): Promise<void>;
+  /** Para enquanto a pessoa usa o Mac ou na bateria (spec #24228). */
+  gate?: Pick<BackgroundGate, "wait">;
   now?(): number;
+  /** Quando o retrato é refeito (os testes passam um pequeno). */
+  compactMinBytes?: number;
 }
 
 export class SemanticIndex {
@@ -119,11 +174,17 @@ export class SemanticIndex {
   private running: Promise<void> | null = null;
   private loaded: Promise<void> | null = null;
   private dirty = false;
+  /** O que mudou desde a última gravação: vai para o `.add`. */
+  private changed = new Set<string>();
+  private gone = new Set<string>();
+  /** O tempo do modelo no lote, sem as esperas do portão. */
+  private busy = 0;
   private lastSave = 0;
   private closed = false;
   private readonly dim: number;
   private readonly file: string;
-  private readonly pause: () => Promise<void>;
+  private readonly journal: string;
+  private readonly pause: (ms: number) => Promise<void>;
   private readonly now: () => number;
   /** Quantos trechos passaram pelo modelo nesta sessão (os testes conferem que uma nota igual não volta à fila). */
   embedded = 0;
@@ -131,15 +192,22 @@ export class SemanticIndex {
   constructor(private readonly o: SemanticIndexOptions) {
     this.dim = o.dim ?? 384;
     this.file = path.join(o.dir, FILE);
-    this.pause = o.pause ?? (() => new Promise((r) => setTimeout(r, 25)));
+    this.journal = path.join(o.dir, JOURNAL);
+    this.pause = o.pause ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.now = o.now ?? Date.now;
   }
 
   private load(): Promise<void> {
     this.loaded ??= (async () => {
       const bytes = await readFile(this.file).catch(() => null);
-      const stored = bytes ? decodeIndex(new Uint8Array(bytes), this.dim) : null;
-      if (stored) for (const [p, s] of stored) if (!this.notes.has(p)) this.notes.set(p, s);
+      const stored = (bytes ? decodeIndex(new Uint8Array(bytes), this.dim) : null) ?? new Map<string, Stored>();
+      const add = await readFile(this.journal).catch(() => null);
+      if (add) {
+        const good = applyJournal(new Uint8Array(add), this.dim, stored);
+        // O fim cortado sai, para o próximo bloco não ficar atrás dele.
+        if (good < add.length) await writeFile(this.journal, add.subarray(0, good)).catch(() => {});
+      }
+      for (const [p, s] of stored) if (!this.notes.has(p)) this.notes.set(p, s);
     })();
     return this.loaded;
   }
@@ -170,17 +238,24 @@ export class SemanticIndex {
     for (const p of [...this.notes.keys()])
       if (!this.wanted.has(p)) {
         this.notes.delete(p);
+        this.changed.delete(p);
+        this.gone.add(p);
         this.dirty = true;
       }
     if (!(await this.o.engine.start()) || this.closed) return this.save(true);
     this.queue = [...this.wanted.values()].filter((d) => this.notes.get(d.path)?.version !== d.version).map((d) => d.path);
     while (this.queue.length && !this.closed) {
+      await this.o.gate?.wait(() => this.closed);
+      if (this.closed) break;
       const model = await this.o.engine.start();
       if (!model) break;
       const batch = this.queue.splice(0, BATCH);
+      this.busy = 0;
       for (const p of batch) await this.embedNote(model, p);
+      const busy = this.busy;
       await this.save(false);
-      await this.pause();
+      // O modelo trabalha no máximo `DUTY` do tempo: depois de `busy` ms, espera o resto.
+      await this.pause(Math.max(25, (busy * (1 - DUTY)) / DUTY));
     }
     await this.save(true);
   }
@@ -190,29 +265,63 @@ export class SemanticIndex {
     if (!d || this.notes.get(p)?.version === d.version) return;
     const chunks = noteChunks(d.title, d.content);
     const vectors: Float32Array[] = [];
-    for (let i = 0; i < chunks.length; i += BATCH) vectors.push(...(await model.embed(chunks.slice(i, i + BATCH), "passage")));
+    for (let i = 0; i < chunks.length; i += PER_CALL) {
+      // O portão a cada chamada, não só entre lotes: uma nota longa não segue rodando depois que o ditado começa.
+      await this.o.gate?.wait(() => this.closed);
+      if (this.closed) return;
+      const t0 = this.now();
+      vectors.push(...(await model.embed(chunks.slice(i, i + PER_CALL), "passage")));
+      this.busy += this.now() - t0;
+    }
     this.embedded += chunks.length;
     // A nota pode ter mudado enquanto o modelo rodava: só fica se ainda é a mesma versão.
     if (this.wanted.get(p)?.version !== d.version || this.closed) return;
     this.notes.set(p, { version: d.version, vectors });
+    this.gone.delete(p);
+    this.changed.add(p);
     this.dirty = true;
   }
 
+  /** Grava o que mudou no fim do `.add`; o retrato inteiro só quando o `.add` fica grande (`COMPACT_MIN_BYTES`). */
   private async save(force: boolean): Promise<void> {
     if (!this.dirty || (!force && this.now() - this.lastSave < SAVE_EVERY_MS)) return;
     this.dirty = false;
     this.lastSave = this.now();
-    await mkdir(this.o.dir, { recursive: true });
+    const changed = new Map<string, Stored>();
+    for (const p of this.changed) {
+      const s = this.notes.get(p);
+      if (s) changed.set(p, s);
+    }
+    const gone = [...this.gone];
+    this.changed.clear();
+    this.gone.clear();
+    try {
+      await mkdir(this.o.dir, { recursive: true });
+      const [snap, add] = await Promise.all([stat(this.file).catch(() => null), stat(this.journal).catch(() => null)]);
+      const block = encodeIndex(this.dim, changed, gone);
+      const addBytes = (add?.size ?? 0) + block.length;
+      if (!snap || (addBytes > (this.o.compactMinBytes ?? COMPACT_MIN_BYTES) && addBytes > snap.size / 2)) await this.compact();
+      else await appendFile(this.journal, block);
+    } catch (e) {
+      // O disco cheio no meio (T7942): o que não foi gravado volta para a próxima vez.
+      for (const p of changed.keys()) if (this.notes.has(p)) this.changed.add(p);
+      for (const p of gone) if (!this.notes.has(p)) this.gone.add(p);
+      this.dirty = true;
+      throw e;
+    }
+  }
+
+  /** O retrato inteiro, por um temporário; depois, o `.add` sai (o que estava nele já está no retrato). */
+  private async compact(): Promise<void> {
     const tmp = `${this.file}.tmp`;
     try {
       await writeFile(tmp, encodeIndex(this.dim, this.notes));
       await rename(tmp, this.file);
     } catch (e) {
-      // O disco cheio no meio (T7942): o temporário sai, e o índice continua por gravar.
       await rm(tmp, { force: true }).catch(() => {});
-      this.dirty = true;
       throw e;
     }
+    await rm(this.journal, { force: true });
   }
 
   /**
@@ -260,6 +369,8 @@ export class SemanticIndex {
   async clear(): Promise<void> {
     await this.idle();
     this.notes.clear();
+    this.changed.clear();
+    this.gone.clear();
     this.dirty = false;
     await rm(this.o.dir, { recursive: true, force: true });
   }

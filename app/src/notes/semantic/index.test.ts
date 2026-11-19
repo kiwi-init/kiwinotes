@@ -1,11 +1,11 @@
 // T6013: o índice do sentido acompanha as notas pela versão, guarda só vetores fora do cofre e acha pelo assunto.
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { noteChunks, plainText } from "./chunks.ts";
 import { DIM, fakeEmbedder } from "./fake.ts";
-import { decodeIndex, encodeIndex, type SemanticDocument, SemanticIndex } from "./index.ts";
+import { applyJournal, decodeIndex, DUTY, PER_CALL, encodeIndex, type SemanticDocument, SemanticIndex } from "./index.ts";
 import { meanPool } from "./embedder.ts";
 import { tempDir } from "../../../test/tmp.ts";
 
@@ -112,4 +112,222 @@ test("sem o modelo, a busca pelo sentido não acha nada e não espera; desligar 
   expect(existsSync(path.join(dir, "vectors.bin"))).toBe(true);
   await on.index.clear();
   expect(existsSync(dir)).toBe(false);
+});
+
+// ── a CPU (spec #24228) ──────────────────────────────────────────────────────────────────────────────────────────
+
+const notesOf = (n: number, version = "v1") => Array.from({ length: n }, (_, i) => doc(`N${i}.md`, `backup do servidor ${i}`, version));
+
+test("o modelo trabalha no máximo um quarto do tempo: depois de um lote de t ms, espera 3t", async () => {
+  let t = 0;
+  const model = fakeEmbedder();
+  const slow = { ...model, embed: async (texts: readonly string[], kind: "query" | "passage") => ((t += 100), model.embed(texts, kind)) };
+  const pauses: number[] = [];
+  const index = new SemanticIndex({
+    dir: tmp(),
+    engine: { start: async () => slow, loaded: () => slow },
+    dim: DIM,
+    now: () => t,
+    pause: async (ms) => void pauses.push(ms),
+  });
+  index.sync(notesOf(20));
+  await index.idle();
+  // 20 notas em lotes de 8: 8, 8 e 4, cada nota uma chamada de 100 ms.
+  expect(pauses).toEqual([2400, 2400, 1200]);
+  for (const [i, ms] of pauses.entries()) {
+    const busy = [800, 800, 400][i]!;
+    expect(busy / (busy + ms)).toBeCloseTo(DUTY);
+  }
+});
+
+test("com o portão fechado (a pessoa no Mac), o modelo não roda; aberto, a fila anda", async () => {
+  const { dir, model } = setup();
+  let open!: () => void;
+  const opened = new Promise<void>((r) => (open = r));
+  let waits = 0;
+  const index = new SemanticIndex({
+    dir,
+    engine: { start: async () => model, loaded: () => model },
+    dim: DIM,
+    pause: async () => {},
+    gate: { wait: async () => void (waits++, await opened) },
+  });
+  index.sync(notesOf(3));
+  await Bun.sleep(30);
+  expect(waits).toBe(1);
+  expect(model.calls).toEqual([]);
+  open();
+  await index.idle();
+  expect(index.status()).toEqual({ notes: 3, indexed: 3 });
+});
+
+test("fechar o índice com o portão fechado não fica esperando", async () => {
+  const model = fakeEmbedder();
+  let stop: (() => boolean) | undefined;
+  const index = new SemanticIndex({
+    dir: tmp(),
+    engine: { start: async () => model, loaded: () => model },
+    dim: DIM,
+    pause: async () => {},
+    gate: {
+      wait: async (s) => {
+        stop = s;
+        while (!s?.()) await Bun.sleep(5);
+      },
+    },
+  });
+  index.sync(notesOf(2));
+  await Bun.sleep(20);
+  await index.close();
+  expect(stop?.()).toBe(true);
+  expect(model.calls).toEqual([]);
+});
+
+test("mudar uma nota não regrava o retrato: o que mudou vai para o fim do vectors.add", async () => {
+  const { dir, index } = setup();
+  const notes = notesOf(50);
+  index.sync(notes);
+  await index.idle();
+  const bin = path.join(dir, "vectors.bin");
+  const add = path.join(dir, "vectors.add");
+  const snapshot = readFileSync(bin);
+  // O retrato sai do 1º lote; o resto da 1ª passada já vai para o .add.
+  const first = existsSync(add) ? statSync(add).size : 0;
+
+  index.sync([...notes.slice(0, 49), doc("N49.md", "receita de bolo", "v2")]);
+  await index.idle();
+  expect(readFileSync(bin)).toEqual(snapshot);
+  const one = statSync(add).size;
+  // Um bloco com uma nota só, não as 50.
+  expect(one - first).toBeGreaterThan(0);
+  expect(one - first).toBeLessThan((snapshot.length + first) / 10);
+
+  // Uma nota que sai também vai para o .add, e reabrir não refaz nada.
+  index.sync(notes.slice(0, 48).concat(doc("N49.md", "receita de bolo", "v2")));
+  await index.idle();
+  expect(statSync(add).size).toBeGreaterThan(one);
+  expect(readFileSync(bin)).toEqual(snapshot);
+
+  const again = setup(dir);
+  again.index.sync(notes.slice(0, 48).concat(doc("N49.md", "receita de bolo", "v2")));
+  await again.index.idle();
+  expect(again.model.calls.filter((c) => c.kind === "passage")).toEqual([]);
+  expect(again.index.status()).toEqual({ notes: 49, indexed: 49 });
+  expect((await again.index.query("cozinha", 1))[0]!.path).toBe("N49.md");
+  expect((await again.index.query("cópia de segurança", 100)).map((h) => h.path)).not.toContain("N48.md");
+});
+
+test("o fim cortado do vectors.add (o app caiu gravando) sai, e só aquela nota volta ao modelo", async () => {
+  const { dir, index } = setup();
+  const notes = notesOf(10);
+  index.sync(notes);
+  await index.idle();
+  const changed = [...notes.slice(0, 8), doc("N8.md", "receita de bolo", "v2")];
+  index.sync([...changed, notes[9]!]);
+  await index.idle();
+  const two = [...changed, doc("N9.md", "viagem de férias", "v2")];
+  index.sync(two);
+  await index.idle();
+  const add = path.join(dir, "vectors.add");
+  const full = readFileSync(add);
+  writeFileSync(add, full.subarray(0, full.length - 6));
+
+  const again = setup(dir);
+  again.index.sync(two);
+  await again.index.idle();
+  // O N8 estava no 1º bloco, que valeu; o N9, no bloco cortado, volta ao modelo.
+  expect(again.model.calls.flatMap((c) => (c.kind === "passage" ? c.texts : []))).toEqual(["N9. viagem de férias"]);
+  expect(again.index.status()).toEqual({ notes: 10, indexed: 10 });
+  // O .add ficou sem o pedaço cortado, e o bloco novo do N9 veio atrás dele.
+  const fixed = new Map<string, { version: string; vectors: Float32Array[] }>();
+  expect(applyJournal(new Uint8Array(readFileSync(add)), DIM, fixed)).toBe(statSync(add).size);
+  expect(fixed.get("N9.md")?.version).toBe("v2");
+});
+
+test("o vectors.add grande vira um retrato novo, e sai", async () => {
+  const dir = tmp();
+  const model = fakeEmbedder();
+  const make = () =>
+    new SemanticIndex({ dir, engine: { start: async () => model, loaded: () => model }, dim: DIM, pause: async () => {}, compactMinBytes: 300 });
+  const index = make();
+  const notes = notesOf(20);
+  index.sync(notes);
+  await index.idle();
+  const bin = path.join(dir, "vectors.bin");
+  const add = path.join(dir, "vectors.add");
+  const snapshots = new Set<string>();
+  let current = notes;
+  for (let round = 2; round < 12; round++) {
+    current = current.map((d, i) => (i < 5 ? doc(d.path, `receita de bolo ${round}`, `v${round}`) : d));
+    index.sync(current);
+    await index.idle();
+    snapshots.add(readFileSync(bin).toString("base64"));
+  }
+  // O retrato foi refeito no caminho (mais de um retrato visto), e o .add nunca passa muito do limite.
+  expect(snapshots.size).toBeGreaterThan(1);
+  // O .add passou do limite e da metade do retrato pelo menos uma vez: o retrato tem as versões novas, e o .add sumiu ou recomeçou pequeno.
+  const snap = decodeIndex(new Uint8Array(readFileSync(bin)), DIM)!;
+  expect(existsSync(add) ? statSync(add).size : 0).toBeLessThan(statSync(bin).size);
+  expect([...snap.values()].some((s) => s.version !== "v1")).toBe(true);
+  const again = new SemanticIndex({ dir, engine: { start: async () => model, loaded: () => model }, dim: DIM, pause: async () => {} });
+  const before = model.calls.length;
+  again.sync(current);
+  await again.idle();
+  expect(model.calls.length).toBe(before);
+  expect(again.status()).toEqual({ notes: 20, indexed: 20 });
+});
+
+test("o e5 roda com 1 thread", () => {
+  const src = readFileSync(path.join(import.meta.dir, "embedder.ts"), "utf8");
+  expect(src).toContain("intraOpNumThreads: o.threads ?? 1,");
+});
+
+test("um trecho por chamada ao modelo: a inferência segura o laço do Bun enquanto roda", async () => {
+  const { index, model } = setup();
+  index.sync([doc("Longa.md", Array.from({ length: 5 }, (_, i) => `backup do servidor ${i} `.repeat(60)).join("\n\n"))]);
+  await index.idle();
+  expect(PER_CALL).toBe(1);
+  const passages = model.calls.filter((c) => c.kind === "passage");
+  expect(passages.length).toBeGreaterThan(1);
+  for (const c of passages) expect(c.texts).toHaveLength(1);
+});
+
+test("uma nota apagada continua fora depois de reabrir, antes de qualquer sync (o retrato antigo e o .add)", async () => {
+  const { dir, index } = setup();
+  const notes = [doc("Viagem.md", "viagem de férias na praia"), doc("Bolo.md", "receita de bolo de cenoura"), doc("Backup.md", "backup do servidor")];
+  index.sync(notes);
+  await index.idle();
+  index.sync(notes.filter((d) => d.path !== "Bolo.md"));
+  await index.idle();
+  expect(existsSync(path.join(dir, "vectors.add"))).toBe(true);
+
+  const again = setup(dir);
+  const hits = await again.index.query("cozinha", 10);
+  expect(hits.map((h) => h.path).sort()).toEqual(["Backup.md", "Viagem.md"]);
+});
+
+test("o portão é conferido a cada chamada ao modelo: uma nota longa para no meio quando o ditado começa", async () => {
+  const { dir, model } = setup();
+  let closed = false;
+  let open!: () => void;
+  const opened = new Promise<void>((r) => (open = r));
+  const index = new SemanticIndex({
+    dir,
+    engine: { start: async () => model, loaded: () => model },
+    dim: DIM,
+    pause: async () => {},
+    gate: { wait: async () => void (closed && (await opened)) },
+  });
+  const counting = model.embed.bind(model);
+  model.embed = async (texts, kind) => {
+    if (model.calls.length === 1) closed = true; // o ditado começou depois da 2ª chamada
+    return counting(texts, kind);
+  };
+  index.sync([doc("Longa.md", Array.from({ length: 6 }, (_, i) => `backup do servidor ${i} `.repeat(60)).join("\n\n"))]);
+  await Bun.sleep(30);
+  expect(model.calls.filter((c) => c.kind === "passage")).toHaveLength(2);
+  open();
+  await index.idle();
+  expect(model.calls.filter((c) => c.kind === "passage").length).toBeGreaterThan(2);
+  expect(index.status()).toEqual({ notes: 1, indexed: 1 });
 });

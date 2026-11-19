@@ -218,6 +218,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     ocr: stores.ocr,
     textIndex: stores.textIndex,
     semanticEngine: stores.semantic,
+    userActive: () => stores.gate.touch(),
     exporter: stores.exporter,
     // O headless nunca abre diálogo: a pasta do exportar vem de KIWI_EXPORT_DIR (T2684), ou o exportar dá E_CANCELED.
     chooseExportFolder: async () => process.env.KIWI_EXPORT_DIR ?? null,

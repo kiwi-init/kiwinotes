@@ -16,6 +16,7 @@ import { statusLabel } from "./session-status.ts";
 import { helperPath, Session, session, type SessionStatus } from "./session.ts";
 import { helperRunner } from "../notes/ocr.ts";
 import { helperPdf } from "../notes/export.ts";
+import { wireGate } from "../notes/semantic/gate.ts";
 import { stores } from "./stores.ts";
 import { installFileLog } from "./file-log.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
@@ -188,6 +189,8 @@ dictation.permissions.holdWhile(async () => (await firstRun) === "pending" && (a
 dictation.sidecar.on("audio.inputs.changed", () => {
   for (const w of ["hub", "settings"] as const) sendToWindow(w, "audio.inputs.changed", {});
 });
+// A busca pelo sentido para enquanto a pessoa dita, fala com o agente ou grava uma reunião (spec #24228).
+wireGate(dictation.sidecar, dictation.meetings, stores.gate);
 // A gravação de reunião começou, parou ou pausou o canal "você" (R6): o card ao vivo da aba Reuniões.
 dictation.meetings.onChange((live) => {
   sendToWindow("hub", "meetings.live", live);
