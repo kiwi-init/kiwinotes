@@ -1,6 +1,6 @@
 // O docx como no Word nas Notas (T21151, spec #21080), na janela de verdade: o AppEngine headless e a janela Notas num
 // WebKit headless, com um relatório inventado de 20 páginas (o `docx-prova/make-doc.ts`). Confere as páginas, o ⌘F com
-// as marcas, o zoom, nenhum pedido de rede, o arquivo igual byte a byte depois de abrir e fechar, e o motor solto ao
+// as marcas, o zoom, nenhum pedido de rede, o arquivo igual byte a byte depois de abrir, rolar e fechar, e o motor solto ao
 // trocar de arquivo. O tempo de abrir segue a régua (`ABRE_MS` e `medirAte`, de test/regua): o motor desenha num canvas,
 // e esta é a prova do item 1 para o docx. Nada na tela de ninguém; os dados num tmp.
 //
@@ -220,6 +220,27 @@ try {
       await check("tudo local e sem erro na página", async () => {
         assert.deepEqual(w.report.blocked, []);
         assert.deepEqual(w.report.problems, []);
+      });
+
+      // Caixa 6 do spec #21080 (T23170): rolar não é editar. Pela roda e pelo teclado até a última página e de volta; o
+      // arquivo segue igual mesmo com o documento aberto, depois da espera de quem grava sozinho.
+      await check("rolar até o fim e voltar não grava", async () => {
+        const scroll = p.locator(".kn-file-docx-scroll");
+        await scroll.hover();
+        for (let i = 0; i < 6; i++) await p.mouse.wheel(0, 2400);
+        await scroll.click({ position: { x: 20, y: 20 } });
+        await p.keyboard.press("PageDown");
+        await p.keyboard.press("End");
+        await p.waitForFunction(() => {
+          const el = document.querySelector(".kn-file-docx-scroll")!;
+          return el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+        }, null, { timeout: 5000 });
+        const bottom = await scroll.evaluate((el) => el.scrollTop);
+        await p.keyboard.press("Home");
+        await p.waitForFunction(() => document.querySelector(".kn-file-docx-scroll")!.scrollTop < 4, null, { timeout: 5000 });
+        await p.waitForTimeout(1200);
+        assert.equal(sha(REPORT), before.report, "o relatório mudou no disco com ele aberto");
+        return `: até ${Math.round(bottom)} px e de volta, o arquivo igual`;
       });
 
       await check("trocar de arquivo solta o motor", async () => {
@@ -631,7 +652,7 @@ try {
     }
   }
 
-  await check("o arquivo fica igual, byte a byte, depois de abrir e fechar", async () => {
+  await check("o arquivo fica igual, byte a byte, depois de abrir, rolar e fechar", async () => {
     assert.deepEqual({ report: sha(REPORT), proposta: sha("Docs/proposta.docx") }, before);
   });
 } finally {
