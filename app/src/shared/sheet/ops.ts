@@ -146,8 +146,12 @@ export interface GridCell {
   format?: string;
   /** O que a célula mostra. */
   text: string;
-  /** O recálculo não soube refazer esta fórmula (uma função que ele não tem): o `value` é o de antes (T21108). */
-  stale?: true;
+  /**
+   * O recálculo não soube refazer esta fórmula: o `value` é o de antes (T21108). Para a tela, os dois são o mesmo aviso.
+   * `true`: o cálculo dela não bateu com o que o Excel gravou, e a marca fica até a pessoa reescrevê-la. `"recheck"`: ela
+   * depende de uma marcada, ou dá um erro que o motor não resolve; o próximo recálculo confere de novo.
+   */
+  stale?: true | "recheck";
 }
 
 export interface GridSheet {
