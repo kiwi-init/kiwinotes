@@ -6,7 +6,7 @@
 
 import { createServerAutomationHost } from "@docx-editor.dev/core/automation";
 
-import type { DocxOp } from "../../shared/docx/ops.ts";
+import { type DocxOp, docxOpsTouch } from "../../shared/docx/ops.ts";
 import type { VaultReader } from "./reader.ts";
 import type { VaultWriter } from "./writer.ts";
 
@@ -300,8 +300,7 @@ export async function docxEdit(
   // A pessoa escrevendo num parágrafo que o lote muda: o gato espera ela sair, com teto. Ou o lote grava inteiro
   // depois, ou nada (spec #21155, como a célula da planilha no T21114).
   if (writer.waitParagraphs) {
-    const touched = ops.flatMap((o) => (o.op === "insert" ? [] : [o.paragraphId]));
-    const { busy, waited } = await writer.waitParagraphs(path, touched);
+    const { busy, waited } = await writer.waitParagraphs(path, [...docxOpsTouch(ops)]);
     if (busy) {
       throw new DocxToolError("E_BUSY", `a pessoa está escrevendo no parágrafo que você ia mudar. Nada foi escrito: mude os outros parágrafos num docx_edit sem ele, ou tente de novo daqui a pouco.`);
     }

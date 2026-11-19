@@ -28,6 +28,8 @@ export interface KiwiSheetSource {
   take(path: string, version: string): { sheetOps?: SheetOp[] } | null;
   /** O mesmo para o docx (T21231): as operações das gravações do gato que levaram o arquivo até `version`. */
   takeDocx?(path: string, version: string): { docxOps?: DocxOp[] } | null;
+  /** `version` saiu de gravações do gato num docx sobre `base`? Não tira nada. */
+  catWroteDocx?(path: string, base: string, version: string): boolean;
   cor: unknown;
 }
 

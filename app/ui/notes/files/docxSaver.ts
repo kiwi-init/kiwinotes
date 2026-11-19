@@ -9,6 +9,10 @@ import type { FilesApi } from "./viewers.ts";
 /** Quanto a gravação espera depois da última edição (ms), como a planilha. */
 export const DOCX_SAVE_DELAY = 400;
 
+/** Por quanto a recusa espera o aviso da gravação do gato chegar: CAT_GRACE_TRIES × CAT_GRACE_MS. */
+const CAT_GRACE_MS = 50;
+const CAT_GRACE_TRIES = 6;
+
 export const CHANGED_OUTSIDE = "O arquivo mudou fora do Kiwi: abri a versão nova, e a última edição não foi gravada.";
 export const SAVE_FAILED = "Não deu para gravar este documento agora. O Kiwi tenta de novo na próxima edição.";
 
@@ -20,6 +24,11 @@ export interface DocxSaverOptions {
   notice(text: string | null): void;
   /** Outro app gravou antes de nós: abrir estes bytes no lugar. */
   reload(base64: string, version: string): void;
+  /**
+   * `version` saiu de gravações do Kiwi Cat sobre `base` (T21231)? O aviso dele (o `agent.wrote`) pode chegar um pouco
+   * depois da recusa: o gravador pergunta de novo por um instante.
+   */
+  catWrote?(base: string, version: string): boolean;
   delay?: number;
 }
 
@@ -163,6 +172,12 @@ export class DocxSaver {
         if (!this.held) this.edited();
         return false;
       }
+      // O gato gravou e a tela ainda não recebeu (revisão #23268): a edição fica por gravar, a tela toca a versão dele,
+      // e o `release` grava a edição por cima. Se a tela não puder tocar, ela abre do disco, com o aviso.
+      if ("version" in r.current && (await this.catWrote(base, r.current.version))) {
+        this.dirty = true;
+        return false;
+      }
       // Mudou no disco desde a nossa versão: vale o arquivo de lá, como numa nota com conflito.
       this.o.notice(CHANGED_OUTSIDE);
       if ("base64" in r.current) {
@@ -178,8 +193,36 @@ export class DocxSaver {
     }
   }
 
+  private async catWrote(base: string, version: string): Promise<boolean> {
+    const ask = this.o.catWrote;
+    if (!ask) return false;
+    for (let n = 0; ; n++) {
+      if (ask(base, version)) return true;
+      if (n >= CAT_GRACE_TRIES) return false;
+      await new Promise((go) => setTimeout(go, CAT_GRACE_MS));
+    }
+  }
+
   private cancel(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
+}
+
+/**
+ * O parágrafo do cursor da pessoa, para o gato (T21231). Ao sair de um parágrafo com uma edição por gravar, grava antes
+ * de dizer o novo: senão o gato, que esperava ela sair, gravaria por cima de um texto que o disco ainda não tem (revisão
+ * #23268). Com a gravação dela no disco, a versão muda, e o gato recebe E_CHANGED em vez de gravar.
+ */
+export function caretReporter(saver: Pick<DocxSaver, "unsaved" | "flush">, send: (id: string | null) => Promise<unknown>): (id: string | null) => void {
+  let last: string | null | undefined;
+  let chain: Promise<unknown> = Promise.resolve();
+  return (id) => {
+    if (id === last) return;
+    last = id;
+    chain = chain.then(async () => {
+      if (saver.unsaved) await saver.flush().catch(() => false);
+      await send(id).catch(() => {});
+    });
+  };
 }

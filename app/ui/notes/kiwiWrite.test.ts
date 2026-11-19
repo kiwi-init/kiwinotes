@@ -79,6 +79,21 @@ describe("as escritas esperando a recarga", () => {
     expect(w.takeDocx("carta.docx", "c")).toEqual({ docxOps: [...troca("Olá"), ...troca("Oi")] });
     expect(w.takeDocx("carta.docx", "c")).toBeNull();
   });
+
+  test("catWroteDocx: a versão saiu do gato sobre a nossa, mesmo depois do takeDocx (revisão #23268)", () => {
+    const w = new KiwiWrites();
+    const troca = (t: string) => [{ op: "replace" as const, paragraphId: "1A2B3C4D", from: 0, to: 3, text: t }];
+    w.add({ path: "carta.docx", baseVersion: "a", version: "b", docxOps: troca("Olá") });
+    w.add({ path: "carta.docx", baseVersion: "b", version: "c", docxOps: troca("Oi") });
+    expect(w.catWroteDocx("carta.docx", "a", "c")).toBe(true);
+    expect(w.catWroteDocx("carta.docx", "b", "c")).toBe(true);
+    expect(w.takeDocx("carta.docx", "c")).not.toBeNull();
+    expect(w.catWroteDocx("carta.docx", "a", "c")).toBe(true);
+    // Outra base, outro arquivo, uma versão de fora: não.
+    expect(w.catWroteDocx("carta.docx", "x", "c")).toBe(false);
+    expect(w.catWroteDocx("outra.docx", "a", "c")).toBe(false);
+    expect(w.catWroteDocx("carta.docx", "a", "z")).toBe(false);
+  });
 });
 
 // #21094: duas escritas seguidas do mesmo pedido (`notes_edit` e depois `notes_append`), cada uma com o seu `agent.wrote`

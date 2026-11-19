@@ -224,6 +224,22 @@ try {
     await settle();
     checks.push("mesmo parágrafo: o gato espera a pessoa sair, e só então escreve (disco conferido)");
 
+    // 3b. A pessoa digita no parágrafo que o gato espera e sai antes de a gravação dela sair (os 400 ms): o texto dela
+    // grava antes de o gato saber que ela saiu, e ele não escreve por cima (E_CHANGED). Revisão #23268, item 2.
+    await clickEnd("Ana revisa na quinta.");
+    const before3b = disk();
+    await catAsks(REL, [{ tipo: "trocar", paragrafo: 5, de: "quinta", para: "sábado" }]);
+    await p.waitForTimeout(800);
+    assert.deepEqual(disk(), before3b, "o gato espera");
+    await p.keyboard.type(" Confirmado.", { delay: 10 });
+    await clickEnd("Os cadernos acabaram");
+    await waitDisk((t) => t.includes("Ana revisa na quinta. Confirmado."), "o texto da pessoa no disco");
+    await p.waitForTimeout(2500);
+    assert.ok(disk().includes("Ana revisa na quinta. Confirmado."), `o gato escreveu por cima: ${JSON.stringify(disk())}`);
+    assert.ok((await screenText()).includes("Ana revisa na quinta. Confirmado."));
+    await noNotice();
+    checks.push("a pessoa sai do parágrafo logo depois de digitar: o texto dela grava antes, e o gato não escreve por cima (disco conferido)");
+
     // 4. A edição da pessoa ainda gravando quando o gato grava: ela fica, por cima da versão dele.
     holding = true;
     await p.keyboard.type(" Até o dia 20.", { delay: 15 });

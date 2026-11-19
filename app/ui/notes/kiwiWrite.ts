@@ -18,7 +18,13 @@ const KEEP = 32;
 /** As escritas do Kiwi que ainda esperam a recarga da nota, pela versão nova. */
 export class KiwiWrites {
   private byKey = new Map<string, AgentWrote>();
+  /** As gravações do gato em docx, `caminho@versão` → a versão de antes. Ficam mesmo depois do `takeDocx` (T21231). */
+  private docxBase = new Map<string, string>();
   add(e: AgentWrote): void {
+    if (e.docxOps?.length && e.version && e.baseVersion) {
+      this.docxBase.set(`${e.path}@${e.version}`, e.baseVersion);
+      while (this.docxBase.size > KEEP) this.docxBase.delete(this.docxBase.keys().next().value!);
+    }
     // A nota anima pelos trechos; a planilha (T21114) e o docx (T21231), pelas operações.
     if (!(e.edits || e.sheetOps?.length || e.docxOps?.length) || !e.version) return;
     const key = `${e.path}@${e.version}`;
@@ -45,6 +51,18 @@ export class KiwiWrites {
   takeDocx(path: string, version: string): { docxOps: DocxOp[] } | null {
     const chain = this.chain(path, version, "docxOps");
     return chain.length ? { docxOps: chain.flatMap((e) => e.docxOps!) } : null;
+  }
+  /**
+   * `version` saiu de gravações do gato sobre `base` (T21231)? A gravação da pessoa recusada por uma delas não é
+   * "mudou fora do Kiwi": a tela vai tocar a do gato, e a edição dela grava de novo por cima (revisão #23268).
+   */
+  catWroteDocx(path: string, base: string, version: string): boolean {
+    let v: string | undefined = version;
+    for (let n = 0; v && n < KEEP; n++) {
+      v = this.docxBase.get(`${path}@${v}`);
+      if (v === base) return true;
+    }
+    return false;
   }
   /** As gravações seguidas com `field` que levaram `path` até `version`, da mais antiga à mais nova; tira cada uma. */
   private chain(path: string, version: string, field: "sheetOps" | "docxOps"): AgentWrote[] {

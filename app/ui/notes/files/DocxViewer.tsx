@@ -19,7 +19,7 @@ import { reducedMotion } from "../kiwiWrite.ts";
 import { externalUrl } from "../links.ts";
 import { bytesOf } from "./csv.ts";
 import type { DocxHandle } from "./docxEngine.ts";
-import { DocxSaver } from "./docxSaver.ts";
+import { caretReporter, DocxSaver } from "./docxSaver.ts";
 import { docxBodyParagraphs, sameText } from "./docxText.ts";
 import { type DocxMatch, type DocxParagraph, docxParagraphs, findInDocx } from "./docxFind.ts";
 import { stepMatch } from "./pdfSearch.ts";
@@ -51,6 +51,7 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
           },
           notice: setNotice,
           reload: (b64, version) => setSource({ base64: b64, version }),
+          catWrote: (base, version) => !!kiwiSource.current?.catWroteDocx?.(path, base, version),
         },
         file.version,
       ),
@@ -131,7 +132,9 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
   // O parágrafo com o cursor da pessoa, para o gato esperar ela sair dele (T21231).
   const owner = useMemo(() => `docx-${Math.random().toString(36).slice(2, 10)}`, []);
   const tellCaret = useRef<(id: string | null) => void>(() => {});
-  tellCaret.current = (id) => void files.editing?.(path, owner, null, id).catch(() => {});
+  // Sair do parágrafo grava antes a edição da pessoa, e só então o gato fica sabendo (revisão #23268).
+  const reportCaret = useMemo(() => caretReporter(saver, (id) => files.editing?.(path, owner, null, id) ?? Promise.resolve()), [saver, files, path, owner]);
+  tellCaret.current = reportCaret;
 
   // Abre o documento no motor. Outro arquivo, ou o mesmo que mudou no disco: solta o de antes.
   useEffect(() => {

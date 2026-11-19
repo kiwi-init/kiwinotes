@@ -149,4 +149,23 @@ describe.skipIf(!hasWebkit)("o gato toca no docx aberto", () => {
     const r = await play(await relatorio(), [{ op: "replace", paragraphId: "0BADF00D", from: 0, to: 1, text: "x" }]);
     expect(r.played).toBe(false);
   }, 60_000);
+
+  // Revisão #23268, item 3: a tabela. Cada caso termina com a tela igual ao disco: tocado, ou aberto do disco (false).
+  describe("na tabela", () => {
+    const ends = async (mudancas: DocxChange[]) => {
+      const a = await agent(mudancas);
+      const r = await play(a.before, a.ops);
+      if (r.played) expect(same(r.saved, a.after)).toBe(true);
+      return r.played;
+    };
+    test("trocar num parágrafo de uma célula", async () => {
+      expect(await ends([{ tipo: "trocar", paragrafo: 3, de: "Caderno", para: "Caderno azul" }])).toBe(true);
+    }, 60_000);
+    test("apagar o parágrafo logo depois da tabela: a tela não toca (juntaria com a célula), e abre o do disco", async () => {
+      expect(await ends([{ tipo: "apagar", paragrafo: 5 }])).toBe(false);
+    }, 60_000);
+    test("inserir depois do último parágrafo de uma célula", async () => {
+      expect(await ends([{ tipo: "inserir", depois_de: 4, texto: "unidades" }])).toBe(true);
+    }, 60_000);
+  });
 });
