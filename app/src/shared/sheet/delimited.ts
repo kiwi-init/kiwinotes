@@ -36,7 +36,7 @@ export function readDelimited(bytes: Uint8Array, name: string): { rows: string[]
   const lines = splitRows(text, delimiter);
   let preamble: string | null = null;
   if (lines[0] && SEP_HINT.test(lines[0].raw)) preamble = lines.shift()!.raw;
-  const eol = lines.find((l) => l.eol)?.eol ?? (preamble !== null ? (/\r\n/.test(text.slice(0, preamble.length + 2)) ? "\r\n" : "\n") : "\n");
+  const eol = lines.find((l) => l.eol !== "")?.eol || (preamble !== null ? (/\r\n/.test(text.slice(0, preamble.length + 2)) ? "\r\n" : "\n") : "\n");
   const finalEol = /[\r\n]$/.test(text);
   return {
     rows: lines.map((l) => l.cells.slice()),
