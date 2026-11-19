@@ -321,7 +321,8 @@ function xlsxSoAMudanca(rel: string, antes: Uint8Array, depois: Uint8Array): str
   const cd = new Set(celulas(depois));
   const sumiram = ca.filter((x) => !cd.has(x));
   if (sumiram.length !== 1 || !sumiram[0]!.includes(MARCA)) return `o xlsx gravado mudou outras células: ${sumiram.length}`;
-  return cd.size === ca.length && [...cd].some((x) => x.includes(`${MARCA}2`)) ? null : "o xlsx gravado não tem a edição";
+  if (cd.size !== ca.length) return `o xlsx gravado ganhou células além da edição: ${cd.size - ca.length}`;
+  return [...cd].some((x) => x.includes(`${MARCA}2`)) ? null : "o xlsx gravado não tem a edição";
 }
 
 /** O gato muda a planilha como no app (T21114): o `sheets_read` e o `sheets_edit` do agente, sobre as capacidades. */
