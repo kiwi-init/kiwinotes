@@ -198,10 +198,11 @@ async function idle(name: string, windows: UiWindow[], limits: Limit[], away: bo
   const data = mkdtempSync(path.join(base, "run-"));
   let app: Awaited<ReturnType<typeof headless>> | null = null;
   let browser: Browser | null = null;
+  let registry: ReturnType<typeof fakeRegistry> | null = null;
   const pages: OpenedPage[] = [];
   try {
     smallVault(path.join(data, "vault"));
-    const registry = fakeRegistry([
+    registry = fakeRegistry([
       { name: "@agentclientprotocol/claude-agent-acp", version: "0.106.0", files: { "dist/index.js": "" } },
       { name: "zod", version: "4.6.7", files: { "index.js": "" } },
     ]);
@@ -242,6 +243,8 @@ async function idle(name: string, windows: UiWindow[], limits: Limit[], away: bo
     for (const p of pages) await p.close().catch(() => {});
     await browser?.close().catch(() => {});
     await app?.stop().catch(() => {});
+    // O servidor do registro falso segura o processo vivo: sem o `stop`, o script mede e não sai (o CI esperou 10 min).
+    registry?.stop();
     rmSync(data, { recursive: true, force: true });
   }
 }
