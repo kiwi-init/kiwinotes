@@ -348,3 +348,32 @@ describe("o pdf, o docx e o xlsx (T22218, issue #156)", () => {
     expect(hits.find((h) => h.path === "D/curto.docx")).toMatchObject({ at: { paragraph: 1 } });
   });
 });
+
+describe("o lote cabe num teto de texto (P0 #23988)", () => {
+  // O FTS5 tokeniza a transação inteira de uma vez, na thread do main: 40 logs de 2 MB prendiam o laço do Bun 1,1 s, e o
+  // histórico do Ditado e a colagem esperavam atrás. Cada transação fica no teto; um arquivo maior vai sozinho.
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const docx = (text: string) =>
+    zipBytes({ "word/document.xml": `<w:document ${W}><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>` }, { deflate: true });
+  const KB = 1024;
+  const cap = 64 * KB;
+
+  test("nenhuma transação passa do teto, no texto e no docx, e tudo entra na busca", async () => {
+    const files: Record<string, string | Uint8Array> = {};
+    for (let i = 0; i < 12; i++) files[`logs/dia-${i}.log`] = `linha de exemplo ${i} caju\n`.repeat((20 * KB) / 24);
+    for (let i = 0; i < 4; i++) files[`docs/relatorio-${i}.docx`] = docx(`pitanga ${i} `.repeat((30 * KB) / 11));
+    files["logs/grande.log"] = "um log grande de exemplo com acerola\n".repeat((200 * KB) / 37);
+    const f = folder(files);
+    const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), pause: async () => {}, batchText: cap });
+    open.push(t);
+    await t.sync(f.all());
+    // O maior lote é o arquivo grande, sozinho; os outros cabem no teto.
+    expect(t.stats.maxBatchText).toBeGreaterThan(cap);
+    expect(t.stats.maxBatchText).toBeLessThan(cap * 4);
+    expect(t.stats.overCap).toBe(0);
+    expect(t.stats.alone).toBe(1);
+    expect(t.stats.batches).toBeGreaterThanOrEqual(Math.ceil((12 * 20 + 4 * 30) / 64));
+    expect(t.stats.read + t.stats.nameOnly).toBe(17);
+    for (const q of ["caju", "pitanga", "acerola"]) expect((await t.search(q, 50, f.stat)).length).toBeGreaterThan(0);
+  });
+});
