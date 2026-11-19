@@ -78,7 +78,7 @@ export function XlsxViewer({ path, file, files, flushRef }: FileViewerProps) {
           <p>{sheets.length ? "Esta aba está vazia." : "Esta planilha não tem abas para mostrar."}</p>
         </div>
       ) : (
-        <SheetPane key={sheet.name} session={session} doc={doc} sheet={sheet} decimal={decimal} widthMemory={widthMemory} />
+        <SheetPane key={sheet.name} session={session} doc={doc} sheet={sheet} decimal={decimal} widthMemory={widthMemory} zoomKey={path} />
       )}
     </div>
   );

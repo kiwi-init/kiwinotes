@@ -295,8 +295,31 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
       if (e.ctrlKey || e.metaKey) setVp((v) => zoomAt(v, local(e), wheelFactor(e.deltaY, e.ctrlKey)));
       else setVp((v) => pan(v, -e.deltaX, -e.deltaY));
     };
+    // No app, o WebKit entrega a pinça como gesto, com a escala desde o começo, e não como rolagem com ctrl (T21238).
+    let last = 1;
+    const start = (e: Event) => {
+      e.preventDefault();
+      last = 1;
+    };
+    const change = (e: Event) => {
+      e.preventDefault();
+      const g = e as Event & { scale: number; clientX: number; clientY: number };
+      if (!g.scale || !Number.isFinite(g.scale)) return;
+      const factor = g.scale / last;
+      last = g.scale;
+      setVp((v) => zoomAt(v, local(g), factor));
+    };
+    const end = (e: Event) => e.preventDefault();
     el.addEventListener("wheel", wheel, { passive: false });
-    return () => el.removeEventListener("wheel", wheel);
+    el.addEventListener("gesturestart", start);
+    el.addEventListener("gesturechange", change);
+    el.addEventListener("gestureend", end);
+    return () => {
+      el.removeEventListener("wheel", wheel);
+      el.removeEventListener("gesturestart", start);
+      el.removeEventListener("gesturechange", change);
+      el.removeEventListener("gestureend", end);
+    };
   }, [doc !== null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Segue o ponteiro na janela inteira até soltar (o arrastar sai do quadro e volta). */

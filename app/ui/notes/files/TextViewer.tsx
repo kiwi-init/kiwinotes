@@ -15,7 +15,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api as appApi, has } from "../../src/api.ts";
 import { ContextMenu, type MenuItem } from "../ContextMenu.tsx";
@@ -27,7 +27,9 @@ import { codeHighlight, codeLanguageFor, isCodeFile } from "./code-languages.ts"
 import { isHtmlFile, previewDocument } from "./htmlPreview.ts";
 import { detectIndent } from "./indent.ts";
 import { detectEol, TextSession, type TextSaveState, toEditor } from "./textSession.ts";
+import { useViewerZoom } from "./useViewerZoom.ts";
 import type { FileViewerProps } from "./viewers.ts";
+import { type Point, recallZoom, type Scroll } from "./zoom.ts";
 
 /** Uma troca que veio de fora (o arquivo mudou no disco): não é a pessoa digitando. */
 const fromDisk = Annotation.define<boolean>();
@@ -35,7 +37,8 @@ const fromDisk = Annotation.define<boolean>();
 const theme = EditorView.theme({
   "&": { height: "100%", color: "var(--text)", background: "none" },
   "&.cm-focused": { outline: "none" },
-  ".cm-scroller": { fontFamily: "var(--mono, var(--font-mono, ui-monospace, Menlo, monospace))", fontSize: "13px", lineHeight: "1.6" },
+  // O zoom (T21238) muda o tamanho da letra, pela variável que o visualizador põe na caixa do editor.
+  ".cm-scroller": { fontFamily: "var(--mono, var(--font-mono, ui-monospace, Menlo, monospace))", fontSize: "calc(13px * var(--kn-text-zoom, 1))", lineHeight: "1.6" },
   // A coluna da nota (spec #13382): a mesma largura do .md, no meio.
   ".cm-content": {
     boxSizing: "border-box",
@@ -74,6 +77,43 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
   const [menuError, setMenuError] = useState<string | null>(null);
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  // O zoom (T21238): a pinça e o ⌘+/⌘−/⌘0 mudam o tamanho da letra; o lugar que rola é o do CodeMirror. `null` é 100%.
+  const scrollEl = useRef<HTMLElement | null>(null);
+  const [editorOn, setEditorOn] = useState(false);
+  const [zoom, setZoom] = useState<number | null>(() => recallZoom(path));
+  useEffect(() => setZoom(recallZoom(path)), [path]);
+  const z = zoom ?? 1;
+  // O CodeMirror guarda a altura das linhas e segura a linha do alto quando elas mudam: a rolagem vai depois de ele
+  // medir a letra nova, e põe a linha embaixo dos dedos de volta no mesmo lugar da tela, maior. Numa pinça, os passos
+  // chegam antes de ele medir o anterior: a linha e o ponto nela ficam os do começo do gesto.
+  const anchor = useRef<{ pos: number; unit: number; at: Point; t: number } | null>(null);
+  const remeasure = useCallback(({ at, from, to }: { at: Point; from: number; to: number; scroll: Scroll }) => {
+    const v = view.current;
+    if (!v) return false;
+    const now = performance.now();
+    let a = anchor.current;
+    if (!a || now - a.t > 400 || Math.abs(a.at.x - at.x) > 2 || Math.abs(a.at.y - at.y) > 2) {
+      // A altura das linhas ainda é a de antes deste zoom: a linha embaixo dos dedos, e onde nela (em px a 100%).
+      const y = at.y - (v.documentTop - v.scrollDOM.getBoundingClientRect().top);
+      const line = v.lineBlockAtHeight(y);
+      a = { pos: line.from, unit: (y - line.top) / from, at, t: now };
+    }
+    a.t = now;
+    anchor.current = a;
+    const { pos, unit } = a;
+    // Depois de ele medir a letra nova: a linha vai pela rolagem do próprio CodeMirror, que também guarda a âncora dele
+    // (um `scrollTop` direto, ele corrige de volta para a linha do alto).
+    v.requestMeasure({
+      // Ele alinha a caixa da letra, não o alto da linha: a diferença (metade do entrelinha) entra na margem.
+      read: (u) => (u.coordsAtPos(pos)?.top ?? 0) - (u.documentTop + u.lineBlockAt(pos).top),
+      write: (inset, u) => {
+        const yMargin = at.y - unit * to + Math.max(0, inset);
+        queueMicrotask(() => u.dispatch({ effects: EditorView.scrollIntoView(pos, { y: "start", yMargin }) }));
+      },
+    });
+    return true;
+  }, []);
+  useViewerZoom({ path, target: scrollEl, scale: z, set: setZoom, min: 0.5, max: 3, onApplied: remeasure, enabled: editorOn });
   // A linguagem do código (T19312): `undefined` no .txt e no .log, que seguem sem cor nem o menu de código.
   const language = codeLanguageFor(path);
   const code = isCodeFile(path);
@@ -155,6 +195,8 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
       }),
     });
     view.current = v;
+    scrollEl.current = v.scrollDOM;
+    setEditorOn(true);
     // A cor chega depois do texto: a linguagem é um import à parte, e o arquivo já pode ser lido e editado sem ela.
     let alive = true;
     setColored(false);
@@ -172,6 +214,8 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
       alive = false;
       if (previewTimer.current) clearTimeout(previewTimer.current);
       view.current = null;
+      scrollEl.current = null;
+      setEditorOn(false);
       v.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -262,6 +306,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
         <div
           ref={host}
           className="kn-file-text-editor"
+          style={z === 1 ? undefined : ({ "--kn-text-zoom": z } as CSSProperties)}
           data-context-menu-open={menu ? true : undefined}
           onContextMenu={(e) => {
             if (readOnly) return;

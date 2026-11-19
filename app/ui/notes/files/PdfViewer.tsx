@@ -13,8 +13,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import { NO_TEXT_ASSIST } from "../../src/textAssist.ts";
 import { bytesOf } from "./csv.ts";
-import { findInPages, fitWidth, type PageText, pageText, type PdfMatch, type PdfRect, type PdfTextItem, stepMatch, stepZoom } from "./pdfSearch.ts";
+import { findInPages, fitWidth, type PageText, pageText, type PdfMatch, type PdfRect, type PdfTextItem, stepMatch, stepZoom, ZOOM_STEPS } from "./pdfSearch.ts";
+import { useViewerZoom } from "./useViewerZoom.ts";
 import type { FileViewerProps } from "./viewers.ts";
+import { recallZoom } from "./zoom.ts";
 
 type PdfJs = typeof import("pdfjs-dist");
 let pdfjs: Promise<PdfJs> | null = null;
@@ -42,7 +44,9 @@ export function PdfViewer({ path, file }: FileViewerProps) {
   const [sizes, setSizes] = useState<Size[]>([]);
   const [problem, setProblem] = useState<Problem | null>(null);
   /** `null`: ajustado à largura. */
-  const [zoom, setZoom] = useState<number | null>(null);
+  const [zoom, setZoom] = useState<number | null>(() => recallZoom(path));
+  // Outro arquivo no mesmo visualizador: o zoom é o dele.
+  useEffect(() => setZoom(recallZoom(path)), [path]);
   const [width, setWidth] = useState(0);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
@@ -105,6 +109,8 @@ export function PdfViewer({ path, file }: FileViewerProps) {
 
   const widest = useMemo(() => sizes.reduce((w, s) => Math.max(w, s.width), 0), [sizes]);
   const scale = zoom ?? Math.min(FIT_MAX, fitWidth(widest, width - GUTTER * 2));
+  // A pinça e o ⌘+/⌘−/⌘0 (T21238): o ponto embaixo dos dedos fica parado; o `padding` da rolagem não cresce.
+  const { zoomTo } = useViewerZoom({ path, target: scroller, scale, set: setZoom, min: ZOOM_STEPS[0], max: ZOOM_STEPS.at(-1)!, pad: { x: GUTTER, y: GUTTER }, anchor: ".kn-file-pdf-sheet", enabled: !!doc });
 
   // A página que está na tela, pela rolagem.
   const tops = useMemo(() => {
@@ -208,14 +214,14 @@ export function PdfViewer({ path, file }: FileViewerProps) {
     <div className="kn-file-pdf" aria-busy={doc ? undefined : "true"}>
       <div className="kn-file-pdf-bar" role="toolbar" aria-label="Pdf">
         <span className="kn-file-pdf-group">
-          <button type="button" className="kn-bt" aria-label="Diminuir o zoom" disabled={!doc} onClick={() => setZoom(stepZoom(scale, -1))}>
+          <button type="button" className="kn-bt" aria-label="Diminuir o zoom" disabled={!doc} onClick={() => zoomTo(stepZoom(scale, -1))}>
             −
           </button>
           <span className="kn-file-pdf-zoom" aria-live="polite">{`${Math.round(scale * 100)}%`}</span>
-          <button type="button" className="kn-bt" aria-label="Aumentar o zoom" disabled={!doc} onClick={() => setZoom(stepZoom(scale, 1))}>
+          <button type="button" className="kn-bt" aria-label="Aumentar o zoom" disabled={!doc} onClick={() => zoomTo(stepZoom(scale, 1))}>
             +
           </button>
-          <button type="button" className="kn-bt" disabled={!doc || zoom === null} onClick={() => setZoom(null)}>
+          <button type="button" className="kn-bt" disabled={!doc || zoom === null} onClick={() => zoomTo(null)}>
             Ajustar à largura
           </button>
         </span>
