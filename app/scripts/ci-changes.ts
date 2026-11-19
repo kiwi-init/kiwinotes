@@ -2,9 +2,11 @@
 // para o Linux, e o `bun test` e o `swift test` só pegam um Mac quando o PR mexe no que eles testam. Quando não mexe,
 // o job roda no Linux, com um passo "pulado: <motivo>", e sai verde: o check continua com o mesmo nome e com passos.
 //
-//   git diff --name-only <base>...<head> | bun scripts/ci-changes.ts pull_request   # escreve no $GITHUB_OUTPUT
+//   bun scripts/ci-changes.ts pull_request --range <base>..<head>   # escreve no $GITHUB_OUTPUT
+//   bun scripts/ci-changes.ts push                                  # fora de um PR: roda tudo
 //
 // As saídas: `bun` e `swift` ("run" ou "skip"), e `bun_reason` e `swift_reason` (o motivo do pulo, ou vazio).
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 
 export interface Plan {
@@ -25,6 +27,22 @@ export function textOnly(files: string[]): boolean {
   return files.length > 0 && files.every((f) => f.toLowerCase().endsWith(".md") && !f.startsWith("app/") && !f.startsWith("native/"));
 }
 
+/**
+ * Os arquivos que o PR mexe: os de cada commit (um print posto e tirado ainda sobe na ref do PR) e os do diff contra a
+ * base (o que um commit de merge resolveu, que o `git log` sem `-m` não lista). Sem detectar renomeação: um `git mv`
+ * de `native/x.swift` para `docs/x.md` traz os dois caminhos, e não só o `.md` novo (T21438, rodada 1).
+ */
+export function changedFiles(cwd: string, range: string): string[] {
+  const [base, head] = range.split("..");
+  const run = (args: string[]) => {
+    const r = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 1 << 26 });
+    if (r.status !== 0) throw new Error(`ci-changes: git ${args[0]} falhou: ${r.stderr.trim()}`);
+    return r.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+  };
+  const files = [...run(["log", "--no-renames", "--name-only", "--format=", range]), ...run(["diff", "--no-renames", "--name-only", `${base}...${head}`])];
+  return [...new Set(files)].sort();
+}
+
 /** O plano de um evento. Fora de um PR (o push na `main`), roda sempre tudo. Sem a lista de arquivos, também. */
 export function plan(event: string, files: string[]): Plan {
   const all: Plan = { bun: "run", bunReason: "", swift: "run", swiftReason: "" };
@@ -38,8 +56,8 @@ export function plan(event: string, files: string[]): Plan {
 }
 
 if (import.meta.main) {
-  const event = process.argv[2] ?? "";
-  const files = (await new Response(Bun.stdin.stream()).text()).split("\n").map((l) => l.trim()).filter(Boolean);
+  const [event = "", flag, range] = process.argv.slice(2);
+  const files = event === "pull_request" && flag === "--range" && range ? changedFiles(process.cwd(), range) : [];
   const p = plan(event, files);
   const lines = [`bun=${p.bun}`, `bun_reason=${p.bunReason}`, `swift=${p.swift}`, `swift_reason=${p.swiftReason}`];
   console.log(`ci-changes: ${files.length} arquivos (${event})\n${lines.join("\n")}`);

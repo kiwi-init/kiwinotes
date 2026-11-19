@@ -1,7 +1,11 @@
 // O que o CI roda em cada PR (spec #21331).
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { type Plan, plan, textOnly } from "./ci-changes.ts";
+import { changedFiles, type Plan, plan, textOnly } from "./ci-changes.ts";
 
 describe("ci-changes", () => {
   test("o PR comum: bun test no Mac, swift test pulado com o motivo", () => {
@@ -41,5 +45,60 @@ describe("ci-changes", () => {
 
   test("README.MD em maiúsculas também é texto", () => {
     expect(textOnly(["NOTAS.MD"])).toBe(true);
+  });
+
+  const dirs: string[] = [];
+  afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
+  const git = (cwd: string, ...args: string[]) => {
+    const r = spawnSync("git", args, { cwd, encoding: "utf8" });
+    if (r.status !== 0) throw new Error(r.stderr);
+    return r.stdout.trim();
+  };
+  const repo = () => {
+    const d = mkdtempSync(join(tmpdir(), "ci-changes-"));
+    dirs.push(d);
+    git(d, "init", "-q", "-b", "main");
+    git(d, "config", "user.email", "ana@exemplo.com");
+    git(d, "config", "user.name", "Ana");
+    mkdirSync(join(d, "native", "Sources"), { recursive: true });
+    mkdirSync(join(d, "docs"));
+    writeFileSync(join(d, "native", "Sources", "Exemplo.swift"), "// um arquivo de exemplo\nlet a = 1\nlet b = 2\nlet c = 3\n");
+    writeFileSync(join(d, "README.md"), "# Exemplo\n");
+    git(d, "add", "-A");
+    git(d, "commit", "-q", "-m", "base");
+    return d;
+  };
+
+  test("um git mv de native/ para um .md traz os dois caminhos e roda tudo (rodada 1)", () => {
+    const d = repo();
+    const base = git(d, "rev-parse", "HEAD");
+    git(d, "mv", "native/Sources/Exemplo.swift", "docs/exemplo.md");
+    git(d, "commit", "-q", "-m", "move");
+    const files = changedFiles(d, `${base}..HEAD`);
+    expect(files).toEqual(["docs/exemplo.md", "native/Sources/Exemplo.swift"]);
+    expect(plan("pull_request", files)).toMatchObject({ bun: "run", swift: "run" });
+  });
+
+  test("o que um commit de merge trouxe também entra na lista", () => {
+    const d = repo();
+    git(d, "checkout", "-q", "-b", "pr");
+    writeFileSync(join(d, "docs", "notas.md"), "notas\n");
+    git(d, "add", "-A");
+    git(d, "commit", "-q", "-m", "texto");
+    git(d, "checkout", "-q", "main");
+    writeFileSync(join(d, "native", "Sources", "Outro.swift"), "let d = 4\n");
+    git(d, "add", "-A");
+    git(d, "commit", "-q", "-m", "na main");
+    git(d, "checkout", "-q", "pr");
+    // Um merge que resolve trazendo o arquivo da main, alterado: o git log sem -m não lista o merge.
+    git(d, "merge", "-q", "--no-ff", "--no-commit", "main");
+    writeFileSync(join(d, "native", "Sources", "Outro.swift"), "let d = 5\n");
+    git(d, "add", "-A");
+    git(d, "commit", "-q", "-m", "merge");
+    // No CI, a base é a ponta da main: o commit dela fica fora do range, e só o diff vê o que o merge mudou.
+    const range = `${git(d, "rev-parse", "main")}..HEAD`;
+    expect(git(d, "log", "--no-renames", "--name-only", "--format=", range).split("\n")).toEqual(["docs/notas.md"]);
+    expect(changedFiles(d, range)).toEqual(["docs/notas.md", "native/Sources/Outro.swift"]);
+    expect(plan("pull_request", changedFiles(d, range))).toMatchObject({ bun: "run", swift: "run" });
   });
 });
