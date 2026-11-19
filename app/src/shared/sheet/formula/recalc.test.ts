@@ -1,0 +1,184 @@
+// O recálculo das fórmulas (T21108, spec #21065 parte 3): mudou um número, as fórmulas que dependem dele mudam na grade
+// e no arquivo; a função desconhecida fica marcada, nunca errada. Sobre o estoque inventado do T21107
+// (`test/fixtures/sheet/estoque.xlsx`) e grades pequenas, também inventadas.
+
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import * as XLSX from "xlsx";
+
+import { applyToGrid, plainDisplay, type CellValue, type Grid, type GridCell, type SheetOp } from "../ops.ts";
+import { patchXlsx, readXlsx, type XlsxBook } from "../xlsx.ts";
+import { hasFormulas } from "./has-formulas.ts";
+import { recalc, recalcOps } from "./recalc.ts";
+
+const ESTOQUE = new Uint8Array(readFileSync(path.join(import.meta.dir, "../../../../test/fixtures/sheet/estoque.xlsx")));
+
+const gridOf = (book: XlsxBook): Grid => ({
+  sheets: book.sheets.map((s) => ({
+    name: s.name,
+    rows: s.rows.map((r) => r.map((c): GridCell | undefined => (c ? { ...c, text: plainDisplay(c.value, c.format) } : undefined))),
+  })),
+});
+
+/** Uma grade de uma aba a partir de linhas: "=…" é fórmula (sem valor ainda), o resto é valor. */
+const small = (rows: (CellValue | `=${string}`)[][], name = "Caixa"): Grid => ({
+  sheets: [
+    {
+      name,
+      rows: rows.map((r) =>
+        r.map((v): GridCell | undefined =>
+          v === null ? undefined : typeof v === "string" && v.startsWith("=") ? { value: null, formula: v.slice(1), text: "" } : { value: v, text: plainDisplay(v) },
+        ),
+      ),
+    },
+  ],
+});
+
+const cell = (g: Grid, ref: string, sheet = 0) => {
+  const m = /^([A-Z]+)(\d+)$/.exec(ref)!;
+  return g.sheets[sheet]!.rows[Number(m[2]) - 1]?.[m[1]!.charCodeAt(0) - 65];
+};
+
+/** A edição como a grade faz (T21109): o `set` da pessoa e os `cached` do recálculo, num batch só. */
+function edit(g: Grid, op: SheetOp) {
+  const applied = applyToGrid(g, op);
+  const after = recalc(applied);
+  const batch: SheetOp = { op: "batch", ops: [op, ...recalcOps(applied, after)] };
+  return { grid: after, batch };
+}
+
+describe("recalc: a grade", () => {
+  test("mudou a quantidade: o total da linha, a soma e a aba Resumo mudam", () => {
+    const g = recalc(gridOf(readXlsx(ESTOQUE)));
+    const linha = Number(cell(g, "E2")!.value);
+    const d2 = Number(cell(g, "D2")!.value);
+    const somaE = Number(cell(g, "E8")!.value);
+    const { grid } = edit(g, { op: "set", sheet: "Estoque", row: 1, col: 2, value: 100 });
+    expect(cell(grid, "E2")!.value).toBeCloseTo(100 * d2);
+    expect(cell(grid, "E8")!.value).toBeCloseTo(somaE - linha + 100 * d2);
+    expect(cell(grid, "B2", 1)!.value).toBeCloseTo(somaE - linha + 100 * d2);
+    expect(cell(grid, "B1", 1)!.value).toBe(cell(grid, "C8")!.value);
+  });
+
+  test("a referência de tabela fica marcada com o valor antigo; as outras fórmulas calculam", () => {
+    const book = readXlsx(ESTOQUE);
+    const g = recalc(gridOf(book));
+    const resumo = g.sheets[1]!;
+    const prazo = resumo.rows.findIndex((r) => r?.[1]?.formula?.includes("Fornecedores["));
+    expect(prazo).toBeGreaterThanOrEqual(0);
+    expect(resumo.rows[prazo]![1]).toMatchObject({ stale: true, value: book.sheets[1]!.rows[prazo]![1]!.value });
+    expect(cell(g, "E8")!.stale).toBeUndefined();
+  });
+
+  test("uma função desconhecida fica marcada, com o valor antigo, e quem depende dela também, até o SEERRO", () => {
+    const g = small([[2, "=FUNCAOINVENTADA(A1)", "=B1*2", "=IFERROR(C1,0)", "=A1*3"]]);
+    g.sheets[0]!.rows[0]![1] = { value: 7, formula: "FUNCAOINVENTADA(A1)", text: "7" };
+    g.sheets[0]!.rows[0]![2] = { value: 14, formula: "B1*2", text: "14" };
+    g.sheets[0]!.rows[0]![3] = { value: 14, formula: "IFERROR(C1,0)", text: "14" };
+    const r = recalc(g);
+    expect(r.sheets[0]!.rows[0]!.map((c) => [c!.value, c!.stale ?? false])).toEqual([
+      [2, false],
+      [7, true],
+      [14, true],
+      [14, true],
+      [6, false],
+    ]);
+    expect(recalcOps(g, r)).toEqual([{ op: "cached", sheet: "Caixa", row: 0, col: 4, value: 6 }]);
+  });
+
+  test("o #DIV/0! é resultado; o erro em que o Excel pode discordar e o ciclo ficam marcados, com o valor antigo", () => {
+    const g = small([[0, "=1/A1", '=VLOOKUP("x",A1:A1,1,FALSE)', "=D1+1", "=SQRT(-1)"]]);
+    g.sheets[0]!.rows[0]![2] = { value: "#N/A", formula: 'VLOOKUP("x",A1:A1,1,FALSE)', text: "#N/A" };
+    const r = recalc(g);
+    // O PROCV de texto numa coluna de números dá #VALUE! no HyperFormula e #N/A no Excel: fica o #N/A, marcado.
+    expect(r.sheets[0]!.rows[0]!.slice(1).map((c) => [c!.value, c!.stale ?? false])).toEqual([
+      ["#DIV/0!", false],
+      ["#N/A", true],
+      [null, true],
+      [null, true],
+    ]);
+    // A célula que já tinha o mesmo erro não é marcada.
+    const ja = small([[null, "=SQRT(-1)"]]);
+    ja.sheets[0]!.rows[0]![1] = { value: "#NUM!", formula: "SQRT(-1)", text: "#NUM!" };
+    expect(recalc(ja).sheets[0]!.rows[0]![1]).toEqual({ value: "#NUM!", formula: "SQRT(-1)", text: "#NUM!" });
+  });
+
+  test("o VERDADEIRO/FALSO solto da fórmula, como o Excel grava, calcula", () => {
+    const r = recalc(small([["caixa", 5, '=VLOOKUP("caixa",A1:B1,2,FALSE)', "=IF(TRUE,1,2)", '="FALSE"&"!"']]));
+    expect(r.sheets[0]!.rows[0]!.slice(2).map((c) => [c!.value, c!.stale ?? false])).toEqual([
+      [5, false],
+      [1, false],
+      ["FALSE!", false],
+    ]);
+  });
+
+  test("o texto que parece número ou fórmula continua texto; a célula vazia vale 0", () => {
+    const g = small([["007", null, "=A1&B1", "=LEN(A1)", "=Z9"]]);
+    g.sheets[0]!.rows[0]![1] = { value: "=x", text: "=x" };
+    const r = recalc(g);
+    expect(r.sheets[0]!.rows[0]!.slice(2).map((c) => c!.value)).toEqual(["007=x", 3, 0]);
+  });
+
+  test("os nomes definidos calculam; o _xlfn. das funções novas também", () => {
+    const g = small([[3, 4, "=SUM(Pecas)", "=_xlfn.XLOOKUP(4,A1:B1,A1:B1)"]], "Loja");
+    const r = recalc(g, plainDisplay, [{ name: "Pecas", formula: "Loja!$A$1:$B$1" }]);
+    expect(r.sheets[0]!.rows[0]!.slice(2).map((c) => [c!.value, c!.stale ?? false])).toEqual([
+      [7, false],
+      [4, false],
+    ]);
+  });
+
+  test("o texto da célula segue o formato dela", () => {
+    const g = small([[2, "=A1*1.5"]]);
+    g.sheets[0]!.rows[0]![1]!.format = "0.00";
+    const r = recalc(g, (v, f) => (f === "0.00" && typeof v === "number" ? v.toFixed(2) : String(v)));
+    expect(cell(r, "B1")).toMatchObject({ value: 3, text: "3.00", format: "0.00" });
+  });
+
+  test("sem fórmula, a mesma grade, sem carregar nada", () => {
+    const g = small([[1, 2, "três"]]);
+    expect(hasFormulas(g)).toBe(false);
+    expect(recalc(g)).toBe(g);
+  });
+
+  test("uma célula que não é fórmula nunca muda, e a fórmula que não mudou não vira operação", () => {
+    const g = recalc(small([[1, 2, "=A1+B1"]]));
+    expect(recalcOps(g, recalc(g))).toEqual([]);
+    expect(recalc(g).sheets[0]!.rows[0]!.slice(0, 2)).toEqual(g.sheets[0]!.rows[0]!.slice(0, 2));
+  });
+});
+
+describe("recalc: o arquivo", () => {
+  test("a edição e o recálculo num batch: o arquivo reabre com os valores novos, no Kiwi e no SheetJS", () => {
+    const g = recalc(gridOf(readXlsx(ESTOQUE)));
+    const { grid, batch } = edit(g, { op: "set", sheet: "Estoque", row: 1, col: 2, value: 100 });
+    const out = patchXlsx(ESTOQUE, [batch]);
+    const back = readXlsx(out);
+    expect(back.sheets[0]!.rows[7]![4]!.value).toBeCloseTo(Number(cell(grid, "E8")!.value));
+    expect(back.sheets[1]!.rows[1]![1]!.value).toBeCloseTo(Number(cell(grid, "B2", 1)!.value));
+    expect(back.sheets[0]!.rows[7]![4]!.formula).toBe("SUM(E2:E7)");
+    const wb = XLSX.read(out);
+    expect(wb.Sheets.Estoque!.E8.v).toBeCloseTo(Number(cell(grid, "E8")!.value));
+    expect(wb.Sheets.Estoque!.E8.f).toBe("SUM(E2:E7)");
+  });
+
+  test("uma fórmula nova digitada: calcula, e o resultado vai junto", () => {
+    const g = recalc(gridOf(readXlsx(ESTOQUE)));
+    const { grid, batch } = edit(g, { op: "set", sheet: "Resumo", row: 5, col: 1, value: null, formula: "Estoque!C2*2" });
+    const esperado = Number(cell(g, "C2")!.value) * 2;
+    expect(cell(grid, "B6", 1)!.value).toBe(esperado);
+    expect(readXlsx(patchXlsx(ESTOQUE, [batch])).sheets[1]!.rows[5]![1]).toMatchObject({ formula: "Estoque!C2*2", value: esperado });
+  });
+
+  test("50 mil linhas com fórmula recalculam a tempo", () => {
+    const rows: (CellValue | `=${string}`)[][] = Array.from({ length: 50_000 }, (_, i) => [i % 97, 3, `=A${i + 1}*B${i + 1}`]);
+    rows.push([null, null, "=SUM(C1:C50000)"]);
+    const g = small(rows);
+    const t0 = performance.now();
+    const r = recalc(g);
+    const ms = performance.now() - t0;
+    expect(r.sheets[0]!.rows[50_000]![2]!.value).toBe(rows.slice(0, 50_000).reduce((a, x) => a + Number(x[0]) * 3, 0));
+    expect(ms).toBeLessThan(15_000);
+  }, 30_000);
+});
