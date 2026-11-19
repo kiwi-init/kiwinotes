@@ -298,6 +298,18 @@ try {
       const want = "Código;Produto;Preço\r\n1001;Caneca;\"29,90\"\r\n1002;Caderno;19,50\r\n";
       await until("o csv gravado", () => readFileSync(join(vault, "Papelaria/precos.csv"), "utf8") === want);
       console.log("ok     csv: grava com o mesmo separador, e o resto fica como estava");
+
+      // O ⌘F do csv é o mesmo da grade (T22627): "caderno" acha a célula, sem ligar para maiúscula.
+      await p.click(cellAt(2, 1));
+      await p.keyboard.press("Meta+f");
+      await p.waitForSelector(".kn-grid-find input");
+      await p.keyboard.type("caderno");
+      await p.keyboard.press("Enter");
+      assert.equal(await p.locator(".kn-grid-find-count").textContent(), "1 de 1");
+      assert.equal(await p.locator(".kn-grid-addr").textContent(), "B3");
+      await p.mouse.move(0, 0);
+      await shot(p, "05-procurar-csv");
+      console.log("ok     csv: ⌘F acha a célula");
     } finally {
       await w.close();
     }
