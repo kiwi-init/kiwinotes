@@ -41,11 +41,11 @@ O teste lê esta tabela entre os marcadores. Nos itens com teste, um "cumpre" qu
 | **log** | `log` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
 | **json** | `json` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
 | **yaml** | `yaml` `yml` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
-| **csv** | `csv` `tsv` | cumpre | cumpre | falta spec #21065 | cumpre | falta spec #21065 | falta spec #21065 | cumpre | cumpre | falta spec #21033 | cumpre | cumpre | cumpre |
+| **csv** | `csv` `tsv` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
 | **código** | `CODE_TYPES` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
 | **pdf** | `pdf` | cumpre | cumpre | cumpre | cumpre | n/a: o Kiwi só mostra o pdf | n/a: o Kiwi só mostra o pdf | n/a: o Kiwi só mostra o pdf | cumpre | n/a: o Kiwi só mostra o pdf | cumpre | cumpre | cumpre |
 | **docx** | `docx` | cumpre | cumpre | cumpre | cumpre | falta spec #21080 | falta spec #21080 | falta spec #21080 | cumpre | falta spec #21155 | cumpre | cumpre | cumpre |
-| **xlsx** | `xlsx` | cumpre | cumpre | falta spec #21065 | cumpre | falta spec #21065 | falta spec #21065 | cumpre | cumpre | falta spec #21033 | cumpre | cumpre | cumpre |
+| **xlsx** | `xlsx` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
 | **imagem** | `png` `jpg` `jpeg` `gif` `webp` `heic` `heif` `bmp` | cumpre | cumpre | n/a: sem texto (o OCR fica fora da régua) | n/a: sem texto (o OCR fica fora da régua) | n/a: o Kiwi só mostra a imagem | n/a: o Kiwi só mostra a imagem | n/a: o Kiwi só mostra a imagem | n/a: sem texto (o OCR fica fora da régua) | n/a: o Kiwi só mostra a imagem | cumpre | cumpre | cumpre |
 | **svg** | `svg` `drawio.svg` | cumpre | cumpre | n/a: abre como imagem, e o texto é a marcação do desenho | n/a: abre como imagem, e o texto é a marcação do desenho | n/a: o Kiwi só mostra o desenho | n/a: o Kiwi só mostra o desenho | n/a: o Kiwi só mostra o desenho | n/a: abre como imagem, e o texto é a marcação do desenho | n/a: o Kiwi só mostra o desenho | cumpre | cumpre | cumpre |
 | **drawio** | `drawio` | cumpre | cumpre | cumpre | cumpre | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | cumpre | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | cumpre | cumpre | falta spec #21198 |

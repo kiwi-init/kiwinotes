@@ -4,7 +4,9 @@
 // ⌘F, o histórico no painel, o trackpad) não tem conferência aqui: a tabela diz o estado pela leitura do código.
 //
 // Tudo vai pelo mesmo caminho do app: o `Vault` (as capacidades `notes.*` e `files.*`), as leituras das Notas
-// (`ui/notes/files/`), as do agente (`files_read`) e o escritor do agente (`writerFromCapabilities`).
+// (`ui/notes/files/`), as do agente (`files_read`) e o escritor do agente (`writerFromCapabilities`). A planilha (csv,
+// tsv, xlsx) grava como a grade (`openDoc`, `inputOp`, `docBytes` e o `files.save` em base64) e o gato a muda pelo
+// `sheets_edit` (T22627).
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -16,7 +18,15 @@ import { TextIndex } from "../../src/notes/text-index.ts";
 import { fileFormat, readDocument } from "../../src/agent/tools/files.ts";
 import { isTextFile } from "../../src/agent/tools/reader.ts";
 import { writerFromCapabilities } from "../../src/agent/tools/writer.ts";
-import { parseTable } from "../../ui/notes/files/csv.ts";
+import { readerFromCapabilities } from "../../src/agent/tools/reader.ts";
+import { runKiwiTool } from "../../src/agent/tools/tools.ts";
+import { isSheetPath } from "../../src/agent/tools/sheets.ts";
+import { columnName } from "../../src/notes/doc-text.ts";
+import { readXlsx } from "../../src/shared/sheet/xlsx.ts";
+import { readZip } from "../../src/shared/sheet/zip.ts";
+import { base64Of, parseTable } from "../../ui/notes/files/csv.ts";
+import { docBytes, inputOp, openDoc, replay, type SheetDoc } from "../../ui/notes/files/sheet-doc.ts";
+import type { GridCell } from "../../src/shared/sheet/ops.ts";
 import { parseDocHtml, docText } from "../../ui/notes/files/docx.ts";
 import { checkDrawio } from "../../ui/notes/files/drawio.ts";
 import { imageInfo, imageProblem } from "../../ui/notes/files/imageInfo.ts";
@@ -199,6 +209,35 @@ export class Cofre {
     return { bytes: "text" in r ? new TextEncoder().encode(r.text) : Buffer.from(r.base64, "base64") };
   }
 
+  /**
+   * A planilha (csv, tsv, xlsx) como a grade a abre (T22627): os bytes do `files.read` binário, o `openDoc` e a célula
+   * com a marca, com a versão para gravar por cima.
+   */
+  async planilha(rel: string): Promise<{ doc: SheetDoc; version: string; sheet: string; row: number; col: number; cell: GridCell }> {
+    const r = await this.vault.readFile(rel, "binary");
+    if (!("base64" in r)) throw new Error("a planilha não abriu");
+    const doc = openDoc(new Uint8Array(Buffer.from(r.base64, "base64")), rel);
+    for (const s of doc.base.sheets)
+      for (const [row, cells] of s.rows.entries())
+        for (const [col, cell] of cells.entries()) if (cell?.text.includes(MARCA)) return { doc, version: r.version, sheet: s.name, row, col, cell };
+    throw new Error("a marca não está na grade");
+  }
+
+  /**
+   * Grava a planilha como a pessoa digitando na grade (T21109): a marca ganha um "2" pelo `inputOp`, os bytes saem do
+   * `docBytes` (o xlsx pelo `patchXlsx`, o csv pelo `writeDelimited`) e vão pelo `files.save` em base64.
+   */
+  async gravarPlanilha(rel: string): Promise<string | null> {
+    try {
+      const p = await this.planilha(rel);
+      const ops = [inputOp(p.doc, p.sheet, p.row, p.col, mudado(p.cell.text), p.cell, ",")];
+      const bytes = docBytes(p.doc, ops, replay(p.doc, ops));
+      return (await this.vault.saveFileBytes(rel, base64Of(bytes), p.version)).saved ? null : "o files.save não gravou a planilha";
+    } catch (e) {
+      return `o Kiwi não grava a planilha: ${motivo(e)}`;
+    }
+  }
+
   /** O caminho de `tipo` na pasta `d`. */
   caminho(d: string, tipo: string): string {
     return `${d}/${tipo}.${ext(FAMILIAS[tipo]!.arquivo)}`;
@@ -263,6 +302,67 @@ export async function medirAte<T>(
 }
 
 const motivo = (e: unknown) => (e instanceof Error ? e.message : String(e)).split("\n")[0]!;
+
+/** As partes do zip pelo nome, com os bytes compactados de cada uma. */
+function partes(bytes: Uint8Array): Map<string, Uint8Array> {
+  return new Map(readZip(bytes).map((p) => [p.name, bytes.subarray(p.data, p.data + p.compressed)]));
+}
+
+/** O xlsx gravado mudou só a célula da marca: as outras partes do zip, byte a byte, e as outras células, pelo valor. */
+function xlsxSoAMudanca(rel: string, antes: Uint8Array, depois: Uint8Array): string | null {
+  const a = partes(antes);
+  const d = partes(depois);
+  if ([...a.keys()].sort().join() !== [...d.keys()].sort().join()) return "o xlsx gravado ganhou ou perdeu partes do zip";
+  const mudaram = [...a].filter(([nome, b]) => !Buffer.from(b).equals(d.get(nome)!)).map(([nome]) => nome);
+  if (mudaram.length !== 1 || !/^xl\/worksheets\/sheet\d+\.xml$/.test(mudaram[0]!)) return `o xlsx gravado mudou além da aba da edição: ${mudaram.join(", ")}`;
+  const celulas = (b: Uint8Array) =>
+    readXlsx(b, rel).sheets.flatMap((s) => s.rows.flatMap((r, i) => r.map((x, j) => (x ? `${s.name}!${columnName(j)}${i + 1}=${JSON.stringify([x.value, x.formula ?? null, x.format ?? null])}` : "")).filter(Boolean)));
+  const ca = celulas(antes);
+  const cd = new Set(celulas(depois));
+  const sumiram = ca.filter((x) => !cd.has(x));
+  if (sumiram.length !== 1 || !sumiram[0]!.includes(MARCA)) return `o xlsx gravado mudou outras células: ${sumiram.length}`;
+  return cd.size === ca.length && [...cd].some((x) => x.includes(`${MARCA}2`)) ? null : "o xlsx gravado não tem a edição";
+}
+
+/** O gato muda a planilha como no app (T21114): o `sheets_read` e o `sheets_edit` do agente, sobre as capacidades. */
+async function gatoNaPlanilha(c: Cofre, rel: string): Promise<string | null> {
+  const v = c.vault;
+  const fora = () => Promise.reject(new Error("fora da régua"));
+  const caps = {
+    "notes.search": fora,
+    "notes.list": fora,
+    "notes.get": fora,
+    "meetings.list": fora,
+    "projects.list": fora,
+    "projects.status": fora,
+    "notes.save": fora,
+    "notes.create": fora,
+    "notes.folder": fora,
+    "files.create": fora,
+    "files.read": (a: unknown) => {
+      const x = a as { path: string; as: "text" | "binary" };
+      return v.readFile(x.path, x.as);
+    },
+    "files.save": (a: unknown) => {
+      const x = a as { path: string; base64: string; baseVersion: string };
+      return v.saveFileBytes(x.path, x.base64, x.baseVersion);
+    },
+  };
+  const journal = { keep: async () => "copia", drop: async () => {} };
+  const ctx = { reader: readerFromCapabilities(caps), writer: writerFromCapabilities(caps), journal };
+  try {
+    const p = await c.planilha(rel);
+    const lido = (await runKiwiTool(ctx, "sheets_read", { caminho: rel, ...(p.sheet ? { aba: p.sheet } : {}) })).value;
+    if (typeof lido.versao !== "string") return `o sheets_read não leu: ${JSON.stringify(lido).slice(0, 120)}`;
+    const celula = `${columnName(p.col)}${p.row + 1}`;
+    const mudancas = [{ tipo: "celulas", ...(p.sheet ? { aba: p.sheet } : {}), celulas: { [celula]: mudado(p.cell.text) } }];
+    const feito = (await runKiwiTool(ctx, "sheets_edit", { caminho: rel, versao: lido.versao, mudancas })).value;
+    if (typeof feito.versao !== "string") return `o sheets_edit não gravou: ${JSON.stringify(feito).slice(0, 120)}`;
+    return (await c.planilha(rel)).cell.text.includes(`${MARCA}2`) ? null : "o sheets_edit gravou outra coisa";
+  } catch (e) {
+    return `o gato não edita a planilha: ${motivo(e)}`;
+  }
+}
 
 /** As conferências, pelo índice do item (0 = "Abre rápido"). As que faltam (⌘F, histórico, trackpad) são de tela. */
 export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promise<string | null>>> = {
@@ -331,6 +431,11 @@ export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promis
   // 5. Editar (o desfazer e o refazer são da tela).
   4: async (c, tipo) => {
     const rel = c.caminho("Editar", tipo);
+    if (isSheetPath(rel)) {
+      const erro = await c.gravarPlanilha(rel);
+      if (erro) return erro;
+      return (await c.planilha(rel)).cell.text.includes(`${MARCA}2`) ? null : "a planilha reaberta não tem a edição";
+    }
     const r = await c.ler(tipo, rel);
     if (!("bytes" in r)) return "não abriu";
     return c.gravar(tipo, rel, mudado(texto(r.bytes)));
@@ -341,9 +446,12 @@ export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promis
     const rel = c.caminho("Gravar", tipo);
     const antes = new Uint8Array(readFileSync(path.join(c.root, rel)));
     const esperado = mudado(texto(antes));
-    const erro = await c.gravar(tipo, rel, esperado);
+    // A planilha grava pela grade (T22627): o csv tem de sair byte a byte como o texto com a mudança; o xlsx, com cada
+    // parte do zip intacta menos a aba da célula, e nessa aba só a célula mudada.
+    const erro = isSheetPath(rel) ? await c.gravarPlanilha(rel) : await c.gravar(tipo, rel, esperado);
     if (erro) return erro;
     const depois = readFileSync(path.join(c.root, rel));
+    if (/\.xlsx$/i.test(rel)) return xlsxSoAMudanca(rel, antes, new Uint8Array(depois));
     return depois.equals(Buffer.from(esperado)) ? null : "o arquivo gravado mudou além da edição";
   },
 
@@ -368,6 +476,7 @@ export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promis
   8: async (c, tipo) => {
     const rel = c.caminho("Gato", tipo);
     const v = c.vault;
+    if (isSheetPath(rel)) return gatoNaPlanilha(c, rel);
     const w = writerFromCapabilities({
       "notes.get": (a) => v.get((a as { path: string }).path),
       "notes.save": (a) => {
