@@ -2,6 +2,7 @@
   "window": "notes",
   "steps": [
     { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Diagramas/fluxo.drawio de test/fixtures, com 2 páginas e um rótulo com <img onerror>; Diagramas/hostil.drawio de test/fixtures, com um rótulo position:fixed que tenta cobrir a janela, links javascript:, <script>, <img onerror>, imagens de https://exemplo.invalid (forma, indicador e fundo da página), fonte do Google, extFonts e fórmula com math=1; Diagramas/bomba.drawio com uma página comprimida de 30 MB; Diagramas/quebrado.drawio que é texto; Diagramas/exportado.drawio.svg; e uma nota)" },
+    { "waitFor": ".kn-title", "name": "a nota que as Notas abrem sozinhas ao carregar já está na tela: esse open() fecha a árvore (NotesApp, spec #16821), e um clique no caminho antes dele abre a árvore que logo fecha (T23119)" },
     { "click": ".kn-crumb-bt", "name": "abre a árvore" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Diagramas')", "name": "abre a pasta Diagramas" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('fluxo')", "name": "clica no .drawio" },
