@@ -13,5 +13,11 @@ Cada arquivo portado diz no topo de onde veio (caminho no VoiceInk e commit)
 e o que mudou. Ficaram de fora os provedores de nuvem, o Sparkle, o
 RemoteConfig, os anúncios e o licenciamento pago.
 
+A lista das palavras comuns do português das trilhas (app/src/agent/palavras-comuns.ts)
+vem do FrequencyWords, de Hermit Dave, sob a CC BY-SA 4.0:
+  https://github.com/hermitdave/FrequencyWords
+  commit 525f9b560de45753a5ea01069454e72e9aa541c6, content/2018/pt_br
+  Veja licenses/FrequencyWords-CC-BY-SA-4.0.md.
+
 Dependências com licença própria (Apache-2.0, MIT etc.) seguem as suas
 licenças; veja o Package.resolved de native/ e o bun.lock de app/.

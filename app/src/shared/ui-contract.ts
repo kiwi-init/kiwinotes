@@ -253,7 +253,8 @@ export type { NoteModel };
 //   `setup.done` e o evento `setup.changed`. Só acréscimo.
 // 1.87.0 (T20868, spec #20843): o evento `agent.wrote`, o que uma escrita do agente mudou e onde, para a janela das
 //   Notas mostrar o Kiwi escrevendo. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.87.0";
+// 1.88.0 (T21325, spec #21283): o `aprendendo` no `AgentTrailView`, a trilha que ainda espera a segunda vez. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.88.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -893,6 +894,8 @@ export interface AgentTrailView {
   vezes: number;
   /** A última vez, em ms. */
   em: number;
+  /** Ainda espera a segunda vez (T21325): não casa com nada, e `palavras` são as candidatas. */
+  aprendendo?: boolean;
 }
 
 export interface AgentTrailsView {

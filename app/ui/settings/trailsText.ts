@@ -9,3 +9,7 @@ export const trilhaLabel = (t: Pick<AgentTrailView, "palavras">): string => t.pa
 export function trilhaHint(t: Pick<AgentTrailView, "titulo" | "path" | "vezes">): string {
   return `leva a ${t.titulo} (${t.path}) · ${t.vezes === 1 ? "1 vez" : `${t.vezes} vezes`}`;
 }
+
+/** O que é a parte "Aprendendo" (T21325). */
+export const APRENDENDO_HINT =
+  "Palavras que levaram a uma nota uma vez só. Se vierem de novo para a mesma nota, viram trilha; até lá, não sobem nada.";

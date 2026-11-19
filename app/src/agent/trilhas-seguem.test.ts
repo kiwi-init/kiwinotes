@@ -33,15 +33,17 @@ describe("TrilhaStore.seguir", () => {
     const dir = tmp("kiwi-trilhas-seguir-");
     let t = 1_000;
     const s = new TrilhaStore(dir, () => t++);
-    s.aprender("orçamento da viagem para Lisboa", "Pessoal/Viagem.md");
-    s.aprender("receita do bolo de cenoura", "Cozinha/Bolo.md");
-    s.aprender("lista de livros para ler", "Leituras.md");
+    // Duas vezes cada: fora do nome da pasta, a trilha só vale na segunda (T21325).
+    for (const [pedido, nota] of [["orçamento da viagem para Lisboa", "Pessoal/Viagem.md"], ["receita do bolo de cenoura", "Cozinha/Bolo.md"], ["lista de romances para ler", "Leituras.md"]] as const) {
+      s.aprender(pedido, nota);
+      s.aprender(pedido, nota);
+    }
     const map = (p: string) => (p === "Pessoal/Viagem.md" ? "Arquivo/Lisboa 2026.md" : p === "Cozinha/Bolo.md" ? null : p);
     expect(s.seguir(null, map)).toBe(2);
     const paths = (st: TrilhaStore) => st.list().map((x) => x.path).sort();
     expect(paths(s)).toEqual(["Arquivo/Lisboa 2026.md", "Leituras.md"]);
     // As palavras e as vezes vão junto com a nota.
-    expect(s.list().find((x) => x.path === "Arquivo/Lisboa 2026.md")).toMatchObject({ palavras: ["orçamento", "viagem", "Lisboa"], vezes: 1 });
+    expect(s.list().find((x) => x.path === "Arquivo/Lisboa 2026.md")).toMatchObject({ palavras: ["orçamento", "Lisboa"], vezes: 2 });
     expect(paths(new TrilhaStore(dir))).toEqual(["Arquivo/Lisboa 2026.md", "Leituras.md"]);
     // Nada mudou: nada a gravar.
     expect(s.seguir(null, (p) => p)).toBe(0);
@@ -60,7 +62,10 @@ describe("as trilhas seguem a nota no app (Ajustes › Agente)", () => {
     }
     // As trilhas de antes, no disco, como o app as deixou.
     const antes = new TrilhaStore(agentDir(data));
-    for (const [pedido, nota] of trilhas) antes.aprender(pedido, nota);
+    for (const [pedido, nota] of trilhas) {
+      antes.aprender(pedido, nota);
+      antes.aprender(pedido, nota);
+    }
     let agentSettings = { ...DEFAULT_SETTINGS.agent };
     const agent = new AgentService({
       data,
@@ -102,7 +107,7 @@ describe("as trilhas seguem a nota no app (Ajustes › Agente)", () => {
   test("renomear, mover a nota e renomear a pasta pelo app levam a trilha; apagar a tira", async () => {
     const { v, trails, call } = await setup(
       { "Viagem.md": "Lisboa", "Cozinha/Bolo.md": "cenoura", "Leituras.md": "livros", "Rascunho.md": "nada" },
-      [["orçamento da viagem para Lisboa", "Viagem.md"], ["receita do bolo de cenoura", "Cozinha/Bolo.md"], ["lista de livros para ler", "Leituras.md"], ["rascunho da proposta antiga", "Rascunho.md"]],
+      [["orçamento da viagem para Lisboa", "Viagem.md"], ["receita do bolo de cenoura", "Cozinha/Bolo.md"], ["lista de romances para ler", "Leituras.md"], ["rascunho da proposta antiga", "Rascunho.md"]],
     );
     await call("notes.rename", { path: "Viagem.md", newPath: "Lisboa 2026.md" });
     await call("folders.create", { path: "Arquivo" });
