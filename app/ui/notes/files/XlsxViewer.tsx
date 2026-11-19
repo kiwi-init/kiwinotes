@@ -12,10 +12,12 @@ import type { FileViewerProps } from "./viewers.ts";
 
 type State = { kind: "loading" } | { kind: "ready"; book: Workbook & { truncated: boolean } } | { kind: "tooLarge" } | { kind: "error" };
 
-export function XlsxViewer({ file }: FileViewerProps) {
+export function XlsxViewer({ path, file }: FileViewerProps) {
   const base64 = "base64" in file ? file.base64 : "";
   const [state, setState] = useState<State>({ kind: "loading" });
   const [tab, setTab] = useState(0);
+  // As larguras que a pessoa arrastou, por aba: valem enquanto o arquivo está aberto, trocando de aba ou recarregando (T21040).
+  const widthMemory = useMemo(() => new Map<string, Record<number, number>>(), [path]);
 
   useEffect(() => {
     let alive = true;
@@ -83,7 +85,7 @@ export function XlsxViewer({ file }: FileViewerProps) {
           <p>{sheets.length ? "Esta aba está vazia." : "Esta planilha não tem abas para mostrar."}</p>
         </div>
       ) : (
-        <TableGrid key={sheet.name} header={sheet.rows[0] ?? []} rows={body} columns={sheet.columns} firstRow={2} rowTotal={sheet.rows.length} />
+        <TableGrid key={sheet.name} name={sheet.name} widthMemory={widthMemory} header={sheet.rows[0] ?? []} rows={body} columns={sheet.columns} firstRow={2} rowTotal={sheet.rows.length} />
       )}
     </div>
   );

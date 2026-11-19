@@ -2,10 +2,11 @@
 // como a linha 1. Só leitura: para editar, o botão "Abrir no app padrão". Um csv que não é UTF-8 (o do Excel no
 // Windows) é lido de novo pelos bytes.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { bytesOf, columnName, decodeText, parseTable } from "./csv.ts";
 import { CELL_PAD, columnWidths, isNumeric, offsetsOf, ROW_H, trimEmpty, visibleRange, type Viewport } from "./grid.ts";
+import { type Cell, cellAddress, cellText, clampCell, dragWidth, firstVisible, fitWidth, moveCell, scrollToShow, withCustom } from "./selection.ts";
 import type { FileViewerProps } from "./viewers.ts";
 
 const ENCODINGS = { "utf-8": "UTF-8", "utf-16": "UTF-16", "windows-1252": "Windows-1252" } as const;
@@ -32,6 +33,8 @@ export function TableViewer({ path, file, files }: FileViewerProps) {
 
   const text = utf8 ? file.text : decoded && decoded !== "error" ? decoded.text : null;
   const table = useMemo(() => (text === null ? null : parseTable(text, path)), [text, path]);
+  // As larguras que a pessoa arrastou valem enquanto o arquivo está aberto, mesmo quando ele recarrega (T21040).
+  const widthMemory = useMemo(() => new Map<string, Record<number, number>>(), [path]);
 
   if (decoded === "error" && !utf8) {
     return (
@@ -50,7 +53,7 @@ export function TableViewer({ path, file, files }: FileViewerProps) {
   }
 
   const encoding = !utf8 && decoded && decoded !== "error" ? ENCODINGS[decoded.encoding] : null;
-  return <TableGrid header={table.header} rows={table.rows} columns={table.columns} firstRow={2} foot={encoding ? `lido como ${encoding}` : null} />;
+  return <TableGrid header={table.header} rows={table.rows} columns={table.columns} firstRow={2} widthMemory={widthMemory} foot={encoding ? `lido como ${encoding}` : null} />;
 }
 
 interface GridProps {
@@ -64,6 +67,12 @@ interface GridProps {
   firstRow?: number;
   /** As linhas que o rodapé conta, quando não são as de `rows` (a planilha conta a linha 1 também). */
   rowTotal?: number;
+  /**
+   * Onde guardar as larguras que a pessoa mudou, por `name` (a aba): a largura vale enquanto o arquivo está aberto,
+   * mesmo trocando de aba (T21040). Sem ela, vale enquanto a grade está na tela.
+   */
+  widthMemory?: Map<string, Record<number, number>>;
+  name?: string;
 }
 
 /** A coluna dos números das linhas: no mínimo esta largura (px). */
@@ -117,12 +126,27 @@ function measurer(el: HTMLElement): (text: string, bold: boolean) => number {
  * dos números paradas. Todas as linhas e colunas: só as células que estão na tela são montadas, e a rolagem segue lisa
  * com 256 colunas e 100.000 linhas. As linhas e colunas vazias do fim não contam.
  */
-export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal }: GridProps) {
+export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal, widthMemory, name = "" }: GridProps) {
   const { rows, columns } = useMemo(() => trimEmpty(rawHeader, rawRows, rawColumns), [rawHeader, rawRows, rawColumns]);
   const header = rawHeader;
   const scroll = useRef<HTMLDivElement>(null);
-  // As larguras ficam no estado: a borda arrastável (T21040) muda uma só.
-  const [widths, setWidths] = useState<number[] | null>(null);
+  // As larguras ficam no estado: a de abertura, pelo conteúdo, e por cima as que a pessoa arrastou (T21040).
+  const [baseWidths, setWidths] = useState<number[] | null>(null);
+  const [custom, setCustomState] = useState<Record<number, number>>(() => widthMemory?.get(name) ?? {});
+  const setCustom = useCallback(
+    (col: number, w: number) =>
+      setCustomState((prev) => {
+        const next = { ...prev, [col]: w };
+        widthMemory?.set(name, next);
+        return next;
+      }),
+    [widthMemory, name],
+  );
+  const widths = useMemo(() => (baseWidths ? withCustom(baseWidths, custom) : null), [baseWidths, custom]);
+  const measureRef = useRef<((text: string, bold: boolean) => number) | null>(null);
+  // A célula selecionada (T21040): o endereço e o conteúdo inteiro na barra de cima, as setas e o ⌘C.
+  const [selected, setSelected] = useState<Cell | null>(null);
+  const id = useId();
   const [numW, setNumW] = useState(MIN_NUM);
   const [view, setView] = useState<Viewport>({ left: 0, top: 0, width: 1200, height: 800 });
 
@@ -132,6 +156,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     let live = true;
     const fit = () => {
       const measure = measurer(el);
+      measureRef.current = measure;
       setWidths(columnWidths(header, rows, columns, measure));
       setNumW(Math.max(MIN_NUM, Math.ceil(measure(String(firstRow + rows.length), false) + CELL_PAD)));
     };
@@ -174,21 +199,128 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
   const cols: number[] = [];
   for (let c = range.col0; c < range.col1; c++) cols.push(c);
 
-  const cell = (text: string, c: number, role: "gridcell" | "columnheader") => (
-    <div
-      key={c}
-      role={role}
-      aria-colindex={c + 2}
-      className="kn-grid-cell"
-      data-num={role === "gridcell" && isNumeric(text) ? "" : undefined}
-      style={{ left: numW + offsets![c]!, width: widths![c] }}
-    >
-      {text}
-    </div>
-  );
+  // O arquivo mudou e ficou menor: a seleção volta para dentro.
+  const sel = selected && columns ? clampCell(selected, rows.length, columns) : null;
+  const selText = sel ? cellText(sel, header, rows) : "";
+  const cellId = (r: number, c: number) => `${id}-${r}-${c}`;
+
+  /** A área das células agora (sem as partes paradas), lida da rolagem e não do estado, que chega um quadro depois. */
+  const liveView = (): Viewport | null => {
+    const el = scroll.current;
+    return el ? { left: el.scrollLeft, top: el.scrollTop, width: el.clientWidth - numW, height: el.clientHeight - head } : null;
+  };
+  const select = (cell: Cell, byKey = false) => {
+    setSelected(cell);
+    const el = scroll.current;
+    const v = liveView();
+    if (!el || !v || !offsets) return;
+    const to = scrollToShow(cell, offsets, v, byKey);
+    if (to.left !== v.left || to.top !== v.top) el.scrollTo(to.left, to.top);
+  };
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const at = (e.target as HTMLElement).closest<HTMLElement>("[data-r]");
+    if (!at) return;
+    select({ row: Number(at.dataset.r), col: Number(at.dataset.c) });
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!offsets || !columns || e.altKey || e.ctrlKey) return;
+    const v = liveView();
+    if (!v) return;
+    const page = Math.max(1, Math.floor(v.height / ROW_H));
+    // A primeira seta começa no canto da tela, sem pular a rolagem para o A1.
+    const from = sel ?? (e.key.startsWith("Arrow") ? firstVisible(offsets, v, rows.length) : null);
+    if (!from) return;
+    const to = sel ? moveCell(from, { key: e.key, meta: e.metaKey }, rows.length, columns, page) : from;
+    if (!to) return;
+    e.preventDefault();
+    select(to, true);
+  };
+
+  // ⌘C copia o conteúdo da célula selecionada. Vai pelo "Copiar" do menu Editar do app, que manda o evento `copy` da
+  // página: o `beforecopy` cancelado liga o item sem texto selecionado. Um texto selecionado (o da barra) copia ele mesmo.
+  useEffect(() => {
+    if (!sel) return;
+    const mine = () => {
+      const el = scroll.current;
+      if (!el || !el.contains(document.activeElement)) return false;
+      const s = document.getSelection();
+      return !s || s.isCollapsed || !s.toString();
+    };
+    const before = (e: Event) => {
+      if (mine()) e.preventDefault();
+    };
+    const copy = (e: ClipboardEvent) => {
+      if (!mine() || !e.clipboardData) return;
+      e.clipboardData.setData("text/plain", selText);
+      e.preventDefault();
+    };
+    document.addEventListener("beforecopy", before);
+    document.addEventListener("copy", copy);
+    return () => {
+      document.removeEventListener("beforecopy", before);
+      document.removeEventListener("copy", copy);
+    };
+  }, [sel !== null, selText]);
+
+  // A borda do cabeçalho: arrastar muda a largura daquela coluna; dois cliques ajustam ao conteúdo.
+  const drag = useRef<{ col: number; x0: number; start: number } | null>(null);
+  const [resizing, setResizing] = useState(false);
+  const onResizeDown = (c: number) => (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !widths) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { col: c, x0: e.clientX, start: widths[c]! };
+    setResizing(true);
+  };
+  const onResizeMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (d) setCustom(d.col, dragWidth(d.start, e.clientX - d.x0));
+  };
+  const onResizeUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    drag.current = null;
+    setResizing(false);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+  const onResizeFit = (c: number) => () => {
+    const measure = measureRef.current;
+    if (measure) setCustom(c, fitWidth(c, header, rows, measure));
+  };
+
+  const cell = (text: string, r: number, c: number, role: "gridcell" | "columnheader") => {
+    const on = sel?.row === r && sel.col === c;
+    return (
+      <div
+        key={c}
+        id={cellId(r, c)}
+        role={role}
+        aria-colindex={c + 2}
+        aria-selected={on}
+        data-r={r}
+        data-c={c}
+        className="kn-grid-cell"
+        data-num={role === "gridcell" && isNumeric(text) ? "" : undefined}
+        style={{ left: numW + offsets![c]!, width: widths![c] }}
+      >
+        {text}
+      </div>
+    );
+  };
 
   return (
     <div className="kn-file-table-wrap">
+      <div className="kn-grid-bar">
+        <span className="kn-grid-addr" aria-label="Célula selecionada">
+          {sel ? cellAddress(sel, firstRow) : ""}
+        </span>
+        <div className="kn-grid-value" aria-label="Conteúdo da célula" data-empty={sel ? undefined : ""}>
+          {sel ? selText : "Clique numa célula para ver o conteúdo inteiro"}
+        </div>
+      </div>
       <div
         ref={scroll}
         className="kn-grid"
@@ -197,7 +329,11 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
         aria-readonly="true"
         aria-rowcount={rows.length + 1}
         aria-colcount={columns + 1}
+        aria-activedescendant={sel ? cellId(sel.row, sel.col) : undefined}
+        data-resizing={resizing ? "" : undefined}
         tabIndex={0}
+        onMouseDown={onMouseDown}
+        onKeyDown={onKeyDown}
       >
         <div className="kn-grid-canvas" style={{ width, height: head + rows.length * ROW_H }}>
           <div className="kn-grid-head" role="rowgroup" style={{ width, height: head }}>
@@ -205,7 +341,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
               <div className="kn-grid-n kn-grid-corner" style={{ width: numW }} />
               {offsets
                 ? cols.map((c) => (
-                    <div key={c} className="kn-grid-cell kn-grid-letter" style={{ left: numW + offsets[c]!, width: widths![c] }}>
+                    <div key={c} className="kn-grid-cell kn-grid-letter" data-on={sel?.col === c ? "" : undefined} style={{ left: numW + offsets[c]!, width: widths![c] }}>
                       {/* Grudada na área das células: a coluna cortada na borda mostra a letra na parte que aparece. */}
                       <span className="kn-grid-letter-name" style={{ left: numW }}>
                         {columnName(c)}
@@ -213,12 +349,28 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
                     </div>
                   ))
                 : null}
+              {offsets
+                ? cols.map((c) => (
+                    <div
+                      key={`r${c}`}
+                      className="kn-grid-resize"
+                      data-col={c}
+                      title="Arraste para mudar a largura; dois cliques ajustam ao conteúdo"
+                      style={{ left: numW + offsets[c + 1]! - 4 }}
+                      onPointerDown={onResizeDown(c)}
+                      onPointerMove={onResizeMove}
+                      onPointerUp={onResizeUp}
+                      onPointerCancel={onResizeUp}
+                      onDoubleClick={onResizeFit(c)}
+                    />
+                  ))
+                : null}
             </div>
             <div className="kn-grid-row kn-grid-top" role="row" aria-rowindex={1} style={{ top: ROW_H, width }}>
-              <div className="kn-grid-n" role="rowheader" style={{ width: numW }}>
+              <div className="kn-grid-n" role="rowheader" data-on={sel?.row === 0 ? "" : undefined} style={{ width: numW }}>
                 {firstRow - 1}
               </div>
-              {offsets ? cols.map((c) => cell(header[c] ?? "", c, "columnheader")) : null}
+              {offsets ? cols.map((c) => cell(header[c] ?? "", 0, c, "columnheader")) : null}
             </div>
           </div>
           {offsets
@@ -227,10 +379,10 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
                 const row = rows[r]!;
                 return (
                   <div key={r} className="kn-grid-row" role="row" aria-rowindex={r + 2} style={{ top: head + r * ROW_H, width }}>
-                    <div className="kn-grid-n" role="rowheader" style={{ width: numW }}>
+                    <div className="kn-grid-n" role="rowheader" data-on={sel?.row === r + 1 ? "" : undefined} style={{ width: numW }}>
                       {r + firstRow}
                     </div>
-                    {cols.map((c) => cell(row[c] ?? "", c, "gridcell"))}
+                    {cols.map((c) => cell(row[c] ?? "", r + 1, c, "gridcell"))}
                   </div>
                 );
               })
