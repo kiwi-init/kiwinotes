@@ -267,10 +267,13 @@ export class Cofre {
 /** O texto da fixture com uma mudança só: a marca ganha um "2". */
 const mudado = (t: string) => t.replace(MARCA, `${MARCA}2`);
 
-const tempo = async <T>(f: () => Promise<T>): Promise<[T, number]> => {
-  const t0 = performance.now();
+/** O relógio das medidas: o de verdade, ou um falso nos testes do teste (T23067), que não atrasa com a máquina ocupada. */
+export type Relogio = () => number;
+
+const tempo = async <T>(f: () => Promise<T>, agora: Relogio = () => performance.now()): Promise<[T, number]> => {
+  const t0 = agora();
   const r = await f();
-  return [r, Math.round(performance.now() - t0)];
+  return [r, Math.round(agora() - t0)];
 };
 
 /** Quantas vezes o tempo de abrir é medido antes de falhar (T22099): uma máquina do CI ocupada atrasa uma medida, não três. */
@@ -281,19 +284,20 @@ export const MEDIDAS = 3;
  * A 1ª medida é a fria, a que a pessoa vê (o pdf carrega o PDF.js nela); as outras já vêm com o código carregado e são
  * muito mais rápidas. Por isso a fria tem um teto próprio, `tetoFrio` (2× o máximo): acima dele, `ok` é falso e não se
  * repete, porque uma abertura fria que dobrou de tempo não é tremor do CI. Abaixo dele, `ok` só é falso se todas passam
- * de `max`.
+ * de `max`. `agora`: o relógio (o falso, nos testes do teste).
  */
 export async function medirAte<T>(
   f: () => Promise<T>,
   max: number,
   vezes = MEDIDAS,
   tetoFrio = 2 * max,
+  agora: Relogio = () => performance.now(),
 ): Promise<{ r: T; ms: number[]; ok: boolean; fria: boolean }> {
   const ms: number[] = [];
   let r!: T;
   for (let i = 0; i < vezes; i++) {
     let t: number;
-    [r, t] = await tempo(f);
+    [r, t] = await tempo(f, agora);
     ms.push(t);
     if (i === 0 && t > tetoFrio) return { r, ms, ok: false, fria: true };
     if (t <= max) return { r, ms, ok: true, fria: false };

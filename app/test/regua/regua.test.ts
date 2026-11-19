@@ -95,26 +95,34 @@ describe("o teste do teste", () => {
   });
 
   test("o tempo de abrir falha se todas as medidas passam do máximo, ou se a 1ª passa do teto dela (T22099)", async () => {
-    const espera = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+    // Um relógio falso (T23067): cada abertura "leva" o tempo que diz, e uma máquina ocupada não muda a conta.
+    let agora = 0;
+    const relogio = () => agora;
+    const leva = (ms: number) => {
+      agora += ms;
+    };
+    const medir = <T>(f: () => Promise<T>, vezes?: number) => medirAte(f, 40, vezes, undefined, relogio);
+
     let n = 0;
-    const lentoUmaVez = await medirAte(async () => (n++ === 0 ? espera(60) : undefined), 40);
-    expect(lentoUmaVez.ok).toBe(true);
-    expect(lentoUmaVez.ms.length).toBe(2);
+    const lentoUmaVez = await medir(async () => leva(n++ === 0 ? 60 : 5));
+    expect(lentoUmaVez).toMatchObject({ ok: true, ms: [60, 5] });
 
-    const rapido = await medirAte(async () => "aberto", 40);
-    expect(rapido).toMatchObject({ r: "aberto", ok: true });
-    expect(rapido.ms.length).toBe(1);
+    const rapido = await medir(async () => (leva(5), "aberto"));
+    expect(rapido).toMatchObject({ r: "aberto", ok: true, ms: [5] });
+    // Exatamente no máximo ainda passa.
+    expect(await medir(async () => leva(40))).toMatchObject({ ok: true, ms: [40] });
 
-    const sempreLento = await medirAte(() => espera(60), 40, 3);
-    expect(sempreLento.ok).toBe(false);
-    expect(sempreLento.ms.length).toBe(3);
-    expect(sempreLento.ms.every((t) => t > 40)).toBe(true);
+    const sempreLento = await medir(async () => leva(60), 3);
+    expect(sempreLento).toMatchObject({ ok: false, fria: false, ms: [60, 60, 60] });
 
     // A fria acima do teto (2× o máximo) falha mesmo que as outras fossem rápidas: o código carregado não esconde a 1ª.
     let m = 0;
-    const friaLenta = await medirAte(async () => (m++ === 0 ? espera(100) : undefined), 40);
-    expect(friaLenta).toMatchObject({ ok: false, fria: true });
-    expect(friaLenta.ms.length).toBe(1);
+    const friaLenta = await medir(async () => leva(m++ === 0 ? 100 : 5));
+    expect(friaLenta).toMatchObject({ ok: false, fria: true, ms: [100] });
+    // No teto, ainda não é fria demais: é uma medida lenta, e a seguinte decide.
+    let k = 0;
+    const friaNoTeto = await medir(async () => leva(k++ === 0 ? 80 : 5));
+    expect(friaNoTeto).toMatchObject({ ok: true, fria: false, ms: [80, 5] });
   });
 
   test('"n/a" e "abre fora" não rodam', () => {
