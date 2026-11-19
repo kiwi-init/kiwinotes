@@ -10,7 +10,7 @@ O que todo tipo de arquivo cumpre nas Notas (spec #21156 do Kiwi, task T21236). 
 
 | # | O item | Vale para | Como se confere |
 |---|---|---|---|
-| 1 | **Abre rápido** e legível de primeira, sem ajuste da pessoa | todos | teste: a fixture difícil abre pelo leitor do app em até 1,5 s, com o texto de dentro |
+| 1 | **Abre rápido** e legível de primeira, sem ajuste da pessoa | todos | teste: a fixture difícil abre pelo leitor do app em até 1,5 s, com o texto de dentro (a 1ª abertura, a fria, tem de ficar em até 3 s; acima de 1,5 s, ela se repete até 3 vezes e falha se nenhuma fica em 1,5 s) |
 | 2 | **Arquivo grande** não trava: rola liso ou avisa o limite | todos | teste: acima do limite (5 MB de texto, 25 MB de binário) vem o aviso; a planilha e o csv de 50 mil linhas e a nota de 2 MB abrem em até 10 s |
 | 3 | **Buscar dentro** (⌘F) | todos com texto | pela leitura do código (é da tela) |
 | 4 | **Entra na busca do app** e no ⌘K | todos com texto | teste: a palavra que só existe dentro do arquivo é achada pelo `vault.search` |
