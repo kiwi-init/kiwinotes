@@ -1,0 +1,36 @@
+{
+  "loja": "Loja Exemplo",
+  "itens": [
+    {
+      "produto": "Parafuso sextavado",
+      "secao": "Ferragens",
+      "quantidade": 120,
+      "preco": 0.35
+    },
+    {
+      "produto": "Martelo de unha",
+      "secao": "Ferramentas",
+      "quantidade": 14,
+      "preco": 32.9
+    },
+    {
+      "produto": "Fita isolante",
+      "secao": "Elétrica",
+      "quantidade": 48,
+      "preco": 6.5
+    },
+    {
+      "produto": "Tinta acrílica branca",
+      "secao": "Pintura",
+      "quantidade": 9,
+      "preco": 89
+    },
+    {
+      "produto": "Lâmpada de LED",
+      "secao": "Elétrica",
+      "quantidade": 60,
+      "preco": 12.75
+    }
+  ],
+  "nota": "caixa quindimrosa"
+}

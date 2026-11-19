@@ -1,0 +1,14 @@
+{
+  "nodes": [
+    {
+      "id": "a1",
+      "type": "text",
+      "text": "Caixa quindimrosa",
+      "x": 0,
+      "y": 0,
+      "width": 240,
+      "height": 60
+    }
+  ],
+  "edges": []
+}

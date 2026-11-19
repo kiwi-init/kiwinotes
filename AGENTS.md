@@ -67,6 +67,7 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 ## Testes
 - Lógica TS: `bun test`. Lógica Swift: `swift test` em `native/`.
 - **Teste pela CLI headless** (`bun run cli`, `app/README.md`): o app inteiro (as capacidades do AppEngine, o helper, o ditado com dryRun) sem nada na tela de ninguém e com os dados num tmp. É o padrão para testar comportamento.
+- **Tipo de arquivo novo nas Notas passa pela régua** (spec #21156): a linha dele toda preenchida em `docs/specs/regua-dos-arquivos.md` (cada "falta" com o spec ou a issue que fecha, cada "n/a" com o motivo) e a fixture difícil em `app/test/regua/arquivos.ts`. Um tipo em `VIEWER_TYPES` sem linha quebra o `bun test test/regua`. Fechou uma "falta"? A troca para "cumpre" vai no mesmo PR; o teste pede.
 - **Mudou a limpeza, o tom ou a inserção do ditado?** Rode `bun run test:dictation` em `app/`, a bateria de regressão de `app/test/dictation/`. São casos de texto e casos falados (`say` → STT, sem mic), e ela sai com exit 1 se algum caso falhar. O modo falado usa o STT: pegue `kiwi lock bench` antes. Um caso novo que mostra um problema de verdade entra com `known` e a task do bug.
 - Comportamento do app: rode com `ELECTROBUN_AGENT_CONTROL=1` e dirija pelo MCP do Livewire, **só com horário combinado** com a pessoa do Mac (veja abaixo).
 - A máquina é compartilhada (M1 Pro, 16 GB): não rode benchmarks pesados em paralelo com outro agente. Pegue `kiwi lock bench` antes.
