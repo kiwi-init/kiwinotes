@@ -200,6 +200,8 @@ export interface CapabilityDeps {
   };
   /** O modelo da busca pelo sentido, um para o app (T6013). */
   semanticEngine?: Pick<SemanticEngine, "state" | "start" | "disable">;
+  /** A pessoa digitou numa nota ou num arquivo: o trabalho de fundo (a busca pelo sentido) espera (spec #24228). */
+  userActive?(): void;
   /** Os anexos das notas (T2594): sem eles (um host antigo), as capacidades `attachments.*` dão E_NO_ATTACHMENTS. */
   attachments?: Pick<Attachments, "save" | "read" | "rename">;
   /** Baixa a imagem de fora depois do clique (T2984). Sem isto, o `images.remote` dá E_NO_REMOTE_IMAGES. */
@@ -983,6 +985,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "notes.get": async (args) => (await vault()).get(fields(args, "notes.get", ["path"]).path),
     "notes.save": async (args) => {
+      deps.userActive?.();
       const a = fields(args, "notes.save", ["path", "content", "baseVersion",
         "baseContent", "snapshot",
       ]);
@@ -1147,6 +1150,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       return (await vault()).readFile(a.path, a.as ?? "binary");
     },
     "files.save": async (args) => {
+      deps.userActive?.();
       const a = fields(args, "files.save", ["path", "content", "base64", "baseVersion", "snapshot"]);
       if (a.base64 !== undefined && a.content !== undefined) throw bad("files.save: send content or base64, not both");
       if (a.snapshot !== undefined && typeof a.snapshot !== "boolean") throw bad("files.save: snapshot must be true or false");

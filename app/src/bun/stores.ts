@@ -15,6 +15,7 @@ import { assertHeadlessNotesFolder, resolveReal } from "../headless/guard.ts";
 import { headlessTrash } from "../headless/trash.ts";
 import { Vault } from "../notes/vault.ts";
 import { SemanticEngine } from "../notes/semantic/engine.ts";
+import { BackgroundGate } from "../notes/semantic/gate.ts";
 import { appAgentService } from "../agent/app-service.ts";
 
 /** `KIWI_DATA_DIR` troca a pasta (testes e agentes, sem mexer nos dados reais). */
@@ -32,11 +33,14 @@ const semantic = new SemanticEngine({
   enabled: async () => (await globalSettings.load()).semanticSearch,
   download: process.env.KIWI_HEADLESS !== "1",
 });
+// Quando o modelo pode indexar (spec #24228): para com a pessoa ditando, gravando, falando com o agente ou digitando, e
+// na bateria. O headless não confere a bateria (os roteiros e o CI dão o mesmo resultado em qualquer Mac).
+const gate = new BackgroundGate({ battery: process.env.KIWI_HEADLESS === "1" ? null : undefined });
 let folders: NotesFolders;
 // O headless apaga para `<data>/trash`, nunca para o Lixo do macOS da pessoa (T7681).
 const trash = process.env.KIWI_HEADLESS === "1" ? headlessTrash(path.join(dir, "trash")) : undefined;
 const internalNotes = new Vault({ root: defaultRoot, watch: true, onIndexProgress: p => folders?.indexProgress(defaultRoot,p), ...(trash ? { trash } : {}) });
-folders = new NotesFolders({dir,defaultRoot,globalSettings,internalNotes,semantic,
+folders = new NotesFolders({dir,defaultRoot,globalSettings,internalNotes,semantic,gate,
   guard: process.env.KIWI_HEADLESS === "1" ? root => assertHeadlessNotesFolder(root) : undefined,
   ...(trash ? { trash } : {}),
 });
@@ -54,6 +58,7 @@ export const stores = {
   folders,
   globalSettings,
   semantic,
+  gate,
   dictionary: new DictionaryStore(dir),
   snippets: new SnippetStore(dir),
   recoveries,

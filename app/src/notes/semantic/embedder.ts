@@ -43,8 +43,9 @@ export function meanPool(data: Float32Array, mask: BigInt64Array, rows: number, 
 }
 
 /**
- * Carrega o tokenizer e o modelo de `dir` (o `ensureModel` já conferiu os arquivos). Poucas threads: a indexação roda
- * em segundo plano e não pode tomar o Mac de quem está digitando.
+ * Carrega o tokenizer e o modelo de `dir` (o `ensureModel` já conferiu os arquivos). Uma thread (spec #24228): com 2, o
+ * índice da pasta inteira deixava o Kiwi em 200% de CPU. A indexação roda em segundo plano e não pode tomar o Mac de
+ * quem está digitando.
  */
 export async function onnxEmbedder(dir: string, o: { threads?: number } = {}): Promise<Embedder> {
   const ort: typeof Ort = await import("onnxruntime-node");
@@ -54,7 +55,7 @@ export async function onnxEmbedder(dir: string, o: { threads?: number } = {}): P
   ]);
   const tokenizer = new Tokenizer(JSON.parse(tokenizerJson) as object, JSON.parse(configJson) as object);
   const session = await ort.InferenceSession.create(path.join(dir, "onnx", "model_quantized.onnx"), {
-    intraOpNumThreads: o.threads ?? 2,
+    intraOpNumThreads: o.threads ?? 1,
     interOpNumThreads: 1,
     executionMode: "sequential",
     enableCpuMemArena: false,
