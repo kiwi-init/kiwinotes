@@ -32,7 +32,8 @@ function resolveTarget(raw: string, r: BubbleLinkResolver, opts: { bareNote: boo
   if (!t) return null;
   let path: string | null = null;
   if (/\.md$/i.test(t) || (opts.bareNote && !EXT.test(t))) path = r.note(t);
-  if (!path && EXT.test(t) && !/\.md$/i.test(t)) path = r.file(t);
+  // Sem extensão, um arquivo só pelo caminho com a pasta (`Projeto X/Dockerfile`, T20047): um nome solto fica texto.
+  if (!path && (EXT.test(t) || t.includes("/")) && !/\.md$/i.test(t)) path = r.file(t);
   if (!path) return null;
   return { path, kind: NOTE_EXT.test(path) ? "note" : "file" };
 }

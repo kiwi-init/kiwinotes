@@ -810,6 +810,15 @@ export class Vault {
     }
   }
 
+  /**
+   * O arquivo neste caminho exato, com a pasta e sem extensão (o `Projeto X/Dockerfile`, T20047), ou null. Os links do
+   * balão usam: o `resolveFiles` só acha nome com extensão, como o Obsidian.
+   */
+  fileAt(target: string): string | null {
+    const p = target.trim().replace(/^\/+/, "");
+    return p.includes("/") && this.files.has(p) ? p : null;
+  }
+
   private resolveFile(target: string): string | null {
     this.fileResolver ??= makeFileResolver([...this.files.keys()]);
     return this.fileResolver(target);

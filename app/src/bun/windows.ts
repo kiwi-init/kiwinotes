@@ -240,7 +240,7 @@ stores.agent.useVaultRoot(async () => (await stores.folders.current()).notes.roo
 // Os links do balão (spec #17683): só o que está no índice da pasta aberta.
 stores.agent.useLinkResolver(async () => {
   const v = (await stores.folders.current()).notes;
-  return { note: (t) => v.resolve(t), file: (t) => v.resolveFiles([t])[t] ?? null };
+  return { note: (t) => v.resolve(t), file: (t) => v.resolveFiles([t])[t] ?? v.fileAt(t) };
 });
 stores.agent.useGlossary(async () => (await stores.dictionary.load()).map((t) => t.term));
 stores.agent.useWriter(writerFromCapabilities(capabilities));
