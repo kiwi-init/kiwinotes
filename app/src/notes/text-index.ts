@@ -74,8 +74,24 @@ export const formatOf = (p: string): string => (/\.([a-z0-9]+)$/i.exec(p)?.[1] ?
 
 /** Muda quando o esquema muda: o índice velho é apagado e refeito. */
 const SCHEMA = 4;
-/** Quantos arquivos por lote, e a pausa entre os lotes. */
+/** Quantos arquivos por lote. */
 const BATCH = 40;
+/**
+ * O teto do ritmo (spec #24228, T24286): o índice trabalha no máximo esta fração do tempo, como a busca pelo sentido
+ * (#248). Depois de um lote que levou `t`, a pausa é `t × (1 − DUTY) / DUTY`: com 0,25, um lote de 20 ms descansa 60.
+ * Na pasta de código do harry, a 1ª passada ia a 70–90% de um núcleo, a ~600 arquivos por segundo.
+ */
+export const DUTY = 0.25;
+/** A menor pausa entre os lotes, mesmo num lote rápido. */
+const MIN_PAUSE_MS = 5;
+/** A pausa depois de um lote que levou `workMs`, no teto `duty`. */
+export const pauseAfter = (workMs: number, duty = DUTY): number => Math.max(MIN_PAUSE_MS, (workMs * (1 - duty)) / duty);
+/**
+ * As saídas de build e as dependências copiadas (o `SKIP` do `project-finder.ts`): entram só pelo nome. A busca ainda as
+ * acha pelo caminho, mas o índice não lê nem tokeniza milhares de arquivos gerados (spec #24228, T24286).
+ */
+const BUILD_DIRS = new Set(["build", "dist", "target", "DerivedData", "Pods", "venv", "vendor", "__pycache__"]);
+export const isBuildOutput = (p: string): boolean => p.split("/").slice(0, -1).some((s) => BUILD_DIRS.has(s));
 /**
  * O texto (em caracteres) de uma transação. O FTS5 tokeniza tudo dentro dela, de uma vez, na thread do main: com 40 logs de
  * 2 MB, o laço do Bun ficava preso 1,1 s por lote, e o histórico do Ditado e a colagem esperavam atrás (P0 #23988). Com
@@ -115,8 +131,13 @@ export interface TextIndexOptions {
   maxBytes?: number;
   /** O maior pdf, docx ou xlsx lido (o arquivo, não o texto); acima disto, só o nome. */
   maxDocBytes?: number;
-  /** A pausa entre os lotes (nos testes, nenhuma). */
-  pause?(): Promise<void>;
+  /** A pausa depois de um lote que levou `workMs` (o padrão segue o `DUTY`; nos testes, nenhuma). */
+  pause?(workMs: number): Promise<void>;
+  /**
+   * Espera antes de cada lote, enquanto a pessoa usa o Mac (o portão do #248, `BackgroundGate.wait`). No worker, é a
+   * pergunta ao main (`text-index-client.ts`).
+   */
+  gate?(): Promise<void>;
   /** O texto de uma transação (`BATCH_TEXT`; testes usam menos). */
   batchText?: number;
   /** O que uma busca lê no total e por arquivo (testes usam menos). */
@@ -184,7 +205,7 @@ export class TextIndex {
   private chain: Promise<void> = Promise.resolve();
   private closed = false;
   private readonly maxBytes: number;
-  private readonly pause: () => Promise<void>;
+  private readonly pause: (workMs: number) => Promise<void>;
   /** O que a sessão fez (o teste da 2ª abertura e a medição). */
   readonly stats = { read: 0, nameOnly: 0, removed: 0, skipped: 0, batches: 0, maxBatchText: 0, overCap: 0, alone: 0, docs: 0 };
   /** Os bytes que a última busca leu do disco (o teste do orçamento). */
@@ -192,7 +213,12 @@ export class TextIndex {
 
   constructor(private readonly o: TextIndexOptions) {
     this.maxBytes = o.maxBytes ?? MAX_VIEW_TEXT_BYTES;
-    this.pause = o.pause ?? (() => new Promise((r) => setTimeout(r, 5)));
+    this.pause = o.pause ?? ((ms) => new Promise((r) => setTimeout(r, pauseAfter(ms))));
+  }
+
+  /** Fechou: o portão para de esperar (o `createTextIndex` no main). */
+  get isClosed(): boolean {
+    return this.closed;
   }
 
   get file(): string {
@@ -319,7 +345,9 @@ export class TextIndex {
     /** O arquivo que não coube no lote de antes: abre o próximo. */
     let carry: Item | null = null;
     while (i < files.length || carry) {
+      if (this.o.gate) await this.o.gate();
       if (this.closed) return;
+      const started = performance.now();
       const batch: Item[] = [];
       // O lote fecha em `BATCH` arquivos ou antes de passar de `cap` de texto (P0 #23988: é o que a transação tokeniza
       // de uma vez no main; T22218: e o que ele segura na memória). O arquivo que passaria vai para o próximo lote.
@@ -341,6 +369,10 @@ export class TextIndex {
       while (i < files.length && batch.length < BATCH && !carry) {
         const f = files[i++]!;
         let text: string | null = null;
+        if (isBuildOutput(f.path)) {
+          add({ f, text: null });
+          continue;
+        }
         if (isDocText(f.path)) {
           const doc = await this.readDoc(f);
           if (doc === undefined) continue; // sumiu ou saiu da pasta por um link
@@ -384,7 +416,7 @@ export class TextIndex {
       this.stats.maxBatchText = Math.max(this.stats.maxBatchText, held);
       // Acima do teto, só um arquivo sozinho (`alone`); um lote de vários acima dele (`overCap`) é o que travava o laço.
       if (held > cap) this.stats[batch.length > 1 ? "overCap" : "alone"]++;
-      if (i < files.length || carry) await this.pause();
+      if (i < files.length || carry) await this.pause(performance.now() - started);
     }
   }
 

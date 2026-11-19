@@ -8,7 +8,7 @@
 import { heapStats } from "bun:jsc";
 
 import { TextIndex } from "./text-index.ts";
-import type { WorkerLog, WorkerReply, WorkerRequest } from "./text-index-client.ts";
+import type { WorkerGate, WorkerGateOk, WorkerLog, WorkerReply, WorkerRequest } from "./text-index-client.ts";
 import type { VaultFile } from "./vault.ts";
 
 declare const self: Worker;
@@ -22,6 +22,17 @@ for (const level of ["error", "warn"] as const) {
 
 let index: TextIndex | null = null;
 
+// O portão (spec #24228, T24286): antes de cada lote, o worker pergunta ao main, que espera a pessoa parar de usar o Mac
+// (`BackgroundGate.wait`) e responde com o mesmo número.
+let gates = 0;
+const gateWaiting = new Map<number, () => void>();
+const askGate = (): Promise<void> =>
+  new Promise((resolve) => {
+    const gate = ++gates;
+    gateWaiting.set(gate, resolve);
+    postMessage({ gate } satisfies WorkerGate);
+  });
+
 function ready(): TextIndex {
   if (!index) throw new Error("o índice ainda não abriu");
   return index;
@@ -30,7 +41,7 @@ function ready(): TextIndex {
 async function run(m: WorkerRequest): Promise<unknown> {
   switch (m.op) {
     case "init":
-      index = new TextIndex({ ...m.options, ...(m.pauseMs === 0 ? { pause: async () => {} } : {}) });
+      index = new TextIndex({ ...m.options, ...(m.pauseMs === 0 ? { pause: async () => {} } : {}), ...(m.gated ? { gate: askGate } : {}) });
       return;
     case "sync":
       // O `sync` escolhe o que entra (`isIndexedFile`): o filtro de 250 mil caminhos fica aqui, não no main.
@@ -54,7 +65,12 @@ async function run(m: WorkerRequest): Promise<unknown> {
 }
 
 // Cada pedido responde pelo `id`. Um `sync` longo não segura os outros: a busca anda enquanto o lote indexa, como no main.
-self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
+self.onmessage = async (e: MessageEvent<WorkerRequest | WorkerGateOk>) => {
+  if ("gateOk" in e.data) {
+    gateWaiting.get(e.data.gateOk)?.();
+    gateWaiting.delete(e.data.gateOk);
+    return;
+  }
   const m = e.data;
   let reply: WorkerReply;
   try {

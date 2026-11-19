@@ -10,7 +10,7 @@ import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { tempDir } from "../../test/tmp.ts";
 import { zipBytes } from "../../test/office-files.ts";
 import { ABA_LARGA, MARCA, PASTA } from "../../test/regua/arquivos.ts";
-import { isIndexedFile, isIndexedText, lineOf, TextIndex } from "./text-index.ts";
+import { isBuildOutput, isIndexedFile, isIndexedText, lineOf, pauseAfter, TextIndex } from "./text-index.ts";
 import { Vault, type VaultFile } from "./vault.ts";
 
 const open: { close(): unknown }[] = [];
@@ -387,5 +387,65 @@ describe("o lote cabe num teto de texto (P0 #23988)", () => {
     expect(t.stats.batches).toBeGreaterThanOrEqual(Math.ceil((12 * 20 + 4 * 30) / 64));
     expect(t.stats.read + t.stats.nameOnly).toBe(17);
     for (const q of ["caju", "pitanga", "acerola"]) expect((await t.search(q, 50, f.stat)).length).toBeGreaterThan(0);
+  });
+});
+
+describe("o ritmo e o portão (spec #24228, T24286)", () => {
+  test("a pausa segue o teto: com 25%, um lote de 20 ms descansa 60, e nunca menos de 5", () => {
+    expect(pauseAfter(20)).toBe(60);
+    expect(pauseAfter(0)).toBe(5);
+    expect(pauseAfter(10, 0.5)).toBe(10);
+  });
+
+  test("a pausa recebe quanto o lote levou", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 90; i++) files[`codigo/mod-${i}.ts`] = `export const caju${i} = ${i};\n`;
+    const f = folder(files);
+    const work: number[] = [];
+    const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), pause: async (ms) => void work.push(ms) });
+    open.push(t);
+    await t.sync(f.all());
+    expect(t.stats.batches).toBe(3);
+    expect(work.length).toBe(2);
+    for (const ms of work) expect(ms).toBeGreaterThan(0);
+  });
+
+  test("o portão segura cada lote até liberar", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 90; i++) files[`codigo/mod-${i}.ts`] = `export const caju${i} = ${i};\n`;
+    const f = folder(files);
+    const waiting: (() => void)[] = [];
+    const t = new TextIndex({
+      root: f.root,
+      dir: path.join(f.base, "dados", "text-index"),
+      pause: async () => {},
+      gate: () => new Promise<void>((r) => waiting.push(r)),
+    });
+    open.push(t);
+    const done = t.sync(f.all());
+    for (let lote = 1; lote <= 3; lote++) {
+      while (waiting.length === 0) await Bun.sleep(1);
+      expect(t.stats.batches).toBe(lote - 1);
+      waiting.shift()!();
+    }
+    await done;
+    expect(t.stats.batches).toBe(3);
+  });
+
+  test("a saída de build entra só pelo nome: o caminho acha, o texto não", async () => {
+    const f = folder({
+      "app/dist/bundle.js": "const pitanga = 1;\n",
+      "app/build/saida.json": '{"pitanga": 2}\n',
+      "app/src/main.ts": "const pitanga = 3;\n",
+      "app/distante/nota.txt": "pitanga\n",
+    });
+    const t = f.index();
+    await t.sync(f.all());
+    expect(t.stats.nameOnly).toBe(2);
+    expect(paths(await t.search("pitanga", 50, f.stat))).toEqual(["app/distante/nota.txt", "app/src/main.ts"]);
+    expect(paths(await t.search("bundle", 50, f.stat))).toEqual(["app/dist/bundle.js"]);
+    expect(isBuildOutput("dist/x.js")).toBe(true);
+    expect(isBuildOutput("dist.txt")).toBe(false);
+    expect(isBuildOutput("projeto/vendor/lib.py")).toBe(true);
   });
 });

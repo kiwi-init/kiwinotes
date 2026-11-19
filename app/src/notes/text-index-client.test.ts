@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path";
 
 import { tempDir } from "../../test/tmp.ts";
-import { createTextIndex, TextIndexWorker, textIndexWorkerScript } from "./text-index-client.ts";
+import { createTextIndex, type IndexGate, TextIndexWorker, textIndexWorkerScript } from "./text-index-client.ts";
 import { TextIndex } from "./text-index.ts";
 import type { VaultFile } from "./vault.ts";
 
@@ -29,8 +29,8 @@ function folder(files: Record<string, string>) {
     return { path: rel, size: s.size, mtime: s.mtime.toISOString() };
   };
   const all = () => Object.keys(files).map(stat).filter((f): f is VaultFile => !!f);
-  const worker = (extra: { batchText?: number } = {}) => {
-    const t = new TextIndexWorker({ root, dir: path.join(base, "dados", "text-index"), ...extra }, textIndexWorkerScript()!, 0);
+  const worker = (extra: { batchText?: number } = {}, gate?: IndexGate) => {
+    const t = new TextIndexWorker({ root, dir: path.join(base, "dados", "text-index"), ...extra }, textIndexWorkerScript()!, 0, gate);
     open.push(t);
     return t;
   };
@@ -140,5 +140,26 @@ describe("o índice num Worker (P0 #23988)", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  test("o portão do main segura cada lote do worker até liberar (spec #24228, T24286)", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 90; i++) files[`codigo/mod-${i}.ts`] = `export const jambo${i} = ${i};\n`;
+    const f = folder(files);
+    const waiting: (() => void)[] = [];
+    const gate: IndexGate = { wait: () => new Promise<void>((r) => waiting.push(r)) };
+    const t = f.worker({}, gate);
+    const done = t.sync(f.all());
+    for (let lote = 1; lote <= 3; lote++) {
+      for (let n = 0; waiting.length === 0; n++) {
+        if (n > 2000) throw new Error(`o lote ${lote} não pediu o portão`);
+        await Bun.sleep(1);
+      }
+      expect((await t.stats()).batches).toBe(lote - 1);
+      waiting.shift()!();
+    }
+    await done;
+    expect((await t.stats()).batches).toBe(3);
+    expect(paths(await t.search("jambo42", 10, f.stat))).toEqual(["codigo/mod-42.ts"]);
   });
 });
