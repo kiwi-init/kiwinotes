@@ -11,6 +11,8 @@
 //            a diarização, os `segment` finais.
 // - live48k: o mesmo, com a captura no meio: cada canal sobe a 48 kHz e volta pelo `Resampler` do app, em 10 ms.
 // - livept:  o mesmo, com a língua (`--language pt`) que o app não passa.
+// - livefalante: o mesmo no limpo, com o filtro de eco ligado (`--output speaker`): sem eco no áudio, o filtro não pode
+//            tirar nada do canal "você" (T20750).
 // - nota:    os `segment` do `live` pela escrita da nota (`nota.ts`).
 // - wsmall, wturbo: os candidatos a modelo de reunião (#20494), em batch no fim, no canal inteiro (`--meeting --whisper`):
 //            o Whisper small do modo preciso e o Whisper large-v3 turbo. Rodam no limpo, no eco e no ruído.
@@ -38,7 +40,7 @@ const MEETINGS = join(BENCH, "reunioes");
 const OUT = join(BENCH, "resultados");
 mkdirSync(OUT, { recursive: true });
 
-const STAGES = ["batch", "stream", "live", "live48k", "livept", "nota", "wsmall", "wturbo", "batchvad", "wsmallvad", "wturbovad"] as const;
+const STAGES = ["batch", "stream", "live", "live48k", "livept", "livefalante", "nota", "wsmall", "wturbo", "batchvad", "wsmallvad", "wturbovad"] as const;
 type Stage = (typeof STAGES)[number];
 const helperArgs = (stage: Stage, wav: string, variant: string): string[] | null => {
   const output = ["--output", variant === "eco" ? "speaker" : "headphones"];
@@ -49,6 +51,7 @@ const helperArgs = (stage: Stage, wav: string, variant: string): string[] | null
     case "live": return ["--meeting-live", wav, ...output];
     case "live48k": return ["--meeting-live", wav, ...output, "--capture", "48000"];
     case "livept": return ["--meeting-live", wav, ...output, "--language", "pt"];
+    case "livefalante": return ["--meeting-live", wav, "--output", "speaker"];
     case "nota": return null;
     case "wsmall": case "wturbo": case "wsmallvad": case "wturbovad": {
       const m = CANDIDATES.find((c) => c.stage === stage.replace(/vad$/, ""))!;

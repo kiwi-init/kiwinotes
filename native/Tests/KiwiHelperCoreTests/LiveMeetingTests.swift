@@ -179,6 +179,48 @@ final class LiveMeetingTests: XCTestCase {
         XCTAssertTrue(events.contains(.drained(.system, 320_000)))
     }
 
+    /// T20750: the system stream ends first and the "you" channel's last final (the echo of the system's last sentence)
+    /// comes after. The system segments must still be there to match it.
+    func testEchoAfterTheSystemChannelEnds() {
+        var m = LiveMeeting(session: session, output: "speaker")
+        _ = m.fed(.mine, clockFrame: 0, samples: noise(20))
+        _ = m.fed(.system, clockFrame: 0, samples: noise(20))
+        var events = m.asr(.system, retained: 0, added: tokens("o forno novo chega na quinta de manhã", from: 12), stable: 0)
+        events += m.finish(.system)
+        events += m.asr(.mine, retained: 0, added: tokens("o forno novo chega na quinta de manhã", from: 12.05), stable: 0)
+        events += m.finish(.mine)
+        XCTAssertEqual(segments(events).filter { $0.channel == .mine }.map(\.text), [])
+        XCTAssertTrue(events.contains(.drained(.mine, 320_000)))
+    }
+
+    /// Speech-like sound: a tone whose loudness rises and falls like syllables, its own rhythm per `seed`.
+    func speech(_ seconds: Double, seed: Double, gain: Float = 0.3) -> [Float] {
+        (0..<Int(seconds * 16_000)).map { i in
+            let t = Double(i) / 16_000
+            let syllables = 0.55 + 0.45 * sin(2 * .pi * (3.1 + seed) * t + seed) * sin(2 * .pi * (0.7 + seed / 3) * t)
+            return gain * Float(syllables * sin(2 * .pi * 220 * t))
+        }
+    }
+
+    /// T20750: the ASR garbles the echo in the mic, so its words don't match the system's, but its loudness follows the
+    /// system's 40 ms late. It leaves the "you" channel; your own voice over the system stays.
+    func testEchoBySoundWhenTheWordsDiffer() {
+        let theirs = speech(10, seed: 0)
+        let delay = 640
+        for (label, mic, expected) in [
+            ("echo", Array(repeating: 0, count: delay) + theirs.prefix(theirs.count - delay).map { $0 * 0.25 }, [String]()),
+            ("own voice over the system", speech(10, seed: 1.7), ["eu acho que dá para fechar hoje"]),
+        ] {
+            var m = LiveMeeting(session: session, output: "speaker")
+            _ = m.fed(.system, clockFrame: 0, samples: theirs)
+            _ = m.fed(.mine, clockFrame: 0, samples: mic)
+            var events = m.asr(.system, retained: 0, added: tokens("o pão de centeio sai às sete", from: 2), stable: 0)
+            events += m.asr(.mine, retained: 0, added: tokens("eu acho que dá para fechar hoje", from: 2.05), stable: 0)
+            events += m.finish(.system) + m.finish(.mine)
+            XCTAssertEqual(segments(events).filter { $0.channel == .mine }.map(\.text), expected, label)
+        }
+    }
+
     /// From the R3 measure: a reply that repeats the question's word, or shares only "e, a, o" with what was said near
     /// it, is the person speaking, not echo.
     func testRepliesAreNotEcho() {

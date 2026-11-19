@@ -78,6 +78,7 @@ public struct LiveMeeting: Sendable {
     /// meeting clock.
     public mutating func fed(_ channel: MeetingChannel, clockFrame: Int, samples: [Float]) -> [Event] {
         clocks[channel]!.append(clockFrame: clockFrame, count: samples.count)
+        echo.audio(channel, clockFrame: clockFrame, samples: samples)
         guard channel == .system, silent.feed(samples) else { return [] }
         return [.warning(Self.systemSilentWarning)]
     }

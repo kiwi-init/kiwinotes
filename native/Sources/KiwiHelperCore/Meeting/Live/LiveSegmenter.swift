@@ -257,7 +257,43 @@ public struct EchoFilter: Sendable {
         public var coverage: Double = 0.5
         /// The tolerance on each side of a system segment for that coverage (the echo's delay, different cuts).
         public var timePad: Double = 0.3
+        /// The audio check (T20750): the mic's loudness, 10 ms at a time, follows the system's this closely (Pearson,
+        /// in dB) at some delay up to `maxDelay`. The ASR garbles the echo in the mic, so the words often don't match;
+        /// the sound does. In the meetings bench, pure echo went 0.85–1.00, your own speech over the system up to 0.89.
+        public var audioCorrelation: Double = 0.9
+        public var maxDelay: Double = 0.3
         public init() {}
+    }
+
+    /// The loudness of each channel, in 10 ms frames on the meeting clock, for the audio check.
+    struct Loudness: Sendable {
+        static let frame = 160
+        var base = 0
+        var sums: [Float] = []
+
+        mutating func add(clockFrame: Int, samples: [Float]) {
+            guard !samples.isEmpty, clockFrame >= 0 else { return }
+            let last = (clockFrame + samples.count - 1) / Self.frame - base
+            guard last >= 0 else { return }
+            if last >= sums.count { sums += Array(repeating: 0, count: last + 1 - sums.count) }
+            for (i, x) in samples.enumerated() {
+                let f = (clockFrame + i) / Self.frame - base
+                if f >= 0 { sums[f] += x * x }
+            }
+        }
+
+        /// dB of frames `from..<to` (frame indexes on the clock); nil if any of them is gone.
+        func db(_ from: Int, _ to: Int) -> [Double]? {
+            guard from >= base, to <= base + sums.count, to > from else { return nil }
+            return sums[(from - base)..<(to - base)].map { 10 * log10(Double($0) / Double(Self.frame) + 1e-10) }
+        }
+
+        mutating func drop(before frame: Int) {
+            let n = min(sums.count, frame / Self.frame - base)
+            guard n > 0 else { return }
+            sums.removeFirst(n)
+            base += n
+        }
     }
 
     public var config: Config
@@ -265,6 +301,7 @@ public struct EchoFilter: Sendable {
     public var enabled: Bool
     private var held: [LiveSegmentDraft] = []
     private var system: [LiveSegmentDraft] = []
+    private var loudness: [MeetingChannel: Loudness] = [.mine: Loudness(), .system: Loudness()]
 
     public init(enabled: Bool, config: Config = Config()) {
         self.enabled = enabled
@@ -273,6 +310,12 @@ public struct EchoFilter: Sendable {
 
     /// The earliest held "you" final, which the ack of the "you" channel can't pass yet.
     public var heldFrom: Int? { held.map(\.startFrame).min() }
+
+    /// The samples each channel's ASR got, on the meeting clock: their loudness is what the audio check compares.
+    public mutating func audio(_ channel: MeetingChannel, clockFrame: Int, samples: [Float]) {
+        guard enabled else { return }
+        loudness[channel]!.add(clockFrame: clockFrame, samples: samples)
+    }
 
     public mutating func system(_ segment: LiveSegmentDraft) {
         guard enabled else { return }
@@ -300,13 +343,50 @@ public struct EchoFilter: Sendable {
             if !isEcho(s) { out.append(s) }
         }
         held = keep
+        // The system channel is over (or never ran): the "you" channel can still bring finals that are its echo, and
+        // those need the system segments. Trimming on `.max` emptied the list and let the last echo out (T20750).
+        guard !all, systemSettled != .max else { return out }
         // What no held segment can match anymore.
         let horizon = (held.map(\.startFrame).min() ?? systemSettled) - 4 * slack
         system.removeAll { $0.endFrame < horizon }
+        let delay = Int(config.maxDelay * StreamClock.sampleRate)
+        loudness[.mine]!.drop(before: horizon)
+        loudness[.system]!.drop(before: horizon - delay)
         return out
     }
 
     func isEcho(_ s: LiveSegmentDraft) -> Bool {
+        if soundsLikeEcho(s) { return true }
+        return wordsLikeEcho(s)
+    }
+
+    /// The mic's loudness over the segment follows the system's, a few ms late: the speakers playing into the mic.
+    /// Your own voice doesn't follow it, even talking over someone. Too short or flat (silence, a constant hum): no say.
+    func soundsLikeEcho(_ s: LiveSegmentDraft) -> Bool {
+        let f = Loudness.frame
+        let a = s.startFrame / f, b = (s.endFrame + f - 1) / f
+        guard b - a >= 30, let mine = loudness[.mine]!.db(a, b), spread(mine) >= 1 else { return false }
+        let lags = Int(config.maxDelay * StreamClock.sampleRate) / f
+        for lag in 0...lags {
+            guard let theirs = loudness[.system]!.db(a - lag, b - lag), spread(theirs) >= 1 else { continue }
+            if pearson(mine, theirs) >= config.audioCorrelation { return true }
+        }
+        return false
+    }
+
+    private func spread(_ x: [Double]) -> Double {
+        let m = x.reduce(0, +) / Double(x.count)
+        return (x.reduce(0) { $0 + ($1 - m) * ($1 - m) } / Double(x.count)).squareRoot()
+    }
+
+    private func pearson(_ x: [Double], _ y: [Double]) -> Double {
+        let n = Double(x.count), mx = x.reduce(0, +) / n, my = y.reduce(0, +) / n
+        var sxy = 0.0, sxx = 0.0, syy = 0.0
+        for (p, q) in zip(x, y) { sxy += (p - mx) * (q - my); sxx += (p - mx) * (p - mx); syy += (q - my) * (q - my) }
+        return sxy / ((sxx * syy).squareRoot() + 1e-9)
+    }
+
+    func wordsLikeEcho(_ s: LiveSegmentDraft) -> Bool {
         let slack = Int(config.slack * StreamClock.sampleRate)
         let near = system.filter { $0.endFrame + slack >= s.startFrame && $0.startFrame - slack <= s.endFrame }
         guard !near.isEmpty else { return false }
