@@ -27,6 +27,7 @@ import { fillTemplate } from "../shared/templates.ts";
 import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
 import { canvasPath, fileNameFor, filePath, folderPath, inside, linkSafeTarget, notePath, VaultError } from "./paths.ts";
 import { CanvasParseError, parseCanvas, stringifyCanvas } from "../shared/json-canvas.ts";
+import { inspectXlsx } from "../shared/sheet/xlsx.ts";
 import { applyTextEdits, headingFor, headingKey, markdownStructure } from "../shared/markdown-structure.ts";
 import { noteReferences, referenceTarget, rewriteFileReferences, rewriteHeadingReferences, rewriteNoteReferences, rewriteTag, validTag, type LinkWarning, type RefactorResult } from "./refactor.ts";
 
@@ -321,6 +322,8 @@ export function macTrash(abs: string): Promise<void> {
 }
 
 export const versionOf = (content: string) => createHash("sha256").update(content).digest("hex").slice(0, 16);
+/** A versão de um arquivo pelos bytes (o `readFile` binário, a planilha do T21107). */
+export const bytesVersion = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex").slice(0, 16);
 
 /** O texto de um quadro para gravar: uma string de até 5 MB que abre como JSON Canvas (T6600). */
 function canvasText(content: unknown): string {
@@ -353,7 +356,7 @@ export function aliasesOf(content: string): string[] {
  * Escreve e garante no disco antes da troca (T5352): o `fsync` do arquivo temporário vem antes do `rename`, e o da pasta
  * depois, para uma queda de energia nunca deixar uma nota vazia ou pela metade no lugar da boa.
  */
-export async function writeDurable(file: string, content: string): Promise<void> {
+export async function writeDurable(file: string, content: string | Uint8Array): Promise<void> {
   const fh = await openFile(file, "w");
   try {
     await fh.writeFile(content);
@@ -891,6 +894,33 @@ export class Vault {
     if (!(await this.replaceChecked(p, content, baseVersion))) return { saved: false, current: await this.readFile(p, "text") };
     await this.fileWritten(p);
     return { saved: true, path: p, size, version: versionOf(content) };
+  }
+
+  /**
+   * Grava uma planilha do cofre (T21107, spec #21065): `.xlsx`, `.csv` e `.tsv`, com os bytes que a janela montou
+   * (`patchXlsx`, `writeDelimited`), só num arquivo que já existe e só se ninguém o mudou desde `baseVersion` (o hash dos
+   * bytes, como no `readFile` binário). O csv grava na codificação que tem. Um xlsx só de leitura (senha, macro,
+   * estrutura que o Kiwi não conhece) nunca é trocado, e bytes que não são um xlsx legível não vão para o disco.
+   */
+  async saveFileBytes(input: unknown, base64: unknown, baseVersion: unknown): Promise<FileSaveResult> {
+    const p = filePath(input);
+    const ext = /\.(xlsx|csv|tsv)$/i.exec(p)?.[1]?.toLowerCase();
+    if (!ext) throw new VaultError("E_BAD_ARGS", "only xlsx, csv and tsv files are saved from bytes");
+    if (typeof base64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new VaultError("E_BAD_ARGS", "base64 must be base64 text");
+    if (typeof baseVersion !== "string") throw new VaultError("E_BAD_ARGS", "baseVersion must be a string");
+    const bytes = new Uint8Array(Buffer.from(base64, "base64"));
+    if (bytes.length > MAX_VIEW_BYTES) throw new VaultError("E_BAD_ARGS", "the file is larger than 25 MB");
+    const current = await this.readFile(p, "binary");
+    if (!("base64" in current)) throw new VaultError("E_BAD_ARGS", `${p} is too large to save`);
+    if (current.version !== baseVersion) return { saved: false, current };
+    if (ext === "xlsx") {
+      const before = inspectXlsx(new Uint8Array(Buffer.from(current.base64, "base64")), p);
+      if (!before.editable) throw new VaultError("E_BAD_ARGS", `${p} is read-only (${before.reason})`);
+      if (!inspectXlsx(bytes, p).editable) throw new VaultError("E_BAD_ARGS", "the new content is not an xlsx Kiwi can read");
+    }
+    if (!(await this.replaceChecked(p, bytes, baseVersion))) return { saved: false, current: await this.readFile(p, "binary") };
+    await this.fileWritten(p);
+    return { saved: true, path: p, size: bytes.length, version: bytesVersion(bytes) };
   }
 
   /**
@@ -1885,7 +1915,7 @@ export class Vault {
   }
 
   /** A troca atômica e condicional do `write`, sem o índice das notas (o quadro usa a mesma, T6600). */
-  private async replaceChecked(p: string, content: string, expect?: string | null): Promise<boolean> {
+  private async replaceChecked(p: string, content: string | Uint8Array, expect?: string | null): Promise<boolean> {
     const abs = inside(this.root, p);
     const temp = path.join(path.dirname(abs), `.kiwi-${randomBytes(6).toString("hex")}.tmp`);
     try {
@@ -1895,10 +1925,12 @@ export class Vault {
       const raw = await readFile(abs).catch(() => null);
       // Um arquivo que não é UTF-8 (T7575): o texto que chega aqui já perdeu os acentos na leitura, e gravar por cima
       // apagaria os bytes de vez. Nada troca esse arquivo: quem reescreve outras notas pula este e conta como pulado.
-      if (raw && !isUtf8(raw)) throw new VaultError("E_NOT_UTF8", `${p} is not UTF-8; Kiwi won't write over it`);
+      // Bytes (uma planilha, T21107) gravam em qualquer codificação, e a versão é o hash dos bytes do disco.
+      const binary = typeof content !== "string";
+      if (raw && !binary && !isUtf8(raw)) throw new VaultError("E_NOT_UTF8", `${p} is not UTF-8; Kiwi won't write over it`);
       if (expect !== undefined) {
-        const now = raw === null ? null : raw.toString("utf8");
-        if (expect === null ? now !== null : now === null || versionOf(now) !== expect) {
+        const now = raw === null ? null : binary ? bytesVersion(raw) : versionOf(raw.toString("utf8"));
+        if (expect === null ? now !== null : now === null || now !== expect) {
           await rm(temp, { force: true });
           return false;
         }
