@@ -156,8 +156,9 @@ jobs:
         run: bun scripts/hub-goo-check.ts
 
       # O histórico das notas pela tela (T22780): gravar vira versão, o diff, Restaurar e o Restaurar que vira versão,
-      # no hub de um headless --no-helper num tmp. Ficou quebrando fora do CI desde a árvore de hover (T4363).
-      - name: notas-versoes
+      # no hub de um headless --no-helper num tmp. Ficou quebrando fora do CI desde a árvore de hover (T4363). E o dos
+      # outros arquivos editáveis (T23443), que também só rodava à mão.
+      - name: versoes
         if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
         run: |
@@ -168,7 +169,18 @@ jobs:
           bun scripts/cli.ts ui hub --script scripts/ui-scripts/notas-versoes.json --out "$d/out" --data "$d/data"
           code=$?
           bun scripts/cli.ts stop --data "$d/data"
-          exit $code
+          [ $code -eq 0 ] || exit $code
+          # O histórico dos outros arquivos (T23443, spec #21160): o txt e o csv, e o xlsx e o quadro branco. Cada roteiro
+          # num cofre tmp próprio, porque os dois criam as pastas de exemplo deles.
+          for s in arquivo-versoes historico-planilha-quadro; do
+            d="$RUNNER_TEMP/$s"
+            mkdir -p "$d/data"
+            bun scripts/cli.ts start --no-helper --data "$d/data"
+            bun scripts/cli.ts ui notes --script "scripts/ui-scripts/$s.json" --out "$d/out" --data "$d/data"
+            code=$?
+            bun scripts/cli.ts stop --data "$d/data"
+            [ $code -eq 0 ] || exit $code
+          done
 
   # No Linux (spec #21331): o devkit dos tipos sai do mesmo core fixado que o Hutch usa no Mac (scripts/devkit-types.ts,
   # e o devkit-types.test.ts confere no macOS que é igual).
