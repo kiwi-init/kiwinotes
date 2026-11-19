@@ -63,6 +63,15 @@ describe("nada entra num pacote (T20554)", () => {
     expect(pkgItems(root)).toEqual(["Index.zip"]);
   });
 
+  test("criar quadro dentro do pacote ou mover um para lá: recusado (rodada 2)", async () => {
+    const { v, root } = await setup();
+    await expect(v.createCanvas("docs/Plano.key", "Quadro")).rejects.toMatchObject(bad);
+    const q = await v.createCanvas("docs", "Quadro");
+    await expect(v.renameCanvas(q.path, "docs/Plano.key/Quadro.canvas")).rejects.toMatchObject(bad);
+    expect(existsSync(path.join(root, "docs/Quadro.canvas"))).toBe(true);
+    expect(pkgItems(root)).toEqual(["Index.zip"]);
+  });
+
   test("um pacote criado por fora agora há pouco, que o índice ainda não viu, também conta", async () => {
     const { v, root } = await setup();
     mkdirSync(path.join(root, "docs/Novo.pages/Index"), { recursive: true });

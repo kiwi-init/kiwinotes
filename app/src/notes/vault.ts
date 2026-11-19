@@ -1242,6 +1242,7 @@ export class Vault {
     const name = fileNameFor(title);
     for (let n = 1; n < 1000; n++) {
       const p = canvasPath(`${dir ? `${dir}/` : ""}${n === 1 ? name : `${name} ${n}`}.canvas`);
+      await this.refuseInPackage(p);
       const abs = inside(this.root, p);
       if (this.files.has(p) || (await exists(abs))) continue;
       await mkdir(path.dirname(abs), { recursive: true });
@@ -1259,6 +1260,7 @@ export class Vault {
     const absA = inside(this.root, a);
     const absB = inside(this.root, b);
     if (!(await exists(absA))) throw new VaultError("E_NOT_FOUND", `no board ${a}`);
+    await this.refuseInPackage(b);
     // Só a caixa mudou ("quadro" → "Quadro"): no APFS é o mesmo arquivo, e o rename troca o nome.
     if (a !== b && a.toLowerCase() !== b.toLowerCase() && (await exists(absB))) throw new VaultError("E_EXISTS", `${b} already exists`);
     await mkdir(path.dirname(absB), { recursive: true });
