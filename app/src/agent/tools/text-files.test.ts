@@ -117,7 +117,9 @@ describe("o Kiwi Cat edita qualquer arquivo de texto (spec #21158)", () => {
   });
 
   test("a regra vem de EDITABLE_TEXT: todo tipo da lista passa no mesmo teste, e o isTextNote saiu", async () => {
-    const exts = [...EDITABLE_TEXT];
+    // O `env` é o único de fora: o arquivo de segredos tem o teste dele, abaixo.
+    const exts = [...EDITABLE_TEXT].filter((e) => !reader.isSecretFile(`arquivo.${e}`));
+    expect(exts.length).toBe(EDITABLE_TEXT.size - 1);
     const t = setup(Object.fromEntries(exts.map((e) => [`Tipos/arquivo.${e}`, "antes do gato\n"])));
     for (const e of exts) {
       await t.tool("notes_edit", { path: `Tipos/arquivo.${e}`, old: "antes", text: "depois" });
@@ -158,6 +160,36 @@ describe("o Kiwi Cat edita qualquer arquivo de texto (spec #21158)", () => {
       "Loja/estoque.py restored",
     ]);
     expect([t.read("Loja/estoque.py"), t.read("Loja/estoque.json"), t.read("Loja/caixa.log")]).toEqual([PY, JSON_, LOG]);
+  });
+
+  test("o .env fica fora do gato: não lê, não lista, não acha, não grava; e a senha não sai em nada", async () => {
+    // Uma senha inventada, num formato que o guardrail não reconhece.
+    const ENV = "LOJA_SENHA=quindim-azul-42\nLOJA_PORTA=8080\n";
+    const t = setup({ "Loja/.env": ENV, "Loja/.env.teste": ENV, "Loja/prod.env": ENV });
+    const saidas: string[] = [];
+    for (const p of ["Loja/.env", "Loja/.env.teste", "Loja/prod.env"]) {
+      for (const [name, args] of [
+        ["notes_read", { path: p }],
+        ["files_read", { caminho: p }],
+        ["notes_edit", { path: p, old: "8080", text: "9090" }],
+        ["notes_append", { path: p, text: "LOJA_X=1" }],
+        ["notes_write", { path: p, text: "x" }],
+      ] as const) {
+        const e = await t.tool(name, args).then((v) => (saidas.push(JSON.stringify(v)), null), (x: unknown) => x as ToolError);
+        expect(`${name} ${p}: ${e?.code}`).toBe(`${name} ${p}: E_BAD_ARGS`);
+        expect(e!.message).toContain("fica fora do Kiwi Cat");
+        saidas.push(e!.message);
+      }
+      expect(t.read(p)).toBe(ENV);
+    }
+    saidas.push(JSON.stringify(await t.tool("notes_list", { folder: "Loja" })));
+    saidas.push(JSON.stringify(await t.tool("notes_search", { query: "quindim" })));
+    saidas.push(JSON.stringify(await t.tool("notes_search", { query: "env" })));
+    expect(saidas.join("\n")).not.toContain("quindim-azul");
+    expect(saidas.join("\n")).not.toMatch(/"[^"]*\.env(\.teste)?"/);
+    // Falar de um .env no texto não é apontar para ele.
+    await t.tool("notes_append", { path: "Loja/Plano.md", text: "conferir o prod.env com a Ana" });
+    expect(t.read("Loja/Plano.md")).toContain("prod.env");
   });
 
   test("o que é só de Markdown num arquivo de código: erro claro, e nada é gravado", async () => {

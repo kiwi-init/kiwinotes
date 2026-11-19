@@ -18,7 +18,7 @@ import { splitMeetingNote, transcriptSection, isMeetingNote } from "../../shared
 import { closest, folderNames, nearSections, noteCard, noteNamed, noteNames } from "./find.ts";
 import { markdownStructure, headingFor, type NoteHeading } from "../../shared/markdown-structure.ts";
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
-import { hasSections, isTextFile, searchFileNames, textFormat, type VaultReader } from "./reader.ts";
+import { hasSections, isSecretFile, isTextFile, searchFileNames, textFormat, type VaultReader } from "./reader.ts";
 import type { VaultFile } from "../../notes/vault.ts";
 import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument, splitZipPath } from "./files.ts";
 import { buildFile, CREATE_FORMATS, type CreateContent, type CreateFormat, type DocBlock } from "./files-create.ts";
@@ -983,6 +983,28 @@ function capped(text: string): void {
     );
 }
 
+/** Os campos de argumento que são um caminho do cofre (o texto, o trecho e a busca não entram). */
+const PATH_ARG = /^(path|paths|caminho|caminhos|folder|pasta|target|source|from|to|alvo|nota|destino)$/;
+
+/** Os caminhos dos argumentos de uma ferramenta, também dentro das listas (`items: [{ path, target }]`). */
+function argPaths(raw: unknown, key = ""): string[] {
+  if (typeof raw === "string") return PATH_ARG.test(key) ? [raw.trim()] : [];
+  if (Array.isArray(raw)) return raw.flatMap((v) => argPaths(v, key));
+  if (!raw || typeof raw !== "object") return [];
+  return Object.entries(raw as Record<string, unknown>).flatMap(([k, v]) => argPaths(v, k));
+}
+
+/** O `.env` fica fora do gato (T21237, `isSecretFile`): qualquer ferramenta que aponte para ele é recusada antes de ler. */
+function refuseSecretFiles(raw: unknown): void {
+  const hit = argPaths(raw).find(isSecretFile);
+  if (hit) {
+    throw new ToolError(
+      "E_BAD_ARGS",
+      `\`${hit}\` é um arquivo de segredos (.env) e fica fora do Kiwi Cat: ele não lê nem grava esse arquivo. Nada foi lido nem escrito. Quem edita é a pessoa, nas Notas.`,
+    );
+  }
+}
+
 const changed = (path: string) =>
   new ToolError("E_CHANGED", `${path} mudou desde que você leu. Nada foi escrito: leia de novo com \`notes_read\` e mande a versao nova.`);
 
@@ -1053,6 +1075,7 @@ async function mayRewriteText(path: string, decider?: DoubtDecider): Promise<voi
 /** Roda uma ferramenta. Um erro do cofre (`E_NOT_FOUND`, `E_OUTSIDE_VAULT`, `E_BAD_ARGS`) vira um `ToolError`. */
 export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unknown): Promise<ToolResult> {
   try {
+    refuseSecretFiles(raw);
     if (name === "notes_organize_folder") {
       if (!ctx.writer) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta \`${name}\``);
       return await organizeFolder(ctx.reader, raw, ctx.decider);

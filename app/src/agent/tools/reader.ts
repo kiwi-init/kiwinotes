@@ -17,7 +17,14 @@ import { isEditableText } from "../../shared/file-view.ts";
  * lista, o gato já edita. Ele aparece no `notes_list` com o formato e na busca, e se lê e escreve pelos arquivos do
  * cofre (`files.read` e `files.save`), não pelas notas.
  */
-export const isTextFile = (path: string): boolean => isEditableText(path);
+export const isTextFile = (path: string): boolean => isEditableText(path) && !isSecretFile(path);
+
+/**
+ * O arquivo de segredos por convenção (`.env`, `.env.teste`, `prod.env`): fica fora do Kiwi Cat inteiro (T21237). Ele
+ * não lê, não lista, não acha na busca e não grava; a pessoa segue editando nas Notas. O guardrail só pega os formatos
+ * que conhece, e uma senha qualquer num `.env` iria inteira ao modelo (ADR 0011).
+ */
+export const isSecretFile = (path: string): boolean => /^\.env(?:\..*)?$|\.env$/i.test(path.split("/").pop() ?? path);
 
 /** O formato de um arquivo de texto, para o agente não tratar código como nota: "txt", "py", "json"… */
 export const textFormat = (path: string): string => (/\.([a-z0-9]+)$/i.exec(path)?.[1] ?? "").toLowerCase();
@@ -105,7 +112,7 @@ export function searchFileNames(query: string, files: readonly VaultFile[], limi
   const out: VaultFile[] = [];
   for (const f of files) {
     if (out.length >= limit) break;
-    if (isTextFile(f.path)) continue;
+    if (isTextFile(f.path) || isSecretFile(f.path)) continue;
     const where = fold(f.path);
     if (inPath && !where.startsWith(`${inPath.replace(/\/+$/, "")}/`)) continue;
     if (words.every((w) => where.includes(w))) out.push(f);
@@ -171,7 +178,7 @@ export function readerFromCapabilities(caps: Record<ReaderCapability, (args: unk
     },
     list: async () => {
       const r = await listed();
-      const files = r.files ?? [];
+      const files = (r.files ?? []).filter((f) => !isSecretFile(f.path));
       return { folders: r.folders, notes: [...r.notes, ...files.filter((f) => isTextFile(f.path)).map(textMeta)], files: files.filter((f) => !isTextFile(f.path)) };
     },
     get: async (path) => (isTextFile(path) ? textNote(await call<FileContent>("files.read", { path, as: "text" })) : call("notes.get", { path })),
