@@ -36,7 +36,7 @@ import type { PreciseStatus, ProjectCandidate, ProjectSearchView, SemanticStatus
 import { modelBytes } from "../notes/semantic/model.ts";
 import { WHISPER_SMALL } from "./precise-dictation.ts";
 import { checkShortcutsPatch, isNotesShortcut } from "../shared/shortcuts.ts";
-import { type ExternalMoves, followPinned, type Vault,
+import { type ExternalMoves, followPinned, type NoteMeta, type Vault,
 } from "../notes/vault.ts";
 import type { NoteVersions } from "../notes/versions.ts";
 import { ExportError, type NoteExporter } from "../notes/export.ts";
@@ -151,7 +151,7 @@ export interface CapabilityDeps {
   > &
     // O inode de cada nota (spec #9874): sem ele (os vaults de mentira), o projeto só segue o que o watcher viu. Sem o
     // `folderList` (spec #12918), o `notes.folders` tira as pastas do `list()`.
-    Partial<Pick<Vault, "noteInodes" | "folderList" | "filesIn" | "filesMatching" | "resolveFiles">>;
+    Partial<Pick<Vault, "noteInodes" | "noteMetas" | "folderList" | "filesIn" | "filesMatching" | "resolveFiles">>;
   /**
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
    * respondem lista vazia e E_NOT_FOUND, e o save não guarda versão.
@@ -234,6 +234,11 @@ export class CapabilityError extends Error {
   ) {
     super(message);
   }
+}
+
+/** As notas sem montar a lista inteira (T20227, E4); um vault de mentira sem o `noteMetas`, pela lista. */
+async function notesOf(v: Pick<Vault, "list"> & Partial<Pick<Vault, "noteMetas">>): Promise<readonly NoteMeta[]> {
+  return v.noteMetas?.() ?? (await v.list()).notes;
 }
 
 const bad = (message: string) => new CapabilityError("E_BAD_ARGS", message);
@@ -415,7 +420,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       return [...list, { folder, main, ...(ino !== undefined ? { mainIno: ino } : {}), ...(fino !== undefined ? { folderIno: fino } : {}), outside: abs }];
     });
     const e = list.find((x) => x.outside === abs)!;
-    return { project: projectInfo(e, (await v.list()).notes), created };
+    return { project: projectInfo(e, await notesOf(v)), created };
   };
 
   /** O caminho sem links (o que não existe fica como veio). */
@@ -1137,7 +1142,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     "projects.list": async (args) => {
       fields(args, "projects.list", []);
       const v = await vault();
-      const { notes } = await v.list();
+      const notes = await notesOf(v);
       return { projects: (await projectsFile().load()).map((e) => projectInfo(e, notes)), meetingsFolder };
     },
     "projects.mark": async (args) => {
@@ -1165,7 +1170,7 @@ export function uiCapabilities(deps: CapabilityDeps,
         return [...list, { folder, main, ...(ino !== undefined ? { mainIno: ino } : {}), ...(fino !== undefined ? { folderIno: fino } : {}) }];
       });
       const e = list.find((x) => x.folder === folder)!;
-      return { project: projectInfo(e, (await v.list()).notes), created };
+      return { project: projectInfo(e, await notesOf(v)), created };
     },
     "projects.unmark": async (args) => {
       const a = fields(args, "projects.unmark", ["folder"]);
@@ -1185,7 +1190,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       const list = await projectsFile().update((list) =>
         list.map((x) => (x.folder !== e.folder ? x : { ...x, main: note, ...(ino !== undefined ? { mainIno: ino } : { mainIno: undefined }) })),
       );
-      return { project: projectInfo(list.find((x) => x.folder === e.folder)!, (await v.list()).notes) };
+      return { project: projectInfo(list.find((x) => x.folder === e.folder)!, await notesOf(v)) };
     },
     "projects.find": async (args) => {
       const a = fields(args, "projects.find", ["start", "stop"]);
@@ -1216,7 +1221,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       const a = fields(args, "projects.status", ["folder"]);
       const v = await vault();
       const e = await projectByFolder(a.folder, "projects.status");
-      return projectStatus(e, (await v.list()).notes, async (p) => (await v.get(p)).content);
+      return projectStatus(e, await notesOf(v), async (p) => (await v.get(p)).content);
     },
     "notes.search": async (args) => {
       const a = fields(args, "notes.search", ["query", "limit"]);

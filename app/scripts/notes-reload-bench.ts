@@ -84,6 +84,7 @@ try {
   const full = measure("notes.list (inteira, o que o projects.list chama)", () => v.list()) as { filesVersion?: string };
   measure("notes.list { lazy } (a abertura e o after() da janela)", () => v.list({ lazy: true }));
   measure("notes.list { filesVersion } (sem os arquivos)", () => v.list({ filesVersion: full.filesVersion }));
+  measure("noteMetas (o projects.list, sem a lista inteira)", () => v.noteMetas());
   measure("notes.tags", () => v.tags());
   measure("notes.folders", () => v.folderList());
   measure("semanticDocuments (a cada notes.changed, com a busca pelo sentido)", () => v.semanticDocuments().length);

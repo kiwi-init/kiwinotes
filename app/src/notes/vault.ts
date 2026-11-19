@@ -359,6 +359,10 @@ async function syncDir(dir: string): Promise<void> {
 }
 
 /** Até quantas leituras de nota ao mesmo tempo no scan (T5352): o disco responde melhor em paralelo, sem abrir demais. */
+/** Quantas pastas o scan lê ao mesmo tempo (T20227). */
+const SCAN_DIRS_AT_ONCE = 16;
+/** De quanto em quanto tempo o scan dá a vez para o app (T20227): um quadro. */
+const SCAN_YIELD_MS = 16;
 const READ_AT_ONCE = 16;
 
 /** As tags do frontmatter (`tags: [a, b]` ou lista YAML) e as `#tag` do texto. */
@@ -616,6 +620,14 @@ export class Vault {
   /** O tamanho do cofre (spec #12918), só números: vai para o log ao indexar, sem nenhum nome. */
   counts(): { notes: number; folders: number; files: number } {
     return { notes: this.notes.size, folders: this.folders.size, files: this.files.size };
+  }
+
+  /**
+   * Só as notas, sem ordem, sem a árvore e sem os arquivos (T20227, E4): o `projects.list` conta e data as notas de
+   * cada projeto, e montar a lista inteira custava 9 ms e 8,6 MB a cada chamada.
+   */
+  noteMetas(): NoteMeta[] {
+    return [...this.notes.values()].map((e) => e.meta);
   }
 
   folderList(): string[] {
@@ -2057,48 +2069,69 @@ export class Vault {
     const byIno = new Map<number, Entry>();
     for (const e of this.notes.values()) byIno.set(e.ino, e);
     const toRead: { key: string; abs: string; s: Stats }[] = [];
-    const walk = async (rel: string) => {
-      const directory = path.join(this.root, rel);
-      const names = await readdir(directory).catch(error => {
-        if (!rel && this.strictRoot) throw new VaultError("E_ACCESS", `Não foi possível ler a pasta ${directory}: ${(error as Error).message}`);
-        return [] as string[];
-      });
-      // Os `lstat` de uma pasta em paralelo, alguns de cada vez (T5352): é a maior parte de um scan que não relê.
-      const visible = names.filter((name) => !name.startsWith(".") && name !== "node_modules");
-      const stats: (Stats | null)[] = [];
-      for (let i = 0; i < visible.length; i += 64) {
-        stats.push(...(await Promise.all(visible.slice(i, i + 64).map((name) => lstat(path.join(directory, name)).catch(() => null)))));
-      }
-      for (const [at, name] of visible.entries()) {
-        const child = rel ? `${rel}/${name}` : name;
-        const key = child.normalize("NFC");
-        const abs = path.join(this.root, child);
-        const s = stats[at] ?? null;
-        if (!s || s.isSymbolicLink()) continue;
-        if (s.isFile() || s.isDirectory() && PACKAGE_MARKS[extOf(name)]) {
-          seen++;
-          if (seen % 128 === 0) {
-            progress?.({ seen, notes: notes.size, done: false });
-            await new Promise(resolve => setTimeout(resolve, 0));
-            if (this.closed) return;
+    // Um scan mais barato (T20227, E3): as pastas em paralelo, algumas de cada vez, e a vez para o app por tempo. Antes,
+    // uma pasta por vez (~0,6 s com 6 mil pastas) e um `setTimeout` a cada 128 itens (~600 por scan, ~1,2 s no Bun).
+    let lastYield = performance.now();
+    let slots = SCAN_DIRS_AT_ONCE;
+    const waiting: (() => void)[] = [];
+    const acquire = () => (slots > 0 ? (slots--, Promise.resolve()) : new Promise<void>((r) => waiting.push(r)));
+    const release = () => {
+      const next = waiting.shift();
+      if (next) next();
+      else slots++;
+    };
+    const walk = async (rel: string): Promise<void> => {
+      const subfolders: string[] = [];
+      await acquire();
+      try {
+        if (this.closed) return;
+        const directory = path.join(this.root, rel);
+        const names = await readdir(directory).catch(error => {
+          if (!rel && this.strictRoot) throw new VaultError("E_ACCESS", `Não foi possível ler a pasta ${directory}: ${(error as Error).message}`);
+          return [] as string[];
+        });
+        // Os `lstat` de uma pasta em paralelo, alguns de cada vez (T5352): é a maior parte de um scan que não relê.
+        const visible = names.filter((name) => !name.startsWith(".") && name !== "node_modules");
+        const stats: (Stats | null)[] = [];
+        for (let i = 0; i < visible.length; i += 64) {
+          stats.push(...(await Promise.all(visible.slice(i, i + 64).map((name) => lstat(path.join(directory, name)).catch(() => null)))));
+        }
+        for (const [at, name] of visible.entries()) {
+          const child = rel ? `${rel}/${name}` : name;
+          const key = child.normalize("NFC");
+          const abs = path.join(this.root, child);
+          const s = stats[at] ?? null;
+          if (!s || s.isSymbolicLink()) continue;
+          if (s.isFile() || s.isDirectory() && PACKAGE_MARKS[extOf(name)]) {
+            seen++;
+            if (performance.now() - lastYield >= SCAN_YIELD_MS) {
+              progress?.({ seen, notes: notes.size, done: false });
+              await new Promise(resolve => setTimeout(resolve, 0));
+              lastYield = performance.now();
+              if (this.closed) return;
+            }
+          }
+          if (s.isDirectory() && isPackageDir(name, await packageEntries(abs))) {
+            // Um documento-pacote: arquivo, não pasta (T3371). Só com a marca do formato e sem nota dentro (#3476).
+            packages.add(key);
+            files.set(key, fileEntry(key, s));
+          } else if (s.isDirectory()) {
+            folders.add(key);
+            subfolders.push(child);
+          } else if (s.isFile() && /\.md$/i.test(name)) {
+            // Igual ao que já está no índice (T5352): fica, sem reler. Senão, entra na fila de leitura.
+            const kept = this.reuse(key, s, byIno);
+            if (kept) notes.set(key, kept);
+            else toRead.push({ key, abs, s });
+          } else if (s.isFile()) {
+            files.set(key, fileEntry(key, s));
           }
         }
-        if (s.isDirectory() && isPackageDir(name, await packageEntries(abs))) {
-          // Um documento-pacote: arquivo, não pasta (T3371). Só com a marca do formato e sem nota dentro (#3476).
-          packages.add(key);
-          files.set(key, fileEntry(key, s));
-        } else if (s.isDirectory()) {
-          folders.add(key);
-          await walk(child);
-        } else if (s.isFile() && /\.md$/i.test(name)) {
-          // Igual ao que já está no índice (T5352): fica, sem reler. Senão, entra na fila de leitura.
-          const kept = this.reuse(key, s, byIno);
-          if (kept) notes.set(key, kept);
-          else toRead.push({ key, abs, s });
-        } else if (s.isFile()) {
-          files.set(key, fileEntry(key, s));
-        }
+      } finally {
+        release();
       }
+      // As de dentro depois de soltar a vez: uma pasta não segura a vez enquanto espera as filhas.
+      await Promise.all(subfolders.map(walk));
     };
     await walk("");
     if (this.closed) return;
@@ -2197,6 +2230,9 @@ export class Vault {
         }
         if (s?.isFile()) this.keepFile(rel, s);
         else if (this.files.delete(rel)) this.filesChanged([rel]);
+        // Sumiu e o índice não conhecia (T20227, E0b): o eco de uma pasta que o próprio app renomeou, moveu ou apagou, e
+        // que o índice já trocou. Não há o que avisar, e a janela recarregaria a lista à toa.
+        else continue;
         others.push(rel);
         continue;
       }
