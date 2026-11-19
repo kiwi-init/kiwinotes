@@ -628,7 +628,11 @@ class Book {
       if (/purl\.oclc\.org\/ooxml/.test(wb)) throw new XlsxReadOnly("unknown", "a planilha está no formato Strict, que o Kiwi não grava");
       if (!/^(<\?xml[^>]*\?>\s*)?<workbook[\s>]/.test(wb.replace(/^﻿/, ""))) throw new XlsxReadOnly("unknown", "a planilha usa uma estrutura que o Kiwi não conhece");
       if (!check) return book;
-      if (parts.some((p) => /vbaProject\.bin$/i.test(p.name)) || /macroEnabled/i.test(book.text("[Content_Types].xml"))) {
+      // O tipo que vale é o da parte do workbook: o Excel põe um `<Default Extension="bin" … macroEnabled …>` até num
+      // xlsx sem macro nenhuma.
+      const types = book.text("[Content_Types].xml");
+      const wbType = elements(types, "Override").find((o) => attr(o.attrs, "PartName")?.replace(/^\//, "") === book.workbook);
+      if (parts.some((p) => /vbaProject\.bin$/i.test(p.name)) || /macroEnabled/i.test((wbType && attr(wbType.attrs, "ContentType")) ?? "")) {
         throw new XlsxReadOnly("macro", "a planilha tem macros");
       }
       const protection = /<workbookProtection\b([^>]*)>/.exec(wb)?.[1] ?? "";

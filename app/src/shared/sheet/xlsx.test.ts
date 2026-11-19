@@ -345,6 +345,14 @@ describe("só leitura, com o motivo", () => {
   test("macro: pelo nome, pela parte vbaProject.bin ou pelo tipo", () => {
     expect(inspectXlsx(original, "estoque.xlsm")).toMatchObject({ editable: false, reason: "macro" });
     expect(inspectXlsx(variant([["xl/vbaProject.bin", "x"]]))).toMatchObject({ editable: false, reason: "macro" });
+    const types = text(original, "[Content_Types].xml");
+    const xlsm = types.replace(/(PartName="\/xl\/workbook\.xml" ContentType=")[^"]*/, "$1application/vnd.ms-excel.sheet.macroEnabled.main+xml");
+    expect(xlsm).not.toBe(types);
+    expect(inspectXlsx(variant([["[Content_Types].xml", xlsm]]))).toMatchObject({ editable: false, reason: "macro" });
+  });
+  test("o Default de .bin com macroEnabled, que o Excel põe em todo xlsx, não é macro", () => {
+    const types = text(original, "[Content_Types].xml").replace("<Default ", '<Default Extension="bin" ContentType="application/vnd.ms-excel.sheet.binary.macroEnabled.main"/><Default ');
+    expect(inspectXlsx(variant([["[Content_Types].xml", types]]))).toEqual({ editable: true });
   });
   test("estrutura desconhecida: zip quebrado, sem workbook, Strict", () => {
     expect(inspectXlsx(original.slice(0, 2000))).toMatchObject({ editable: false, reason: "unknown" });
