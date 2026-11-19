@@ -136,16 +136,15 @@ const latin1 = (b: Uint8Array) => Buffer.concat([Buffer.from(b), Buffer.from([0x
 /** O cofre da régua, num tmp: as fixtures pequenas, as cópias para escrever e as grandes. */
 export class Cofre {
   readonly vault: Vault;
+  /** O índice do texto dos arquivos (T21240, T22218), nos dados do app, fora do cofre: a outra metade da busca. */
+  readonly texto: TextIndex;
   /** Os pedidos de rede vistos (o `fetch` fica preso durante a régua). */
   rede = 0;
   private readonly fetchAntes = globalThis.fetch;
 
-  /** O índice do texto dos arquivos (T21240), fora do cofre, como nos dados do app. */
-  readonly texto: TextIndex;
-
   constructor(readonly root: string) {
     this.vault = new Vault({ root, debounceMs: 20, trash: async () => {} });
-    this.texto = new TextIndex({ root, dir: `${root}-indice-texto` });
+    this.texto = new TextIndex({ root, dir: `${root}-indice-texto`, pause: async () => {} });
   }
 
   /** A busca do app e do ⌘K (`notes.search`): as notas e, depois, os arquivos de texto pelo conteúdo. */
@@ -170,18 +169,19 @@ export class Cofre {
     this.escrever("Grandes/pesado-nota.md", `# Estoque grande\n\n${"Uma linha do estoque da loja, com a contagem de sexta.\n".repeat(40_000)}${MARCA}\n`);
     this.escrever("Grandes/limite-quadro branco.canvas", `{"nodes":[${'{"id":"x","type":"text","text":"estoque","x":0,"y":0,"width":10,"height":10},'.repeat(70_000)}{"id":"y","type":"text","text":"fim","x":0,"y":0,"width":10,"height":10}],"edges":[]}`);
     await this.vault.open();
-    await this.texto.sync(this.vault.otherFiles());
     const self = this;
     globalThis.fetch = Object.assign(async () => {
       self.rede++;
       throw new Error("a régua não deixa abrir rede");
     }, { preconnect: () => {} }) as unknown as typeof fetch;
+    // O índice lê depois do `fetch` preso: tirar o texto do pdf, do docx e do xlsx também não pede rede.
+    await this.texto.sync(this.vault.otherFiles());
   }
 
-  fechar(): void {
+  async fechar(): Promise<void> {
     globalThis.fetch = this.fetchAntes;
     this.vault.close();
-    void this.texto.destroy();
+    await this.texto.destroy();
   }
 
   private escrever(rel: string, conteudo: string | Uint8Array): void {
