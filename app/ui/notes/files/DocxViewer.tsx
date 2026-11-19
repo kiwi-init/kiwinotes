@@ -117,14 +117,22 @@ export function DocxViewer({ path, file, at }: FileViewerProps) {
     if (m) e.reveal(m);
   }, [matches, current]);
 
-  // O parágrafo que a busca do app achou (T22218): o n-ésimo com texto, contado como o `docText` do índice, ganha a marca
+  // O parágrafo que a busca do app achou (T22218): o n-ésimo do corpo, contado como o `docText` do índice, ganha a marca
   // da vez e vai para a tela. O ⌘F, quando a pessoa busca, troca as marcas.
   useEffect(() => {
     const e = engine.current;
     if (!e || state.kind !== "ready" || !at || !("paragraph" in at)) return;
+    // Os dois lados contam pela lista do motor: todo parágrafo do corpo, mesmo o vazio (T22847).
+    const id = e.paragraphId(at.paragraph);
+    if (!id) return;
     paragraphs.current ??= docxParagraphs(e.pieces());
-    const p = paragraphs.current[at.paragraph - 1];
-    if (!p) return;
+    const p = paragraphs.current.find((x) => x.id === id);
+    // Sem texto desenhado no corpo (só uma caixa de texto, achada pelo texto dela): rola até ele, sem marca.
+    if (!p) {
+      e.mark([], -1);
+      e.revealParagraph(id);
+      return;
+    }
     const found = { paragraphId: p.id, from: p.offsets[0]!, to: p.offsets[p.text.length]!, page: p.page };
     e.mark([found], 0);
     e.reveal(found);

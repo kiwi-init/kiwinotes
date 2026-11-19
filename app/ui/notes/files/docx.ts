@@ -125,32 +125,6 @@ export function docText(nodes: DocNode[]): string {
   return nodes.map((n) => (typeof n === "string" ? n : docText(n.children))).join("");
 }
 
-/** Os blocos que contam como parágrafo (T22218): o parágrafo, o título e o item de lista, como o `w:p` do Word. */
-export const DOC_BLOCK = /^(p|h[1-6]|li)$/;
-
-/**
- * O texto de cada parágrafo com texto, na ordem do documento (T22218): o n-ésimo é o `{ paragraph: n }` que a busca
- * acha no docx. O texto de um bloco é o dele, sem os blocos e as listas de dentro (o item com sublista, a nota de
- * rodapé com parágrafos); os espaços em sequência viram um. O `DocxViewer` conta o DOM pela mesma regra.
- */
-export function docParagraphs(nodes: DocNode[]): string[] {
-  const out: string[] = [];
-  const own = (n: DocNode): string =>
-    typeof n === "string" ? n : DOC_BLOCK.test(n.tag) || n.tag === "ul" || n.tag === "ol" ? "" : n.children.map(own).join("");
-  const walk = (list: DocNode[]) => {
-    for (const n of list) {
-      if (typeof n === "string") continue;
-      if (DOC_BLOCK.test(n.tag)) {
-        const t = n.children.map(own).join("").replace(/\s+/g, " ").trim();
-        if (t) out.push(t);
-      }
-      walk(n.children);
-    }
-  };
-  walk(nodes);
-  return out;
-}
-
 /** O que o mammoth avisou e a pessoa deve saber: o que ficou de fora da conversão. */
 export function docWarnings(messages: { type: string; message: string }[]): number {
   return messages.filter((m) => m.type === "warning" || m.type === "error").length;

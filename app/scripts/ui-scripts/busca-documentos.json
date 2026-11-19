@@ -34,7 +34,7 @@
   },
   {
    "expectText": ".kn-palette .kn-palette-it:has-text('relatorio.docx') .kn-palette-type",
-   "text": "docx:§30",
+   "text": "docx:§31",
    "name": "o docx e o parágrafo"
   },
   {
