@@ -1,6 +1,6 @@
 // O banco de teste das reuniões (T20237, spec #20181): baixa e prepara as falas, sempre FORA do repo.
 //
-//   bun scripts/meeting-bench/prepare.ts [say] [mls] [coraa]     # sem nada, os três
+//   bun scripts/meeting-bench/prepare.ts [say] [mls] [coraa] [modelos]     # sem nada, todos
 //
 // A pasta é `~/Library/Caches/kiwinotes-bench/meetings` (ou `KIWI_MEETING_BENCH`). Cada fonte vira WAVs de 16 kHz mono
 // e um `clips.jsonl` ({ source, id, speaker, group, text, wav, seconds }), que o `build.ts` junta em reuniões.
@@ -9,8 +9,10 @@
 // - coraa: o CORAA v1.1 (CC BY-NC-ND 4.0), parte de teste: fala espontânea (entrevistas e conversas). Decisão do harry
 //   (#20392): só para medir, sem redistribuir nem treinar, e nenhum áudio ou transcrição dele vai para commit, print,
 //   PR ou thread (o relatório mostra o ID do arquivo e as palavras erradas).
+// - modelos: os candidatos a modelo de reunião (#20494), em `<banco>/../models`, num commit fixo e conferidos pelo sha256.
 // Nada aqui manda dado da pessoa para fora: só baixa arquivos públicos.
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -202,6 +204,31 @@ async function prepareCoraa(maxSeconds = 240) {
   save(dir, clips);
 }
 
+/** Os candidatos a modelo de reunião (#20494): o Whisper small que o app já baixa no modo preciso (o mesmo commit e o mesmo
+ * sha256 do `precise-dictation.ts`) e o Whisper large-v3 turbo, do mesmo repositório, para o `--whisper` do helper. */
+export const MODELS = join(dirname(BENCH), "models");
+export const CANDIDATES = [
+  { stage: "wsmall", repo: "handy-computer/whisper-small-gguf", revision: "4afdc7942ecf1997f359deae48a63506b062eac4",
+    file: "whisper-small-Q8_0.gguf", sha256: "9b9c8811bbcc82a7766f0fb0925614bdacb0923b2cc630daeac17108b655b860" },
+  { stage: "wturbo", repo: "handy-computer/whisper-large-v3-turbo-gguf", revision: "main",
+    file: "whisper-large-v3-turbo-Q8_0.gguf", sha256: "257aa7ec9121c22c167d5e2c49e3e76b4ba0e6e27ebc13074eba0a80f8190220" },
+] as const;
+
+function prepareModels() {
+  mkdirSync(MODELS, { recursive: true });
+  for (const m of CANDIDATES) {
+    const f = join(MODELS, m.file);
+    if (!existsSync(f)) {
+      const r = spawnSync("curl", ["-sfL", "-o", `${f}.part`, `https://huggingface.co/${m.repo}/resolve/${m.revision}/${m.file}`], { stdio: "inherit" });
+      if (r.status !== 0) throw new Error(`download falhou: ${m.file}`);
+      renameSync(`${f}.part`, f);
+    }
+    const sum = createHash("sha256").update(readFileSync(f)).digest("hex");
+    if (sum !== m.sha256) throw new Error(`sha256 não bate: ${m.file}`);
+    console.log(`${m.file}: ${(statSync(f).size / 1e6).toFixed(0)} MB, conferido`);
+  }
+}
+
 if (import.meta.main) {
   const which = process.argv.slice(2);
   const want = (s: string) => !which.length || which.includes(s);
@@ -209,5 +236,6 @@ if (import.meta.main) {
   if (want("say")) prepareSay();
   if (want("mls")) await prepareMls();
   if (want("coraa")) await prepareCoraa();
+  if (want("modelos")) prepareModels();
   console.log(`pronto em ${BENCH}`);
 }
