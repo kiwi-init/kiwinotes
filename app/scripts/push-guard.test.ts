@@ -199,6 +199,25 @@ describe("os commits que sobem", () => {
     expect(hits).toHaveLength(1);
   }, 120_000);
 
+  test.skipIf(process.platform !== "darwin")("um print com um termo da lista escrito na imagem barra, pelo OCR local (spec #21331)", async () => {
+    const { webkit } = await import("playwright-core");
+    const d = repo();
+    const base = git(d, "rev-parse", "HEAD");
+    const browser = await webkit.launch({ headless: true });
+    try {
+      const page = await browser.newPage({ viewport: { width: 900, height: 160 }, deviceScaleFactor: 2 });
+      await page.setContent(`<body style="margin:24px;font:28px -apple-system,sans-serif;background:#fff;color:#111">a sobremesa é ${TERM}</body>`);
+      await page.screenshot({ path: join(d, "print.png") });
+    } finally {
+      await browser.close();
+    }
+    git(d, "add", "print.png");
+    git(d, "commit", "-q", "-m", "um print");
+    expect(scanRange(d, [`${base}..HEAD`], terms, new Set(), { ocr: true })).toEqual([
+      { file: "print.png (texto da imagem)", line: 1, reason: "termo da lista (privacy-terms.txt)" },
+    ]);
+  }, 120_000);
+
   /** Um png branco de w×h, em escala de cinza. */
   const png = (w: number, h: number): Buffer => {
     const chunk = (type: string, data: Buffer) => {

@@ -9,5 +9,9 @@
         "sha256": "4b3b99c30155ebfd263791931573763cf5353514cddbac35c960c3bfa1642118"
       }
     }
+  },
+  "devkitCore": {
+    "asset": "electrobun-core-darwin-arm64.tar.gz",
+    "sha256": "6b52b1e24bf6ff395149657273d2751f7188804ef9b2e723ae3f6e9593637290"
   }
 }
