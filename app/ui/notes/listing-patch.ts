@@ -24,3 +24,30 @@ export function applyListingPatch(l: VaultListing, patch: ListingPatch): VaultLi
   }
   return next;
 }
+
+/**
+ * A lista inteira e os pedaços que chegam enquanto ela está no ar (spec #20118, U2, T20249). O `notes.list` pode sair do
+ * engine antes de um `notes.changed` que chega primeiro à janela: sem pôr esse pedaço de novo por cima, a lista voltaria
+ * velha (uma nota renomeada com o nome antigo). Como o pedaço é o estado, repetir um que a lista já tinha não estraga.
+ */
+export class PatchedListing {
+  private since: ListingPatch[] | null = null;
+
+  /** Pede a lista inteira; os pedaços que chegarem até ela voltar vão por cima dela, na ordem em que chegaram. */
+  async fetch(get: () => Promise<VaultListing | null>): Promise<VaultListing | null> {
+    const since: ListingPatch[] = [];
+    this.since = since;
+    try {
+      const fetched = await get();
+      return fetched && since.reduce(applyListingPatch, fetched);
+    } finally {
+      if (this.since === since) this.since = null;
+    }
+  }
+
+  /** Um pedaço do `notes.changed`: fica guardado para a lista no ar e vai sobre `l`. Sem lista ainda, `null`: peça uma. */
+  apply(l: VaultListing | null, patch: ListingPatch): VaultListing | null {
+    this.since?.push(patch);
+    return l && applyListingPatch(l, patch);
+  }
+}

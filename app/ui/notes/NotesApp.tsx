@@ -15,8 +15,7 @@ import { TopBar } from "../src/topbar.tsx";
 import { useShortcuts } from "../src/useShortcuts.ts";
 import { DEFAULT_SHORTCUTS, matchesKeyEvent, shortcutLabel } from "../../src/shared/shortcuts.ts";
 import { Popover } from "./Popover.tsx";
-import type { ListingPatch } from "../../src/shared/ui-contract.ts";
-import { applyListingPatch } from "./listing-patch.ts";
+import { PatchedListing } from "./listing-patch.ts";
 import { useWhenShown } from "./when-shown.ts";
 import { ReloadQueue } from "./reload-queue.ts";
 import { TreePopover } from "./TreePopover.tsx";
@@ -321,35 +320,24 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
    * A lista inteira, uma por vez (spec #20118, T20167): um pedido durante outra espera uma só no fim, e a operação da
    * própria janela usa a recarga do `notes.changed` dela (`ReloadQueue`), sem pedir de novo.
    */
-  /**
-   * Os pedaços do `notes.changed` (U2) que chegaram com uma lista inteira a caminho: ela pode ter saído do engine antes
-   * deles, então eles vão de novo por cima dela, na ordem (é o estado, não a diferença: repetir não estraga).
-   */
-  const patchesSince = useRef<ListingPatch[] | null>(null);
+  /** Os pedaços do `notes.changed` (U2) que chegam com a lista inteira no ar vão de novo por cima dela. */
+  const patched = useMemo(() => new PatchedListing(), []);
   const lists = useMemo(
     () =>
-      new ReloadQueue<VaultListing | null>(() => {
-        const since: ListingPatch[] = [];
-        patchesSince.current = since;
-        const done = () => {
-          if (patchesSince.current === since) patchesSince.current = null;
-        };
-        return api.list().then(
-          (fetched) => {
-            done();
-            const l = fetched && since.reduce(applyListingPatch, fetched);
+      new ReloadQueue<VaultListing | null>(() =>
+        patched.fetch(() => api.list()).then(
+          (l) => {
             listingRef.current = l;
             setListing(l);
             setFailed(false);
             return l;
           },
           () => {
-            done();
             setFailed(true);
             return null;
           },
-        );
-      }),
+        ),
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [api],
   );
@@ -683,10 +671,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         // Anotado na hora (T20167): a resposta da operação da janela chega depois deste aviso, e o after() dela usa esta.
         // Com o pedaço da lista no aviso (U2, T20249), nada se pede ao engine: a janela troca só ele.
         const update = (): Promise<VaultListing | null> => {
-          patchesSince.current?.push(patch!);
-          const l = listingRef.current;
-          if (!l) return lists.request();
-          const next = applyListingPatch(l, patch!);
+          const next = patched.apply(listingRef.current, patch!);
+          if (!next) return lists.request();
           listingRef.current = next;
           setListing(next);
           return Promise.resolve(next);
