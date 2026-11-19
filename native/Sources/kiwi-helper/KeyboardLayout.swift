@@ -6,7 +6,9 @@ import Foundation
 enum KeyboardLayout {
     /// Runs `body` with a translator for the current layout: (key code, ⌘ held) → the one character it types, or nil.
     /// Nil when the layout has no Unicode data (some input methods).
+    /// The TIS/TSM only runs on the main queue: the HIToolbox of macOS 27 asserts it and kills the helper (T23991).
     static func withCurrent<T>(_ body: ((UInt16, Bool) -> Character?) -> T) -> T? {
+        guard Thread.isMainThread else { return DispatchQueue.main.sync { withCurrent(body) } }
         guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
               let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
         let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data

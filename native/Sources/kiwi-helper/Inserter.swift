@@ -107,8 +107,9 @@ final class Inserter {
         let pastedText = spaced ? " " + text : text
         let before = trusted && !IsSecureEventInputEnabled() ? focused.element.flatMap(Self.snapshot) : nil
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.prePasteDelay) { [keys, self] in
-            keys.async {
-                Self.postCommandV()
+            // T23991: the V key comes from the layout (TIS), only on the main queue; the events go out on `keys`.
+            PasteKeystroke.post(on: keys, key: { Self.keyCode(for: "v") ?? CGKeyCode(kVK_ANSI_V) },
+                                post: Self.postCommandV) {
                 let pastedAt = ProcessInfo.processInfo.systemUptime
                 DispatchQueue.main.async {
                     completion(Outcome(pasted: true, restored: restore, reason: reason, app: app?.bundleIdentifier,
@@ -355,9 +356,8 @@ final class Inserter {
 
     /// ⌘V as if typed, the way VoiceInk posts it: ⌘ down, V down, V up, ⌘ up, 10 ms apart, from a private event
     /// source, so a modifier still held from the hotkey (🌐, ⌥) doesn't mix in and turn it into ⌥⌘V. Off the main
-    /// thread (it sleeps between events).
-    static func postCommandV() {
-        let v = keyCode(for: "v") ?? CGKeyCode(kVK_ANSI_V)
+    /// thread (it sleeps between events). `v` is read on the main queue by the caller (T23991).
+    static func postCommandV(_ v: CGKeyCode) {
         let source = CGEventSource(stateID: .privateState)
         let steps: [(key: CGKeyCode, down: Bool, flags: CGEventFlags)] = [
             (CGKeyCode(kVK_Command), true, .maskCommand), (v, true, .maskCommand),
