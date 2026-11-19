@@ -1,3 +1,4 @@
+import type { SetupPermission, SetupStatus } from "./first-run.ts";
 import type { NoteModel } from "./note-model.ts";
 import type { SummarySettings } from "./summary-settings.ts";
 import type { AgentOnboarding } from "./agent-onboarding.ts";
@@ -31,6 +32,7 @@ import type { ProjectReason } from "../notes/project-finder.ts";
 import type { ProjectInfo, ProjectStatus } from "../notes/projects.ts";
 
 export type { AppSettings };
+export type { SetupModel, SetupPermission, SetupStatus } from "./first-run.ts";
 export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
 export {
   conflictOf, DEFAULT_SHORTCUTS, isShortcutFor, matchesKeyEvent, SHORTCUTS, shortcutDef, shortcutLabel,
@@ -245,7 +247,9 @@ export type { NoteModel };
 //   links das notas reescritos. O `baseVersion` do `files.delete` fica opcional (o "Apagar" do menu), e o
 //   `notes.reveal` e o `notes.restore` valem também para esses arquivos. Só acréscimo.
 // 1.85.0 (T20249, spec #20118): o `listing` no `notes.changed`, o pedaço da lista que mudou. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.85.0";
+// 1.86.0 (T20796, spec #20780): o passo da primeira abertura: `firstRun` nas settings, `setup.status`, `setup.request`,
+//   `setup.done` e o evento `setup.changed`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.86.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -318,6 +322,18 @@ export interface UiCapabilities {
    * esse retângulo, e o hub aparece ali. `null` fora da intro, ou quando a moldura não cresce (o hub noutro monitor).
    */
   "intro.layout": { args: Record<string, never>; result: IntroLayout | null };
+  /**
+   * O passo da primeira abertura (1.86.0, T20796): o `firstRun`, as duas permissões e o modelo de voz baixando. Com o
+   * passo na tela, o `setup.changed` traz cada mudança.
+   */
+  "setup.status": { args: Record<string, never>; result: SetupStatus };
+  /**
+   * O botão de uma permissão no passo (1.86.0): o helper pede essa (o diálogo do macOS, ou os Ajustes se já foi pedida).
+   * Só com o clique da pessoa. E_NO_HELPER sem o helper de pé.
+   */
+  "setup.request": { args: { permission: SetupPermission }; result: SetupStatus };
+  /** O fim do passo (1.86.0): `firstRun: "done"`, e o que ficou sem pedir sai como na abertura de sempre. */
+  "setup.done": { args: Record<string, never>; result: SetupStatus };
   /** A versão do app, o canal, o link das notas da versão e as atualizações agora (1.6.0, T2386). */
   "app.about": { args: Record<string, never>; result: AppAbout };
   /**
@@ -1134,6 +1150,9 @@ export const UI_CAPABILITIES = [
   "hub.section",
   "intro.done",
   "intro.layout",
+  "setup.status",
+  "setup.request",
+  "setup.done",
   "app.about",
   "diagnostics.save",
   "diagnostics.slowFrame",
@@ -1278,6 +1297,8 @@ export interface UiEvents {
   "updates.status": UpdatesView;
   /** As Configurações mudaram (1.8.0): todas as janelas trocam a Aparência na hora, sem reiniciar. */
   "settings.changed": AppSettings;
+  /** O passo da primeira abertura mudou (1.86.0, T20796): uma permissão dada, o modelo baixou mais um pouco. */
+  "setup.changed": SetupStatus;
   /** Entrou ou saiu um microfone, ou mudou a saída padrão (1.18.0): os Ajustes listam de novo. */
   "audio.inputs.changed": Record<string, never>;
   /** A gravação começou, parou ou o canal "você" pausou (1.21.0): o card ao vivo da aba Reuniões. */

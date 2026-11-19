@@ -34,6 +34,7 @@ import type { SemanticIndex } from "../notes/semantic/index.ts";
 import type { SemanticEngine } from "../notes/semantic/engine.ts";
 import { semanticQueryText } from "../shared/query.ts";
 import type { PreciseStatus, ProjectCandidate, ProjectSearchView, SemanticStatus } from "../shared/ui-contract.ts";
+import { isSetupPermission, type SetupModel, type SetupPermission, type SetupStatus } from "../shared/first-run.ts";
 import { modelBytes } from "../notes/semantic/model.ts";
 import { WHISPER_SMALL } from "./precise-dictation.ts";
 import { checkShortcutsPatch, isNotesShortcut } from "../shared/shortcuts.ts";
@@ -184,6 +185,16 @@ export interface CapabilityDeps {
   semanticSource?: Pick<Vault, "semanticDocuments" | "onChanged">;
   /** O modo preciso do ditado (T6602), da sessão com o helper. Sem ela, `null`: o status vem só da configuração. */
   precise?(): PreciseStatus | null;
+  /**
+   * O passo da primeira abertura (T20796), da sessão com o helper: as permissões e o modelo agora, o botão de uma
+   * permissão e o fim do passo. Sem ela (o headless sem helper, testes antigos): permissões `null`, o modelo `starting`,
+   * e o `setup.request` dá E_NO_HELPER.
+   */
+  setup?: {
+    live(): { permissions: SetupStatus["permissions"]; model: SetupModel } | null;
+    request(permission: SetupPermission): Promise<void>;
+    done(): void;
+  };
   /** O modelo da busca pelo sentido, um para o app (T6013). */
   semanticEngine?: Pick<SemanticEngine, "state" | "start" | "disable">;
   /** Os anexos das notas (T2594): sem eles (um host antigo), as capacidades `attachments.*` dão E_NO_ATTACHMENTS. */
@@ -331,6 +342,13 @@ export function uiCapabilities(deps: CapabilityDeps,
       liveSession: live.recording ? live.session : null,
       now: now(),
     };
+  };
+
+  /** O passo da primeira abertura agora (T20796): o `firstRun` das settings e o que a sessão sabe do helper. */
+  const setupStatus = async (): Promise<SetupStatus> => {
+    const { firstRun } = await deps.settings.load();
+    const live = deps.setup?.live();
+    return { firstRun, permissions: live?.permissions ?? null, model: live?.model ?? { state: "starting" } };
   };
 
   // As fixadas seguem também o que muda por fora (T2559): no 1º uso do vault, sai o que já não existe, e daí em diante
@@ -819,6 +837,24 @@ export function uiCapabilities(deps: CapabilityDeps,
     "intro.layout": (args) => {
       noArgs(args, "intro.layout");
       return deps.introLayout?.() ?? null;
+    },
+    "setup.status": async (args) => {
+      noArgs(args, "setup.status");
+      return setupStatus();
+    },
+    "setup.request": async (args) => {
+      const { permission } = fields(args, "setup.request", ["permission"]);
+      if (!isSetupPermission(permission)) throw bad("permission must be inputMonitoring or accessibility");
+      if (!deps.setup?.live()) throw new CapabilityError("E_NO_HELPER", "the helper is not running");
+      await deps.setup.request(permission);
+      return setupStatus();
+    },
+    "setup.done": async (args) => {
+      noArgs(args, "setup.done");
+      const s = await deps.settings.save({ firstRun: "done" });
+      deps.settingsChanged?.(s);
+      deps.setup?.done();
+      return setupStatus();
     },
     "spelling.suggest": async (args) => {
       const o = object(args, "spelling.suggest");

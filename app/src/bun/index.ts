@@ -20,7 +20,7 @@ import { stores } from "./stores.ts";
 import { installFileLog } from "./file-log.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
 import { watchBusy } from "./slow-log.ts";
-import { appSlowLog, closeWindow, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, prepareHub, provideAbout, revealHub, startCatOverlay, startAgentVoice, provideHubSection, provideOpenInHub, sendToWindow, homeChanged, showWindow, type WindowName } from "./windows.ts";
+import { appSlowLog, closeWindow, setupChanged, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, prepareHub, provideAbout, revealHub, startCatOverlay, startAgentVoice, provideHubSection, provideOpenInHub, sendToWindow, homeChanged, showWindow, type WindowName } from "./windows.ts";
 import { loadNotices, NOTIFY_LIBRARY } from "./notices.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
@@ -177,6 +177,13 @@ function setMenu(s: SessionStatus) {
 // O sidecar (atalho, mic, STT, overlay, colagem) e o fluxo do ditado (T58).
 const dictation = new Session(PATHS.VIEWS_FOLDER);
 session.set(dictation);
+// A primeira abertura (T20796, spec #20780): sem settings.json nem permissions.json (instalação nova), o settings.json nasce com `firstRun: "pending"`. Até o fim do
+// passo do onboarding, as permissões não são pedidas sozinhas: o passo explica e pede pelo botão de cada uma.
+const firstRun = stores.globalSettings.beginFirstRun([path.join(stores.dir, "permissions.json")]).catch((e: unknown) => {
+  console.warn(`[setup] couldn't read settings.json (${e instanceof Error ? e.message : String(e)})`);
+  return "done" as const;
+});
+dictation.permissions.holdWhile(async () => (await firstRun) === "pending" && (await stores.settings.load()).firstRun === "pending");
 // Entrou ou saiu um microfone (T3230): os Ajustes (no hub ou na janela deles) listam de novo.
 dictation.sidecar.on("audio.inputs.changed", () => {
   for (const w of ["hub", "settings"] as const) sendToWindow(w, "audio.inputs.changed", {});
@@ -193,6 +200,7 @@ if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.folders.setOcrRunner(help
 if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.folders.setPdf(helperPdf(helperPath(PATHS.VIEWS_FOLDER)));
 setMenu(dictation.status());
 dictation.onStatus(setMenu);
+dictation.onStatus(() => void setupChanged().catch(() => {}));
 // O atalho global da janela Notas (T1499): quem vê a tecla é o helper, que já tem o Monitoramento de Entrada.
 dictation.sidecar.on("hotkey.notes", () => openHub("notes"));
 dictation.start();
@@ -309,5 +317,5 @@ if (process.env.KIWI_DEBUG === "1") {
 }
 
 console.log("Kiwi Notes is running in the menu bar");
-// Abrir do zero: a intro e o hub.
-openHub();
+// Abrir do zero: a intro e o hub, depois de o settings.json saber se é a primeira abertura.
+void firstRun.finally(() => openHub());

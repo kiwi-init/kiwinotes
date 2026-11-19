@@ -68,6 +68,7 @@ final class Helper {
     private var sttChain: Task<Void, Never>?
     /// The last `stt.status` sent, so a model that loads after an `unavailable` gets its `ready` (#383).
     private var sttStatus = STTStatus()
+    private var lastDownload: (percent: Int, phase: String) = (-1, "")
     private let frontApp = FrontApp()
     /// `debug.transcribe` exists only with `KIWI_DEBUG=1` (development; never in a release build's environment).
     private let debugCommands = ProcessInfo.processInfo.environment["KIWI_DEBUG"] == "1"
@@ -321,6 +322,14 @@ final class Helper {
         emit("stt.status", fields.merging(["state": state.rawValue]) { _, new in new })
     }
 
+    /// `stt.download` (T20796): the first-run step shows the model coming. Once per percent, or when the phase changes.
+    private func sttDownload(_ fraction: Double, _ phase: String) {
+        let percent = Int((min(max(fraction, 0), 1) * 100).rounded(.down))
+        guard percent != lastDownload.percent || phase != lastDownload.phase else { return }
+        lastDownload = (percent, phase)
+        emit("stt.download", ["fraction": Double(percent) / 100, "phase": phase])
+    }
+
     /// Loads the model while nobody is waiting for it (the first run downloads it), so the first dictation
     /// only pays for the transcription.
     private func prepareSTT() {
@@ -334,6 +343,9 @@ final class Helper {
             await previous?.value
             await stt.setBoostingHandler { [weak self] state in
                 Task { @MainActor in self?.emit("stt.boosting", ["state": state]) }
+            }
+            await stt.setDownloadHandler { [weak self] fraction, phase in
+                Task { @MainActor in self?.sttDownload(fraction, phase) }
             }
             do {
                 try await stt.warmUp()

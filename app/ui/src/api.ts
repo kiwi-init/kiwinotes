@@ -73,6 +73,16 @@ export const api = {
     /** Outra janela (ou o engine) mudou as Configurações (1.8.0). */
     onChanged: (fn: (s: UiEvents["settings.changed"]) => void) => on("settings.changed", fn),
   },
+  /**
+   * O passo da primeira abertura (1.86.0, T20796): as duas permissões e o modelo de voz. O `request` é só no clique
+   * da pessoa (o helper abre o diálogo do macOS); o progresso chega pelo `setup.changed`.
+   */
+  setup: {
+    status: () => invoke("setup.status", {}),
+    request: (permission: UiCapabilities["setup.request"]["args"]["permission"]) => invoke("setup.request", { permission }),
+    done: () => invoke("setup.done", {}),
+    onChanged: (fn: (s: UiEvents["setup.changed"]) => void) => on("setup.changed", fn),
+  },
   /** "Aperte o atalho" (1.24.0, T5349): o helper lê as teclas e devolve o texto, sem salvar. */
   shortcuts: {
     /** `bareKey`: o cancelar do ditado, onde ⌫ ou ↩ sozinhos valem (1.27.0). */

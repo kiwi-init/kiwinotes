@@ -7,6 +7,9 @@
 //   `reset`: se a permissão já foi pedida e segue faltando (a chave ligada nos Ajustes que não vale, T658), o helper
 //   apaga a entrada e pede de novo, e depois abre os Ajustes, para o clique nunca terminar em nada (T825).
 // O que já foi pedido sozinho fica em <dados>/permissions.json, para não abrir os Ajustes a cada vez que o app sobe.
+// Na primeira abertura (T20796, spec #20780), enquanto o `firstRun` está `pending`, nada sai sozinho: o passo do
+// onboarding explica cada uma e pede pelo botão dela (`requestFromSetup`). No fim do passo (`setupDone`), o que ficou
+// sem pedir segue o caminho de sempre.
 
 import path from "node:path";
 
@@ -57,6 +60,8 @@ export class PermissionFlow {
    */
   private chain: Promise<unknown> = Promise.resolve();
   private offs: (() => void)[] = [];
+  /** O passo da primeira abertura está na tela (T20796): os pedidos da abertura esperam por ele. */
+  private held: () => Promise<boolean> = async () => false;
 
   /**
    * @param auto pedir sozinho (na abertura e no primeiro ditado). `false` com `KIWI_DEBUG=1`: um agente nunca faz o
@@ -87,6 +92,29 @@ export class PermissionFlow {
     );
   }
 
+  /** Liga a espera da primeira abertura: `held()` diz se o `firstRun` ainda está `pending`. */
+  holdWhile(held: () => Promise<boolean>): void {
+    this.held = () => held().catch(() => false);
+  }
+
+  /**
+   * O botão de uma permissão no passo da primeira abertura (T20796): pede essa, sem reset, e anota como pedida, para
+   * a abertura não pedir de novo. Pedido da pessoa, então sai mesmo com `auto` desligado (o helper falso dos testes).
+   */
+  async requestFromSetup(permission: Permission): Promise<void> {
+    this.asked ??= await this.store.load().catch(() => []);
+    if (!this.asked.includes(permission)) {
+      this.asked = [...this.asked, permission];
+      await this.store.save(this.asked).catch((e) => this.log(`couldn't save: ${String(e)}`));
+    }
+    await this.request(permission);
+  }
+
+  /** O passo acabou (`firstRun: "done"`): o que ainda falta e não foi pedido sai como na abertura de sempre. */
+  setupDone(): void {
+    if (this.current) this.enqueue(this.current);
+  }
+
   detach(): void {
     for (const off of this.offs.splice(0)) off();
   }
@@ -111,6 +139,7 @@ export class PermissionFlow {
   /** A cada estado novo: na primeira vez do app, pede a próxima que falta e que ainda não foi pedida sozinha. */
   private async update(permissions: Permissions) {
     if (!this.auto) return;
+    if (await this.held()) return;
     this.asked ??= await this.store.load().catch(() => []);
     if (this.asking) return;
     const next = ON_LAUNCH.find((p) => permissions[p] !== "granted" && !this.asked!.includes(p));

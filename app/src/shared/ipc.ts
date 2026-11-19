@@ -508,6 +508,11 @@ export type Event =
    */
   | { type: "stt.boosting"; state: "loading" | "ready" | "unavailable" }
   /**
+   * O download do modelo principal (T20796), só na primeira vez: `fraction` de 0 a 1 (sai a cada 1%) e a fase
+   * (`listing` procura os arquivos, `downloading` baixa, `compiling` prepara o CoreML). O passo da primeira abertura mostra.
+   */
+  | { type: "stt.download"; fraction: number; phase: "listing" | "downloading" | "compiling" }
+  /**
    * O Whisper do modo preciso (T6602), depois de um `config.set {precise}`: `loading`, `ready` (os ditados já saem por
    * ele), `unavailable` (o arquivo não abre ou não é Whisper; os ditados seguem pelo Parakeet) ou `off`.
    */
@@ -616,6 +621,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "transcript.error",
   "stt.status",
   "stt.boosting",
+  "stt.download",
   "stt.precise",
   "log",
 ]);

@@ -1,0 +1,17 @@
+/* O passo da primeira abertura (T20796): o mesmo fundo do onboarding do agente, sem o gato grande. */
+.kn-setup { grid-template-rows: 1fr auto; align-items: center; }
+.kn-setup-step { width: min(560px, 100%); display: grid; gap: var(--space-3); }
+.kn-setup-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.kn-setup-row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg, 12px); background: var(--surface, var(--bg));
+}
+.kn-setup-text { display: grid; gap: var(--space-1); min-width: 0; flex: 1; }
+.kn-setup-text > span { color: var(--text-2); font-size: var(--text-sm); }
+.kn-setup-ok { color: var(--success, var(--accent)); font-size: var(--text-sm); font-weight: 600; white-space: nowrap; }
+.kn-setup-bar { position: relative; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: var(--space-1); }
+.kn-setup-bar > i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--accent); transition: width 0.3s ease; }
+.kn-setup-bar[data-indeterminate="true"] > i { width: 30% !important; animation: kn-setup-slide 1.4s ease-in-out infinite; }
+.kn-setup-line[data-failed="true"] { color: var(--danger); }
+@keyframes kn-setup-slide { from { left: -30%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .kn-setup-bar[data-indeterminate="true"] > i { animation: none; } }

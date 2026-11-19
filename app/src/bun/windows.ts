@@ -1,3 +1,4 @@
+import type { SetupStatus } from "../shared/first-run.ts";
 import { NO_SPELLING } from "../shared/spelling.ts";
 // As janelas do Kiwi Notes. Cada uma é uma UI do AppEngine em modo host (T1192, ADR 0006): o engine sobe quando a
 // janela abre, mostra a UI mais nova que funciona (a de fábrica do .app, ou uma instalada pelo canal local), troca
@@ -159,6 +160,16 @@ const capabilities = uiCapabilities({
   // O seletor de microfone dos Ajustes (T3230): o helper lista as entradas, sem abrir nenhuma.
   audioInputs: async () => (await session.get()?.audioInputs()) ?? null,
   precise: () => session.get()?.precise.status() ?? null,
+  // O passo da primeira abertura (T20796): o botão de cada permissão pede pelo helper; o fim solta os pedidos da abertura.
+  setup: {
+    live: () => session.get()?.setupLive() ?? null,
+    request: async (permission) => {
+      // Com KIWI_DEBUG=1 (os agentes), só registra: nenhum diálogo do macOS abre na tela da pessoa (AGENTS.md, #536).
+      if (process.env.KIWI_DEBUG === "1") return void console.log(`[setup] request (dry run): ${permission}`);
+      await session.get()?.permissions.requestFromSetup(permission);
+    },
+    done: () => session.get()?.permissions.setupDone(),
+  },
   // "Aperte o atalho" das Configurações (T5349): o tap do helper lê as teclas.
   shortcuts: {
     record: async (bareKey?: boolean) => {
@@ -557,6 +568,12 @@ onWindowClosed((name) => {
 });
 
 /** Manda um evento a uma janela aberta. Devolve se ela estava aberta. */
+/** O passo da primeira abertura mudou (T20796): o hub recebe o estado inteiro, só enquanto o `firstRun` está `pending`. */
+export async function setupChanged(): Promise<void> {
+  const status = (await capabilities["setup.status"]({})) as SetupStatus;
+  if (status.firstRun === "pending") void sendToWindow("hub", "setup.changed", status);
+}
+
 export function sendToWindow<E extends keyof UiEvents>(name: WindowName, event: E, payload: UiEvents[E]): boolean {
   const rpc = rpcs.get(name);
   if (!rpc) return false;
