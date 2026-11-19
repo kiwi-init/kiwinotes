@@ -190,5 +190,23 @@ describe.skipIf(!hasWebkit)("o gato toca no docx aberto", () => {
     test("inserir depois do último parágrafo de uma célula", async () => {
       expect(await ends([{ tipo: "inserir", depois_de: 4, texto: "unidades" }])).toBe(true);
     }, 60_000);
+    // T23627: a linha nova pelo comando de inserir linha do motor da tela, com os ids que ela ganhou no arquivo.
+    test("inserir_linha: a tela toca a linha nova, célula por célula, com o mesmo texto do disco", async () => {
+      const a = await agent([{ tipo: "inserir_linha", depois_de: 3, celulas: ["Caneca", "40"] }]);
+      expect(a.ops.map((o) => o.op)).toEqual(["insertRow"]);
+      const r = await play(a.before, a.ops, false);
+      expect(r.played).toBe(true);
+      expect(docxBodyParagraphs(r.saved).map((p) => p.text)).toEqual(docxBodyParagraphs(a.after).map((p) => p.text));
+      expect(same(r.saved, a.after)).toBe(true);
+      expect(r.edits).toBe(0);
+    }, 60_000);
+    test("duas linhas no mesmo lote: a segunda ganha na tela outros ids que no arquivo; não toca, e abre o do disco", async () => {
+      expect(
+        await ends([
+          { tipo: "inserir_linha", depois_de: 4, celulas: ["Caneca", "40"] },
+          { tipo: "inserir_linha", depois_de: 3, celulas: ["Lápis"] },
+        ]),
+      ).toBe(false);
+    }, 60_000);
   });
 });

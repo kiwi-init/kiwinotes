@@ -11,7 +11,12 @@ export type DocxOp =
   /** Um parágrafo novo com `text`, depois de `after` (null: no início do documento). `paragraphId` é o id que ele ganhou. */
   | { op: "insert"; after: string | null; paragraphId: string; text: string }
   /** Apaga o parágrafo inteiro. */
-  | { op: "delete"; paragraphId: string };
+  | { op: "delete"; paragraphId: string }
+  /**
+   * Uma linha nova numa tabela, logo abaixo da linha de `after` (um parágrafo de uma célula dela), com um parágrafo por
+   * célula: `cells`, na ordem, com o id que cada um ganhou e o texto (T23627).
+   */
+  | { op: "insertRow"; after: string; cells: { paragraphId: string; text: string }[] };
 
 /**
  * Onde as operações deixam o documento: `touched`, os parágrafos que ficam com o texto do gato (trocados ou novos), e
@@ -21,7 +26,9 @@ export function docxOpsResult(ops: readonly DocxOp[]): { touched: string[]; gone
   const touched = new Set<string>();
   const gone = new Set<string>();
   for (const o of ops) {
-    if (o.op === "delete") {
+    if (o.op === "insertRow") {
+      for (const c of o.cells) touched.add(c.paragraphId);
+    } else if (o.op === "delete") {
       touched.delete(o.paragraphId);
       gone.add(o.paragraphId);
     } else {
@@ -35,6 +42,6 @@ export function docxOpsResult(ops: readonly DocxOp[]): { touched: string[]; gone
 /** Os parágrafos que as operações mudam ou apagam: a pessoa escrevendo num deles faz o gato esperar. */
 export function docxOpsTouch(ops: readonly DocxOp[]): Set<string> {
   const out = new Set<string>();
-  for (const o of ops) if (o.op !== "insert") out.add(o.paragraphId);
+  for (const o of ops) if (o.op === "replace" || o.op === "delete") out.add(o.paragraphId);
   return out;
 }

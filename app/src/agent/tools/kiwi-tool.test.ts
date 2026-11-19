@@ -94,6 +94,10 @@ describe("a ferramenta única (T14563)", () => {
       code: "E_NOT_ALLOWED",
       tool: "docx_edit",
     });
+    // A linha de tabela (T23627) é o mesmo docx_edit, com a mesma permissão.
+    await expect(
+      runKiwiCall(ctx, { fazer: "escrever", alvo: "a.docx", opcoes: { como: "documento", versao: "v", mudancas: [{ tipo: "inserir_linha", depois_de: 1, celulas: ["x"] }] } }, none),
+    ).rejects.toMatchObject({ code: "E_NOT_ALLOWED", tool: "docx_edit" });
     expect(resolveKiwiCall({ fazer: "ler", alvo: "a.docx", opcoes: { como: "paragrafos" } })).toMatchObject({ tool: "docx_read" });
     await expect(runKiwiCall(ctx, { fazer: "voar" }, none)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
   });

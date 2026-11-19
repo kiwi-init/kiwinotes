@@ -8,7 +8,7 @@
 // não acha, o início do documento), a tela abre o arquivo do disco, só com o realce. A tela nunca mostra o que não
 // está no arquivo.
 
-import type { PaginatedSurface, SemanticPosition, SemanticSelection } from "@docx-editor.dev/core/editor";
+import { type PaginatedSurface, type SemanticPosition, type SemanticSelection, tableCommandState } from "@docx-editor.dev/core/editor";
 import { forEachSemanticSpan, keyedRangeRects, type SemanticLayout } from "@docx-editor.dev/core/layout";
 
 import type { DocxOp } from "../../../src/shared/docx/ops.ts";
@@ -292,6 +292,7 @@ export class DocxKiwi {
       else this.repaint(s);
       return this.textOf(s, node) === op.text;
     }
+    if (op.op === "insertRow") return this.row(s, ids, op, animate);
     const node = ids.nodeIdOf(op.paragraphId);
     if (!node) return false;
     const order = ids.order();
@@ -324,6 +325,34 @@ export class DocxKiwi {
     } else return false;
     this.repaint(s);
     return !ids.order().includes(node) || this.textOf(s, node) !== "";
+  }
+
+  /** A linha de tabela nova: o comando de inserir linha do próprio motor, abaixo da linha de `after`, e cada célula escrita. */
+  private async row(s: PaginatedSurface, ids: ParaIdSession, op: Extract<DocxOp, { op: "insertRow" }>, animate: boolean): Promise<boolean> {
+    const prev = ids.nodeIdOf(op.after);
+    if (!prev) return false;
+    const before = new Set(ids.order());
+    s.setSelection({ anchor: { paragraphId: prev, offset: 0 }, head: { paragraphId: prev, offset: 0 } });
+    const st = tableCommandState({ type: "insertRow", where: "below" }, s);
+    if (!st.can.ok || !st.plan.ok) return false;
+    const r = s.applyTableCommandPlan(st.plan);
+    if (!r.ok) return false;
+    s.flushPendingInput();
+    // As células novas têm de ganhar os mesmos ids que ganharam no arquivo: as operações seguintes falam por eles.
+    const fresh = ids.order().filter((n) => !before.has(n));
+    if (fresh.length !== op.cells.length) return false;
+    for (const [i, node] of fresh.entries()) if (ids.paraIdOf(node)?.toUpperCase() !== op.cells[i]!.paragraphId.toUpperCase()) return false;
+    this.reveal(s, { paragraphId: fresh[0]!, offset: 0 }, { block: "centerIfNeeded" });
+    for (const [i, node] of fresh.entries()) {
+      const text = op.cells[i]!.text;
+      if (!text) continue;
+      s.setSelection({ anchor: { paragraphId: node, offset: 0 }, head: { paragraphId: node, offset: 0 } });
+      await this.type(s, node, 0, text, animate, (piece) => s.insertPlainText(piece));
+      if (this.textOf(s, node) !== text) return false;
+      if (animate) await wait(KIWI_GAP_MS);
+    }
+    this.repaint(s);
+    return true;
   }
 
   private fade(): void {
