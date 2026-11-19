@@ -6,6 +6,7 @@ import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useStat
 
 import { DelimitedError } from "../../../src/shared/sheet/delimited.ts";
 import { type Display, type Grid, SheetHistory, type SheetOp, SheetOpError } from "../../../src/shared/sheet/ops.ts";
+import { moveCell, rebaseOps } from "../../../src/shared/sheet/rebase.ts";
 import { base64Of, bytesOf } from "./csv.ts";
 import type { KiwiPlay, KiwiSheetSource } from "./kiwi-sheet.ts";
 import { docBytes, editBatch, openDoc, replay, type SheetDoc, shownGrid } from "./sheet-doc.ts";
@@ -33,7 +34,25 @@ export interface SheetSession {
   /** A gravação do Kiwi Cat que a grade toca agora (T21114), ou `null`; `kiwiEnd` a tira. */
   kiwi: KiwiPlay | null;
   kiwiEnd(): void;
+  /**
+   * A caixa de edição abriu numa célula do arquivo (a aba e a linha do arquivo), ou fechou (`null`): o app sabe, e o
+   * Kiwi Cat espera antes de mudar essa célula. Fechar grava na hora o que a pessoa digitou (T21114).
+   */
+  editing(cell: SheetCell | null): void;
+  /** O gato inseriu ou apagou linhas: a caixa aberta foi para cá (`cell: null`, a linha dela saiu). `n` muda a cada vez. */
+  boxMoved: { cell: SheetCell | null; n: number } | null;
+  /** A aba da caixa aberta agora, ou `null`. */
+  editingSheet(): string | null;
 }
+
+/** Uma célula do arquivo: a aba (no csv, "") e a linha e a coluna a partir de 0. */
+export interface SheetCell {
+  sheet: string;
+  row: number;
+  col: number;
+}
+
+const LOST = "O arquivo mudou fora do Kiwi: abri a versão nova, e a última edição não foi gravada.";
 
 /**
  * `bytes` e `version`: o arquivo como o `files.read` o leu; mudam quando ele muda no disco. A leitura que volta depois
@@ -69,6 +88,7 @@ export function useSheetSession(opts: {
   /** As edições entram em fila: cada uma espera a de antes (o recálculo é assíncrono). */
   const queue = useRef<Promise<void>>(Promise.resolve());
   const canSave = !!files.saveBytes;
+  const reopenRef = useRef<(b64: string, ver: string) => void>(() => {});
 
   const show = useCallback(async () => {
     const doc = docRef.current;
@@ -76,6 +96,84 @@ export function useSheetSession(opts: {
     const grid = await shownGrid(doc, history.current.ops, display);
     if (docRef.current === doc) setState({ kind: "ready", doc, grid });
   }, [display]);
+
+  /** As operações que a última gravação levou ao disco: as que vêm depois delas ainda não gravaram. */
+  const saved = useRef<readonly SheetOp[]>([]);
+  /** A célula com a caixa aberta, no arquivo. */
+  const box = useRef<SheetCell | null>(null);
+  const [boxMoved, setBoxMoved] = useState<{ cell: SheetCell | null; n: number } | null>(null);
+  const owner = useMemo(() => `planilha-${Math.random().toString(36).slice(2, 10)}`, []);
+  const tell = useCallback((cell: SheetCell | null) => void files.editing?.(path, owner, cell).catch(() => {}), [files, path, owner]);
+
+  /** As edições que ainda não gravaram, ou `null` quando não dá para saber (o desfazer passou da última gravação). */
+  const pendingOps = () => {
+    const ops = history.current.ops;
+    const sv = saved.current;
+    if (sv.length > ops.length || sv.some((o, i) => o !== ops[i])) return null;
+    return ops.slice(sv.length);
+  };
+
+  /**
+   * O arquivo mudou no disco (`base64` na `version`): abre a versão nova. Se foi o Kiwi Cat, a grade toca o que ele
+   * fez (com o arquivo fechado antes, só o realce), e o que a pessoa digitou e ainda não gravou é refeito por cima,
+   * com as linhas que ele inseriu ou apagou já contadas. Se foi outro app, vale o arquivo de lá, como antes.
+   */
+  const reopen = useCallback(
+    (b64: string, ver: string) => {
+      if (!display) return;
+      let doc: SheetDoc;
+      try {
+        doc = openDoc(bytesOf(b64), name, display);
+      } catch (e) {
+        docRef.current = null;
+        setState({ kind: e instanceof TooLarge ? "tooLarge" : "error" });
+        return;
+      }
+      const src = kiwiSource.current;
+      const first = !docRef.current;
+      const wrote = src ? src.take(path, ver) : null;
+      const theirs = wrote?.sheetOps?.length ? wrote.sheetOps : null;
+      const pending = first ? [] : pendingOps();
+      const play: KiwiPlay | null = theirs ? { ops: theirs, before: first ? null : shown.current, cor: src!.cor, ...(first ? { instant: true } : {}) } : null;
+      docRef.current = doc;
+      history.current = new SheetHistory();
+      saved.current = [];
+      disk.current = ver;
+      written.current = null;
+      // A caixa aberta noutra célula segue a célula dela.
+      const moved = theirs && box.current ? { cell: moveCell(box.current, theirs), n: Date.now() } : null;
+      if (moved) {
+        box.current = moved.cell;
+        tell(moved.cell);
+      }
+      const mine = pending?.length && theirs ? rebaseOps(pending, theirs) : [];
+      if (!mine.length) {
+        if (pending === null || (pending.length && !theirs)) setNotice(LOST);
+        dirty.current = false;
+        setKiwi(play);
+        setBoxMoved(moved);
+        setState({ kind: "ready", doc, grid: doc.base });
+        return;
+      }
+      // O que a pessoa digitou vai por cima da versão do gato e grava logo depois.
+      dirty.current = true;
+      queue.current = queue.current.then(async () => {
+        if (docRef.current !== doc) return;
+        try {
+          history.current.do(await editBatch(doc, doc.base, mine, display));
+        } catch {
+          setNotice(LOST);
+        }
+        if (docRef.current !== doc) return;
+        await show();
+        setKiwi(play);
+        setBoxMoved(moved);
+        schedule();
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [display, name, path, tell],
+  );
 
   // Abrir, e abrir de novo quando o arquivo muda fora do Kiwi (a nossa gravação volta com a versão que já temos).
   useEffect(() => {
@@ -85,22 +183,7 @@ export function useSheetSession(opts: {
       if (base64 === written.current && !saving.current) disk.current = version;
       return;
     }
-    try {
-      const doc = openDoc(bytesOf(base64), name, display);
-      // O Kiwi Cat gravou esta versão (T21114): a grade toca as operações dele por cima. Só com o arquivo já na tela.
-      const src = kiwiSource.current;
-      const wrote = docRef.current && src ? src.take(path, version) : null;
-      setKiwi(wrote?.sheetOps?.length ? { ops: wrote.sheetOps, before: dirty.current ? null : shown.current, cor: src!.cor } : null);
-      if (dirty.current) setNotice("O arquivo mudou fora do Kiwi: abri a versão nova, e a última edição não foi gravada.");
-      docRef.current = doc;
-      history.current = new SheetHistory();
-      disk.current = version;
-      dirty.current = false;
-      setState({ kind: "ready", doc, grid: doc.base });
-    } catch (e) {
-      docRef.current = null;
-      setState({ kind: e instanceof TooLarge ? "tooLarge" : "error" });
-    }
+    reopenRef.current(base64, version);
   }, [base64, version, name, display, path]);
 
   useEffect(() => {
@@ -114,6 +197,7 @@ export function useSheetSession(opts: {
     const run = (async () => {
       dirty.current = false;
       const ops = history.current.ops;
+      const base = disk.current;
       let bytes: Uint8Array;
       try {
         bytes = docBytes(doc, ops, replay(doc, ops, display));
@@ -132,20 +216,17 @@ export function useSheetSession(opts: {
       try {
         const b64 = base64Of(bytes);
         written.current = b64;
-        const r = await files.saveBytes!(path, b64, disk.current);
+        const r = await files.saveBytes!(path, b64, base);
         if (r.saved) {
-          disk.current = r.version;
+          if (docRef.current === doc) {
+            disk.current = r.version;
+            saved.current = ops;
+          }
           return true;
         }
-        // Mudou no disco desde a nossa versão: vale o arquivo de lá, como numa nota com conflito.
-        setNotice("O arquivo mudou fora do Kiwi: abri a versão nova, e a última edição não foi gravada.");
-        if ("base64" in r.current) {
-          const next = openDoc(bytesOf(r.current.base64), name, display);
-          docRef.current = next;
-          history.current = new SheetHistory();
-          disk.current = r.current.version;
-          setState({ kind: "ready", doc: next, grid: next.base });
-        }
+        // Mudou no disco desde a nossa versão. A recarga pode já ter refeito estas edições sobre a versão nova; senão,
+        // é agora: do Kiwi Cat, o que a pessoa digitou vai por cima; de outro app, vale o arquivo de lá.
+        if (docRef.current === doc && disk.current === base && "base64" in r.current) reopenRef.current(r.current.base64, r.current.version);
         return false;
       } catch {
         dirty.current = true;
@@ -170,6 +251,8 @@ export function useSheetSession(opts: {
     }, SAVE_DELAY);
   }, [save]);
 
+  reopenRef.current = reopen;
+
   const flush = useCallback(async () => {
     await queue.current;
     if (timer.current) {
@@ -186,8 +269,23 @@ export function useSheetSession(opts: {
     };
   }, [flushRef, flush]);
 
-  // Saiu do arquivo com uma gravação marcada: grava agora.
-  useEffect(() => () => void flush(), [flush]);
+  // Saiu do arquivo com uma gravação marcada: grava agora, e a caixa fecha para o app.
+  useEffect(
+    () => () => {
+      void flush().finally(() => tell(null));
+    },
+    [flush, tell],
+  );
+
+  const editing = useCallback(
+    (cell: SheetCell | null) => {
+      box.current = cell;
+      if (cell) return tell(cell);
+      // Fechou: o que ela digitou grava antes de o app saber, e o gato que esperava relê o arquivo com o valor dela.
+      void flush().finally(() => tell(box.current));
+    },
+    [flush, tell],
+  );
 
   const readOnly = state.kind === "ready" ? (state.doc.readOnly ?? (canSave ? null : "Este Kiwi ainda não grava planilhas.")) : null;
 
@@ -227,7 +325,7 @@ export function useSheetSession(opts: {
   );
 
   return useMemo(
-    () => ({ state, readOnly, notice, edit, undo: () => step(false), redo: () => step(true), kiwi, kiwiEnd: () => setKiwi(null) }),
-    [state, readOnly, notice, edit, step, kiwi],
+    () => ({ state, readOnly, notice, edit, undo: () => step(false), redo: () => step(true), kiwi, kiwiEnd: () => setKiwi(null), editing, boxMoved, editingSheet: () => box.current?.sheet ?? null }),
+    [state, readOnly, notice, edit, step, kiwi, editing, boxMoved],
   );
 }

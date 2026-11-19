@@ -9,6 +9,7 @@ import { applyLiveEdits } from "../../src/shared/live-edits.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
 import { applyKiwiEdits, bodyEdits, type KiwiEdit, type KiwiWriteEnd } from "./editor/kiwi-writing.ts";
 import type { AgentWrote } from "./types.ts";
+import type { SheetOp } from "../../src/shared/sheet/ops.ts";
 
 /** Quantas escritas esperam a recarga, no máximo (uma que nunca recarregou não fica para sempre). */
 const KEEP = 32;
@@ -30,6 +31,23 @@ export class KiwiWrites {
     const e = this.byKey.get(key) ?? null;
     this.byKey.delete(key);
     return e;
+  }
+  /**
+   * As gravações seguidas do Kiwi numa planilha que levaram `path` até `version` (T21114): a planilha fechada pode ter
+   * recebido várias, e ao abrir o realce mostra todas, na ordem. Uma vez só.
+   */
+  takeSheet(path: string, version: string): { sheetOps: SheetOp[] } | null {
+    const chain: AgentWrote[] = [];
+    let v: string | undefined = version;
+    while (v && chain.length < KEEP) {
+      const key: string = `${path}@${v}`;
+      const e = this.byKey.get(key);
+      if (!e?.sheetOps?.length) break;
+      this.byKey.delete(key);
+      chain.unshift(e);
+      v = e.baseVersion;
+    }
+    return chain.length ? { sheetOps: chain.flatMap((e) => e.sheetOps!) } : null;
   }
 }
 

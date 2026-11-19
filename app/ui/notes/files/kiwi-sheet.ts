@@ -1,4 +1,4 @@
-// O Kiwi Cat editando a planilha ao vivo (T21114, spec #21065), a parte pura: as operações que o agente gravou viram
+// O Kiwi Cat editando a planilha ao vivo (T21114, spec #21033), a parte pura: as operações que o agente gravou viram
 // os passos que a grade toca por cima do arquivo do disco (que já tem tudo). Cada célula escrita vai para onde ela
 // ficou no fim (uma linha inserida depois a empurra, uma apagada a tira), na aba com o nome do fim. Sem React e sem
 // DOM, para os testes.
@@ -33,6 +33,8 @@ export interface KiwiPlay {
   ops: SheetOp[];
   before: Grid | null;
   cor: unknown;
+  /** A planilha estava fechada quando o gato gravou: ao abrir, só o realce do que mudou, de uma vez (T21114). */
+  instant?: boolean;
 }
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();

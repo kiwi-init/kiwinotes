@@ -1,4 +1,4 @@
-// O Kiwi Cat tocando as mudanças dele na grade (T21114, spec #21065; o desenho, #21997): o arquivo do disco já está na
+// O Kiwi Cat tocando as mudanças dele na grade (T21114, spec #21033; o desenho, #21997): o arquivo do disco já está na
 // tela, e por cima, célula por célula, o gato rola até ela, digita o texto com a etiqueta dele e deixa a célula
 // realçada, que some sozinha. Com Reduzir movimento, tudo de uma vez com o realce. Um clique ou uma tecla pula para o fim.
 

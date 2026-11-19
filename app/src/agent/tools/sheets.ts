@@ -1,4 +1,4 @@
-// As ferramentas da planilha do agente (T21114, spec #21065): o `sheets_read` lê as células de um xlsx, csv ou tsv
+// As ferramentas da planilha do agente (T21114, spec #21033): o `sheets_read` lê as células de um xlsx, csv ou tsv
 // com os valores e as fórmulas, e o `sheets_edit` muda o arquivo por operações (as células, as linhas e as colunas,
 // as abas), gravando como a grade grava: só o que mudou, com o recálculo das fórmulas que dependem da edição. As
 // operações vão junto da gravação para o Kiwi ao vivo (`liveWriter.saveBytes`): a grade aberta toca cada uma.
@@ -288,6 +288,20 @@ export async function sheetsEdit(
   } catch (e) {
     if (e instanceof SheetOpError) throw new SheetToolError("E_BAD_ARGS", e.message);
     throw e;
+  }
+  // A pessoa com a caixa aberta numa célula que o lote muda: o gato espera ela sair, com teto. Nada do lote passa na
+  // frente: ou ele grava inteiro depois, ou nada (T21114, spec #21033).
+  if (writer.waitCells) {
+    const { busy, waited } = await writer.waitCells(path, ops);
+    if (busy) {
+      const ref = `${cellName(busy)}${doc.kind === "xlsx" ? ` (aba ${busy.sheet})` : ""}`;
+      throw new SheetToolError("E_BUSY", `a pessoa está editando ${ref} agora. Nada foi escrito: mude as outras células num sheets_edit sem ${cellName(busy)}, ou tente de novo daqui a pouco.`);
+    }
+    if (waited) {
+      const now = await writer.getBytes(path);
+      if ("tooLarge" in now || now.version !== f.version)
+        throw new SheetToolError("E_CHANGED", `a pessoa acabou de mudar ${path} na célula que você ia escrever. Nada foi escrito: leia de novo com \`sheets_read\` e decida com o valor dela.`);
+    }
   }
   const batch = await editBatch(doc, doc.base, ops, display);
   const after = docBytes(doc, [batch], [batch].reduce((g, op) => applyToGrid(g, op, display), doc.base));

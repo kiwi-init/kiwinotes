@@ -1,4 +1,4 @@
-// O Kiwi Cat muda uma planilha de verdade (T21114, spec #21065): o `sheets_read` e o `sheets_edit` sobre um cofre num
+// O Kiwi Cat muda uma planilha de verdade (T21114, spec #21033): o `sheets_read` e o `sheets_edit` sobre um cofre num
 // tmp, pelas capacidades das janelas (`uiCapabilities`) e pelo escritor ao vivo (`liveWriter`), e o desfazer da
 // Atividade volta o arquivo byte a byte. As chamadas são as do agente falso (`runKiwiTool`); nenhum agente roda aqui.
 // Tudo inventado: o estoque de uma loja.
@@ -39,6 +39,7 @@ function setup() {
   writeFileSync(path.join(root, "Loja/clientes.csv"), CSV);
   const v = new Vault({ root, debounceMs: 20, trash: async () => {} });
   vaults.push(v);
+  const live = new LiveWrites();
   const caps = uiCapabilities({
     dictionary: { load: async () => [], save: async (t) => t },
     snippets: { load: async () => [], save: async (s) => s },
@@ -48,12 +49,13 @@ function setup() {
     clipboardWrite: () => {},
     notes: v,
     versions: new NoteVersions({ dir: path.join(base, "history") }),
+    // Só o registro das escritas ao vivo: o `files.editing` da janela cai nele.
+    agent: { liveWrites: live, trailsFollow: () => {} } as never,
   }) as Caps;
   let clock = Date.parse("2026-11-19T12:00:00.000Z");
   const now = () => clock;
   const activity = new AgentActivity({ dir: path.join(base, "agent", "activity"), now });
   const id = `p-${randomUUID()}`;
-  const live = new LiveWrites();
   // O servidor pega o aviso no `files.changed`, enquanto a gravação ainda corre: aqui, logo depois de o disco mudar.
   const avisos: ReturnType<LiveWrites["take"]> = [];
   const inner = writerFromCapabilities(caps as never);
@@ -76,6 +78,7 @@ function setup() {
   };
   return {
     root,
+    caps,
     tool,
     avisos,
     begin: () => activity.begin(id, "acerte o estoque"),
@@ -139,5 +142,47 @@ describe("o Kiwi Cat muda a planilha no cofre (T21114)", () => {
     const r = await t.undo();
     expect(r.notes.some((n: { result: string }) => n.result === "restored")).toBe(false);
     expect(t.bytes("Loja/clientes.csv").toString("utf8")).toBe(fora);
+  });
+});
+
+describe("files.editing: a janela diz a célula com a caixa aberta (contrato 1.90.0, T21114)", () => {
+  test("o sheets_edit na célula aberta espera a janela fechar a caixa, e só então grava; noutra célula, na hora", async () => {
+    const t = setup();
+    await t.begin();
+    const lido = await t.tool("sheets_read", { caminho: "Loja/estoque.xlsx" });
+    // A janela abre a caixa em C2 (o caminho vem com a barra do começo, como a janela manda).
+    expect(await t.caps["files.editing"]!({ path: "/Loja/estoque.xlsx", owner: "notes-1", cell: { sheet: "Estoque", row: 1, col: 2 } })).toEqual({ ok: true });
+    // Noutra célula: grava na hora.
+    const outra = await t.tool("sheets_edit", { caminho: "Loja/estoque.xlsx", versao: lido.versao, mudancas: [{ tipo: "celulas", celulas: { C3: 4 } }] });
+    expect(cell(t.bytes("Loja/estoque.xlsx"), "Estoque", 2, 2)?.value).toBe(4);
+    // Na mesma: espera.
+    let feito = false;
+    const pending = t.tool("sheets_edit", { caminho: "Loja/estoque.xlsx", versao: outra.versao, mudancas: [{ tipo: "celulas", celulas: { C2: 10 } }] }).then((r) => ((feito = true), r));
+    await Bun.sleep(150);
+    expect(feito).toBe(false);
+    expect(cell(t.bytes("Loja/estoque.xlsx"), "Estoque", 1, 2)?.value).toBe(7);
+    // A janela fecha a caixa sem mudar nada: o gato grava.
+    await t.caps["files.editing"]!({ path: "/Loja/estoque.xlsx", owner: "notes-1", cell: null });
+    await pending;
+    expect(feito).toBe(true);
+    expect(cell(t.bytes("Loja/estoque.xlsx"), "Estoque", 1, 2)?.value).toBe(10);
+  });
+
+  test("os argumentos errados são recusados", async () => {
+    const t = setup();
+    const call = async (args: unknown) => {
+      try {
+        await t.caps["files.editing"]!(args);
+        return "ok";
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    expect(await call({ path: "Loja/estoque.xlsx", owner: "notes-1", cell: null })).toBe("ok");
+    expect(await call({ path: "", owner: "notes-1", cell: null })).toContain("path");
+    expect(await call({ path: "Loja/estoque.xlsx", owner: "", cell: null })).toContain("owner");
+    expect(await call({ path: "Loja/estoque.xlsx", owner: "notes-1", cell: { sheet: "Estoque", row: -1, col: 0 } })).toContain("cell");
+    expect(await call({ path: "Loja/estoque.xlsx", owner: "notes-1", cell: { row: 1, col: 0 } })).toContain("cell");
+    expect(await call({ path: "Loja/estoque.xlsx", owner: "notes-1", cell: { sheet: "Estoque", row: 1, col: 0 }, extra: 1 })).not.toBe("ok");
   });
 });

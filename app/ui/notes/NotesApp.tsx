@@ -709,7 +709,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     [api],
   );
   // A planilha aberta toca as operações do Kiwi (T21114): ela pega a gravação pelo caminho e pela versão que recarregou.
-  const kiwiSheets = useMemo(() => ({ take: (p: string, v: string) => kiwiWrites.current.take(p, v), cor: prefs.catColor }), [prefs.catColor]);
+  const kiwiSheets = useMemo(() => ({ take: (p: string, v: string) => kiwiWrites.current.takeSheet(p, v), cor: prefs.catColor }), [prefs.catColor]);
   useEffect(() => {
     if (!kiwiTouched) return;
     const t = setTimeout(() => setKiwiTouched(null), 4000);

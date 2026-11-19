@@ -13,6 +13,7 @@ import { readDelimited } from "../../shared/sheet/delimited.ts";
 import type { VaultReader } from "./reader.ts";
 import { runKiwiTool, type KiwiToolContext } from "./tools.ts";
 import type { VaultWriter } from "./writer.ts";
+import { opsTouchCell, SheetEditing } from "../sheet-editing.ts";
 
 const ESTOQUE = new Uint8Array(readFileSync(path.join(import.meta.dir, "../../../test/fixtures/sheet/estoque.xlsx")));
 const CSV = new TextEncoder().encode("Nome;Cidade;Pedidos\nAna;Cidade A;3\nBeto;Cidade B;5\n");
@@ -202,5 +203,73 @@ describe("sheets_edit: muda a planilha por operações, como a grade", () => {
     });
     expect(kept).toHaveLength(1);
     expect(dropped).toEqual(["copia-1"]);
+  });
+});
+
+describe("sheets_edit com a pessoa editando (T21114, spec #21033)", () => {
+  const withEditing = (files: Record<string, Uint8Array>, ms = 60) => {
+    const v = vault(files);
+    const editing = new SheetEditing();
+    (v.ctx.writer as VaultWriter).waitCells = (p, ops) => editing.waitFree(p, ops, ms);
+    return { ...v, editing };
+  };
+
+  test("noutra célula, o gato grava na hora", async () => {
+    const { ctx, disk, editing } = withEditing({ "estoque.xlsx": ESTOQUE });
+    editing.set("janela", "estoque.xlsx", { sheet: "Estoque", row: 3, col: 0 });
+    const t0 = Date.now();
+    await runKiwiTool(ctx, "sheets_edit", { caminho: "estoque.xlsx", versao: bytesVersion(ESTOQUE), mudancas: [{ tipo: "celulas", celulas: { C2: 10 } }] });
+    expect(Date.now() - t0).toBeLessThan(50);
+    expect(cell(disk.get("estoque.xlsx")!, "Estoque", "C2")?.value).toBe(10);
+  });
+
+  test("na mesma célula, ele espera a pessoa sair e só então grava", async () => {
+    const { ctx, disk, editing } = withEditing({ "estoque.xlsx": ESTOQUE }, 5_000);
+    editing.set("janela", "estoque.xlsx", { sheet: "Estoque", row: 1, col: 2 });
+    let gravou = false;
+    const edit = runKiwiTool(ctx, "sheets_edit", { caminho: "estoque.xlsx", versao: bytesVersion(ESTOQUE), mudancas: [{ tipo: "celulas", celulas: { A2: "Caneca verde", C2: 10 } }] }).then(() => (gravou = true));
+    await Bun.sleep(30);
+    // Nada do lote passou na frente: nem a outra célula.
+    expect(gravou).toBe(false);
+    expect(disk.get("estoque.xlsx")).toBe(ESTOQUE);
+    editing.set("janela", "estoque.xlsx", null);
+    await edit;
+    expect(cell(disk.get("estoque.xlsx")!, "Estoque", "C2")?.value).toBe(10);
+    expect(cell(disk.get("estoque.xlsx")!, "Estoque", "A2")?.value).toBe("Caneca verde");
+  });
+
+  test("se a pessoa gravou a célula enquanto ele esperava, nada é escrito e ele relê", async () => {
+    const { ctx, disk, editing } = withEditing({ "clientes.csv": CSV }, 5_000);
+    editing.set("janela", "clientes.csv", { sheet: "", row: 1, col: 2 });
+    const edit = runKiwiTool(ctx, "sheets_edit", { caminho: "clientes.csv", versao: bytesVersion(CSV), mudancas: [{ tipo: "celulas", celulas: { C2: 9 } }] });
+    await Bun.sleep(20);
+    const dela = new TextEncoder().encode("Nome;Cidade;Pedidos\nAna;Cidade A;4\nBeto;Cidade B;5\n");
+    disk.set("clientes.csv", dela);
+    editing.set("janela", "clientes.csv", null);
+    await expect(edit).rejects.toMatchObject({ code: "E_CHANGED" });
+    expect(disk.get("clientes.csv")).toBe(dela);
+  });
+
+  test("a caixa esquecida aberta: no teto, E_BUSY com a célula, e nada gravado", async () => {
+    const { ctx, disk, editing, kept } = withEditing({ "estoque.xlsx": ESTOQUE }, 40);
+    editing.set("janela", "estoque.xlsx", { sheet: "Estoque", row: 1, col: 2 });
+    await expect(
+      runKiwiTool(ctx, "sheets_edit", { caminho: "estoque.xlsx", versao: bytesVersion(ESTOQUE), mudancas: [{ tipo: "celulas", celulas: { C2: 10 } }] }),
+    ).rejects.toMatchObject({ code: "E_BUSY", message: expect.stringContaining("C2 (aba Estoque)") });
+    expect(disk.get("estoque.xlsx")).toBe(ESTOQUE);
+    expect(kept).toHaveLength(0);
+  });
+});
+
+describe("opsTouchCell", () => {
+  test("escrever nela ou apagar a linha toca; inserir antes só empurra", () => {
+    const c = { sheet: "A", row: 2, col: 1 };
+    expect(opsTouchCell([{ op: "set", sheet: "a", row: 2, col: 1, value: 1 }], c)).toBe(true);
+    expect(opsTouchCell([{ op: "set", sheet: "A", row: 2, col: 2, value: 1 }], c)).toBe(false);
+    expect(opsTouchCell([{ op: "insertRows", sheet: "A", at: 0, count: 1 }, { op: "set", sheet: "A", row: 2, col: 1, value: 1 }], c)).toBe(false);
+    expect(opsTouchCell([{ op: "insertRows", sheet: "A", at: 0, count: 1 }, { op: "set", sheet: "A", row: 3, col: 1, value: 1 }], c)).toBe(true);
+    expect(opsTouchCell([{ op: "deleteCols", sheet: "A", at: 0, count: 2 }], c)).toBe(true);
+    expect(opsTouchCell([{ op: "renameSheet", sheet: "A", name: "B" }, { op: "set", sheet: "B", row: 2, col: 1, value: 1 }], c)).toBe(true);
+    expect(opsTouchCell([{ op: "set", sheet: "Outra", row: 2, col: 1, value: 1 }], c)).toBe(false);
   });
 });

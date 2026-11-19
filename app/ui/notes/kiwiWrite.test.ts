@@ -57,6 +57,18 @@ describe("as escritas esperando a recarga", () => {
     expect(w.take("Viagem.md", "x0")).toBeNull();
     expect(w.take("Viagem.md", "x99")).not.toBeNull();
   });
+
+  test("a planilha fechada: as gravações seguidas do gato saem juntas, na ordem, ao abrir (T21114)", () => {
+    const w = new KiwiWrites();
+    const set = (row: number) => [{ op: "set" as const, sheet: "Estoque", row, col: 0, value: "x" }];
+    w.add({ path: "estoque.xlsx", baseVersion: "a", version: "b", sheetOps: set(1) });
+    w.add({ path: "estoque.xlsx", baseVersion: "b", version: "c", sheetOps: set(2) });
+    w.add({ path: "outra.xlsx", baseVersion: "b", version: "c", sheetOps: set(9) });
+    expect(w.takeSheet("estoque.xlsx", "c")).toEqual({ sheetOps: [...set(1), ...set(2)] });
+    // Uma vez só: a segunda abertura não realça de novo.
+    expect(w.takeSheet("estoque.xlsx", "c")).toBeNull();
+    expect(w.takeSheet("outra.xlsx", "c")).toEqual({ sheetOps: set(9) });
+  });
 });
 
 // #21094: duas escritas seguidas do mesmo pedido (`notes_edit` e depois `notes_append`), cada uma com o seu `agent.wrote`

@@ -75,7 +75,7 @@ export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, cou
     return { cells, recalc, rowsIn, colsIn: s.colsIn };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.kiwi]);
-  const kiwi = useKiwiPlay(kiwiInput, { reduced: useMemo(reducedMotion, [session.kiwi]), face: session.kiwi ? kiwiFaceUrl(session.kiwi.cor) : "", onEnd: session.kiwiEnd });
+  const kiwi = useKiwiPlay(kiwiInput, { reduced: useMemo(() => !!session.kiwi?.instant || reducedMotion(), [session.kiwi]), face: session.kiwi ? kiwiFaceUrl(session.kiwi.cor) : "", onEnd: session.kiwiEnd });
 
   const edit: GridEdit | undefined = editable
     ? {
@@ -103,8 +103,19 @@ export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, cou
         undo: session.undo,
         redo: session.redo,
         staleAt: (r, c) => !!cellOf(r, c)?.stale,
+        editing: (cell) => session.editing(cell ? { sheet: sheet.name, row: fileRow(cell.row), col: cell.col } : null),
       }
     : undefined;
+
+  // A caixa aberta segue a célula dela quando o gato insere ou apaga linhas (do arquivo para a grade).
+  const moveEditing = useMemo(() => {
+    const m = session.boxMoved;
+    if (!m) return null;
+    if (!m.cell || m.cell.sheet.toLowerCase() !== sheet.name.toLowerCase()) return { row: -1, col: 0, n: m.n };
+    const row = m.cell.row === 0 ? 0 : order.indexOf(m.cell.row) + 1 || -1;
+    return { row, col: m.cell.col, n: m.n };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.boxMoved]);
 
   const parts = [
     spec.filter ? `só “${spec.filter.values[0] || "vazias"}” na ${columnName(spec.filter.col)}` : "",
@@ -133,6 +144,7 @@ export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, cou
       view={view}
       foot={foot}
       kiwi={kiwi}
+      moveEditing={moveEditing}
     />
   );
 }

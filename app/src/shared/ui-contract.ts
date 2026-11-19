@@ -257,8 +257,8 @@ export type { NoteModel };
 // 1.88.0 (T21325, spec #21283): o `aprendendo` no `AgentTrailView`, a trilha que ainda espera a segunda vez. Só acréscimo.
 // 1.89.0 (T21107, spec #21065): o `files.save` grava planilha (xlsx, csv, tsv) com `base64` no lugar de `content`. Só
 //   acréscimo.
-// 1.90.0 (T21114, spec #21065): as `sheetOps` no `agent.wrote`, as operações da planilha que o Kiwi mudou, para a grade
-//   aberta mostrar cada uma. Só acréscimo.
+// 1.90.0 (T21114, spec #21033): as `sheetOps` no `agent.wrote`, as operações da planilha que o Kiwi mudou, para a grade
+//   aberta mostrar cada uma, e o `files.editing`, a célula que a pessoa está editando, para o gato esperar. Só acréscimo.
 export const UI_CONTRACT_VERSION = "1.90.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
@@ -459,6 +459,13 @@ export interface UiCapabilities {
    * E_BAD_ARGS com o motivo, e nada é escrito.
    */
   "files.save": { args: { path: string; content?: string; base64?: string; baseVersion: string }; result: FileSaveResult };
+  /**
+   * A célula com a caixa de edição aberta numa planilha (1.90.0, T21114, spec #21033), ou `null` quando ela fecha. O
+   * `owner` é um nome qualquer da janela, o mesmo em cada chamada dela. O `sheets_edit` que mudaria essa célula espera a
+   * pessoa sair (até uns segundos; depois, E_BUSY ao agente). `sheet` é o nome da aba (no csv, ""); `row` e `col`, a
+   * partir de 0, as do arquivo.
+   */
+  "files.editing": { args: { path: string; owner: string; cell: { sheet: string; row: number; col: number } | null }; result: { ok: true } };
   /**
    * Um arquivo novo que o agente gerou (1.62.0, spec #11549): txt, csv, xlsx, docx ou pdf, em base64, até 25 MB. Nunca
    * por cima de outro: com o nome já usado na pasta, ele ganha um número. A versão é a do `files.read`.
@@ -1212,6 +1219,7 @@ export const UI_CAPABILITIES = [
   "notes.openPath",
   "files.read",
   "files.save",
+  "files.editing",
   "files.create",
   "files.delete",
   "files.rename",

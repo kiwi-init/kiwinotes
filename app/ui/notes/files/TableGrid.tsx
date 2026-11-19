@@ -33,6 +33,8 @@ export interface GridEdit {
   redo(): void;
   /** A fórmula que o Kiwi não sabe refazer: a célula fica marcada, e a barra diz por quê. */
   staleAt?(r: number, c: number): boolean;
+  /** A caixa de digitar abriu nesta célula, ou fechou (`null`), depois de gravar (T21114: o Kiwi Cat espera). */
+  editing?(cell: Cell | null): void;
 }
 
 /** A ordem e o filtro da vista (nada grava). `label`: o que está valendo, para o rodapé; `null` sem nenhum. */
@@ -73,6 +75,8 @@ interface GridProps {
   view?: GridView;
   /** O Kiwi Cat tocando a gravação dele por cima (T21114): o texto que ele digita, a etiqueta e o realce. */
   kiwi?: GridKiwi | null;
+  /** O Kiwi Cat inseriu ou apagou linhas: a caixa aberta vai para esta célula (`row` -1: ela saiu). `n` muda a cada vez. */
+  moveEditing?: { row: number; col: number; n: number } | null;
 }
 
 /** A coluna dos números das linhas: no mínimo esta largura (px). */
@@ -134,7 +138,7 @@ interface Editing {
  * dos números paradas. Todas as linhas e colunas: só as células que estão na tela são montadas, e a rolagem segue lisa
  * com 256 colunas e 100.000 linhas. As linhas e colunas vazias do fim não contam (na grade que edita, a folga fica).
  */
-export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal, columnTotal, widthMemory, name = "", rowNumbers, edit, view: viewSpec, zoomKey = "", kiwi }: GridProps) {
+export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal, columnTotal, widthMemory, name = "", rowNumbers, edit, view: viewSpec, zoomKey = "", kiwi, moveEditing }: GridProps) {
   const editable = !!edit;
   const { rows, columns } = useMemo(
     () => (editable ? { rows: rawRows, columns: rawColumns } : trimEmpty(rawHeader, rawRows, rawColumns)),
@@ -179,6 +183,25 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     editingRef.current = e;
     setEditingState(e);
   };
+  // O app sabe qual célula tem a caixa aberta (T21114). Fechar já gravou: a edição entrou antes deste aviso.
+  const editingAt = editing ? `${editing.row}:${editing.col}` : "";
+  const reportEditing = edit?.editing;
+  useEffect(() => {
+    const e = editingRef.current;
+    reportEditing?.(e ? { row: e.row, col: e.col } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingAt]);
+  // A linha da caixa andou com a gravação do gato: a caixa vai junto, com o que a pessoa já digitou.
+  useEffect(() => {
+    const e = editingRef.current;
+    if (!moveEditing || !e) return;
+    if (moveEditing.row < 0) setEditing(null);
+    else if (moveEditing.row !== e.row || moveEditing.col !== e.col) {
+      setEditing({ ...e, row: moveEditing.row, col: moveEditing.col });
+      setSelected({ row: moveEditing.row, col: moveEditing.col });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveEditing?.n]);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [find, setFind] = useState<{ query: string; index: number } | null>(null);
   const findInput = useRef<HTMLInputElement>(null);

@@ -13,6 +13,7 @@
 //   notas: a cópia de antes fica no registro do agente, e o [Desfazer] volta.
 
 import type { FileContent, FileSaveResult } from "../../notes/vault.ts";
+import type { EditingCell } from "../sheet-editing.ts";
 import type { SheetOp } from "../../shared/sheet/ops.ts";
 import { isTextFile, textNote } from "./reader.ts";
 
@@ -39,13 +40,18 @@ export interface VaultWriter {
   folder(): Promise<string | null>;
   /** Um arquivo novo (spec #11549): txt, csv, xlsx, docx ou pdf; com o nome já usado na pasta, ganha um número. */
   createFile(folder: string, name: string, bytes: Uint8Array): Promise<{ path: string; size: number; version: string }>;
-  /** Os bytes de uma planilha (T21114, spec #21065): xlsx, csv ou tsv, em base64, com a versão. */
+  /** Os bytes de uma planilha (T21114, spec #21033): xlsx, csv ou tsv, em base64, com a versão. */
   getBytes?(path: string): Promise<{ base64: string; version: string } | { tooLarge: true; limit: number }>;
   /**
    * Grava a planilha se ninguém a mudou desde `baseVersion`. As `sheetOps` (as operações que levaram aos bytes novos) são
    * para o Kiwi ao vivo: a grade toca cada uma na frente da pessoa.
    */
   saveBytes?(path: string, base64: string, baseVersion: string, sheetOps?: readonly SheetOp[]): Promise<{ saved: true; path: string; version: string } | { saved: false }>;
+  /**
+   * Espera a pessoa sair da célula que as `ops` mudariam (a caixa aberta numa planilha, T21114), por até `ms`. Dá a que
+   * ainda prende no fim, ou `null`; `waited` diz se houve espera.
+   */
+  waitCells?(path: string, ops: readonly SheetOp[], ms?: number): Promise<{ busy: EditingCell | null; waited: boolean }>;
 }
 
 /** As únicas capacidades que o escritor chama. */

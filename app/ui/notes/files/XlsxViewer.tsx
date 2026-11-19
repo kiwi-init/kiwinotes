@@ -31,7 +31,9 @@ export function XlsxViewer({ path, file, files, flushRef, kiwi }: FileViewerProp
   // O Kiwi Cat gravou: a aba onde ele mexeu vem para a frente (T21114).
   useEffect(() => {
     const at = session.kiwi ? kiwiSheetOf(session.kiwi.ops) : null;
-    if (at) setTab(at);
+    // Com a caixa aberta noutra aba, a pessoa fica onde está: trocar de aba levaria o que ela está digitando.
+    const busy = session.editingSheet();
+    if (at && (busy === null || busy.toLowerCase() === at.toLowerCase())) setTab(at);
     else if (session.kiwi) session.kiwiEnd();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.kiwi]);

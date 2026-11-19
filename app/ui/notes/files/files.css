@@ -820,7 +820,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* O Kiwi Cat editando a planilha ao vivo (T21114, spec #21065): a célula que ele digita ganha a moldura e o cursor
+/* O Kiwi Cat editando a planilha ao vivo (T21114, spec #21033): a célula que ele digita ganha a moldura e o cursor
    dele (a etiqueta do editor, `.kn-kiwi-*` em notes.css), a que ele já escreveu fica realçada na cor dele e o realce
    some sozinho no fim; a linha ou a coluna que ele inseriu entra devagar. */
 .kn-grid-cell[data-kiwi="typing"] {
