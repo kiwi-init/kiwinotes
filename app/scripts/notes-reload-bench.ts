@@ -114,6 +114,10 @@ try {
   await op("mover nota", (r) => v.moveNote(`Pasta 1/Renomeada ${r}.md`, "Pasta 2"));
   await op("apagar nota", (r) => v.delete(`Pasta 2/Renomeada ${r}.md`));
   await op("desfazer o apagar da nota", (r) => v.restore(`Pasta 2/Renomeada ${r}.md`));
+  // Um arquivo que não é nota (T20547): o `dados r.csv` mora em `folders[r * 13]`.
+  const fileAt = (r: number) => folders[(r * 13) % FOLDERS]!;
+  await op("renomear arquivo", (r) => v.renameFile(`${fileAt(r)}/dados ${r}.csv`, `${fileAt(r)}/tabela ${r}.csv`));
+  await op("mover arquivo", (r) => v.renameFile(`${fileAt(r)}/tabela ${r}.csv`, `Pasta 5/tabela ${r}.csv`));
   await op("criar pasta", (r) => v.createFolder(`Pasta 3/Nova pasta ${r}`));
   await op("renomear pasta (vazia)", (r) => v.moveFolder(`Pasta 3/Nova pasta ${r}`, `Pasta 3/Ideias ${r}`));
   // Uma pasta com notas dentro (as de `Pasta 10/Sub …` têm ~2 cada).

@@ -189,4 +189,38 @@ describe("sem o scan inteiro (T20166)", () => {
     expect(scans()).toBe(2);
     expect(view(v)).toEqual(await fresh(root));
   });
+
+  test("renomear e mover arquivo e pacote: zero scans, os links seguem e o índice bate com o disco (T20547)", async () => {
+    const { v, root, scans } = await setup();
+    writeFileSync(path.join(root, "Ideias.md"), "# Ideias\n\n[[Plano]] e ![[foto.png]]\n");
+    await v.reconcile();
+    const before = scans();
+    await v.renameFile("Diário/2026/foto.png", "Diário/2026/capa.png");
+    await v.renameFile("Projetos/Velhos/dados.csv", "Planilhas/dados.csv");
+    await v.renameFile("Projetos/Relatório.pages", "Arquivo/Relatório.pages");
+    expect(scans()).toBe(before);
+    expect(view(v)).toEqual(await fresh(root));
+    expect((await v.get("Ideias.md")).content).toContain("![[capa.png]]");
+  });
+
+  test("renomear arquivo: a nota que ganhou o link por fora, antes do watcher, também muda (T20547)", async () => {
+    const { v, root, scans } = await setup();
+    // Dentro do debounce do watcher: uma nota que já existia muda, e uma nova aparece, as duas citando o arquivo.
+    writeFileSync(path.join(root, "Ideias.md"), "# Ideias\n\n[[Plano]], ver [tabela](Projetos/Velhos/dados.csv)\n");
+    writeFileSync(path.join(root, "Nova.md"), "# Nova\n\n![[dados.csv]]\n");
+    const r = await v.renameFile("Projetos/Velhos/dados.csv", "Projetos/Velhos/numeros.csv");
+    expect(scans()).toBe(0);
+    expect(r.updatedLinks).toBe(2);
+    expect((await v.get("Ideias.md")).content).toContain("[tabela](Projetos/Velhos/numeros.csv)");
+    expect((await v.get("Nova.md")).content).toContain("![[numeros.csv]]");
+    expect(view(v)).toEqual(await fresh(root));
+  });
+
+  test("renomear arquivo para dentro de um pacote que o índice ainda não viu: recusa (T20547)", async () => {
+    const { v, root, scans } = await setup();
+    mkdirSync(path.join(root, "Projetos/Novo.key/Data"), { recursive: true });
+    writeFileSync(path.join(root, "Projetos/Novo.key/Index.zip"), "z");
+    await expect(v.renameFile("Projetos/Velhos/dados.csv", "Projetos/Novo.key/Data/dados.csv")).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    expect(scans()).toBe(0);
+  });
 });
