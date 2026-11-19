@@ -1,7 +1,7 @@
 // As capacidades `notes.*` do contrato (A1, T1316, src/shared/ui-contract.ts), do lado da janela Notas (T1317), mais as
 // de pastas do contrato 1.7.0 (T2468): `folders.*`, `notes.move|duplicate|restore|reveal`, o `ctime` e o `pinned`.
 
-import type { UiCapabilities } from "../../src/shared/ui-contract.ts";
+import type { UiCapabilities, UiEvents } from "../../src/shared/ui-contract.ts";
 
 /** Um projeto, como o `projects.list` devolve. */
 export type ProjectView = UiCapabilities["projects.list"]["result"]["projects"][number];
@@ -70,14 +70,7 @@ export interface TreePrefs {
  * inteiro, com o frontmatter), em ordem crescente e sem sobrepor; aplicados à `baseVersion`, dão a `version`. Um arquivo
  * que não é nota vem sem `edits`.
  */
-export interface AgentWrote {
-  path: string;
-  folderId?: string;
-  baseVersion?: string;
-  version?: string;
-  turnId?: string;
-  edits?: { from: number; to: number; removed: string; inserted: string }[];
-}
+export type AgentWrote = UiEvents["agent.wrote"];
 
 type Result<C extends keyof UiCapabilities> = Promise<UiCapabilities[C]["result"]>;
 

@@ -5,6 +5,7 @@
 // editor. Em qualquer dúvida (o frontmatter mudou, os trechos não fecham com o disco, a pessoa tem edição pendente), a
 // janela recarrega como sempre: a tela nunca mostra outro texto que não o do disco.
 
+import { applyLiveEdits } from "../../src/shared/live-edits.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
 import { applyKiwiEdits, bodyEdits, type KiwiEdit } from "./editor/kiwi-writing.ts";
 import type { AgentWrote } from "./types.ts";
@@ -47,6 +48,8 @@ export interface KiwiPlan {
 export function kiwiPlan(open: { content: string; version: string }, next: { content: string; version: string }, e: AgentWrote | null): KiwiPlan | null {
   if (!e?.edits || e.version !== next.version) return null;
   if (e.baseVersion !== undefined && e.baseVersion !== open.version) return null;
+  // Os trechos levam o arquivo aberto exatamente ao do disco (o `applyLiveEdits` do contrato confere o `removed`).
+  if (applyLiveEdits(open.content, e.edits) !== next.content) return null;
   const was = splitFrontmatter(open.content);
   const now = splitFrontmatter(next.content);
   if (was.frontmatter !== now.frontmatter) return null;
