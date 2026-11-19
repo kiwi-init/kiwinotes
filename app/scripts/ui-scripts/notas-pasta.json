@@ -3,7 +3,8 @@
   "query": { "section": "notes" },
   "steps": [
     {
-      "waitFor": ".kn-crumb-bt"
+      "waitFor": ".kn-crumb-bt",
+      "name": "o hub abre nas Notas (precisa do seletor falso: rode pelo `bun scripts/notas-pasta-check.ts`, não pelo `cli ui` sozinho)"
     },
     {
       "click": ".kn-crumb-bt"
@@ -31,7 +32,8 @@
     },
     {
       "expectText": ".kn-side-root-bt",
-      "text": "Obsidian de teste"
+      "text": "Obsidian de teste",
+      "name": "a raiz é a pasta que o seletor falso escolheu (precisa do seletor falso: rode pelo `bun scripts/notas-pasta-check.ts`, não pelo `cli ui` sozinho)"
     },
     {
       "press": "Escape"
