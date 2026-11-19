@@ -25,6 +25,7 @@ import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fil
 import { buildFile, CREATE_FORMATS, type CreateContent, type CreateFormat, type DocBlock } from "./files-create.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
 import { SHEETS_EDIT_CHANGES, SHEETS_READ_ROWS, SheetToolError, type SheetChange, sheetsEdit, sheetsRead } from "./sheets.ts";
+import { DOCX_EDIT_CHANGES, DOCX_READ_PARAGRAPHS, DocxToolError, type DocxChange, docxEdit, docxRead } from "./docx.ts";
 import { FACT_MAX_CHARS, MEMORY_MAX, MemoryError } from "../memory.ts";
 import {
   PROPOSAL_CANDIDATES_MAX,
@@ -87,6 +88,7 @@ export const KIWI_READ_TOOL_NAMES = [
   "project_status",
   "files_read",
   "sheets_read",
+  "docx_read",
 ] as const;
 export const KIWI_WRITE_TOOL_NAMES = [
   "notes_create",
@@ -100,6 +102,7 @@ export const KIWI_WRITE_TOOL_NAMES = [
   "project_diary_add",
   "files_create",
   "sheets_edit",
+  "docx_edit",
 ] as const;
 /** O diário do agente num projeto (spec #11469, T11670): a seção no fim da nota principal, uma linha com data por vez. */
 export const DIARY_SECTION = "Diário do agente";
@@ -299,6 +302,21 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     },
   },
   {
+    name: "docx_read",
+    title: "Ler os parágrafos de um docx",
+    description: `Lê os parágrafos de um docx do cofre, numerados, para mudá-lo com o docx_edit; os das tabelas também, na ordem. Devolve a versao e o total. Sem de/ate, os ${DOCX_READ_PARAGRAPHS} primeiros. Para só entender o conteúdo, o files_read também serve.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        caminho: { type: "string", description: "O caminho do docx no cofre (ex.: Projetos/Kiwi/proposta.docx)." },
+        de: { type: "integer", minimum: 1, description: "O primeiro parágrafo (a partir de 1)." },
+        ate: { type: "integer", minimum: 1, description: "O último parágrafo." },
+      },
+      required: ["caminho"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "notes_create",
     title: "Criar uma nota",
     description: `Cria uma nota nova numa pasta do Kiwi, com o título e o texto em Markdown. Se já existe uma nota com esse título na pasta, a nova ganha um número ("Título 2"): a resposta diz o caminho que ela ganhou. Até ${WRITE_MAX_CHARS} caracteres. Não cria notas de reunião.`,
@@ -476,6 +494,40 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
               coluna: { type: "string", description: "A letra da coluna: onde inserir, ou a primeira a apagar." },
               quantidade: { type: "integer", minimum: 1, maximum: 10000, description: "Quantas linhas ou colunas; sem ela, 1." },
               nome: { type: "string", description: "O nome da aba nova, ou o nome novo." },
+            },
+            required: ["tipo"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["caminho", "versao", "mudancas"],
+      additionalProperties: false,
+    },
+    writes: true,
+    replaces: true,
+  },
+  {
+    name: "docx_edit",
+    title: "Mudar um docx",
+    description: `Muda o texto de um docx do cofre na frente da pessoa: se ele está aberto, ela vê cada mudança. Leia antes com o docx_read e mande a versao; os números são os do docx_read, mesmo depois de inserir ou apagar. Mudanças: trocar (paragrafo, de: um trecho que aparece uma vez nele, para), reescrever (paragrafo, texto), inserir (depois_de: o número, 0 é o início; texto, uma linha por parágrafo novo) e apagar (paragrafo). O resto do arquivo (estilos, tabelas, imagens) fica como estava. Se a pessoa está escrevendo num parágrafo que você muda, o Kiwi espera ela sair; se demorar, nada é escrito e vem E_BUSY: mude os outros sem ele. Até ${DOCX_EDIT_CHANGES} mudanças por vez. Aparece na Atividade com [Desfazer].`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        caminho: { type: "string", description: "O caminho do docx no cofre." },
+        versao: { type: "string", description: "A versao que o docx_read devolveu." },
+        mudancas: {
+          type: "array",
+          minItems: 1,
+          maxItems: DOCX_EDIT_CHANGES,
+          items: {
+            type: "object",
+            properties: {
+              tipo: { type: "string", enum: ["trocar", "reescrever", "inserir", "apagar"] },
+              paragrafo: { type: "integer", minimum: 1, description: "O número do parágrafo no docx_read." },
+              de: { type: "string", description: "No trocar: o trecho de agora." },
+              para: { type: "string", description: "No trocar: o trecho novo (vazio apaga)." },
+              texto: { type: "string", description: "No reescrever e no inserir: o texto." },
+              depois_de: { type: "integer", minimum: 0, description: "No inserir: o parágrafo antes do novo (0 é o início)." },
             },
             required: ["tipo"],
             additionalProperties: false,
@@ -1405,6 +1457,17 @@ async function run(
         throw e;
       }
     }
+    case "docx_read": {
+      const a = args(raw, ["caminho", "de", "ate"]);
+      const path = str(a, "caminho", true)!.trim().replace(/^\/+/, "");
+      try {
+        const value = await docxRead(reader, { caminho: path, de: int(a, "de", 1, Number.MAX_SAFE_INTEGER), ate: int(a, "ate", 1, Number.MAX_SAFE_INTEGER) }, (t) => seen(path, t));
+        return { value, target: path };
+      } catch (e) {
+        if (e instanceof DocxToolError) throw new ToolError(e.code, e.message);
+        throw e;
+      }
+    }
     case "files_read": {
       const a = args(raw, ["caminho", "parte"]);
       const path = str(a, "caminho", true)!.trim().replace(/^\/+/, "");
@@ -1735,6 +1798,23 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
         };
       } catch (e) {
         if (e instanceof SheetToolError) throw new ToolError(e.code, e.message);
+        throw e;
+      }
+    }
+    case "docx_edit": {
+      const a = args(raw, ["caminho", "versao", "mudancas"]);
+      const path = str(a, "caminho", true)!.trim().replace(/^\/+/, "");
+      const versao = str(a, "versao", true, 200)!;
+      if (!Array.isArray(a.mudancas)) throw new ToolError("E_BAD_ARGS", "mudancas é uma lista");
+      try {
+        const r = await docxEdit(writer, journal, { caminho: path, versao, mudancas: a.mudancas as DocxChange[] }, (p, t) => restore(guard, p, t));
+        return {
+          value: { caminho: r.path, versao: r.version, mudou: `${a.mudancas.length} mudança(s)` },
+          target: r.path,
+          change: { kind: "replaced", path: r.path, before: r.before, after: r.after, version: r.version, copy: r.copy, ...where },
+        };
+      } catch (e) {
+        if (e instanceof DocxToolError) throw new ToolError(e.code, e.message);
         throw e;
       }
     }

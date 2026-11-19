@@ -54,6 +54,8 @@ export const ACOES: readonly Acao[] = [
   { fazer: "ler", como: "arquivo", tool: "files_read", alvo: "caminho" },
   // A planilha célula a célula, para mudar (T21114).
   { fazer: "ler", como: "celulas", tool: "sheets_read", alvo: "caminho" },
+  // O docx parágrafo a parágrafo, para mudar (T21231).
+  { fazer: "ler", como: "paragrafos", tool: "docx_read", alvo: "caminho" },
   { fazer: "ler", como: "projeto", tool: "project_status", alvo: "projeto" },
   { fazer: "escrever", como: "acrescentar", tool: "notes_append", alvo: "path", texto: "text", nomes: { secao: "section", versao: "version" }, padrao: true },
   { fazer: "escrever", como: "trocar", tool: "notes_write", alvo: "path", texto: "text", nomes: { secao: "section", versao: "version" } },
@@ -67,6 +69,7 @@ export const ACOES: readonly Acao[] = [
   { fazer: "escrever", como: "organizar", tool: "notes_organize_folder", alvo: "folder", cartao: true },
   { fazer: "escrever", como: "arquivo", tool: "files_create", alvo: "nome", cartao: true },
   { fazer: "escrever", como: "planilha", tool: "sheets_edit", alvo: "caminho", cartao: true },
+  { fazer: "escrever", como: "documento", tool: "docx_edit", alvo: "caminho", cartao: true },
   { fazer: "propor", como: "reuniao", tool: "meeting_propose", alvo: "reuniao", cartao: true },
   { fazer: "propor", como: "resumo", tool: "project_summary_propose", alvo: "projeto", cartao: true },
   { fazer: "propor", como: "referencias", tool: "notes_add_references", alvo: "nota", cartao: true },
@@ -295,6 +298,9 @@ export function cardsFor(request: string): Acao[] {
   // Mudar uma planilha que já existe (T21114): o verbo de mudar e a planilha, ou uma célula pelo nome (B3).
   if (has(/\b(mud\w*|atualiz\w*|preench\w*|coloq\w*|poe|ponha|corrij\w*|corrig\w*|edit\w*|insir\w*|inser\w*|apag\w*|som[ae]\w*|adicion\w*|acrescent\w*|troc\w*|renome\w*)\b/) && has(/\b(planilha|xlsx|csv|tsv|celulas?|colunas?|aba)\b|\b[a-z]{1,2}[0-9]{1,5}\b/))
     out.push("sheets_edit");
+  // Mudar um docx que já existe (T21231): o verbo de mudar e o documento.
+  if (has(/\b(mud\w*|atualiz\w*|coloq\w*|poe|ponha|corrij\w*|corrig\w*|edit\w*|insir\w*|inser\w*|apag\w*|adicion\w*|acrescent\w*|troc\w*|reescrev\w*|revis\w*)\b/) && has(/\b(docx|word|documento|paragrafos?)\b/))
+    out.push("docx_edit");
   if (has(/\borganiz\w*\b.*\b(pasta|todas as notas)\b/)) out.push("notes_organize_folder");
   if (has(/\breunia?o\b|\breunioes\b/) && has(/\b(propo\w*|proposta|ata|registr\w*|projeto)\b/)) out.push("meeting_propose");
   if (has(/\bresumo executivo\b|\b(status|ponto|situacao) d[oe]s? projeto\b|\bcomo (esta|anda|vai) o projeto\b/)) out.push("project_summary_propose");

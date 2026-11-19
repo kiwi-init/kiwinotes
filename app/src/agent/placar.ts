@@ -20,7 +20,7 @@ export type PlacarPartes = Record<PlacarParte, number>;
 
 /** As ferramentas do Kiwi que acham e as que leem (as mesmas da bateria). As outras escrevem ou propõem: são o pedido. */
 const ACHAR = new Set(["find", "notes_search", "notes_list", "projects_list", "meetings_list"]);
-const LER = new Set(["notes_read", "notes_outline", "files_read", "sheets_read", "meetings_get", "project_status"]);
+const LER = new Set(["notes_read", "notes_outline", "files_read", "sheets_read", "docx_read", "meetings_get", "project_status"]);
 
 export function parteDaFerramenta(tool: string, ok: boolean): PlacarParte {
   if (!ok || ACHAR.has(tool)) return "achar";

@@ -1,0 +1,21 @@
+// As mudanças que o Kiwi fez num docx (T21231, spec #21155), para o Kiwi ao vivo: o `docx_edit` grava os bytes novos e
+// manda estas operações no `agent.wrote`, e o docx aberto toca cada uma na frente da pessoa (o texto entrando, o realce).
+//
+// O parágrafo vai pelo id dele, o `w14:paraId` do arquivo: o mesmo na leitura do agente e no motor da tela, que é o mesmo
+// pacote. Num arquivo sem ele, os dois derivam o mesmo id a cada abertura, e a gravação o escreve. As posições são as
+// do texto do parágrafo no modelo do motor (a projeção `model`), cada operação sobre o resultado da anterior.
+
+export type DocxOp =
+  /** Troca `[from, to)` do parágrafo por `text` (vazio apaga o trecho). */
+  | { op: "replace"; paragraphId: string; from: number; to: number; text: string }
+  /** Um parágrafo novo com `text`, depois de `after` (null: no início do documento). `paragraphId` é o id que ele ganhou. */
+  | { op: "insert"; after: string | null; paragraphId: string; text: string }
+  /** Apaga o parágrafo inteiro. */
+  | { op: "delete"; paragraphId: string };
+
+/** Os parágrafos que as operações mudam ou apagam: a pessoa escrevendo num deles faz o gato esperar. */
+export function docxOpsTouch(ops: readonly DocxOp[]): Set<string> {
+  const out = new Set<string>();
+  for (const o of ops) if (o.op !== "insert") out.add(o.paragraphId);
+  return out;
+}

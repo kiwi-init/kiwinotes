@@ -1206,10 +1206,17 @@ export function uiCapabilities(deps: CapabilityDeps,
       return r;
     },
     "files.editing": (args) => {
-      const a = fields(args, "files.editing", ["path", "owner", "cell"]);
+      const a = fields(args, "files.editing", ["path", "owner", "cell", "paragraph"]);
       if (typeof a.path !== "string" || !a.path) throw bad("files.editing: path is the file's path");
       if (typeof a.owner !== "string" || !a.owner || a.owner.length > 100) throw bad("files.editing: owner is a short name");
-      const c = a.cell as { sheet?: unknown; row?: unknown; col?: unknown } | null;
+      // O parágrafo do docx com o cursor da pessoa (T21231).
+      if (a.paragraph !== undefined) {
+        if (a.cell !== undefined) throw bad("files.editing: cell or paragraph, not both");
+        if (a.paragraph !== null && (typeof a.paragraph !== "string" || !a.paragraph || a.paragraph.length > 64)) throw bad("files.editing: paragraph is a paragraph id or null");
+        deps.agent?.liveWrites.editing.setParagraph(a.owner, a.path.replace(/^\/+/, ""), a.paragraph as string | null);
+        return { ok: true as const };
+      }
+      const c = (a.cell ?? null) as { sheet?: unknown; row?: unknown; col?: unknown } | null;
       if (c !== null) {
         const pos = (n: unknown) => Number.isInteger(n) && (n as number) >= 0;
         if (!c || typeof c !== "object" || typeof c.sheet !== "string" || !pos(c.row) || !pos(c.col)) throw bad("files.editing: cell is {sheet, row, col} or null");

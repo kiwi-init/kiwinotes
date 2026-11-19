@@ -89,6 +89,12 @@ describe("a ferramenta única (T14563)", () => {
     await expect(runKiwiCall(ctx, { fazer: "escrever", alvo: "A.md", texto: "x" }, none)).rejects.toMatchObject({ code: "E_NOT_ALLOWED", tool: "notes_append" });
     await expect(runKiwiCall(ctx, { fazer: "propor", alvo: "R", opcoes: { como: "reuniao" } }, none)).rejects.toMatchObject({ code: "E_NOT_ALLOWED", tool: "meeting_propose" });
     await expect(runKiwiCall(ctx, { fazer: "lembrar", texto: "x" }, none)).rejects.toMatchObject({ code: "E_NOT_ALLOWED", tool: "memory_remember" });
+    // O docx (T21231): mudar é escrita, ler não precisa de permissão.
+    await expect(runKiwiCall(ctx, { fazer: "escrever", alvo: "a.docx", opcoes: { como: "documento", versao: "v", mudancas: [] } }, none)).rejects.toMatchObject({
+      code: "E_NOT_ALLOWED",
+      tool: "docx_edit",
+    });
+    expect(resolveKiwiCall({ fazer: "ler", alvo: "a.docx", opcoes: { como: "paragrafos" } })).toMatchObject({ tool: "docx_read" });
     await expect(runKiwiCall(ctx, { fazer: "voar" }, none)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
   });
 

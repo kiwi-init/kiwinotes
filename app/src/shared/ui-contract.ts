@@ -1,6 +1,7 @@
 import type { SetupPermission, SetupStatus } from "./first-run.ts";
 import type { NoteModel } from "./note-model.ts";
 import type { SheetOp } from "./sheet/ops.ts";
+import type { DocxOp } from "./docx/ops.ts";
 import type { SummarySettings } from "./summary-settings.ts";
 import type { AgentOnboarding } from "./agent-onboarding.ts";
 export type { AgentOnboarding } from "./agent-onboarding.ts";
@@ -263,7 +264,9 @@ export type { NoteModel };
 //   `files.version`, `files.restoreVersion`) e o `snapshot` do `files.save`, a cópia de antes na hora (o do agente). Só
 //   acréscimo.
 // 1.92.0 (T21152, spec #21080): o `files.save` com `base64` grava também o docx editado nas Notas. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.92.0";
+// 1.93.0 (T21231, spec #21155): as `docxOps` no `agent.wrote`, as mudanças que o Kiwi fez num docx, para o docx aberto
+//   mostrar cada uma, e o `paragraph` no `files.editing`, o parágrafo do docx com o cursor da pessoa. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.93.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -472,9 +475,10 @@ export interface UiCapabilities {
    * A célula com a caixa de edição aberta numa planilha (1.90.0, T21114, spec #21033), ou `null` quando ela fecha. O
    * `owner` é um nome qualquer da janela, o mesmo em cada chamada dela. O `sheets_edit` que mudaria essa célula espera a
    * pessoa sair (até uns segundos; depois, E_BUSY ao agente). `sheet` é o nome da aba (no csv, ""); `row` e `col`, a
-   * partir de 0, as do arquivo.
+   * partir de 0, as do arquivo. No docx (1.93.0, T21231), `paragraph` é o id do parágrafo com o cursor da pessoa
+   * (`null`: ela saiu), e o `docx_edit` que o mudaria espera do mesmo jeito.
    */
-  "files.editing": { args: { path: string; owner: string; cell: { sheet: string; row: number; col: number } | null }; result: { ok: true } };
+  "files.editing": { args: { path: string; owner: string; cell?: { sheet: string; row: number; col: number } | null; paragraph?: string | null }; result: { ok: true } };
   /**
    * Um arquivo novo que o agente gerou (1.62.0, spec #11549): txt, csv, xlsx, docx ou pdf, em base64, até 25 MB. Nunca
    * por cima de outro: com o nome já usado na pasta, ele ganha um número. A versão é a do `files.read`.
@@ -1347,7 +1351,7 @@ export interface UiEvents {
    * - Cada chamada de ferramenta é um evento, na ordem em que o agente escreveu; as de um pedido têm o mesmo `turnId`, e
    *   cada uma tem o `baseVersion` da anterior.
    */
-  "agent.wrote": { path: string; folderId?: string; baseVersion?: string; version?: string; turnId?: string; edits?: LiveEdit[]; sheetOps?: SheetOp[] };
+  "agent.wrote": { path: string; folderId?: string; baseVersion?: string; version?: string; turnId?: string; edits?: LiveEdit[]; sheetOps?: SheetOp[]; docxOps?: DocxOp[] };
   /** O hub aberto vai para uma seção (1.4.0, T2121): o menu da barra ou o atalho pediram. */
   "hub.navigate": { section: HubSection; path?: string };
   /** As atualizações mudaram (checando, baixando, pronta, a última checagem): a seção Sobre acompanha (1.6.0). */
