@@ -74,7 +74,8 @@ export interface ScenarioResult {
   cpu: CpuByRole | null;
   /** O segundo mais alto do principal (os roteiros do índice). */
   peak?: number;
-  limits: { label: string; max: number; got: number; ok: boolean }[];
+  /** `min`: a prova de que o roteiro mediu o que diz (a passada andou), em vez de um teto. */
+  limits: { label: string; max: number; min?: number; got: number; ok: boolean }[];
   skipped?: string;
   /** Os segundos que o repouso esperou o app assentar antes de medir (`waitQuiet`). */
   warmup?: number;
@@ -389,7 +390,7 @@ async function indexing(name: string, kind: "md" | "code", files: number, typing
       seconds: active,
       cpu: { main: avg, helper: 0, webview: 0, gpu: 0 },
       peak,
-      limits: limits.map(({ min, ...l }) => ({ ...l, ok: l.got <= l.max && l.got >= (min ?? -Infinity) })),
+      limits: limits.map((l) => ({ ...l, ok: l.got <= l.max && l.got >= (l.min ?? -Infinity) })),
     };
   } finally {
     await stop?.().catch(() => {});
@@ -428,7 +429,7 @@ if (import.meta.main) {
     console.log(`${name} (${r.seconds} s${r.warmup ? `, depois de ${r.warmup} s assentando` : ""}): main ${c.main}% · helper ${c.helper}% · webview ${c.webview}% · gpu ${c.gpu}%${r.peak != null ? ` · pico do main ${r.peak}%` : ""}`);
     for (const l of r.limits) {
       const unit = l.label.endsWith("(s)") ? "" : "%";
-      const ruler = Number.isFinite(l.max) ? `teto ${l.max}${unit}` : "tem de andar";
+      const ruler = l.min != null ? `mínimo ${l.min}${unit || " s"}` : `teto ${l.max}${unit}`;
       console.log(`  ${l.ok ? "ok " : Number.isFinite(l.max) ? "PASSOU" : "PAROU"} ${l.label}: ${l.got}${unit} (${ruler})`);
     }
   }
