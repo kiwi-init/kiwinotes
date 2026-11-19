@@ -807,6 +807,11 @@
   min-height: 0;
   overflow: auto;
   background: var(--surface-2);
+  /* As dicas que o motor mostra no cabeçalho e no rodapé ao editar (em inglês por padrão). */
+  --docx-hf-add-header: "Clique duas vezes para pôr um cabeçalho";
+  --docx-hf-add-footer: "Clique duas vezes para pôr um rodapé";
+  --docx-hf-edit-header: "Clique duas vezes para editar o cabeçalho";
+  --docx-hf-edit-footer: "Clique duas vezes para editar o rodapé";
 }
 /* Sem o anel de foco nas páginas: o motor põe o foco nelas ao abrir, e o papel não é um controle. */
 .kn-file-docx-scroll:focus,

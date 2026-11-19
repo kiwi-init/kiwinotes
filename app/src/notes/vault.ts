@@ -27,6 +27,7 @@ import { fillTemplate } from "../shared/templates.ts";
 import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
 import { canvasPath, fileNameFor, filePath, folderPath, inside, linkSafeTarget, notePath, VaultError } from "./paths.ts";
 import { CanvasParseError, parseCanvas, stringifyCanvas } from "../shared/json-canvas.ts";
+import { inspectDocx } from "../shared/docx-file.ts";
 import { inspectXlsx } from "../shared/sheet/xlsx.ts";
 import { applyTextEdits, headingFor, headingKey, markdownStructure } from "../shared/markdown-structure.ts";
 import { noteReferences, referenceTarget, rewriteFileReferences, rewriteHeadingReferences, rewriteNoteReferences, rewriteTag, validTag, type LinkWarning, type RefactorResult } from "./refactor.ts";
@@ -913,15 +914,15 @@ export class Vault {
   }
 
   /**
-   * Grava uma planilha do cofre (T21107, spec #21065): `.xlsx`, `.csv` e `.tsv`, com os bytes que a janela montou
+   * Grava uma planilha do cofre (T21107, spec #21065) ou um docx (T21152, spec #21080): `.xlsx`, `.csv`, `.tsv` e `.docx`, com os bytes que a janela montou
    * (`patchXlsx`, `writeDelimited`), só num arquivo que já existe e só se ninguém o mudou desde `baseVersion` (o hash dos
    * bytes, como no `readFile` binário). O csv grava na codificação que tem. Um xlsx só de leitura (senha, macro,
    * estrutura que o Kiwi não conhece) nunca é trocado, e bytes que não são um xlsx legível não vão para o disco.
    */
   async saveFileBytes(input: unknown, base64: unknown, baseVersion: unknown): Promise<FileSaveResult> {
     const p = filePath(input);
-    const ext = /\.(xlsx|csv|tsv)$/i.exec(p)?.[1]?.toLowerCase();
-    if (!ext) throw new VaultError("E_BAD_ARGS", "only xlsx, csv and tsv files are saved from bytes");
+    const ext = /\.(xlsx|csv|tsv|docx)$/i.exec(p)?.[1]?.toLowerCase();
+    if (!ext) throw new VaultError("E_BAD_ARGS", "only xlsx, csv, tsv and docx files are saved from bytes");
     if (typeof base64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new VaultError("E_BAD_ARGS", "base64 must be base64 text");
     if (typeof baseVersion !== "string") throw new VaultError("E_BAD_ARGS", "baseVersion must be a string");
     const bytes = new Uint8Array(Buffer.from(base64, "base64"));
@@ -933,6 +934,12 @@ export class Vault {
       const before = inspectXlsx(new Uint8Array(Buffer.from(current.base64, "base64")), p);
       if (!before.editable) throw new VaultError("E_BAD_ARGS", `${p} is read-only (${before.reason})`);
       if (!inspectXlsx(bytes, p).editable) throw new VaultError("E_BAD_ARGS", "the new content is not an xlsx Kiwi can read");
+    }
+    if (ext === "docx") {
+      // Um docx com senha, ou que não é um docx, nunca é trocado; e os bytes novos têm de ser um docx (T21152).
+      const before = inspectDocx(new Uint8Array(Buffer.from(current.base64, "base64")));
+      if (!before.editable) throw new VaultError("E_BAD_ARGS", `${p} is read-only (${before.reason})`);
+      if (!inspectDocx(bytes).editable) throw new VaultError("E_BAD_ARGS", "the new content is not a docx");
     }
     if (!(await this.replaceChecked(p, bytes, baseVersion))) return { saved: false, current: await this.readFile(p, "binary") };
     await this.fileWritten(p);

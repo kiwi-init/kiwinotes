@@ -9,7 +9,7 @@ declare global {
 }
 
 const bytes = new Uint8Array(await (await fetch("/doc.docx")).arrayBuffer());
-const r = mountDocx(document.getElementById("doc")!, bytes, { zoom: 1, onLink: () => {} });
+const r = mountDocx(document.getElementById("doc")!, bytes, { zoom: 1, editable: false, onEdit: () => {}, onLink: () => {} });
 if (!r.ok) throw new Error(r.reason);
 const docx = r.handle;
 const frame = () => new Promise((done) => requestAnimationFrame(done));
