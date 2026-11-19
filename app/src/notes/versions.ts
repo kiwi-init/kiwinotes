@@ -12,9 +12,12 @@
 // - Cada pasta guarda o caminho da nota num `note.json` (T7940): com o `index.json` vazio, cortado ou estragado, o índice
 //   se refaz pelas pastas, e as versões não somem. As duas escritas vão com `fsync` antes do rename, como o cofre.
 // - Uma pasta que ninguém reclama (de antes do `note.json`, com o índice perdido) só perde o que passou dos 30 dias.
+// - Todo arquivo que o Kiwi grava tem histórico, não só a nota (T21239, spec #21160): o texto (`.txt`, código, json…)
+//   entra como a nota, e o binário (xlsx, docx) entra em bytes, num `<carimbo>.bin`, com um teto de espaço por arquivo
+//   (`maxBinaryBytes`): passou, saem as mais antigas. O caminho do índice é o do arquivo no cofre, qualquer que seja.
 
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, open, readdir, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 export interface VersionInfo {
@@ -24,6 +27,9 @@ export interface VersionInfo {
   size: number;
 }
 
+/** O que uma versão guarda: o texto (a nota, o `.txt`, o código) ou os bytes (o xlsx, o docx). */
+export type VersionContent = string | Uint8Array;
+
 export interface VersionsOptions {
   /** `<dados do app>/history/notes`. */
   dir: string;
@@ -31,13 +37,23 @@ export interface VersionsOptions {
   minGapMs?: number;
   maxCount?: number;
   maxAgeMs?: number;
+  /** O teto das versões em bytes de um arquivo (T21239); o texto não tem teto. */
+  maxBinaryBytes?: number;
 }
 
 export const MIN_GAP_MS = 2 * 60_000;
 export const MAX_VERSIONS = 50;
 export const MAX_AGE_MS = 30 * 86_400_000;
+/** O teto por arquivo das versões em bytes (T21239, spec #21160): o número sai da medida do PR. */
+export const MAX_BINARY_BYTES = 200 * 1024 * 1024;
 
-const hash = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+const hash = (s: VersionContent) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+/** O texto vai num `.md` (como sempre foi), os bytes num `.bin`. */
+const TEXT_EXT = ".md";
+const BIN_EXT = ".bin";
+const extOf = (c: VersionContent) => (typeof c === "string" ? TEXT_EXT : BIN_EXT);
+/** O id da versão pelo nome do arquivo (`<carimbo>.md` ou `<carimbo>.bin`). */
+const idOfFile = (name: string) => name.replace(/\.(md|bin)$/, "");
 /** O carimbo da versão (e o nome do arquivo): a hora ISO sem `:` nem `.`, que ordena como texto. */
 const stampOf = (ms: number) => new Date(ms).toISOString().replace(/[:.]/g, "-");
 /** De volta: `2026-11-04T05-10-00-000Z` → `2026-11-04T05:10:00.000Z`. */
@@ -52,7 +68,7 @@ const NOTE_FILE = "note.json";
 const isVersionId = (id: unknown): id is string => typeof id === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(?:~\d+)?$/.test(id);
 
 interface Pending {
-  content: string;
+  content: VersionContent;
   timer: ReturnType<typeof setTimeout>;
 }
 
@@ -62,6 +78,7 @@ export class NoteVersions {
   private readonly minGapMs: number;
   private readonly maxCount: number;
   private readonly maxAgeMs: number;
+  private readonly maxBinaryBytes: number;
   /** path → id. Lido uma vez, gravado a cada mudança. */
   private index: Record<string, string> | null = null;
   /** A hora e o hash da última versão gravada de cada id. */
@@ -76,6 +93,7 @@ export class NoteVersions {
     this.minGapMs = o.minGapMs ?? MIN_GAP_MS;
     this.maxCount = o.maxCount ?? MAX_VERSIONS;
     this.maxAgeMs = o.maxAgeMs ?? MAX_AGE_MS;
+    this.maxBinaryBytes = o.maxBinaryBytes ?? MAX_BINARY_BYTES;
   }
 
   private serial<T>(fn: () => Promise<T>): Promise<T> {
@@ -90,12 +108,12 @@ export class NoteVersions {
    * Um save mudou a nota para `content`. `before` é o texto de antes: se a nota ainda não tem histórico, ele vira a 1ª
    * versão. Respeita o intervalo mínimo: dentro dele, a versão fica pendente.
    */
-  record(notePath: string, content: string, before?: string): Promise<void> {
+  record(notePath: string, content: VersionContent, before?: VersionContent): Promise<void> {
     return this.serial(async () => {
       const id = await this.idFor(notePath, true);
       const known = await this.latest(id);
       // A 1ª mudança de uma nota sem histórico: o texto de antes entra primeiro, e o novo logo em seguida.
-      const first = !known && before !== undefined && before !== content;
+      const first = !known && before !== undefined && hash(before) !== hash(content);
       if (first) await this.write(id, before, this.now() - 1);
       const last = await this.latest(id);
       if (last && last.hash === hash(content)) return this.cancel(notePath);
@@ -136,25 +154,35 @@ export class NoteVersions {
       if (!id) return [];
       const out: VersionInfo[] = [];
       for (const name of await this.files(id)) {
-        const vid = name.slice(0, -3);
-        const content = await readFile(path.join(this.noteDir(id), name), "utf8").catch(() => null);
-        if (content !== null) out.push({ id: vid, at: atOf(vid), size: Buffer.byteLength(content) });
+        const vid = idOfFile(name);
+        const s = await stat(path.join(this.noteDir(id), name)).catch(() => null);
+        if (s) out.push({ id: vid, at: atOf(vid), size: s.size });
       }
       return out.reverse();
     });
   }
 
-  /** O texto de uma versão. */
+  /** O texto de uma versão (a nota, o `.txt`, o código). Uma versão em bytes dá `E_BINARY`: ela se lê pelo `read`. */
   async get(notePath: string, versionId: unknown): Promise<{ content: string; at: string }> {
+    const v = await this.read(notePath, versionId);
+    if (typeof v.content !== "string") throw Object.assign(new Error(`version ${String(versionId)} of ${notePath} is binary`), { code: "E_BINARY" });
+    return { content: v.content, at: v.at };
+  }
+
+  /** Uma versão como foi guardada: o texto, ou os bytes (T21239). */
+  async read(notePath: string, versionId: unknown): Promise<{ content: VersionContent; at: string }> {
     if (!isVersionId(versionId)) throw Object.assign(new Error("bad version id"), { code: "E_BAD_ARGS" });
     const id = await this.serial(() => this.idFor(notePath, false));
-    const content = id ? await readFile(path.join(this.noteDir(id), `${versionId}.md`), "utf8").catch(() => null) : null;
-    if (content === null) throw Object.assign(new Error(`no version ${versionId} of ${notePath}`), { code: "E_NOT_FOUND" });
-    return { content, at: atOf(versionId) };
+    const dir = id ? this.noteDir(id) : null;
+    const text = dir ? await readFile(path.join(dir, `${versionId}${TEXT_EXT}`), "utf8").catch(() => null) : null;
+    if (text !== null) return { content: text, at: atOf(versionId) };
+    const bytes = dir ? await readFile(path.join(dir, `${versionId}${BIN_EXT}`)).catch(() => null) : null;
+    if (bytes === null) throw Object.assign(new Error(`no version ${versionId} of ${notePath}`), { code: "E_NOT_FOUND" });
+    return { content: new Uint8Array(bytes), at: atOf(versionId) };
   }
 
   /** Grava uma versão agora, sem esperar o intervalo (o restaurar: a volta também é uma versão). */
-  snapshot(notePath: string, content: string): Promise<void> {
+  snapshot(notePath: string, content: VersionContent): Promise<void> {
     return this.serial(async () => {
       this.cancel(notePath);
       const id = await this.idFor(notePath, true);
@@ -218,7 +246,7 @@ export class NoteVersions {
 
   private async files(id: string): Promise<string[]> {
     const names = await readdir(this.noteDir(id)).catch(() => [] as string[]);
-    return names.filter((n) => n.endsWith(".md") && isVersionId(n.slice(0, -3))).sort();
+    return names.filter((n) => /\.(md|bin)$/.test(n) && isVersionId(idOfFile(n))).sort((a, b) => (idOfFile(a) < idOfFile(b) ? -1 : idOfFile(a) > idOfFile(b) ? 1 : 0));
   }
 
   /**
@@ -289,7 +317,7 @@ export class NoteVersions {
    * Grava `name` em `dir` pelo temporário, com `fsync` antes do rename (o 0 byte do APFS num crash, T7940), como o
    * `writeDurable` do cofre, mas só para a pessoa (0600): é o texto das notas.
    */
-  private async durable(dir: string, name: string, content: string): Promise<void> {
+  private async durable(dir: string, name: string, content: VersionContent): Promise<void> {
     const tmp = path.join(dir, `.${name}-${randomBytes(4).toString("hex")}.tmp`);
     try {
       const fh = await open(tmp, "w", 0o600);
@@ -328,7 +356,7 @@ export class NoteVersions {
   private async pruneOrphan(id: string): Promise<void> {
     const oldest = this.now() - this.maxAgeMs;
     for (const name of await this.files(id))
-      if (Date.parse(atOf(name.slice(0, -3))) < oldest) await rm(path.join(this.noteDir(id), name), { force: true });
+      if (Date.parse(atOf(idOfFile(name))) < oldest) await rm(path.join(this.noteDir(id), name), { force: true });
     // Sem versão nenhuma, a pasta some, com o note.json junto (T8073).
     if (!(await this.files(id)).length) await rm(this.noteDir(id), { recursive: true, force: true }).catch(() => {});
   }
@@ -353,31 +381,54 @@ export class NoteVersions {
     const names = await this.files(id);
     const name = names.at(-1);
     if (!name) return null;
-    const content = await readFile(path.join(this.noteDir(id), name), "utf8").catch(() => null);
-    if (content === null) return null;
-    const info = { at: Date.parse(atOf(name.slice(0, -3))), hash: hash(content) };
+    const raw = await readFile(path.join(this.noteDir(id), name)).catch(() => null);
+    if (raw === null) return null;
+    // O hash do texto é o da string, como na gravação; o dos bytes, o dos bytes.
+    const info = { at: Date.parse(atOf(idOfFile(name))), hash: name.endsWith(TEXT_EXT) ? hash(raw.toString("utf8")) : hash(new Uint8Array(raw)) };
     this.last.set(id, info);
     return info;
   }
 
-  private async write(id: string, content: string, at: number): Promise<void> {
+  private async write(id: string, content: VersionContent, at: number): Promise<void> {
     const dir = this.noteDir(id);
     await mkdir(dir, { recursive: true, mode: 0o700 });
-    let name = `${stampOf(at)}.md`;
+    const ext = extOf(content);
+    const taken = new Set((await this.files(id)).map(idOfFile));
+    let stamp = stampOf(at);
     // Duas no mesmo milissegundo (raro): um sufixo que ordena depois da 1ª (o `~` vem depois do `.`, revisão #2826).
-    for (let n = 2; (await this.files(id)).includes(name); n++) name = `${stampOf(at)}~${n}.md`;
+    for (let n = 2; taken.has(stamp); n++) stamp = `${stampOf(at)}~${n}`;
+    const name = `${stamp}${ext}`;
     await this.durable(dir, name, content);
     this.last.set(id, { at, hash: hash(content) });
     await this.prune(id);
   }
 
-  /** Até `maxCount` versões e só as dos últimos `maxAgeMs`; a mais nova sempre fica. */
+  /**
+   * Até `maxCount` versões e só as dos últimos `maxAgeMs`; as em bytes, até `maxBinaryBytes` somadas (T21239), saindo
+   * as mais antigas. A mais nova sempre fica.
+   */
   private async prune(id: string): Promise<void> {
     const names = await this.files(id);
     const oldest = this.now() - this.maxAgeMs;
     const keep = new Set(names.slice(-this.maxCount));
+    const gone = new Set<string>();
     for (const name of names.slice(0, -1)) {
-      if (!keep.has(name) || Date.parse(atOf(name.slice(0, -3))) < oldest) await rm(path.join(this.noteDir(id), name), { force: true });
+      if (!keep.has(name) || Date.parse(atOf(idOfFile(name))) < oldest) {
+        await rm(path.join(this.noteDir(id), name), { force: true });
+        gone.add(name);
+      }
+    }
+    const bins = names.filter((n) => n.endsWith(BIN_EXT) && !gone.has(n));
+    if (!bins.length) return;
+    const sizes = new Map<string, number>();
+    for (const n of bins) sizes.set(n, (await stat(path.join(this.noteDir(id), n)).catch(() => null))?.size ?? 0);
+    let total = [...sizes.values()].reduce((a, b) => a + b, 0);
+    const newest = names.at(-1);
+    for (const n of bins) {
+      if (total <= this.maxBinaryBytes) break;
+      if (n === newest) break;
+      await rm(path.join(this.noteDir(id), n), { force: true });
+      total -= sizes.get(n)!;
     }
   }
 }

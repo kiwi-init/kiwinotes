@@ -159,7 +159,7 @@ export interface CapabilityDeps {
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
    * respondem lista vazia e E_NOT_FOUND, e o save não guarda versão.
    */
-  versions?: Pick<NoteVersions, "record" | "list" | "get" | "snapshot" | "flush" | "move">;
+  versions?: Pick<NoteVersions, "record" | "list" | "get" | "read" | "snapshot" | "flush" | "move">;
   /** Exportar nota (T2684). Sem ele, o `notes.export` dá E_NO_EXPORT. */
   exporter?: Pick<NoteExporter, "export">;
   /**
@@ -534,6 +534,24 @@ export function uiCapabilities(deps: CapabilityDeps,
     if (!deps.attachments) throw new CapabilityError("E_NO_ATTACHMENTS", "this host has no attachments",
       );
     return deps.attachments;
+  };
+  /**
+   * O conteúdo de agora de um arquivo que não é nota, como as versões guardam (T21239): o texto, ou os bytes. `null`
+   * quando não dá para guardar: grande demais, sumiu, ou um texto que não é UTF-8 (que o Kiwi não grava).
+   */
+  const fileContentOf = async (v: CapabilityDeps["notes"], p: unknown, binary: boolean): Promise<{ path: string; version: string; content: string | Uint8Array } | null> => {
+    const f = await v.readFile(p, binary ? "binary" : "text").catch(() => null);
+    if (!f || "tooLarge" in f) return null;
+    if ("base64" in f) return { path: f.path, version: f.version, content: new Uint8Array(Buffer.from(f.base64, "base64")) };
+    return f.readOnly ? null : { path: f.path, version: f.version, content: f.text };
+  };
+  /** Uma versão guardada, com o erro do histórico virando o da capacidade. */
+  const versionOf = async (p: string, id: unknown) => {
+    try {
+      return await deps.versions!.read(p, id);
+    } catch (e) {
+      throw new CapabilityError((e as { code?: string }).code ?? "E_FAILED", (e as Error).message);
+    }
   };
   const fields = (args: unknown, cap: string, allowed: string[]) => {
     const a = object(args, cap);
@@ -1110,14 +1128,52 @@ export function uiCapabilities(deps: CapabilityDeps,
       return (await vault()).readFile(a.path, a.as ?? "binary");
     },
     "files.save": async (args) => {
-      const a = fields(args, "files.save", ["path", "content", "base64", "baseVersion"]);
+      const a = fields(args, "files.save", ["path", "content", "base64", "baseVersion", "snapshot"]);
       if (a.base64 !== undefined && a.content !== undefined) throw bad("files.save: send content or base64, not both");
-      if (a.base64 !== undefined) {
-        const v = await vault();
-        if (!v.saveFileBytes) throw bad("files.save: this vault can't save spreadsheets");
-        return v.saveFileBytes(a.path, a.base64, a.baseVersion);
+      if (a.snapshot !== undefined && typeof a.snapshot !== "boolean") throw bad("files.save: snapshot must be true or false");
+      const v = await vault();
+      const binary = a.base64 !== undefined;
+      if (binary && !v.saveFileBytes) throw bad("files.save: this vault can't save spreadsheets");
+      // O de antes (T21239): a 1ª versão de um arquivo sem histórico, e a cópia na hora do agente (`snapshot`).
+      const before = deps.versions ? await fileContentOf(v, a.path, binary) : null;
+      if (a.snapshot === true && deps.versions && before && before.version === a.baseVersion)
+        await deps.versions.snapshot(before.path, before.content).catch((e) => console.error("[notes] versions:", e));
+      const r = binary ? await v.saveFileBytes!(a.path, a.base64, a.baseVersion) : await v.saveFile(a.path, a.content, a.baseVersion);
+      if (r.saved && deps.versions) {
+        const now = binary ? new Uint8Array(Buffer.from(a.base64 as string, "base64")) : (a.content as string);
+        await deps.versions.record(r.path, now, before?.content).catch((e) => console.error("[notes] versions:", e));
       }
-      return (await vault()).saveFile(a.path, a.content, a.baseVersion);
+      return r;
+    },
+    "files.versions": async (args) => {
+      const p = filePath(fields(args, "files.versions", ["path"]).path);
+      return { versions: deps.versions ? await deps.versions.list(p) : [] };
+    },
+    "files.version": async (args) => {
+      const a = fields(args, "files.version", ["path", "id"]);
+      const p = filePath(a.path);
+      if (!deps.versions) throw new CapabilityError("E_NOT_FOUND", "no version history");
+      const v = await versionOf(p, a.id);
+      return typeof v.content === "string" ? { content: v.content, at: v.at } : { base64: Buffer.from(v.content).toString("base64"), at: v.at };
+    },
+    "files.restoreVersion": async (args) => {
+      const a = fields(args, "files.restoreVersion", ["path", "id"]);
+      const p = filePath(a.path);
+      if (!deps.versions) throw new CapabilityError("E_NOT_FOUND", "no version history");
+      const v = await vault();
+      await deps.versions.flush(p);
+      const old = await versionOf(p, a.id);
+      const binary = typeof old.content !== "string";
+      if (binary && !v.saveFileBytes) throw bad("files.restoreVersion: this vault can't save spreadsheets");
+      const current = await fileContentOf(v, p, binary);
+      if (!current) throw new CapabilityError("E_BAD_ARGS", `${p} can't be restored (too large, or not text)`);
+      // O de agora vira uma versão antes (para dar para voltar do restaurar), e o restaurado também.
+      await deps.versions.snapshot(p, current.content);
+      const r = binary
+        ? await v.saveFileBytes!(p, Buffer.from(old.content).toString("base64"), current.version)
+        : await v.saveFile(p, old.content, current.version);
+      if (r.saved) await deps.versions.snapshot(p, old.content);
+      return r;
     },
     "files.editing": (args) => {
       const a = fields(args, "files.editing", ["path", "owner", "cell"]);
@@ -1142,7 +1198,10 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "files.rename": async (args) => {
       const a = fields(args, "files.rename", ["path", "newPath"]);
-      return (await vault()).renameFile(a.path, a.newPath);
+      const r = await (await vault()).renameFile(a.path, a.newPath);
+      // O histórico vai junto (T21239), como o da nota.
+      await deps.versions?.move((p) => (p === filePath(a.path) ? r.path : p));
+      return r;
     },
     "notes.canvasGet": async (args) => (await vault()).getCanvas(fields(args, "notes.canvasGet", ["path"]).path),
     "notes.canvasSave": async (args) => {

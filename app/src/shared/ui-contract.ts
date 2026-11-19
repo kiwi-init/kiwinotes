@@ -259,7 +259,10 @@ export type { NoteModel };
 //   acréscimo.
 // 1.90.0 (T21114, spec #21033): as `sheetOps` no `agent.wrote`, as operações da planilha que o Kiwi mudou, para a grade
 //   aberta mostrar cada uma, e o `files.editing`, a célula que a pessoa está editando, para o gato esperar. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.90.0";
+// 1.91.0 (T21239, spec #21160): o histórico de versões de todo arquivo que o Kiwi grava (`files.versions`,
+//   `files.version`, `files.restoreVersion`) e o `snapshot` do `files.save`, a cópia de antes na hora (o do agente). Só
+//   acréscimo.
+export const UI_CONTRACT_VERSION = "1.91.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -457,8 +460,11 @@ export interface UiCapabilities {
    * `content`, e a versão é a do `files.read` binário. O csv não precisa ser UTF-8 (a codificação dele fica). Um xlsx
    * que abre só para leitura (senha, macro, estrutura desconhecida), ou bytes novos que não são um xlsx legível, dão
    * E_BAD_ARGS com o motivo, e nada é escrito.
+   *
+   * Histórico (1.91.0, T21239): cada gravação entra nas versões do arquivo, com as regras da nota. `snapshot: true` (o
+   * que o agente manda) guarda já o de agora como versão, sem o intervalo de 2 minutos, se ele ainda está em `baseVersion`.
    */
-  "files.save": { args: { path: string; content?: string; base64?: string; baseVersion: string }; result: FileSaveResult };
+  "files.save": { args: { path: string; content?: string; base64?: string; baseVersion: string; snapshot?: boolean }; result: FileSaveResult };
   /**
    * A célula com a caixa de edição aberta numa planilha (1.90.0, T21114, spec #21033), ou `null` quando ela fecha. O
    * `owner` é um nome qualquer da janela, o mesmo em cada chamada dela. O `sheets_edit` que mudaria essa célula espera a
@@ -506,6 +512,15 @@ export interface UiCapabilities {
    */
   "notes.restoreVersion": { args: { path: string; id: string }; result: SaveResult;
   };
+  /**
+   * O mesmo histórico para os arquivos que não são nota (1.91.0, T21239, spec #21160): o texto (`.txt`, código, json…)
+   * e o que grava em bytes (xlsx, csv). As versões de um arquivo em bytes têm um teto de espaço por arquivo: passou,
+   * saem as mais antigas. A versão volta como `content` (texto) ou `base64` (bytes).
+   */
+  "files.versions": { args: { path: string }; result: { versions: { id: string; at: string; size: number }[] } };
+  "files.version": { args: { path: string; id: string }; result: { content: string; at: string } | { base64: string; at: string } };
+  /** Volta o arquivo para a versão `id`, como o `notes.restoreVersion`: o de agora e o restaurado viram versões. */
+  "files.restoreVersion": { args: { path: string; id: string }; result: FileSaveResult };
 
   // ---------------------------------------------------------------- exportar (1.15.0, T2684)
   /**
@@ -1241,6 +1256,9 @@ export const UI_CAPABILITIES = [
   "notes.versions",
   "notes.version",
   "notes.restoreVersion",
+  "files.versions",
+  "files.version",
+  "files.restoreVersion",
   "notes.export",
   "home.today",
   "home.pending",

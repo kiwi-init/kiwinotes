@@ -62,6 +62,7 @@ import { hasFilters, parseQuery, type SavedSearch, searchTooLong,
 import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { CanvasView } from "./canvas/CanvasView.tsx";
 import { FileView, type FilesApi } from "./files/FileView.tsx";
+import { hasTextVersions } from "../../src/shared/file-view.ts";
 import { allFolders, loadCollapsed, loadOpenFolders, saveCollapsed, saveOpenFolders, type SectionId, toggled } from "./sidebarState.ts";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
 import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, VaultFile, ExportFormat, TreePrefs, ProjectView,
@@ -1238,8 +1239,17 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     await open(n.path);
   };
 
-  /** "Versões…" (T2680): grava o que estiver pendente (a versão de agora entra no histórico) e abre o diálogo. */
+  /**
+   * "Versões…" (T2680): grava o que estiver pendente (a versão de agora entra no histórico) e abre o diálogo. Desde o
+   * T21239 (spec #21160), também o de um arquivo de texto: o texto de agora vem do disco, depois do que estava por gravar.
+   */
   const openVersions = async (path: string) => {
+    if (!/\.md$/i.test(path)) {
+      if (view === "file" && fileOpen === path && fileFlush.current && !(await fileFlush.current())) return;
+      const f = await api.files?.read?.(path, "text").catch(() => null);
+      if (f && "text" in f) setVersionsOf({ path, title: path.split("/").pop() ?? path, content: f.text });
+      return;
+    }
     if (current.current === path && !(await leave())) return;
     const n = await api.get(path).catch(() => null);
     if (n) setVersionsOf({ path, title: n.title, content: n.content });
@@ -1414,6 +1424,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         ...(shownHere ? [{ label: "Abrir no app padrão", onSelect: () => void api.files?.open(t.path).catch(failed_("abrir o arquivo")) }] : []),
         { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders },
         { label: "Copiar caminho", onSelect: () => copyPath(t.path) },
+        // O histórico do arquivo de texto (T21239), como o da nota.
+        ...(api.versions && hasTextVersions(t.path) ? [{ label: "Versões…", onSelect: () => void openVersions(t.path) }] : []),
         { kind: "separator" },
         { label: "Renomear", onSelect: () => setRenaming(sideKey(t)), disabled: !canMove },
         { label: "Mover para…", onSelect: () => setMoving(t), disabled: !canMove || !folders },
@@ -1862,6 +1874,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             onReveal={folders ? (p) => void folders.reveal(p).catch(failed_("mostrar no Finder")) : undefined}
             stat={statFile}
             kiwi={kiwiSheets}
+            onVersions={api.versions ? (p) => void openVersions(p) : undefined}
           />
           </>
         ) : view === "trash" && api.extras ? (
@@ -2208,6 +2221,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             const p = versionsOf.path;
             setVersionsOf(null);
             void refresh();
+            // O arquivo de texto aberto relê do disco sozinho, pelo aviso de mudança do cofre (T21239).
             // A nota aberta é a restaurada: o editor mostra o texto de volta.
             if (current.current === p) api.get(p).then((n) => show(n), () => {},
               );
