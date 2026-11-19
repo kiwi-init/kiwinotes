@@ -6,12 +6,12 @@
 //   bun run cli start --data DIR --no-helper
 //   bun run cli ui notes --script scripts/ui-scripts/busca-documentos.json --out DIR/prints --data DIR
 
+import { Document, Packer, Paragraph, TextRun } from "docx";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import * as XLSX from "xlsx";
 
-import { zipBytes } from "../test/office-files.ts";
 
 const dir = process.argv[2];
 if (!dir) throw new Error("uso: bun scripts/busca-documentos-seed.ts DIR");
@@ -27,12 +27,25 @@ for (let n = 1; n <= 4; n++) {
   if (n === 3) page.drawText("A graviola chegou na sexta.", { x: 50, y: 60, size: 14, font });
 }
 
-// O docx: a palavra no parágrafo 30, depois de um título e de uma lista.
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-const p = (t: string) => `<w:p><w:r><w:t xml:space="preserve">${esc(t)}</w:t></w:r></w:p>`;
-const W = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"`;
-const body = [p("Relatório da feira"), ...Array.from({ length: 28 }, (_, i) => p(`Item ${i + 1}: a banca de caju abriu cedo e fechou às seis.`)), p("A graviola chegou na sexta, e a banca dela fechou mais tarde."), ...Array.from({ length: 20 }, (_, i) => p(`Nota ${i + 1}: sem novidade.`))].join("");
-const docx = zipBytes({ "word/document.xml": `<?xml version="1.0" encoding="UTF-8"?><w:document ${W}><w:body>${body}</w:body></w:document>` }, { deflate: true });
+// O docx: a palavra no parágrafo 30, depois de um título e de 28 itens. Um docx inteiro (o pacote `docx`, como o do
+// docx-check), que o motor do visualizador abre.
+const par = (t: string) => new Paragraph({ children: [new TextRun(t)] });
+const docx = new Uint8Array(
+  await Packer.toBuffer(
+    new Document({
+      sections: [
+        {
+          children: [
+            par("Relatório da feira"),
+            ...Array.from({ length: 28 }, (_, i) => par(`Item ${i + 1}: a banca de caju abriu cedo e fechou às seis.`)),
+            par("A graviola chegou na sexta, e a banca dela fechou mais tarde."),
+            ...Array.from({ length: 20 }, (_, i) => par(`Nota ${i + 1}: sem novidade.`)),
+          ],
+        },
+      ],
+    }),
+  ),
+);
 
 // O xlsx: a palavra na aba de trás, na C40.
 const wb = XLSX.utils.book_new();
