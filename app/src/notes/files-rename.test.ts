@@ -193,3 +193,21 @@ describe("o menu da árvore num pacote (.pages) (T20402)", () => {
     expect(await code(v.deleteFile("Relatório.pages", "x"))).toBe("E_NOT_FOUND");
   });
 });
+
+describe("mover um arquivo para uma pasta que ainda não existe (T20516)", () => {
+  test("a pasta nova, e as de cima dela, entram na lista na hora, como num cofre aberto do zero", async () => {
+    const { v, root } = await vault({ "docs/exemplo.pdf": "pdf", "docs/dados.csv": "a\n" });
+    const changed: string[][] = [];
+    v.onChanged((p) => changed.push(p));
+    await v.renameFile("docs/exemplo.pdf", "Nova/Funda/exemplo.pdf");
+    await v.renameFile("docs/dados.csv", "Outra/dados.csv");
+    for (const f of ["Nova", "Nova/Funda", "Outra"]) expect(v.folderList()).toContain(f);
+    // A árvore fica sabendo pelo aviso, como no criar pasta.
+    expect(changed.flat()).toEqual(expect.arrayContaining(["Nova/Funda", "Nova", "Outra"]));
+    expect([...v.list().folders].sort()).toEqual(["Nova", "Nova/Funda", "Outra", "docs"]);
+    const fresh = new Vault({ root });
+    vaults.push(fresh);
+    await fresh.open();
+    expect([...v.list().folders].sort()).toEqual([...fresh.list().folders].sort());
+  });
+});

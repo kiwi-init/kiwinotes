@@ -979,6 +979,13 @@ export class Vault {
     // Um pacote muda de lugar como arquivo, com a marca de pacote junto (T20402).
     if (this.packages.delete(from)) this.packages.add(to);
     if (this.files.delete(from)) this.filesChanged([from]);
+    // A pasta de destino que o `mkdir` criou (e as de cima dela) entra na lista na hora, como no criar pasta (T20516).
+    const madeFolders: string[] = [];
+    for (let up = parentOf(to); up && !this.folders.has(up); up = parentOf(up)) {
+      this.folders.add(up);
+      madeFolders.push(up);
+    }
+    if (madeFolders.length) this.emit(madeFolders);
     await this.fileWritten(to, [from]);
     const resolveBefore = makeFileResolver(before);
     const resolveAfter = makeFileResolver(after);
