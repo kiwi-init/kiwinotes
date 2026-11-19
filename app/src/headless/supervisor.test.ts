@@ -2,11 +2,18 @@
 import { expect, test } from "bun:test";
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
+import { request } from "../../scripts/cli.ts";
 import { tempDir } from "../../test/tmp.ts";
 const app = path.resolve(import.meta.dirname, "../..");
 const helper = path.join(app, "test/helpers/supervisor-helper.ts");
+/**
+ * O headless de um teste, com o CLI de verdade. O `run` tem o próprio prazo, menor que o do teste (T22227): se o teste
+ * estourasse o do `bun test`, o `finally` não rodava, e o headless e o helper falso ficavam vivos, caindo e subindo de
+ * novo, e pesando nos testes seguintes.
+ */
 async function rig(
   mode: "crash" | "hang",
+  deadlineMs: number,
   run: (
     cli: (...args: string[]) => Promise<any>,
     data: string,
@@ -41,7 +48,15 @@ async function rig(
   };
   try {
     await cli("start");
-    await run(cli, data);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`rig: o teste passou de ${deadlineMs} ms`)), deadlineMs);
+    });
+    try {
+      await Promise.race([run(cli, data), late]);
+    } finally {
+      clearTimeout(timer);
+    }
   } finally {
     try {
       await cli("stop");
@@ -51,17 +66,22 @@ async function rig(
     rmSync(data, { recursive: true, force: true });
   }
 }
+/**
+ * Espera o status do headless pelo socket de controle, neste processo (T22227). Cada `cli status` sobe um Bun inteiro
+ * (~1 s, 3 s a frio); a cada 60 ms, com outros testes rodando, a espera passava dos 25 s só nesses processos. O CLI de
+ * verdade segue no `start`, no `stop`, no `invoke` e na última conferência do status.
+ */
 async function waitStatus(
-  cli: (...args: string[]) => Promise<any>,
+  data: string,
   check: (value: any) => boolean,
-  timeout = 15000,
+  timeout = 40000,
 ) {
   const until = Date.now() + timeout;
   let value: any;
   do {
-    value = (await cli("status")).value;
-    if (check(value)) return value;
-    await Bun.sleep(60);
+    value = ((await request(data, { cmd: "status" }, 2000)) as { value?: unknown } | null)?.value;
+    if (value && check(value)) return value;
+    await Bun.sleep(100);
   } while (Date.now() < until);
   throw new Error(`status deadline: ${JSON.stringify(value)}`);
 }
@@ -77,8 +97,10 @@ async function waitLog(data: string, line: RegExp, timeout = 5000) {
   return log;
 }
 test("CLI: five ready/crash cycles stop and show the real tray warning; exits reach diagnostics", async () => {
-  await rig("crash", async (cli, data) => {
-    const status = await waitStatus(cli, (s) => s.helper === "failed");
+  // O mínimo é o backoff de verdade (0,5 + 1 + 2 + 4 s) e cinco helpers que sobem; numa máquina cheia, cada processo
+  // do Bun (o helper e cada chamada do CLI) leva de 1 a 3 s. O prazo cobre isso, e o `stop` cabe depois dele.
+  await rig("crash", 45000, async (cli, data) => {
+    const status = await waitStatus(data, (s) => s.helper === "failed");
     expect(status.menuLabel).toBe("O ditado está com problema");
     expect(status.session.supervision).toMatchObject({
       state: "failed",
@@ -100,10 +122,10 @@ test("CLI: five ready/crash cycles stop and show the real tray warning; exits re
     await Bun.sleep(150);
     expect((await cli("status")).value.helper).toBe("failed");
   });
-}, 25000);
+}, 60000);
 test("CLI: stop kills an actual fake process that ignores SIGTERM and socket close", async () => {
-  await rig("hang", async (cli, data) => {
-    await waitStatus(cli, (s) => s.helper === "ready");
+  await rig("hang", 22000, async (cli, data) => {
+    await waitStatus(data, (s) => s.helper === "ready");
     const before = readFileSync(path.join(data, "headless.out"), "utf8");
     const pid = Number(before.match(/supervisor spawn pid=(\d+)/)?.[1]);
     expect(pid).toBeGreaterThan(0);
@@ -124,4 +146,4 @@ test("CLI: stop kills an actual fake process that ignores SIGTERM and socket clo
     expect(log).toContain("signal=SIGKILL reason=stop");
     expect(log).toMatch(/supervisor exit .*signal=SIGKILL/);
   });
-}, 15000);
+}, 35000);
