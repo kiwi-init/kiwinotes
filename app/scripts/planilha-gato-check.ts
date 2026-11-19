@@ -4,7 +4,8 @@
 //
 // - O gato grava: a janela aberta recarrega do disco e toca as operações por cima, célula por célula, com a etiqueta
 //   dele; no fim as células ficam realçadas e o realce some; a grade fica igual ao arquivo.
-// - A linha que ele insere entra na grade, e a fórmula recalcula.
+// - A linha que ele insere entra na grade, e a fórmula recalcula. A coluna também entra, e a célula fora da tela faz a
+//   grade rolar até ela (T22504).
 // - Uma tecla no meio pula para o fim.
 // - Com Reduzir movimento, tudo de uma vez, com o realce.
 // - A pessoa editando junto: a caixa aberta noutra célula segue a célula; a edição ainda por gravar é refeita sobre a
@@ -48,6 +49,16 @@ const book = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(book, estoque, "Estoque");
 XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["Fornecedor"], ["Empresa X"]]), "Fornecedores");
 put("Loja/estoque.xlsx", new Uint8Array(XLSX.write(book, { type: "array", bookType: "xlsx", compression: true }) as ArrayBuffer));
+// O inventário do depósito de exemplo (T22504): 80 itens, mais do que cabe na tela, para a coluna que entra e a rolagem.
+put(
+  "Loja/inventario.xlsx",
+  (() => {
+    const b = XLSX.utils.book_new();
+    const rows = [["Item", "Qtd", "Local"], ...Array.from({ length: 80 }, (_, i) => [`Item ${i + 1}`, (i * 7) % 30, `Prateleira ${(i % 6) + 1}`])];
+    XLSX.utils.book_append_sheet(b, XLSX.utils.aoa_to_sheet(rows), "Inventário");
+    return new Uint8Array(XLSX.write(b, { type: "array", bookType: "xlsx", compression: true }) as ArrayBuffer);
+  })(),
+);
 put("Loja/clientes.csv", "Nome;Cidade;Pedidos\r\nAna;Cidade A;3\r\nBeto;Cidade B;5\r\n");
 
 const registry = fakeRegistry([
@@ -183,6 +194,48 @@ try {
       await p.waitForSelector(".kn-file-table-wrap[data-kiwi-play='fading']", { timeout: 1000 });
       assert.equal(await text(p, 5, 1), "Lápis preto");
       checks.push("uma tecla no meio pula para o fim, com tudo escrito");
+      assert.deepEqual(w.report.problems, [], "problemas na página");
+    } finally {
+      await w.close();
+    }
+  }
+
+  // 2b. A coluna que o gato insere aparece entrando, e a célula fora da tela faz a grade rolar até ela (T22504).
+  {
+    const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 900, height: 480, motion: true, browser: "webkit", query: { note: "Loja/inventario.xlsx" } });
+    const p = w.page;
+    const grid = p.locator(".kn-grid");
+    try {
+      await p.waitForSelector(".kn-file[data-state='ready'] .kn-grid .kn-grid-cell", { timeout: 15000 });
+      await catEdits("Loja/inventario.xlsx", [
+        { tipo: "inserir_colunas", coluna: "B", quantidade: 1 },
+        { tipo: "celulas", celulas: { B1: "Lote", B2: "L-01", B3: "L-02" } },
+      ]);
+      // Enquanto o gato toca, as células da coluna B (a coluna 3 da grade, depois da dos números) entram; as outras não.
+      await p.waitForSelector(".kn-file-table-wrap[data-kiwi-play='on'] .kn-grid-cell[data-kiwi-new]", { timeout: 5000 });
+      const cols = await p.locator(".kn-grid-cell[data-kiwi-new]").evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute("aria-colindex")))]);
+      assert.deepEqual(cols, ["3"], `as células que entram são só as da coluna nova: ${JSON.stringify(cols)}`);
+      assert.ok((await p.locator(".kn-grid-cell[data-kiwi-new]").count()) >= 8, "a coluna inteira na tela entra, não só as que ele escreveu");
+      assert.equal(await p.locator(".kn-grid-cell[data-kiwi-new][aria-colindex='3']").first().evaluate((e) => getComputedStyle(e).animationName), "kn-kiwi-cell-in");
+      await shot(p, "09-coluna-entrando");
+      await p.waitForFunction(() => !document.querySelector(".kn-file-table-wrap[data-kiwi-play]"), null, { timeout: 10000 });
+      assert.equal(await p.locator(".kn-grid-cell[data-kiwi-new]").count(), 0, "no fim, nada mais entrando");
+      assert.equal(await text(p, 1, 2), "Lote");
+      assert.equal(await text(p, 2, 3), "0");
+      checks.push("a coluna que o gato insere entra na grade (só as células dela, com a animação), e no fim fica igual ao arquivo");
+
+      // A linha 70 está fora da tela: a grade rola até ela quando o gato digita lá.
+      assert.equal(await grid.evaluate((e) => e.scrollTop), 0);
+      assert.equal(await p.locator(cellAt(70, 3)).count(), 0, "a linha 70 começa fora da tela");
+      await catEdits("Loja/inventario.xlsx", [{ tipo: "celulas", celulas: { C70: 12 } }]);
+      await p.waitForSelector(`${cellAt(70, 3)}[data-kiwi='typing']`, { timeout: 5000 });
+      assert.ok((await grid.evaluate((e) => e.scrollTop)) > 0, "a grade rolou");
+      const [g, c] = await Promise.all([grid.boundingBox(), p.locator(cellAt(70, 3)).boundingBox()]);
+      assert.ok(g && c && c.y >= g.y && c.y + c.height <= g.y + g.height, `a célula ficou na tela: ${JSON.stringify({ g, c })}`);
+      await shot(p, "10-grade-rola-ate-a-celula");
+      await p.waitForFunction(() => !document.querySelector(".kn-file-table-wrap[data-kiwi-play]"), null, { timeout: 10000 });
+      assert.equal(await text(p, 70, 3), "12");
+      checks.push("a célula fora da tela: a grade rola até ela enquanto o gato digita, e ela fica visível");
       assert.deepEqual(w.report.problems, [], "problemas na página");
     } finally {
       await w.close();

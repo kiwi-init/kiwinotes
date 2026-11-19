@@ -82,6 +82,23 @@ describe("a ferramenta única (T14563)", () => {
     await expect(runKiwiCall(ctx, { fazer: "voar" }, none)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
   });
 
+  test("a planilha passa pela mesma permissão da nota: sem escrita, o escrever planilha volta E_NOT_ALLOWED (T22504, spec #21033)", async () => {
+    const ctx = {} as KiwiToolContext;
+    const none = { writes: false, proposes: false, memory: false };
+    const planilha = { fazer: "escrever", alvo: "Loja/estoque.xlsx", opcoes: { como: "planilha", versao: "v1", mudancas: [{ celulas: { B2: 3 } }] } };
+    const nota = { fazer: "escrever", alvo: "Loja/estoque.md", texto: "x" };
+    await expect(runKiwiCall(ctx, planilha, none)).rejects.toMatchObject({ code: "E_NOT_ALLOWED", tool: "sheets_edit" });
+    await expect(runKiwiCall(ctx, nota, none)).rejects.toMatchObject({ code: "E_NOT_ALLOWED", tool: "notes_append" });
+    // As mensagens são as mesmas: o "só lê" da sessão vale para as duas.
+    const [p, n] = await Promise.all([runKiwiCall(ctx, planilha, none).catch((e) => e), runKiwiCall(ctx, nota, none).catch((e) => e)]);
+    expect(p.message).toContain("o Kiwi só lê");
+    expect(n.message).toContain("o Kiwi só lê");
+    // E a definição da sheets_edit só aparece na lista quando a sessão escreve, como a das notas.
+    expect(kiwiTools(false).map((t) => t.name)).not.toContain("sheets_edit");
+    expect(kiwiTools(true).map((t) => t.name)).toContain("sheets_edit");
+    expect(kiwiTools(false).map((t) => t.name)).toContain("sheets_read");
+  });
+
   test("o cartão: as instruções longas da ação, com os campos com o nome de fora", () => {
     const meeting = ACOES.find((a) => a.tool === "meeting_propose")!;
     const card = instructionCard(meeting);

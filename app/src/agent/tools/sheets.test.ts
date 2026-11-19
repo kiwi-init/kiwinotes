@@ -215,11 +215,13 @@ describe("sheets_edit com a pessoa editando (T21114, spec #21033)", () => {
   };
 
   test("noutra célula, o gato grava na hora", async () => {
-    const { ctx, disk, editing } = withEditing({ "estoque.xlsx": ESTOQUE });
+    // O prazo é longo (5 s): se o gato esperasse a pessoa sair de A3, ele levaria os 5 s. Bem abaixo disso é "na hora",
+    // sem depender de quanto a máquina está ocupada (com 50 ms contra um prazo de 60, ele falhava com carga, T22504).
+    const { ctx, disk, editing } = withEditing({ "estoque.xlsx": ESTOQUE }, 5_000);
     editing.set("janela", "estoque.xlsx", { sheet: "Estoque", row: 3, col: 0 });
     const t0 = Date.now();
     await runKiwiTool(ctx, "sheets_edit", { caminho: "estoque.xlsx", versao: bytesVersion(ESTOQUE), mudancas: [{ tipo: "celulas", celulas: { C2: 10 } }] });
-    expect(Date.now() - t0).toBeLessThan(50);
+    expect(Date.now() - t0).toBeLessThan(2_500);
     expect(cell(disk.get("estoque.xlsx")!, "Estoque", "C2")?.value).toBe(10);
   });
 
