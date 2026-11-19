@@ -150,6 +150,18 @@ jobs:
         timeout-minutes: 10
         run: bun scripts/hub-tabs-ui-check.ts
 
+      # A primeira abertura (T23565, specs #20780 e #20828): a boas-vindas (e o balão que espera a intro), o que o Kiwi
+      # faz, e o passo das permissões e do modelo. Cada roteiro sobe o próprio headless num tmp, com o agente e as
+      # permissões de mentira. Rodavam só à mão.
+      - name: onboarding-checks
+        if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
+        run: |
+          for c in welcome showcase first-run; do
+            echo "== $c-check"
+            bun scripts/$c-check.ts "$RUNNER_TEMP/$c" || exit 1
+          done
+
       - name: hub-goo-check
         if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10

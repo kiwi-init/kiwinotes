@@ -35,14 +35,30 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const systemReduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** O balão que se escreve: um clique nele mostra o texto inteiro. O leitor de tela lê o texto inteiro de uma vez. */
+/**
+ * O hub ainda não está na tela (T23565): segurado para a intro (`__kiwiHeld`, até o `__kiwiReveal`) ou com a janela
+ * escondida. Na abertura do zero, a boas-vindas monta atrás da intro.
+ */
+const offScreen = () => window.__kiwiHeld === true || document.visibilityState === "hidden";
+
+/**
+ * O balão que se escreve: um clique nele mostra o texto inteiro. O leitor de tela lê o texto inteiro de uma vez. O
+ * relógio começa no primeiro quadro com o hub na tela (T23565): antes, ele começava ao montar, atrás da intro, e o rAF
+ * parado na janela escondida pulava direto para o texto inteiro quando o hub aparecia.
+ */
 function TypedBubble({ reduced, onTyped }: { reduced: boolean; onTyped: () => void }) {
   const [shown, setShown] = useState(() => typedLength(WELCOME_TEXT, 0, reduced));
   const typed = shown >= WELCOME_TEXT.length;
   useEffect(() => {
     if (typed) return onTyped();
-    const start = performance.now();
+    let start: number | null = null;
     let frame = requestAnimationFrame(function tick(now) {
+      if (offScreen()) {
+        start = null;
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+      start ??= now;
       const n = typedLength(WELCOME_TEXT, now - start, reduced);
       setShown(n);
       if (n < WELCOME_TEXT.length) frame = requestAnimationFrame(tick);

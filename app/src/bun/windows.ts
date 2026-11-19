@@ -551,7 +551,7 @@ export async function prepareHub(): Promise<boolean> {
   );
   const hub = open.get("hub");
   if (!hub || hub.isVisible()) return false;
-  hub.webview.executeJavascript("window.__kiwiHold?.()");
+  hub.webview.executeJavascript("window.__kiwiHeld = true; window.__kiwiHold?.()");
   return true;
 }
 
@@ -566,7 +566,7 @@ export async function revealHub(): Promise<boolean> {
     hub.show();
     hub.activate();
     setHubFocused(true);
-    hub.webview.executeJavascript("window.__kiwiReveal?.()");
+    hub.webview.executeJavascript("window.__kiwiHeld = false; window.__kiwiReveal?.()");
     return true;
   } catch (e) {
     log("hub", `couldn't show the window: ${e instanceof Error ? e.message : String(e)}`);
