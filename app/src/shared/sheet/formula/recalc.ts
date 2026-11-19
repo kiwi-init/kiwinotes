@@ -1,8 +1,12 @@
 // O recálculo das fórmulas (T21108, spec #21065, parte 3): mudou um número, o resultado das fórmulas que dependem dele
 // muda na tela e no arquivo. Quem calcula é o HyperFormula (GPL-3.0, ~400 funções do Excel), sem tela.
 //
+// - `calibrate(grid)`, uma vez, ao abrir o arquivo: a fórmula em que o HyperFormula não chega ao valor que o Excel
+//   gravou (`INT(-1,5)`, um `TEXTO` com formato que ele não lê, `AGORA()`) fica marcada, com o valor do Excel, e toda
+//   fórmula que depende dela também. É o que pega a próxima diferença entre os dois que ninguém listou.
 // - `recalc(grid)` devolve a grade com o `value` e o `text` de cada fórmula refeitos. A grade chama depois de cada
-//   `applyToGrid` (T21109).
+//   `applyToGrid` (T21109). A marca é para sempre: a fórmula marcada não ganha valor do HyperFormula até a pessoa
+//   reescrevê-la. O valor que bate com o gravado (até a 12ª casa) fica como está, e o arquivo não muda.
 // - `recalcOps(antes, depois)` são os `cached` dos resultados que mudaram, para irem no mesmo `batch` da edição: o
 //   arquivo ganha o valor novo (só o `<v>`; o `<f>` fica byte a byte), e o desfazer volta tudo de uma vez.
 // - **Nunca um número errado sem aviso:** a fórmula que o HyperFormula não sabe calcular (uma função ou um nome que ele
@@ -70,11 +74,40 @@ export interface DefinedName {
  * muda; a fórmula muda só o `value`, o `text` e a marca `stale`.
  */
 export function recalc(grid: Grid, display: Display = plainDisplay, names: readonly DefinedName[] = []): Grid {
+  return run(grid, display, names, false);
+}
+
+/**
+ * A grade recém-aberta, conferida contra o que o Excel gravou: cada fórmula cujo valor no HyperFormula não bate com o
+ * do arquivo fica marcada (`stale`), e as que dependem dela também. Os valores não mudam. A grade chama uma vez, antes
+ * da primeira edição; depois, o `recalc`. A fórmula sem valor gravado (o arquivo de outro programa que não guarda o
+ * resultado) não tem com o que comparar: ganha o valor do HyperFormula, como a fórmula nova que a pessoa digita.
+ */
+export function calibrate(grid: Grid, display: Display = plainDisplay, names: readonly DefinedName[] = []): Grid {
+  return run(grid, display, names, true);
+}
+
+/** O mesmo valor, com a folga do ponto flutuante: 1e-12 relativo. */
+function close(a: CellValue, b: CellValue): boolean {
+  if (sameValue(a, b)) return true;
+  if (typeof a !== "number" || typeof b !== "number") return false;
+  return Math.abs(a - b) <= 1e-12 * Math.max(Math.abs(a), Math.abs(b));
+}
+
+function run(grid: Grid, display: Display, names: readonly DefinedName[], calibrating: boolean): Grid {
   if (!hasFormulas(grid)) return grid;
   const data: Record<string, CellValue[][]> = {};
   // Sem buracos: o HyperFormula pede um array de arrays de verdade (a linha ou a célula que falta vira vazia).
   for (const s of grid.sheets) data[s.name] = Array.from(s.rows, (r) => Array.from(r ?? [], content));
-  const hf = HyperFormula.buildFromSheets(data as never, { licenseKey: "gpl-v3", maxRows: MAX_ROWS, maxColumns: MAX_COLS });
+  const hf = HyperFormula.buildFromSheets(data as never, {
+    licenseKey: "gpl-v3",
+    maxRows: MAX_ROWS,
+    maxColumns: MAX_COLS,
+    // O double inteiro, como o Excel grava (10/3 = 3.3333333333333335), e não arredondado a 14 casas.
+    smartRounding: false,
+    // `SUMPRODUCT((B1:B3>1)*1)` e afins: a conta com faixas, como no Excel.
+    useArrayArithmetic: true,
+  });
   try {
     const ids = grid.sheets.map((s) => hf.getSheetId(s.name)!);
     for (const n of names) {
@@ -97,7 +130,10 @@ export function recalc(grid: Grid, display: Display = plainDisplay, names: reado
         r?.forEach((c, col) => {
           if (c?.formula === undefined) return;
           const v = hf.getCellValue(at(i, row, col));
-          const unsure = v instanceof DetailedCellError && (CANT.has(v.type) || (!SURE_ERROR.has(v.type) && valueOf(v) !== c.value));
+          const unsure =
+            c.stale === true ||
+            (calibrating && c.value !== null && !close(valueOf(v), c.value)) ||
+            (v instanceof DetailedCellError && (CANT.has(v.type) || (!SURE_ERROR.has(v.type) && valueOf(v) !== c.value)));
           if (unsure) {
             stale.add(key(at(i, row, col)));
             queue.push(at(i, row, col));
@@ -124,9 +160,9 @@ export function recalc(grid: Grid, display: Display = plainDisplay, names: reado
           r?.map((c, col): GridCell | undefined => {
             if (c?.formula === undefined) return c;
             const { stale: _old, ...cell } = c;
-            if (stale.has(key(at(i, row, col)))) return { ...cell, stale: true };
+            if (stale.has(key(at(i, row, col)))) return c.stale ? c : { ...cell, stale: true };
             const value = valueOf(hf.getCellValue(at(i, row, col)));
-            return sameValue(value, cell.value) ? cell : { ...cell, value, text: display(value, cell.format) };
+            return close(value, cell.value) ? cell : { ...cell, value, text: display(value, cell.format) };
           }),
         ),
       })),

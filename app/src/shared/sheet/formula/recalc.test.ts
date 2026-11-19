@@ -10,7 +10,7 @@ import * as XLSX from "xlsx";
 import { applyToGrid, plainDisplay, type CellValue, type Grid, type GridCell, type SheetOp } from "../ops.ts";
 import { patchXlsx, readXlsx, type XlsxBook } from "../xlsx.ts";
 import { hasFormulas } from "./has-formulas.ts";
-import { recalc, recalcOps } from "./recalc.ts";
+import { calibrate, recalc, recalcOps } from "./recalc.ts";
 
 const ESTOQUE = new Uint8Array(readFileSync(path.join(import.meta.dir, "../../../../test/fixtures/sheet/estoque.xlsx")));
 
@@ -50,7 +50,7 @@ function edit(g: Grid, op: SheetOp) {
 
 describe("recalc: a grade", () => {
   test("mudou a quantidade: o total da linha, a soma e a aba Resumo mudam", () => {
-    const g = recalc(gridOf(readXlsx(ESTOQUE)));
+    const g = calibrate(gridOf(readXlsx(ESTOQUE)));
     const linha = Number(cell(g, "E2")!.value);
     const d2 = Number(cell(g, "D2")!.value);
     const somaE = Number(cell(g, "E8")!.value);
@@ -63,7 +63,7 @@ describe("recalc: a grade", () => {
 
   test("a referência de tabela fica marcada com o valor antigo; as outras fórmulas calculam", () => {
     const book = readXlsx(ESTOQUE);
-    const g = recalc(gridOf(book));
+    const g = calibrate(gridOf(book));
     const resumo = g.sheets[1]!;
     const prazo = resumo.rows.findIndex((r) => r?.[1]?.formula?.includes("Fornecedores["));
     expect(prazo).toBeGreaterThanOrEqual(0);
@@ -149,9 +149,73 @@ describe("recalc: a grade", () => {
   });
 });
 
+describe("calibrate: o que o Excel gravou manda", () => {
+  /** Uma aba como o Excel gravaria: cada fórmula com o valor que ele calculou. */
+  const gravada = (cells: [CellValue, string?][]) => ({
+    sheets: [{ name: "Caixa", rows: [cells.map(([value, formula]): GridCell => (formula ? { value, formula, text: plainDisplay(value) } : { value, text: plainDisplay(value) }))] }],
+  });
+  // As contas em que o HyperFormula e o Excel divergem, com o valor que o Excel grava (a sonda da revisão, #21910).
+  const g = gravada([
+    [1],
+    [2],
+    [3],
+    [-2, "INT(-1.5)"],
+    [2, "SUMPRODUCT((A1:C1>1)*1)"],
+    ["1,234.50", 'TEXT(1234.5,"#,##0.00")'],
+    [10 / 3, "10/3"],
+    [0.1 + 0.2, "0.1+0.2"],
+    [1 - 0.9, "1-0.9"],
+    [-4, "D1*2"],
+    [46000.5, "NOW()"],
+    [6, "SUM(A1:C1)"],
+    [null, "A1+B1"],
+  ]);
+
+  test("sem edição: nenhum valor gravado muda e nenhuma operação sai além da fórmula sem valor", () => {
+    // A fórmula sem valor gravado ganha o do HyperFormula; é a única operação.
+    const aberta = calibrate(g);
+    expect(aberta.sheets[0]!.rows[0]![12]).toMatchObject({ value: 3 });
+    expect(recalcOps(g, aberta)).toEqual([{ op: "cached", sheet: "Caixa", row: 0, col: 12, value: 3 }]);
+    // Com todos os valores gravados, nada muda.
+    const cheia = structuredClone(g);
+    cheia.sheets[0]!.rows[0]![12]!.value = 3;
+    const c = calibrate(cheia);
+    expect(c.sheets[0]!.rows[0]!.map((x) => x!.value)).toEqual(cheia.sheets[0]!.rows[0]!.map((x) => x!.value));
+    expect(recalcOps(cheia, c)).toEqual([]);
+    expect(recalcOps(c, recalc(c))).toEqual([]);
+  });
+
+  test("a fórmula em que o HyperFormula não chega ao valor do Excel fica marcada, e quem depende dela também", () => {
+    const c = calibrate(g);
+    const marcadas = c.sheets[0]!.rows[0]!.flatMap((x, i) => (x?.stale ? [x.formula ?? i] : []));
+    expect(marcadas).toEqual(["INT(-1.5)", 'TEXT(1234.5,"#,##0.00")', "D1*2", "NOW()"]);
+  });
+
+  test("o double inteiro e a conta com faixas, como no Excel", () => {
+    const r = recalc(small([[1, 2, 3, "=10/3", "=0.1+0.2", "=SUMPRODUCT((A1:C1>1)*1)"]]));
+    expect(r.sheets[0]!.rows[0]!.slice(3).map((x) => x!.value)).toEqual([10 / 3, 0.1 + 0.2, 2]);
+  });
+
+  test("depois da edição: a marca fica, e só muda o que depende da célula editada", () => {
+    const c = calibrate(g);
+    const { grid, batch } = edit(c, { op: "set", sheet: "Caixa", row: 0, col: 0, value: 5 });
+    expect(batch).toEqual({
+      op: "batch",
+      ops: [
+        { op: "set", sheet: "Caixa", row: 0, col: 0, value: 5 },
+        { op: "cached", sheet: "Caixa", row: 0, col: 4, value: 3 },
+        { op: "cached", sheet: "Caixa", row: 0, col: 11, value: 10 },
+        { op: "cached", sheet: "Caixa", row: 0, col: 12, value: 7 },
+      ],
+    });
+    expect(grid.sheets[0]!.rows[0]![3]).toMatchObject({ value: -2, stale: true });
+    expect(grid.sheets[0]!.rows[0]![9]).toMatchObject({ value: -4, stale: true });
+  });
+});
+
 describe("recalc: o arquivo", () => {
   test("a edição e o recálculo num batch: o arquivo reabre com os valores novos, no Kiwi e no SheetJS", () => {
-    const g = recalc(gridOf(readXlsx(ESTOQUE)));
+    const g = calibrate(gridOf(readXlsx(ESTOQUE)));
     const { grid, batch } = edit(g, { op: "set", sheet: "Estoque", row: 1, col: 2, value: 100 });
     const out = patchXlsx(ESTOQUE, [batch]);
     const back = readXlsx(out);
@@ -164,7 +228,7 @@ describe("recalc: o arquivo", () => {
   });
 
   test("uma fórmula nova digitada: calcula, e o resultado vai junto", () => {
-    const g = recalc(gridOf(readXlsx(ESTOQUE)));
+    const g = calibrate(gridOf(readXlsx(ESTOQUE)));
     const { grid, batch } = edit(g, { op: "set", sheet: "Resumo", row: 5, col: 1, value: null, formula: "Estoque!C2*2" });
     const esperado = Number(cell(g, "C2")!.value) * 2;
     expect(cell(grid, "B6", 1)!.value).toBe(esperado);

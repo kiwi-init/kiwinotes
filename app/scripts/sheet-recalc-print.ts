@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { webkit } from "playwright-core";
 
 import { applyToGrid, plainDisplay, type Grid, type SheetOp } from "../src/shared/sheet/ops.ts";
-import { recalc, recalcOps } from "../src/shared/sheet/formula/recalc.ts";
+import { calibrate, recalc, recalcOps } from "../src/shared/sheet/formula/recalc.ts";
 import { toPtBr } from "../src/shared/sheet/formula/translate.ts";
 import { patchXlsx, readXlsx } from "../src/shared/sheet/xlsx.ts";
 
@@ -19,7 +19,7 @@ mkdirSync(out, { recursive: true });
 const bytes = new Uint8Array(readFileSync(join(app, "test/fixtures/sheet/estoque.xlsx")));
 const book = readXlsx(bytes);
 const grid: Grid = { sheets: book.sheets.map((s) => ({ name: s.name, rows: s.rows.map((r) => r.map((c) => (c ? { ...c, text: plainDisplay(c.value, c.format) } : undefined))) })) };
-const antes = recalc(grid);
+const antes = calibrate(grid);
 const op: SheetOp = { op: "set", sheet: "Estoque", row: 1, col: 2, value: 100 };
 const applied = applyToGrid(antes, op);
 const depois = recalc(applied);
