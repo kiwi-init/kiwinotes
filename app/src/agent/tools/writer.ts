@@ -9,8 +9,9 @@
 //   `notes.create`, `notes.folder`, `files.create`, o arquivo novo do spec #11549, e `files.read` e `files.save`, os
 //   textos do spec #13379), e nenhuma outra passa por ele.
 // - **O `.txt` e os outros textos (spec #13379, #21158):** o log, o json, o yaml e o código (`EDITABLE_TEXT`) se leem e
-//   gravam como texto, com a mesma conferência da versão (`files.save` com `baseVersion`). Eles não têm as Versões das
-//   notas: a cópia de antes fica no registro do agente, e o [Desfazer] volta.
+//   gravam como texto, com a mesma conferência da versão (`files.save` com `baseVersion`). Desde o T21239 (spec #21160)
+//   eles têm as Versões como a nota: o `files.save` vai com `snapshot: true`, e o texto de antes vira uma versão na hora.
+//   A cópia de antes também fica no registro do agente, e o [Desfazer] volta. A planilha (`saveBytes`) também.
 
 import type { FileContent, FileSaveResult } from "../../notes/vault.ts";
 import type { EditingCell } from "../sheet-editing.ts";
@@ -76,7 +77,7 @@ export function writerFromCapabilities(caps: Record<WriterCapability, (args: unk
       isTextFile(path) ? note(textNote(await call<FileContent>("files.read", { path, as: "text" }))) : note(await call<NoteResult>("notes.get", { path })),
     save: async (path, content, baseVersion) => {
       if (isTextFile(path)) {
-        const r = await call<FileSaveResult>("files.save", { path, content, baseVersion });
+        const r = await call<FileSaveResult>("files.save", { path, content, baseVersion, snapshot: true });
         return r.saved ? { saved: true, path: r.path, version: r.version } : { saved: false };
       }
       const r = await call<{ saved: true; meta: { path: string; version: string } } | { saved: false }>("notes.save", {
@@ -96,7 +97,7 @@ export function writerFromCapabilities(caps: Record<WriterCapability, (args: unk
       return { base64: f.base64, version: f.version };
     },
     saveBytes: async (path, base64, baseVersion) => {
-      const r = await call<FileSaveResult>("files.save", { path, base64, baseVersion });
+      const r = await call<FileSaveResult>("files.save", { path, base64, baseVersion, snapshot: true });
       return r.saved ? { saved: true, path: r.path, version: r.version } : { saved: false };
     },
     folder: async () => {

@@ -28,6 +28,12 @@ export const EDITABLE_TEXT = new Set(["txt", "log", "json", "yaml", "yml", ...CO
 
 export const isEditableText = (name: string): boolean => EDITABLE_TEXT.has((/\.([a-z0-9]+)$/i.exec(name)?.[1] ?? "").toLowerCase());
 
+/**
+ * O arquivo que não é nota e tem o painel Versões com o diff (T21239, spec #21160): o texto editável e a tabela em texto
+ * (csv, tsv), que grava em bytes mas se lê como texto. O xlsx e o docx guardam versões, sem o painel ainda.
+ */
+export const hasTextVersions = (name: string): boolean => isEditableText(name) || /\.(csv|tsv)$/i.test(name);
+
 export const viewLimit = (as: FileReadAs): number => (as === "text" ? MAX_VIEW_TEXT_BYTES : MAX_VIEW_BYTES);
 
 /** "1,2 MB", "340 KB", "12 B": o tamanho como o Finder diz. */

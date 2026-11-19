@@ -123,12 +123,29 @@ export function engineNotes(
       }
     : undefined;
   // O histórico de versões (T2680), só num engine que tem.
+  // Desde o 1.91.0 (T21239), o de todo arquivo que o Kiwi grava: o `.md` pelas `notes.*`, o resto pelas `files.*`.
+  const isNote = (path: string) => /\.md$/i.test(path);
+  const fileVersions = has("files.versions");
   const versions: VersionsApi | undefined = has("notes.versions")
     ? {
-        list: (path) => call<{ versions: never[] }>("notes.versions", { path }).then((r) => r.versions,
-          ),
-        get: (path, id) => call("notes.version", { path, id }),
-        restore: (path, id) => call("notes.restoreVersion", { path, id }),
+        list: (path) =>
+          isNote(path)
+            ? call<{ versions: never[] }>("notes.versions", { path }).then((r) => r.versions)
+            : fileVersions
+              ? call<{ versions: never[] }>("files.versions", { path }).then((r) => r.versions)
+              : Promise.resolve([]),
+        get: async (path, id) => {
+          if (isNote(path)) return call("notes.version", { path, id });
+          const v = await call<{ content: string; at: string } | { base64: string; at: string }>("files.version", { path, id });
+          if ("content" in v) return v;
+          // A tabela em texto (csv, tsv) grava em bytes: a versão volta em base64, e o diff é do texto.
+          if (/\.(csv|tsv)$/i.test(path)) {
+            const bytes = Uint8Array.from(atob(v.base64), (c) => c.charCodeAt(0));
+            return { content: new TextDecoder().decode(bytes), at: v.at };
+          }
+          throw new Error("esta versão é de um arquivo em bytes");
+        },
+        restore: (path, id) => (isNote(path) ? call("notes.restoreVersion", { path, id }) : call("files.restoreVersion", { path, id })),
       }
     : undefined;
   // Os outros arquivos do cofre e as preferências da árvore (1.19.0, T3370).

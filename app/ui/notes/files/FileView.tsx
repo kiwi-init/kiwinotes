@@ -8,7 +8,7 @@ import { type MutableRefObject, type ReactNode, Suspense, useEffect, useRef, use
 
 import type { VaultFile } from "../types.ts";
 
-import { fileSize } from "../../../src/shared/file-view.ts";
+import { fileSize, hasTextVersions } from "../../../src/shared/file-view.ts";
 import { isPackageName, modified, typeLabel } from "./fileCard.ts";
 import { fileType } from "../tree.ts";
 import { isHtmlFile } from "./htmlPreview.ts";
@@ -38,9 +38,11 @@ interface Props {
   viewer?: FileViewer;
   /** A linha onde abrir (T21240): a da busca. */
   at?: { line: number };
+  /** "Versões" (T21239, spec #21160): o histórico do arquivo de texto, como o da nota. Sem ele, o botão não aparece. */
+  onVersions?(path: string): void;
 }
 
-export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef, widthHandles, kiwi, viewer = viewerFor(path), at }: Props) {
+export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef, widthHandles, kiwi, viewer = viewerFor(path), at, onVersions }: Props) {
   const [state, setState] = useState<FileState>({ kind: "loading" });
   const [info, setInfo] = useState<VaultFile | null>(null);
   const generation = useRef(0);
@@ -145,6 +147,11 @@ export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef
             {html && state.kind === "ready" ? (
               <button type="button" className="kn-bt kn-file-preview-toggle" aria-pressed={preview} onClick={() => setPreview((on) => !on)}>
                 Prévia
+              </button>
+            ) : null}
+            {onVersions && state.kind === "ready" && hasTextVersions(name) && !("readOnly" in state.file && state.file.readOnly) ? (
+              <button type="button" className="kn-bt kn-file-versions" onClick={() => onVersions(path)}>
+                Versões
               </button>
             ) : null}
             {open}

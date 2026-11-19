@@ -64,7 +64,7 @@ export function VersionsDialog({
           </button>
         </header>
         {list === null ? null : !list.length ? (
-          <p className="kn-faint kn-versions-empty">Ainda não há versões: elas nascem quando a nota é editada.</p>
+          <p className="kn-faint kn-versions-empty">Ainda não há versões: elas nascem quando o arquivo é editado.</p>
         ) : (
           <div className="kn-versions-body">
             <ul className="kn-versions-list" role="listbox" aria-label="Versões">

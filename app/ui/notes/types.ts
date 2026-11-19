@@ -190,12 +190,16 @@ export type Mention = UiCapabilities["notes.unlinkedMentions"]["result"][number]
 
 export type VersionInfo = UiCapabilities["notes.versions"]["result"]["versions"][number];
 
+/**
+ * O histórico de versões (T2680) da nota e, desde o T21239 (spec #21160), de todo arquivo que o Kiwi grava: o caminho
+ * diz qual (`.md` pelas `notes.*`, o resto pelas `files.*`). O `get` é o texto: a versão em bytes (xlsx) não abre aqui.
+ */
 export interface VersionsApi {
   /** A mais nova primeiro. */
   list(path: string): Promise<VersionInfo[]>;
   get(path: string, id: string): Promise<{ content: string; at: string }>;
-  /** Volta a nota para a versão (o texto de agora vira uma versão antes). */
-  restore(path: string, id: string): Result<"notes.restoreVersion">;
+  /** Volta a nota ou o arquivo para a versão (o texto de agora vira uma versão antes). */
+  restore(path: string, id: string): Promise<{ saved: boolean }>;
 }
 
 export interface ExtrasApi {
