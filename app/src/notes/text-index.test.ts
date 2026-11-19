@@ -410,6 +410,24 @@ describe("o ritmo e o portão (spec #24228, T24286)", () => {
     for (const ms of work) expect(ms).toBeGreaterThan(0);
   });
 
+  test("um arquivo grande, sozinho no lote, também descansa pelo tempo dele (lead #24438)", async () => {
+    const f = folder({
+      "a/1.txt": "caju pequeno\n",
+      "b/grande.txt": "caju grande ".repeat(90_000),
+      "c/3.txt": "caju pequeno\n",
+    });
+    const work: number[] = [];
+    const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), batchText: 30 * 1024, pause: async (ms) => void work.push(ms) });
+    open.push(t);
+    await t.sync(f.all());
+    expect(t.stats.alone).toBe(1);
+    expect(t.stats.batches).toBe(3);
+    // Cada lote, o grande também, passa pela pausa; a dele é a maior, e o teto a multiplica (3× com 25%).
+    expect(work.length).toBe(2);
+    expect(Math.max(...work)).toBe(work[1]!);
+    expect(pauseAfter(work[1]!)).toBeGreaterThanOrEqual(3 * work[1]!);
+  });
+
   test("o portão segura cada lote até liberar", async () => {
     const files: Record<string, string> = {};
     for (let i = 0; i < 90; i++) files[`codigo/mod-${i}.ts`] = `export const caju${i} = ${i};\n`;

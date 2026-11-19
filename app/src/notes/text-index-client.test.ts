@@ -156,6 +156,12 @@ describe("o índice num Worker (P0 #23988)", () => {
         await Bun.sleep(1);
       }
       expect((await t.stats()).batches).toBe(lote - 1);
+      if (lote === 2) {
+        // Parado no portão, o worker ainda responde a busca, com o que já indexou, e logo (lead #24438).
+        const at = performance.now();
+        expect((await t.search("jambo", 100, f.stat)).length).toBeGreaterThan(0);
+        expect(performance.now() - at).toBeLessThan(1000);
+      }
       waiting.shift()!();
     }
     await done;
