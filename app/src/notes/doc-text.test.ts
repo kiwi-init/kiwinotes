@@ -95,11 +95,25 @@ describe("docText: docx", () => {
     ]);
   });
 
-  test("a caixa de texto sai uma vez só (sem o mc:Fallback)", async () => {
+  test("a caixa de texto sai uma vez só (sem o mc:Fallback), logo depois do parágrafo que a segura, como no visualizador", async () => {
+    // Como o Word grava: o `mc:Choice` com o desenho (`wps:txbx`) e o `mc:Fallback` com o VML (`v:textbox`).
+    const NS = [
+      W,
+      `xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"`,
+      `xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"`,
+      `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`,
+      `xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"`,
+      `xmlns:v="urn:schemas-microsoft-com:vml"`,
+    ].join(" ");
     const box = (t: string) => `<w:txbxContent>${p(t)}</w:txbxContent>`;
-    const body = `<w:p><w:r><mc:AlternateContent><mc:Choice>${box("Na caixa")}</mc:Choice><mc:Fallback>${box("Na caixa")}</mc:Fallback></mc:AlternateContent></w:r><w:r><w:t>Fora</w:t></w:r></w:p>`;
-    const d = await docText("a.docx", docx(body));
-    expect(d.segments.map((s) => s.text)).toEqual(["Na caixa", "Fora"]);
+    const choice = `<mc:Choice Requires="wps"><w:drawing><wp:anchor><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:txbx>${box("Na caixa")}</wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></mc:Choice>`;
+    const fallback = `<mc:Fallback><w:pict><v:shape><v:textbox>${box("Na caixa")}</v:textbox></v:shape></w:pict></mc:Fallback>`;
+    const body = p("Antes") + `<w:p><w:r><mc:AlternateContent>${choice}${fallback}</mc:AlternateContent></w:r><w:r><w:t>Fora</w:t></w:r></w:p>` + p("Depois");
+    const bytes = zipBytes({ "word/document.xml": `<?xml version="1.0" encoding="UTF-8"?><w:document ${NS}><w:body>${body}</w:body></w:document>` }, { deflate: true });
+    const mine = (await docText("a.docx", bytes)).segments;
+    expect(mine.map((s) => s.text)).toEqual(["Antes", "Fora", "Na caixa", "Depois"]);
+    expect(mine.map((s) => s.text)).toEqual(await viewerBlocks(bytes));
+    expect(mine.map((s) => s.at)).toEqual([1, 2, 3, 4].map((paragraph) => ({ paragraph })));
   });
 
   test("sem o document.xml, ou que não é zip: erro", async () => {

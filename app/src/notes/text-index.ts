@@ -138,15 +138,15 @@ function decode(b: Uint8Array): string {
   }
 }
 
+/** O texto antes do termo no trecho de um documento (T22218): umas quatro palavras. */
+const DOC_SNIPPET_LEAD = 24;
+
 /**
  * A linha (de 1) e o trecho em volta do 1º termo que aparece numa linha, sem diferenciar maiúscula nem acento. A posição
  * vem do mesmo texto que o trecho corta (os espaços já juntados), pelo mapa da dobra: numa linha com recuo ou com
  * espaços no meio, o trecho não se perde (revisão do T21240). `lead`: quanto do texto antes do termo o trecho leva; a
  * linha do pdf é a página inteira, e a lista do ⌘K corta o trecho numa linha só, então o documento leva menos (T22218).
  */
-/** O texto antes do termo no trecho de um documento (T22218): umas quatro palavras. */
-const DOC_SNIPPET_LEAD = 24;
-
 export function lineOf(text: string, terms: readonly string[], lead = 60): { line: number; snippet: string } | null {
   const lines = text.split(/\r?\n/);
   for (const t of terms) {

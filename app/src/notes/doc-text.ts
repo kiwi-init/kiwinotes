@@ -152,8 +152,9 @@ function attr(attrs: string, name: string): string | undefined {
 /**
  * Os parágrafos do `word/document.xml`, na ordem: o texto dos `<w:t>` (o inserido de uma alteração controlada entra; o
  * excluído, `<w:delText>`, e o código de campo, `<w:instrText>`, não), o tab e a quebra como espaço. Um parágrafo dentro
- * de outro (a caixa de texto) sai separado. Só os que têm texto contam no número, como no visualizador (o mammoth
- * pula o parágrafo vazio); a equação (`<m:t>`) fica de fora pelo mesmo motivo: o mammoth não a mostra.
+ * de outro (a caixa de texto) sai separado, logo depois do que o segura. Só os que têm texto contam no número, como no
+ * visualizador (o mammoth pula o parágrafo vazio); a equação (`<m:t>`) fica de fora pelo mesmo motivo: o mammoth não a
+ * mostra.
  */
 function docxText(bytes: Uint8Array, out: Collector): void {
   const pkg = new Package(bytes, "docx");
@@ -161,7 +162,9 @@ function docxText(bytes: Uint8Array, out: Collector): void {
   if (raw === null) throw new DocTextError("não é um docx que abre");
   // O `mc:Fallback` repete o texto do `mc:Choice` (a caixa de texto do Word novo e a do antigo): fica só um.
   const doc = raw.replace(/<mc:Fallback\b[\s\S]*?<\/mc:Fallback>/g, "");
-  const stack: string[] = [];
+  // Cada parágrafo aberto guarda o texto dele e os de dentro (a caixa de texto), que saem logo depois dele, como no
+  // mammoth: primeiro o parágrafo que segura a caixa, depois os da caixa, na ordem.
+  const stack: { text: string; inner: string[] }[] = [];
   let n = 0;
   const tag = /<(\/?)(w:p|w:t|w:tab|w:br|w:cr)\b([^>]*?)(\/?)>/g;
   let m: RegExpExecArray | null;
@@ -169,10 +172,12 @@ function docxText(bytes: Uint8Array, out: Collector): void {
     const [, close, name, , self] = m;
     if (name === "w:p") {
       if (self) continue;
-      if (!close) stack.push("");
+      if (!close) stack.push({ text: "", inner: [] });
       else if (stack.length) {
-        const text = stack.pop()!;
-        if (oneLine(text) && !out.add({ paragraph: ++n }, text)) return;
+        const p = stack.pop()!;
+        const texts = [p.text, ...p.inner];
+        if (stack.length) stack[stack.length - 1]!.inner.push(...texts);
+        else for (const text of texts) if (oneLine(text) && !out.add({ paragraph: ++n }, text)) return;
       }
     } else if (!stack.length || close) {
       continue;
@@ -180,10 +185,10 @@ function docxText(bytes: Uint8Array, out: Collector): void {
       if (self) continue;
       const end = doc.indexOf(`</${name}>`, tag.lastIndex);
       if (end < 0) break;
-      stack[stack.length - 1] += decodeEntities(doc.slice(tag.lastIndex, end));
+      stack[stack.length - 1]!.text += decodeEntities(doc.slice(tag.lastIndex, end));
       tag.lastIndex = end + name.length + 3;
     } else {
-      stack[stack.length - 1] += " ";
+      stack[stack.length - 1]!.text += " ";
     }
   }
 }
