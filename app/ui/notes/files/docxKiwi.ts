@@ -174,7 +174,8 @@ export class DocxKiwi {
     const caret = doc.createElement("span");
     caret.className = "kn-kiwi-caret";
     const tag = doc.createElement("span");
-    tag.className = "kn-kiwi-tag";
+    // O painter refaz o cursor a cada quadro: com a entrada animada, a etiqueta ficaria sempre no começo dela, invisível.
+    tag.className = "kn-kiwi-tag kn-kiwi-tag-still";
     const face = doc.createElement(this.face ? "img" : "span");
     face.className = "kn-kiwi-face";
     if (this.face) {

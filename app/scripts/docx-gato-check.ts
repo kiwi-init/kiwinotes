@@ -161,6 +161,8 @@ try {
     const item = p.locator(`.kn-tree-pop .kn-side-item[data-path="${rel}"]`);
     await item.waitFor({ timeout: 1500 }).catch(() => p.click(".kn-tree-pop button[data-all='expand']"));
     await item.click();
+    await p.locator(".kn-tree-pop").waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+    await p.waitForTimeout(300);
   };
   try {
     await p.waitForSelector(".kn-file[data-state='ready'] .docx-page", { timeout: 30000 });
@@ -181,6 +183,7 @@ try {
     });
     assert.equal((await p.locator(".kn-kiwi-tag").first().innerText()).trim(), "Kiwi");
     await p.waitForFunction(() => document.querySelector(".docx-paginated-surface")?.textContent?.includes("As canecas"), null, { timeout: 8000 });
+    assert.ok(Number(await p.locator(".kn-file-docx-kiwi-cursor .kn-kiwi-tag").first().evaluate((t) => getComputedStyle(t).opacity)) > 0.9, "a etiqueta à vista");
     await shot(p, "01-gato-digitando");
     checks.push("o gato grava e a tela toca: o cursor com a etiqueta Kiwi, o texto entrando");
     await p.waitForSelector(".kn-file-docx-kiwi[data-fading]", { timeout: 8000 });
