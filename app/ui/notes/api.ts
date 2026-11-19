@@ -9,7 +9,7 @@ import { applyFilesDelta, type FilesDelta } from "./files-delta.ts";
 import type { AttachmentFile, AttachmentSource } from "./editor/attachments.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
 import type { ListingPatch } from "../../src/shared/ui-contract.ts";
-import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode, ExportFormat, TreePrefs, VaultFile, VaultListing,
+import type { AgentWrote, ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode, ExportFormat, TreePrefs, VaultFile, VaultListing,
 } from "./types.ts";
 
 type Invoke = (cap: string, args?: unknown) => Promise<unknown>;
@@ -145,11 +145,12 @@ export function engineNotes(
         rename: (from, to) => call("notes.canvasRename", { from, to }),
       }
     : undefined;
-  type Prefs = { showExtensions?: boolean; dailyFolder?: string; noteWidth?: number };
+  type Prefs = { showExtensions?: boolean; dailyFolder?: string; noteWidth?: number; kiwicat?: { cor?: string } };
   const treePrefs = (s: Prefs): TreePrefs => ({
     showExtensions: s.showExtensions === true,
     dailyFolder: typeof s.dailyFolder === "string" ? s.dailyFolder : "",
     noteWidth: typeof s.noteWidth === "number" ? s.noteWidth : null,
+    ...(typeof s.kiwicat?.cor === "string" ? { catColor: s.kiwicat.cor } : {}),
   });
   const prefs: NotesApi["prefs"] = has("settings.get")
     ? {
@@ -267,6 +268,7 @@ export function engineNotes(
     backlinks: (path) => call("notes.backlinks", { path }),
     resolve: (link) => call("notes.resolve", { link }),
     ...(has("notes.embed") ? { embed: (link: string) => call("notes.embed", { link }) } : {}),
+    onAgentWrote: (fn) => on("agent.wrote", (payload) => {const e=payload as AgentWrote;if(e&&typeof e.path==="string"&&(!folderId||!e.folderId||e.folderId===folderId))fn(e);}),
     onChanged: (fn) => on("notes.changed", (payload) => {const e=payload as {paths:string[];folderId?:string;listing?:ListingPatch|null};if(!folderId||!e.folderId||e.folderId===folderId)fn(e.paths,e.listing);}),
   };
 }

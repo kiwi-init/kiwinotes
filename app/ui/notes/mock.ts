@@ -12,7 +12,7 @@ import { DEFAULT_TEMPLATES_FOLDER, fillTemplate } from "../../src/shared/templat
 import type { TagNode } from "./types.ts";
 import { linkSpans, unlinkedSpans, contextOf } from "../../src/notes/mentions.ts";
 import type { VersionsApi } from "./types.ts";
-import type { Backlink, ExtrasApi, FolderMoved, FoldersApi, Note, NoteMeta, NotesApi, SaveResult, SearchHit, TrashItem, VaultFile, VaultListing } from "./types.ts";
+import type { AgentWrote, Backlink, ExtrasApi, FolderMoved, FoldersApi, Note, NoteMeta, NotesApi, SaveResult, SearchHit, TrashItem, VaultFile, VaultListing } from "./types.ts";
 
 /**
  * Um erro como o AppEngine manda (T7656): `Error("<cap>: <mensagem>")` com o código em `.code`, e não no texto. Assim o
@@ -104,6 +104,36 @@ export class MockVault implements NotesApi {
   editOutside(path: string, content: string): void {
     this.write(path, content);
     this.emit([path]);
+  }
+
+  private kiwiListeners = new Set<(e: AgentWrote) => void>();
+
+  /**
+   * Simula uma escrita do Kiwi (T20869): grava, e avisa como o engine avisa (o `agent.wrote` com os trechos, logo antes do
+   * `notes.changed`). `edits` em posições do texto de antes; aplicados a ele, dão o texto novo.
+   */
+  agentWrite(path: string, edits: { from: number; to: number; inserted: string }[], turnId = "turno-exemplo"): void {
+    const s = this.notes.get(path);
+    if (!s) throw engineError("E_NOT_FOUND", `${path}`);
+    const before = s.content;
+    const full = edits.map((e) => ({ ...e, removed: before.slice(e.from, e.to) }));
+    let next = "";
+    let at = 0;
+    for (const e of full) {
+      next += before.slice(at, e.from) + e.inserted;
+      at = e.to;
+    }
+    next += before.slice(at);
+    const baseVersion = String(s.version);
+    this.write(path, next);
+    const event: AgentWrote = { path, baseVersion, version: String(this.notes.get(path)!.version), turnId, edits: full };
+    for (const fn of this.kiwiListeners) fn(event);
+    this.emit([path]);
+  }
+
+  onAgentWrote(fn: (e: AgentWrote) => void): () => void {
+    this.kiwiListeners.add(fn);
+    return () => this.kiwiListeners.delete(fn);
   }
 
   /** Os arquivos que não são notas (T7616): só na lista, para um `[[relatorio.pdf]]` achar o arquivo. */
