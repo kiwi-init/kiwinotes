@@ -661,6 +661,13 @@
   padding: 24px;
   box-sizing: border-box;
   background: var(--surface-2);
+  /* o vídeo com zoom (T22178) passa da área e rola */
+  overflow: auto;
+}
+
+/* maior que a área, o vídeo sai do meio para o canto, e a rolagem alcança as quatro bordas */
+.kn-file-media[data-zoomed] {
+  place-items: start;
 }
 
 .kn-file-media-player {

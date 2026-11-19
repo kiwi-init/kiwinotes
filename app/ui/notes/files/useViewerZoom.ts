@@ -12,11 +12,81 @@ interface GestureLike extends UIEvent {
   clientY: number;
 }
 
-/** Um ponto preso num elemento que cresce: `u` e `v` são a fração da largura e da altura dele. */
-interface Hold {
-  el: HTMLElement;
-  u: number;
-  v: number;
+/**
+ * O que fica embaixo dos dedos. Num elemento que cresce: `u` e `v` são a fração da largura e da altura dele. Num texto
+ * que quebra de novo com o zoom (a nota): a letra, e quanto o ponto fica dela, em px de 100%.
+ */
+type Hold = { el: HTMLElement; u: number; v: number } | TextHold;
+
+/**
+ * A letra embaixo dos dedos. O editor da nota redesenha os parágrafos quando o zoom muda o que cabe na tela: o texto
+ * some e volta noutro elemento. Por isso a letra também vai pelo bloco dela (a tag, o texto inteiro e onde nele), para
+ * ser achada de novo.
+ */
+interface TextHold {
+  node: Node;
+  offset: number;
+  unit: Point;
+  block: { tag: string; text: string; index: number };
+}
+
+/** O bloco do texto (o parágrafo, a linha): o primeiro ancestral que não é `inline`. */
+function blockOf(node: Node): HTMLElement | null {
+  let e = node.parentElement;
+  while (e?.parentElement && getComputedStyle(e).display.startsWith("inline")) e = e.parentElement;
+  return e;
+}
+
+/** A letra de novo, num texto redesenhado: o bloco com o mesmo texto mais perto de `y`, e a letra pela posição nele. */
+function findAgain(el: HTMLElement, h: TextHold, y: number): boolean {
+  let best: { e: Element; d: number } | null = null;
+  for (const e of el.querySelectorAll(h.block.tag)) {
+    if (e.textContent !== h.block.text) continue;
+    const r = e.getBoundingClientRect();
+    const d = Math.max(r.top - y, 0, y - r.bottom);
+    if (!best || d < best.d) best = { e, d };
+  }
+  if (!best) return false;
+  const walk = document.createTreeWalker(best.e, NodeFilter.SHOW_TEXT);
+  let left = h.block.index;
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const length = n.textContent?.length ?? 0;
+    if (left < length) {
+      h.node = n;
+      h.offset = left;
+      return true;
+    }
+    left -= length;
+  }
+  return false;
+}
+
+/** A caixa da letra `offset` do texto `node` na tela. */
+function letterBox(node: Node, offset: number): DOMRect | null {
+  const length = node.textContent?.length ?? 0;
+  if (!length) return null;
+  const at = Math.min(offset, length - 1);
+  const range = document.createRange();
+  range.setStart(node, at);
+  range.setEnd(node, at + 1);
+  const box = range.getClientRects()[0] ?? range.getBoundingClientRect();
+  return box.width || box.height ? box : null;
+}
+
+/** A letra embaixo do ponto (em px da janela), se ela está dentro de `el`. */
+function letterAt(el: HTMLElement, x: number, y: number): { node: Node; offset: number; box: DOMRect; block: TextHold["block"] } | null {
+  const range = (document as Document & { caretRangeFromPoint?(x: number, y: number): Range | null }).caretRangeFromPoint?.(x, y);
+  const node = range?.startContainer;
+  if (!range || !node || node.nodeType !== Node.TEXT_NODE || !el.contains(node)) return null;
+  const box = letterBox(node, range.startOffset);
+  // Longe da letra (o ponto no espaço do fim de uma linha, ou entre os parágrafos): fica a conta pelo elemento.
+  if (!box || y < box.top - box.height || y > box.bottom + box.height) return null;
+  const block = blockOf(node);
+  if (!block) return null;
+  const before = document.createRange();
+  before.setStart(block, 0);
+  before.setEnd(node, range.startOffset);
+  return { node, offset: range.startOffset, box, block: { tag: block.tagName, text: block.textContent ?? "", index: before.toString().length } };
 }
 
 export interface ViewerZoom {
@@ -39,6 +109,12 @@ export interface ViewerZoom {
    */
   anchor?: string;
   /**
+   * O texto quebra de novo com o zoom (a nota, com a coluna que cresce até a janela e depois reflui): o ponto fica preso
+   * na letra embaixo dos dedos, e não na fração do `anchor`, que muda de altura de outro jeito. Fora de um texto, vale o
+   * `anchor`.
+   */
+  anchorText?: boolean;
+  /**
    * Quando o zoom muda o tamanho de outra forma (a letra do CodeMirror): quem mede de novo e deixa parado o ponto `at`.
    * Devolve `true` se já cuidou da rolagem.
    */
@@ -51,7 +127,7 @@ export interface ViewerZoom {
  * Liga o zoom. Devolve `zoomBy(factor, at)`, para os botões dos visualizadores darem o mesmo zoom que a pinça (o `at`
  * no meio da área, sem ele).
  */
-export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor, onApplied, enabled = true }: ViewerZoom) {
+export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor, anchorText, onApplied, enabled = true }: ViewerZoom) {
   const live = useRef({ scale, set, min, max, path });
   live.current = { scale, set, min, max, path };
   /** O zoom pedido que ainda não chegou à tela, com o ponto que fica parado. */
@@ -65,6 +141,9 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor,
    * parte da pedida, senão o arredondamento soma e o ponto escorrega de baixo dos dedos.
    */
   const wrote = useRef<{ want: Scroll; got: Scroll } | null>(null);
+  /** Os quadros depois do zoom em que a letra embaixo dos dedos é posta de volta (o texto ainda se mede). */
+  const settle = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(settle.current), []);
 
   const middle = useCallback((): Point => {
     const el = target.current;
@@ -72,18 +151,27 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor,
   }, [target]);
 
   /** O elemento do `anchor` embaixo do ponto (ou o mais perto dele), e onde o ponto cai nele. */
-  const hold = (el: HTMLElement, sel: string, at: Point): Hold | undefined => {
+  const hold = (el: HTMLElement, sel: string | undefined, at: Point, from: number): Hold | undefined => {
     const now = performance.now();
     const h = held.current;
-    const same = h && now - h.t < 400 && Math.abs(h.at.x - at.x) < 2 && Math.abs(h.at.y - at.y) < 2 ? again(el, sel, h.el) : undefined;
+    const near = h && now - h.t < 400 && Math.abs(h.at.x - at.x) < 2 && Math.abs(h.at.y - at.y) < 2;
+    // O elemento de antes, ou o que o substituiu (as páginas do docx, T21151); a letra de antes, ou a mesma no bloco novo.
+    const same = !h || !near ? false : "el" in h ? (sel ? again(el, sel, h.el) : h.el.isConnected ? h.el : undefined) : h.node.isConnected || findAgain(el, h, el.getBoundingClientRect().top + at.y);
     if (h && same) {
-      h.el = same;
+      if ("el" in h && same instanceof HTMLElement) h.el = same;
       h.t = now;
       return h;
     }
     const box = el.getBoundingClientRect();
     const x = box.left + at.x;
     const y = box.top + at.y;
+    const letter = anchorText ? letterAt(el, x, y) : null;
+    if (letter) {
+      const next = { node: letter.node, offset: letter.offset, block: letter.block, unit: { x: (x - letter.box.left) / from, y: (y - letter.box.top) / from }, at, t: now };
+      held.current = next;
+      return next;
+    }
+    if (!sel) return undefined;
     let best: HTMLElement | undefined;
     let dist = Infinity;
     for (const c of el.querySelectorAll<HTMLElement>(sel)) {
@@ -111,12 +199,12 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor,
         // Só o arredondamento: a rolagem que o navegador cortou (no começo ou no fim) fica como está.
         if (w && near(scroll.left, w.got.left) && Math.abs(w.want.left - w.got.left) < 1) scroll.left = w.want.left;
         if (w && near(scroll.top, w.got.top) && Math.abs(w.want.top - w.got.top) < 1) scroll.top = w.want.top;
-        pending.current = { at, from, to, scroll, on: anchor ? hold(el, anchor, at) : undefined };
+        pending.current = { at, from, to, scroll, on: anchor || anchorText ? hold(el, anchor, at, from) : undefined };
       }
       rememberZoom(file, to);
       apply(to);
     },
-    [middle, target, anchor],
+    [middle, target, anchor, anchorText],
   );
 
   const zoomBy = useCallback((factor: number, at?: Point) => zoomTo(live.current.scale * factor, at), [zoomTo]);
@@ -129,14 +217,38 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor,
     if (Math.abs(scale - p.to) > 1e-4) return;
     pending.current = null;
     if (onApplied?.(p)) return;
-    const on = p.on && anchor ? again(el, anchor, p.on.el) : undefined;
-    if (p.on && on) {
-      // Onde o ponto do elemento foi parar, e a rolagem que o põe de volta embaixo dos dedos.
+    const on = p.on;
+    cancelAnimationFrame(settle.current);
+    // Onde o ponto do elemento (ou da letra) foi parar, e a rolagem que o põe de volta embaixo dos dedos.
+    const place = (): boolean => {
+      if (!on) return false;
       const box = el.getBoundingClientRect();
-      const r = on.getBoundingClientRect();
-      el.scrollLeft += r.left + p.on.u * r.width - (box.left + p.at.x);
-      el.scrollTop += r.top + p.on.v * r.height - (box.top + p.at.y);
+      if (!("el" in on) && !on.node.isConnected && !findAgain(el, on, box.top + p.at.y)) return false;
+      if ("el" in on) {
+        // As páginas do docx são desenhadas de novo na escala nova (T21151): a mesma, pelo `data-page-index`.
+        const now = anchor ? again(el, anchor, on.el) : on.el.isConnected ? on.el : undefined;
+        if (!now) return false;
+        on.el = now;
+      }
+      const r = "el" in on ? on.el.getBoundingClientRect() : letterBox(on.node, on.offset);
+      if (!r) return false;
+      const [x, y] = "el" in on ? [r.left + on.u * r.width, r.top + on.v * r.height] : [r.left + on.unit.x * p.to, r.top + on.unit.y * p.to];
+      el.scrollLeft += x - (box.left + p.at.x);
+      el.scrollTop += y - (box.top + p.at.y);
+      return true;
+    };
+    if (place()) {
       wrote.current = null;
+      // O texto: o editor ainda mede e redesenha nos próximos quadros (a altura dos parágrafos que quebram de novo), e o
+      // que está acima da letra muda de altura. Nesses quadros, a letra volta para baixo dos dedos.
+      if (on && !("el" in on)) {
+        let n = 0;
+        const step = () => {
+          place();
+          if (++n < 4) settle.current = requestAnimationFrame(step);
+        };
+        settle.current = requestAnimationFrame(step);
+      }
       return;
     }
     const to = anchorScroll(p.scroll, p.at, p.from, p.to, pad);

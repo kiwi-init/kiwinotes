@@ -27,7 +27,10 @@ export function ContextMenu({ x, y, items, onClose, onRestoreFocus }: {
     return () => { removeEventListener("mousedown", away, true); removeEventListener("blur", onClose); };
   }, [owner, onClose]);
   // Escolher um item, ou o Esc, devolvem o foco a quem abriu o menu (spec #10211); o clique fora, não.
-  return <MenuPanel {...{ x, y, items, owner }} onClose={() => { onClose(); onRestoreFocus?.(); }} autoFocus onBack={() => { onClose(); onRestoreFocus?.(); }} />;
+  // No `body`, como o submenu: o `x`/`y` são px da tela, e dentro da nota com o `zoom` do CSS (T22178) o menu abriria
+  // longe do clique e maior.
+  return createPortal(<MenuPanel {...{ x, y, items, owner }} onClose={() => { onClose(); onRestoreFocus?.(); }} autoFocus
+    onBack={() => { onClose(); onRestoreFocus?.(); }} />, document.body);
 }
 
 function MenuPanel({ x, y, parentLeft, items, owner, onClose, onBack, autoFocus, label }: {

@@ -20,9 +20,11 @@ function widest(page: HTMLElement): number {
 export const clampNoteWidth = (px: number, max: number = NOTE_WIDTH.max) =>
   Math.round(Math.min(max, Math.max(NOTE_WIDTH.min, px)));
 
-export function NoteWidthHandles({ width, onChange, onCommit }: {
+export function NoteWidthHandles({ width, onChange, onCommit, zoom = 1 }: {
   /** A largura de agora (a salva, ou a do arrastar). */
   width: number;
+  /** O zoom da nota (T22178): a coluna cresce na tela, e o arrasto, em px da tela, vai dividido por ele. */
+  zoom?: number;
   onChange(px: number): void;
   onCommit(px: number): void;
 }) {
@@ -40,8 +42,8 @@ export function NoteWidthHandles({ width, onChange, onCommit }: {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     // A largura que se vê, não a salva: numa janela estreita, a coluna já é menor que o máximo.
-    const start = Math.min(width, page.getBoundingClientRect().width);
-    drag.current = { x: e.clientX, start, side, max: widest(page) };
+    const start = Math.min(width, page.getBoundingClientRect().width / zoom);
+    drag.current = { x: e.clientX, start, side, max: widest(page) / zoom };
     setShown(side === 1 ? "right" : "left");
     setDragging(true);
   };
@@ -49,7 +51,7 @@ export function NoteWidthHandles({ width, onChange, onCommit }: {
     const d = drag.current;
     if (!d) return;
     // A coluna é centralizada: a borda anda dx, e a largura muda 2·dx.
-    d.px = clampNoteWidth(d.start + 2 * d.side * (e.clientX - d.x), d.max);
+    d.px = clampNoteWidth(d.start + (2 * d.side * (e.clientX - d.x)) / zoom, d.max);
     onChange(d.px);
   };
   const up = () => {
@@ -67,7 +69,7 @@ export function NoteWidthHandles({ width, onChange, onCommit }: {
     if (!dir) return;
     e.preventDefault();
     const page = e.currentTarget.parentElement;
-    const next = clampNoteWidth(width + dir * STEP, page ? widest(page) : NOTE_WIDTH.max);
+    const next = clampNoteWidth(width + dir * STEP, page ? widest(page) / zoom : NOTE_WIDTH.max);
     onChange(next);
     onCommit(next);
   };

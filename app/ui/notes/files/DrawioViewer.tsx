@@ -8,15 +8,24 @@
 // rótulo ou uma forma com imagem de fora nem tenta buscá-la, nem a fonte ou a fórmula de fora (`drawioGuard.ts`).
 // O HTML dos rótulos fica preso na área do diagrama (`contain: paint` em `files.css`): um `position: fixed` não cobre
 // o resto da janela.
+//
+// A pinça e o ⌘+/⌘−/⌘0 (T22178, spec #21198) usam o zoom do próprio viewer, e o papel branco cresce junto: o diagrama
+// segue nítido, e o clique e o link continuam caindo onde o viewer espera. Os botões de zoom da barra dele fazem o mesmo.
 
 import viewerUrl from "./drawio/viewer-static.min.js?url";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FindBar, useFindKey } from "../FindBar.tsx";
 import { findIds, stepFind } from "../find.ts";
 import { checkDrawio, drawioPages } from "./drawio.ts";
 import { installDrawioGuard, pointViewerAtPack } from "./drawioGuard.ts";
+import { useViewerZoom } from "./useViewerZoom.ts";
 import type { FileViewerProps } from "./viewers.ts";
+import { recallZoom, rememberZoom } from "./zoom.ts";
+
+/** Os limites do zoom, em vezes o ajuste à janela. */
+const DRAWIO_ZOOM = { min: 0.25, max: 4 };
+
 
 /** As dicas da barra do viewer em português (sem os textos dele, que viriam da rede, elas ficariam em inglês). */
 const TOOLBAR_PT = [
@@ -36,10 +45,20 @@ interface DrawioCellState {
   height: number;
 }
 
+/** O pedaço do grafo do viewer (mxGraph) que o ⌘F e o zoom (T22178) usam. */
 interface DrawioGraph {
   container?: HTMLElement;
+  centerZoom?: boolean;
   model: { getCell(id: string): unknown };
-  view: { getState(cell: unknown): DrawioCellState | null };
+  view: {
+    getState(cell: unknown): DrawioCellState | null;
+    scale: number;
+    setScale(scale: number): void;
+    scaleAndTranslate(scale: number, dx: number, dy: number): void;
+    addListener(name: string, fn: () => void): void;
+    removeListener(fn: () => void): void;
+  };
+  initialViewState?: { scale: number; translate: { x: number; y: number } };
 }
 
 interface DrawioViewerInstance {
@@ -87,7 +106,7 @@ function loadViewer(): Promise<DrawioGlobals> {
 
 type State = { kind: "loading" } | { kind: "ready" } | { kind: "tooLarge" } | { kind: "error" };
 
-export function DrawioViewer({ file }: FileViewerProps) {
+export function DrawioViewer({ path, file }: FileViewerProps) {
   const text = "text" in file ? file.text : "";
   const box = useRef<HTMLDivElement>(null);
   // O arquivo é conferido antes do viewer carregar: um que não é diagrama, ou que passa do teto, nem chega nele.
@@ -159,6 +178,19 @@ export function DrawioViewer({ file }: FileViewerProps) {
   };
   useFindKey(wrap, openFind);
 
+  // O zoom (T22178), em vezes o ajuste à janela que o viewer escolheu ao abrir (`fit`). O papel tem o tamanho do ajuste
+  // vezes o zoom; o diagrama cresce a partir do canto dele, e o ponto embaixo dos dedos fica parado pela rolagem.
+  const graph = useRef<{ g: DrawioGraph; fit: number; width: number; height: number } | null>(null);
+  const [scale, setScale] = useState(1);
+  const zoomTo = useCallback((z: number | null) => {
+    const v = graph.current;
+    if (!v) return;
+    const init = v.g.initialViewState;
+    if (z === null && init) v.g.view.scaleAndTranslate(init.scale, init.translate.x, init.translate.y);
+    else v.g.view.setScale(v.fit * (z ?? 1));
+  }, []);
+  useViewerZoom({ path, target: box, scale, set: zoomTo, ...DRAWIO_ZOOM, anchor: ".kn-file-drawio-graph", enabled: state.kind === "ready" });
+
   useEffect(() => {
     let alive = true;
     const host = box.current;
@@ -169,6 +201,7 @@ export function DrawioViewer({ file }: FileViewerProps) {
     }
     setState({ kind: "loading" });
     let viewer: DrawioViewerInstance | null = null;
+    let unlisten = () => {};
     const container = document.createElement("div");
     container.className = "kn-file-drawio-graph";
     loadViewer().then(
@@ -177,7 +210,7 @@ export function DrawioViewer({ file }: FileViewerProps) {
         try {
           host.replaceChildren(container);
           const xml = dx.mxUtils!.parseXml(text).documentElement;
-          viewer = new dx.GraphViewer!(container, xml, {
+          const made = new dx.GraphViewer!(container, xml, {
             toolbar: "pages zoom layers",
             "toolbar-nohide": true,
             nav: true,
@@ -188,7 +221,30 @@ export function DrawioViewer({ file }: FileViewerProps) {
             "auto-fit": true,
             highlight: "#2ea05a",
           });
+          viewer = made;
           viewerRef.current = { viewer, dx };
+          const g = made.graph;
+          if (g) {
+            // O zoom da barra do viewer, sem mexer no deslocamento: o diagrama cresce do canto, como o papel.
+            g.centerZoom = false;
+            const fit = g.view.scale;
+            const v = { g, fit, width: container.offsetWidth, height: container.offsetHeight };
+            graph.current = v;
+            const sync = () => {
+              const k = g.view.scale / fit;
+              container.style.width = `${v.width * k}px`;
+              container.style.height = `${v.height * k}px`;
+              const fitted = Math.abs(k - 1) < 1e-4 && (!g.initialViewState || g.view.scale === g.initialViewState.scale);
+              rememberZoom(path, fitted ? null : k);
+              setScale(k);
+            };
+            g.view.addListener("scale", sync);
+            g.view.addListener("scaleAndTranslate", sync);
+            unlisten = () => g.view.removeListener(sync);
+            const z = recallZoom(path);
+            if (z !== null) g.view.setScale(fit * z);
+            else setScale(1);
+          }
           setState({ kind: "ready" });
         } catch {
           host.replaceChildren();
@@ -203,10 +259,12 @@ export function DrawioViewer({ file }: FileViewerProps) {
       mark.current = null;
       viewerRef.current = null;
       setFind(null);
+      unlisten();
+      graph.current = null;
       viewer?.destroy?.();
       host.replaceChildren();
     };
-  }, [text, check]);
+  }, [text, check, path]);
 
   const failed = state.kind === "tooLarge" || state.kind === "error";
   return (

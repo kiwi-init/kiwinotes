@@ -6,6 +6,7 @@
 import { type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { externalUrl } from "../links.ts";
+import { cssZoom } from "../files/zoom.ts";
 
 type Mermaid = (typeof import("mermaid"))["default"];
 export type Drawn = { kind: "svg"; svg: string } | { kind: "error"; message: string } | null;
@@ -280,7 +281,8 @@ export function MermaidBlock({ source, code, onLink, onShown }: { source: string
     const el = box.current;
     const svg = el?.querySelector("svg");
     if (!el || !svg) return;
-    const natural = svg.viewBox.baseVal.width || svg.getBoundingClientRect().width;
+    // Sem viewBox, a medida da tela, em px da nota: ela pode ter o `zoom` do CSS (T22178).
+    const natural = svg.viewBox.baseVal.width || svg.getBoundingClientRect().width / cssZoom(svg);
     let width = -1;
     let frame = 0;
     const fit = () => {

@@ -65,6 +65,8 @@ import { CanvasView } from "./canvas/CanvasView.tsx";
 import { FileView, type FilesApi } from "./files/FileView.tsx";
 import { canvasLines } from "../../src/shared/canvas-lines.ts";
 import { hasVersions } from "../../src/shared/file-view.ts";
+import { useViewerZoom } from "./files/useViewerZoom.ts";
+import { recallZoom } from "./files/zoom.ts";
 import { allFolders, loadCollapsed, loadOpenFolders, saveCollapsed, saveOpenFolders, type SectionId, toggled } from "./sidebarState.ts";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
 import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, VaultFile, ExportFormat, TreePrefs, ProjectView,
@@ -243,6 +245,14 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   // O aberto, para o agente (T14359, T19969): "essa nota", "esse arquivo" no pedido é ele. A nota, o arquivo no
   // visualizador ou o quadro, o último em destaque, mesmo com as Notas fora de vista e a pessoa falando pelo gato. Com a
   // janela fechada, o Bun esquece (`windows.ts`).
+  // A pinça e o ⌘+/⌘−/⌘0 na nota (T22178, spec #21198), como no Safari: o `zoom` do CSS na página inteira (o título, o
+  // texto, as imagens e as tabelas), a coluna cresce até a janela e depois o texto quebra de novo. A letra embaixo dos
+  // dedos fica parada. O zoom fica guardado por nota enquanto o app está aberto. `null` é 100%.
+  const center = useRef<HTMLElement>(null);
+  const [noteZoom, setNoteZoom] = useState<number | null>(null);
+  useEffect(() => setNoteZoom(note ? recallZoom(note.path) : null), [note?.path]);
+  const nz = noteZoom ?? 1;
+  useViewerZoom({ path: note?.path ?? "", target: center, scale: nz, set: setNoteZoom, min: 0.5, max: 3, anchor: ".kn-page", anchorText: true, enabled: view === "note" && !!note });
   const openForAgent = view === "note" ? (note?.path ?? null) : view === "file" ? fileOpen : view === "canvas" ? board : null;
   useEffect(() => {
     api.agentOpenNote?.(openForAgent);
@@ -1607,6 +1617,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     api.prefs && prefs.noteWidth !== null ? (
       <NoteWidthHandles
         width={dragWidth ?? prefs.noteWidth}
+        zoom={view === "note" ? nz : 1}
         onChange={setDragWidth}
         onCommit={(px) => {
           if (px === prefs.noteWidth) setDragWidth(null);
@@ -1857,7 +1868,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         />
       </TreePopover>
       {/* A largura da nota vale também para o .txt aberto (spec #13382): o texto quebra na mesma coluna. */}
-      <main className="kn-center" style={{ "--note-width": `${dragWidth ?? prefs.noteWidth ?? NOTE_WIDTH.default}px`, "--kiwi-accent": catPalette(prefs.catColor).accentColor } as CSSProperties}>
+      <main ref={center} className="kn-center" style={{ "--note-width": `${dragWidth ?? prefs.noteWidth ?? NOTE_WIDTH.default}px`, "--kiwi-accent": catPalette(prefs.catColor).accentColor } as CSSProperties}>
         {view === "canvas" && board && api.canvas ? (
           <CanvasView
             key={board}
@@ -1920,7 +1931,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         {note ? (
           <article
             className="kn-page"
-            style={{ "--note-width": `${dragWidth ?? prefs.noteWidth ?? NOTE_WIDTH.default}px` } as CSSProperties}
+            style={{ "--note-width": `${dragWidth ?? prefs.noteWidth ?? NOTE_WIDTH.default}px`, zoom: nz === 1 ? undefined : nz } as CSSProperties}
           >
             {widthHandles}
             {note.folder ? (

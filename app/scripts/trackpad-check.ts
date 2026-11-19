@@ -3,8 +3,10 @@
 // eventos que o WebKit do app entrega (`gesturestart`/`gesturechange`/`gestureend`, com a escala e o ponto dos dedos) e
 // como a rolagem com ctrl dos outros navegadores.
 //
-// - A pinça dá zoom centrada nos dedos na planilha (xlsx e csv), no docx, no pdf, na imagem, no texto e no código: o
-//   que estava embaixo dos dedos continua lá, maior.
+// - A pinça dá zoom centrada nos dedos na planilha (xlsx e csv), no docx, no pdf, na imagem, no texto e no código, e
+//   na nota, no diagrama do draw.io e no vídeo (T22178): o que estava embaixo dos dedos continua lá, maior.
+// - Na nota, o texto quebra de novo com o zoom: a letra embaixo dos dedos fica parada, e o clique com zoom cai na letra
+//   certa.
 // - ⌘+, ⌘− e ⌘0 fazem o mesmo.
 // - Rolar na diagonal uma planilha de 50.000 linhas e 300 colunas, com a roda do trackpad, não mostra área em branco:
 //   a cada quadro, os pontos da área da grade caem numa célula.
@@ -66,7 +68,29 @@ put(
 );
 put("Docs/lista.txt", `${Array.from({ length: 400 }, (_, i) => `Linha ${i + 1} da lista`).join("\n")}\n`);
 put("Docs/exemplo.ts", `${Array.from({ length: 300 }, (_, i) => `export const v${i} = ${i};`).join("\n")}\n`);
-put("Leia-me.md", "# Leia-me\n\nUma nota de exemplo.\n");
+// A nota: linhas curtas (cada uma inteira na largura, para medir a altura dela) e depois parágrafos longos, que quebram
+// de novo quando a coluna cresce.
+const paragraph = (i: number) =>
+  `Parágrafo ${i} de exemplo: a horta comunitária do bairro recebe voluntários aos sábados, e cada canteiro tem uma placa com o nome da planta, a data do plantio e quem cuida dele naquela semana.`;
+put(
+  "Leia-me.md",
+  `# Leia-me\n\n${Array.from({ length: 60 }, (_, i) => `Linha ${i + 1} da nota de exemplo`).join("\n\n")}\n\n${Array.from({ length: 30 }, (_, i) => paragraph(i + 1)).join("\n\n")}\n`,
+);
+// O diagrama: 6 × 5 caixas, alto o bastante para que, com 2×, o papel passe da área e role.
+put(
+  "Docs/fluxo.drawio",
+  `<mxfile><diagram id="d1" name="Página-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>${Array.from(
+    { length: 30 },
+    (_, i) =>
+      `<mxCell id="c${i}" value="Etapa ${i + 1}" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;" vertex="1" parent="1"><mxGeometry x="${(i % 6) * 150}" y="${Math.floor(i / 6) * 110}" width="120" height="80" as="geometry"/></mxCell>`,
+  ).join("")}</root></mxGraphModel></diagram></mxfile>`,
+);
+// O vídeo: 1600 × 900, maior que a área, para começar ajustado. Um padrão de teste do ffmpeg, sem nada de ninguém.
+{
+  const file = join(vault, "Docs/painel.mp4");
+  const ff = Bun.spawnSync(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=1600x900:rate=10:duration=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", file]);
+  assert.equal(ff.exitCode, 0, `ffmpeg: ${ff.stderr.toString()}`);
+}
 
 async function cli(args: string[]): Promise<string> {
   const p = Bun.spawn([process.execPath, join(app, "scripts/cli.ts"), ...args, "--data", data], { cwd: app, stdout: "pipe", stderr: "pipe" });
@@ -166,6 +190,9 @@ async function again(p: Page, at: { x: number; y: number }, keySel: string, befo
   );
 }
 
+/** Uma linha da nota: a que está em edição (`.cm-line`) ou um parágrafo mostrado pronto (`p`). */
+const NOTE_LINE = ".kn-page .cm-content p, .kn-page .cm-line";
+
 interface Case {
   file: string;
   /** O lugar que rola, onde a pinça cai. */
@@ -176,8 +203,10 @@ interface Case {
   at: [number, number];
   /** Só no eixo que cresce: o texto quebra na largura da nota, então a largura da linha não muda. */
   axis?: "both" | "y";
-  /** Pronto para medir. */
+  /** Pronto para medir (dentro do arquivo aberto). */
   ready: string;
+  /** Pronto para medir, quando não é um arquivo (a nota). */
+  page?: string;
 }
 
 const CASES: Case[] = [
@@ -188,7 +217,11 @@ const CASES: Case[] = [
   { file: "Docs/mapa.svg", area: ".kn-file-image-area", under: ".kn-file-image-img", at: [0.6, 0.55], ready: ".kn-file-image-img" },
   { file: "Docs/lista.txt", area: ".kn-file-text-editor .cm-scroller", under: ".cm-line", at: [0.3, 0.5], axis: "y", ready: ".cm-line" },
   { file: "Docs/exemplo.ts", area: ".kn-file-text-editor .cm-scroller", under: ".cm-line", at: [0.3, 0.5], axis: "y", ready: ".cm-line" },
+  { file: "Leia-me.md", area: ".kn-center", under: NOTE_LINE, at: [0.3, 0.5], axis: "y", ready: "", page: ".kn-page .cm-content" },
+  { file: "Docs/fluxo.drawio", area: ".kn-file-drawio-area", under: ".kn-file-drawio-graph", at: [0.55, 0.45], ready: ".kn-file-drawio-graph svg" },
+  { file: "Docs/painel.mp4", area: ".kn-file-media", under: ".kn-file-media-player", at: [0.6, 0.55], ready: ".kn-file-media[data-loaded] .kn-file-media-player" },
 ];
+const only = (name: string) => !process.env.ONLY || process.env.ONLY.split(",").some((o) => name.includes(o));
 
 /** Quanto o ponto embaixo dos dedos pode andar, em px da tela: só o arredondamento. */
 const DRIFT_PX = 3;
@@ -201,11 +234,11 @@ await cli(["start", "--no-helper"]);
 const browser = await webkit.launch({ headless: true });
 try {
   // 1. A pinça, o ctrl+roda e o ⌘+/⌘−/⌘0 em cada tipo.
-  for (const c of CASES.filter((x) => !process.env.ONLY || x.file.includes(process.env.ONLY))) {
+  for (const c of CASES.filter((x) => only(x.file))) {
     const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1000, height: 680, motion: false, browser: "webkit", video, query: { note: c.file } });
     const p = w.page;
     try {
-      await p.waitForSelector(`.kn-file[data-state='ready'] ${c.ready}`, { timeout: 30000 });
+      await p.waitForSelector(c.page ?? `.kn-file[data-state='ready'] ${c.ready}`, { timeout: 30000 });
       await p.waitForTimeout(500);
       const a = (await p.locator(c.area).first().boundingBox())!;
       const at = { x: a.x + a.width * c.at[0], y: a.y + a.height * c.at[1] };
@@ -273,7 +306,7 @@ try {
   }
 
   // 2. A planilha grande na diagonal, com a roda do trackpad, medindo cada quadro; e para o lado até passar da borda.
-  {
+  if (only("pedidos-grande")) {
     const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "dark", width: 1000, height: 680, motion: false, browser: "webkit", query: { note: "Loja/pedidos-grande.xlsx" } });
     const p = w.page;
     try {
@@ -338,6 +371,128 @@ try {
     } catch (e) {
       failed = true;
       report.push(`FALHOU pedidos-grande.xlsx: ${(e as Error).message}`);
+    } finally {
+      await w.close();
+    }
+  }
+
+  // 3. A nota com parágrafos longos: a coluna cresce até a janela e o texto quebra de novo. A letra embaixo dos dedos
+  // fica parada, e, com zoom, o clique põe o cursor na letra certa.
+  if (only("Leia-me")) {
+    const w = await openWindow(browser, ctx, { window: "notes", scale: 2, theme: "light", width: 1000, height: 680, motion: false, browser: "webkit", query: { note: "Leia-me.md" } });
+    const p = w.page;
+    try {
+      await p.waitForSelector(".kn-page .cm-content", { timeout: 30000 });
+      await p.waitForTimeout(500);
+      /** O parágrafo pelo começo do texto (o editor só desenha o que está perto da tela). */
+      const para = `(start) => [...document.querySelectorAll(${JSON.stringify(NOTE_LINE)})].find((l) => l.textContent?.startsWith(start))`;
+      // O parágrafo 12 no meio da área: desce até o editor desenhar ele.
+      for (let i = 0; i < 40; i++) {
+        const found = await p.evaluate(`(${para})("Parágrafo 12 ") ? true : (document.querySelector(".kn-center").scrollTop += 300, false)`);
+        if (found) break;
+        await p.waitForTimeout(100);
+      }
+      await p.evaluate(`(${para})("Parágrafo 12 ").scrollIntoView({ block: "center" })`);
+      await p.waitForTimeout(300);
+      type Letter = { x: number; y: number; text: string; index: number; top: number; left: number; h: number };
+      /** A letra embaixo do ponto: o texto da linha, onde ela está nele, e a caixa dela. */
+      const letterAt = (x: number, y: number) =>
+        p.evaluate(
+          ([px, py]) => {
+            const r = document.caretRangeFromPoint(px!, py!)!;
+            const line = (r.startContainer.parentElement as HTMLElement).closest(".cm-content p, .cm-line")!;
+            const before = document.createRange();
+            before.setStart(line, 0);
+            before.setEnd(r.startContainer, r.startOffset);
+            const one = document.createRange();
+            one.setStart(r.startContainer, r.startOffset);
+            one.setEnd(r.startContainer, r.startOffset + 1);
+            const b = one.getBoundingClientRect();
+            return { x: px!, y: py!, text: line.textContent!, index: before.toString().length, top: b.top, left: b.left, h: b.height };
+          },
+          [x, y],
+        );
+      /**
+       * A letra `index` do parágrafo que começa com `start`, e a caixa dela. Pela posição no texto, não por um x: depois do
+       * zoom a quebra depende da largura da janela, e um x fixo pode cair depois do fim da linha (revisão 2 do T22178).
+       */
+      const letterOf = (start: string, index: number) =>
+        p.evaluate(
+          ([st, ix]) => {
+            const line = [...document.querySelectorAll(".cm-content p, .cm-line")].find((l) => l.textContent?.startsWith(st as string))!;
+            const w = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+            let left = Math.max(0, Math.min(ix as number, line.textContent!.length - 1));
+            const at = left;
+            for (let n = w.nextNode(); n; n = w.nextNode()) {
+              const k = n.textContent!.length;
+              if (left < k) {
+                const r = document.createRange();
+                r.setStart(n, left);
+                r.setEnd(n, left + 1);
+                const b = r.getBoundingClientRect();
+                return { x: b.left + 1, y: b.top + b.height / 2, text: line.textContent!, index: at, top: b.top, left: b.left, h: b.height };
+              }
+              left -= k;
+            }
+            throw new Error(`a letra ${ix} não está no parágrafo`);
+          },
+          [start, index] as const,
+        );
+      const mid = (await p.evaluate(`(() => { const r = (${para})("Parágrafo 12 ").getBoundingClientRect(); return { x: r.left + r.width * 0.55, y: r.top + r.height * 0.5 }; })()`)) as { x: number; y: number };
+      const l0: Letter = await letterAt(mid.x, mid.y);
+      const lines0 = Math.round(((await p.evaluate(`(${para})("Parágrafo 12 ").getBoundingClientRect().height`)) as number) / l0.h);
+      await pinch(p, ".kn-center", mid, 2);
+      // A mesma letra, achada pelo parágrafo e pela posição nele: na altura dos dedos (o ponto, o dobro do que estava
+      // abaixo do alto dela). Para o lado ela anda: o texto quebra de novo na coluna mais larga, e não há o que rolar.
+      const l1 = (await p.evaluate(
+        `(() => { const line = (${para})(${JSON.stringify(l0.text.slice(0, 14))}); const w = document.createTreeWalker(line, NodeFilter.SHOW_TEXT); let left = ${l0.index};
+          for (let n = w.nextNode(); n; n = w.nextNode()) { const k = n.textContent.length; if (left < k) { const r = document.createRange(); r.setStart(n, left); r.setEnd(n, left + 1); const b = r.getBoundingClientRect(); return { top: b.top, h: b.height }; } left -= k; }
+          return null; })()`,
+      )) as { top: number; h: number } | null;
+      assert.ok(l1, "nota: a letra sumiu do parágrafo");
+      const drift = Math.abs(l1.top + (mid.y - l0.top) * 2 - mid.y);
+      assert.ok(drift <= DRIFT_PX, `nota: a letra andou ${drift.toFixed(1)} px de baixo dos dedos`);
+      assert.ok(Math.abs(l1.h / l0.h - 2) < 0.15, `nota: a letra cresceu ${(l1.h / l0.h).toFixed(2)}×`);
+      // A coluna não passa da janela: nada de rolar para o lado.
+      const side = await p.locator(".kn-center").evaluate((el) => el.scrollWidth - el.clientWidth);
+      assert.ok(side <= 1, `nota: com zoom, a coluna passou da janela (${side} px)`);
+      await p.screenshot({ path: join(out, "nota-pinca.png") });
+      // O clique com zoom: o cursor antes da letra clicada (um marcador digitado cai bem ali).
+      const target = await letterOf(l0.text.slice(0, 14), l0.index + 6);
+      await p.mouse.click(target.left + 1, target.top + target.h / 2);
+      await p.keyboard.type("§");
+      await p.waitForTimeout(200);
+      const typed = (await p.evaluate(`(${para})(${JSON.stringify(target.text.slice(0, 14))}).textContent`)) as string;
+      assert.equal(typed, `${target.text.slice(0, target.index)}§${target.text.slice(target.index)}`, "nota: com zoom, o clique pôs o cursor em outra letra");
+      // O menu do botão direito com zoom (revisão do T22178): no clique, no tamanho normal, e dentro da janela.
+      await p.keyboard.press("Escape");
+      const spot = await letterOf(l0.text.slice(0, 14), l0.index - 4);
+      await p.mouse.click(spot.left + 1, spot.top + spot.h / 2, { button: "right" });
+      const menu = p.locator(".kn-menu").first();
+      await menu.waitFor({ timeout: 5000 });
+      // A caixa parada: a entrada do menu ainda pode estar no meio quando ele aparece.
+      let mb = (await menu.boundingBox())!;
+      for (let i = 0; i < 40; i++) {
+        await p.waitForTimeout(50);
+        const next = (await menu.boundingBox())!;
+        const same = Math.abs(next.y - mb.y) < 0.5 && Math.abs(next.height - mb.height) < 0.5 && Math.abs(next.x - mb.x) < 0.5;
+        mb = next;
+        if (same) break;
+      }
+      const win = p.viewportSize()!;
+      // No clique; ou, sem lugar embaixo, preso ao pé da janela (8 px, como em 1×) e ainda cobrindo o clique.
+      const cy = spot.top + spot.h / 2, dx = Math.abs(mb.x - (spot.left + 1));
+      const atClick = Math.abs(mb.y - cy) <= 3, clamped = Math.abs(mb.y + mb.height - (win.height - 8)) <= 3 && mb.y <= cy;
+      assert.ok(dx <= 3 && (atClick || clamped), `nota: com zoom, o menu abriu em (${mb.x.toFixed(0)}, ${mb.y.toFixed(0)}), ${mb.height.toFixed(0)} px de altura, e o clique foi em (${(spot.left + 1).toFixed(0)}, ${cy.toFixed(0)})`);
+      assert.ok(mb.x >= 0 && mb.y >= 0 && mb.x + mb.width <= win.width && mb.y + mb.height <= win.height, `nota: com zoom, o menu passou da janela (${JSON.stringify(mb)})`);
+      const zoomed = (await menu.evaluate((el) => { let z = 1; for (let e: Element | null = el; e; e = e.parentElement) z *= parseFloat(getComputedStyle(e).zoom) || 1; return z; })) as number;
+      assert.equal(zoomed, 1, "nota: o menu herdou o zoom da nota");
+      await p.screenshot({ path: join(out, "nota-menu-zoom.png") });
+      await p.keyboard.press("Escape");
+      report.push(`ok     Leia-me.md: parágrafo de ${lines0} linhas quebra de novo com 2×, a letra andou ${drift.toFixed(1)} px, sem rolar para o lado; o clique com zoom cai na letra certa; o menu do botão direito abre no clique, sem o zoom`);
+    } catch (e) {
+      failed = true;
+      report.push(`FALHOU Leia-me.md (parágrafos): ${(e as Error).message}`);
     } finally {
       await w.close();
     }

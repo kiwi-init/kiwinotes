@@ -36,7 +36,7 @@ O teste lê esta tabela entre os marcadores. Nos itens com teste, um "cumpre" qu
 <!-- regua:inicio -->
 | Tipo | Extensões | 1. Abre rápido | 2. Arquivo grande | 3. Buscar dentro (⌘F) | 4. Busca do app e ⌘K | 5. Editar | 6. Gravar não estraga | 7. Histórico | 8. O gato lê | 9. O gato edita | 10. Recusa em vez de arriscar | 11. Tudo local | 12. Trackpad |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **nota** | `md` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | falta spec #21198 |
+| **nota** | `md` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
 | **txt** | `txt` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
 | **log** | `log` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
 | **json** | `json` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
@@ -48,8 +48,8 @@ O teste lê esta tabela entre os marcadores. Nos itens com teste, um "cumpre" qu
 | **xlsx** | `xlsx` | cumpre | cumpre | falta spec #21065 | cumpre | falta spec #21065 | falta spec #21065 | cumpre | cumpre | falta spec #21033 | cumpre | cumpre | cumpre |
 | **imagem** | `png` `jpg` `jpeg` `gif` `webp` `heic` `heif` `bmp` | cumpre | cumpre | n/a: sem texto (o OCR fica fora da régua) | n/a: sem texto (o OCR fica fora da régua) | n/a: o Kiwi só mostra a imagem | n/a: o Kiwi só mostra a imagem | n/a: o Kiwi só mostra a imagem | n/a: sem texto (o OCR fica fora da régua) | n/a: o Kiwi só mostra a imagem | cumpre | cumpre | cumpre |
 | **svg** | `svg` `drawio.svg` | cumpre | cumpre | n/a: abre como imagem, e o texto é a marcação do desenho | n/a: abre como imagem, e o texto é a marcação do desenho | n/a: o Kiwi só mostra o desenho | n/a: o Kiwi só mostra o desenho | n/a: o Kiwi só mostra o desenho | n/a: abre como imagem, e o texto é a marcação do desenho | n/a: o Kiwi só mostra o desenho | cumpre | cumpre | cumpre |
-| **drawio** | `drawio` | cumpre | cumpre | cumpre | cumpre | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | cumpre | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | cumpre | cumpre | falta spec #21198 |
-| **mídia** | `MEDIA_TYPES` | cumpre | cumpre | n/a: sem texto (o OCR fica fora da régua) | n/a: sem texto (o OCR fica fora da régua) | n/a: o Kiwi só toca o áudio e o vídeo | n/a: o Kiwi só toca o áudio e o vídeo | n/a: o Kiwi só toca o áudio e o vídeo | n/a: sem texto (o OCR fica fora da régua) | n/a: o Kiwi só toca o áudio e o vídeo | cumpre | cumpre | falta spec #21198 |
+| **drawio** | `drawio` | cumpre | cumpre | cumpre | cumpre | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | cumpre | n/a: o diagrama se edita no draw.io, e o Kiwi só mostra | cumpre | cumpre | cumpre |
+| **mídia** | `MEDIA_TYPES` | cumpre | cumpre | n/a: sem texto (o OCR fica fora da régua) | n/a: sem texto (o OCR fica fora da régua) | n/a: o Kiwi só toca o áudio e o vídeo | n/a: o Kiwi só toca o áudio e o vídeo | n/a: o Kiwi só toca o áudio e o vídeo | n/a: sem texto (o OCR fica fora da régua) | n/a: o Kiwi só toca o áudio e o vídeo | cumpre | cumpre | cumpre |
 | **quadro branco** | `canvas` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
 | **abre fora** | `doc` `xls` `pages` `numbers` `pptx` | abre fora | abre fora | abre fora | abre fora | abre fora | abre fora | abre fora | abre fora | abre fora | abre fora | abre fora | abre fora |
 <!-- regua:fim -->
