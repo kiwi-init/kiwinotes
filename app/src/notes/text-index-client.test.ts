@@ -79,7 +79,7 @@ describe("o índice num Worker (P0 #23988)", () => {
     expect(paths(await t.search("acerola", 10, f.stat))).toEqual(["logs/a.log", "logs/b.json"]);
   });
 
-  test("se o worker cai, o próximo pedido abre outro, com a lista de novo", async () => {
+  test("se o worker cai, o próximo pedido abre outro, sobre o mesmo banco", async () => {
     const f = folder({ "x.txt": "pitanga", "y.txt": "pitanga e jambo" });
     const t = f.worker();
     await t.sync(f.all());

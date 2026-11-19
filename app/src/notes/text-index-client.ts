@@ -3,9 +3,11 @@
 // um xlsx de 33 MB (745 ms). Agora o `TextIndex` inteiro roda num Worker (`text-index-worker.ts`), e o main fica com
 // este cliente, de mesma API: manda a lista e os avisos, e recebe os achados.
 //
-// - O main guarda o caminho, o tamanho e o mtime de cada arquivo indexável: se o worker cair, um novo abre e recebe a
-//   lista de novo (o banco já tem quase tudo, e só o que mudou é lido).
-// - O achado volta com o tamanho e o mtime do worker; o main confere com o `stat` de agora e tira o que já saiu.
+// - A lista vai como um JSON só com o caminho, o tamanho e o mtime, e o worker escolhe o que entra: com 250 mil arquivos,
+//   o filtro e o clone estruturado no main custavam uns 180 ms de uma vez; o `JSON.stringify` custa uns 20.
+// - O worker confere a busca pelo que o banco tem (`TextIndex.stored`); o achado volta e o main confere com o `stat` de
+//   agora, tira o que já saiu e põe o tamanho e o mtime de agora. Se o worker cai, o próximo pedido abre outro sobre o
+//   mesmo banco, que já tem tudo, e a próxima lista ou aviso põe em dia o que mudou nesse meio-tempo.
 // - Sem o arquivo do worker (um build sem o preBuild) ou com `KIWI_TEXT_INDEX_WORKER=0`, o índice roda no main, como antes.
 
 import { existsSync } from "node:fs";
@@ -23,7 +25,8 @@ export type WorkerOptions = Omit<TextIndexOptions, "pause">;
 
 export type WorkerRequest = { id: number } & (
   | { op: "init"; options: WorkerOptions; pauseMs?: number }
-  | { op: "sync"; files: VaultFile[] }
+  /** `json`: `VaultFile[]`, só com `path`, `size` e `mtime`. */
+  | { op: "sync"; json: string }
   | { op: "update"; now: VaultFile[]; gone: string[] }
   | { op: "search"; query: string; limit: number }
   | { op: "idle" }
@@ -53,9 +56,6 @@ export class TextIndexWorker implements TextIndexApi {
   private w: Worker | null = null;
   private seq = 0;
   private readonly pending = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>();
-  /** Os arquivos indexáveis de agora (só caminho, tamanho e mtime), para um worker novo receber a lista. */
-  private readonly known = new Map<string, VaultFile>();
-  private synced = false;
   private closed = false;
   /** Quantos workers abriram (o teste da queda). */
   starts = 0;
@@ -86,8 +86,6 @@ export class TextIndexWorker implements TextIndexApi {
     this.w = w;
     this.starts++;
     this.send(w, { op: "init", options: this.o, ...(this.pauseMs !== undefined ? { pauseMs: this.pauseMs } : {}) }).catch(() => {});
-    // Um worker novo depois de uma queda: a lista de novo, e ele lê só o que mudou.
-    if (this.synced) this.send(w, { op: "sync", files: [...this.known.values()] }).catch(log);
     return w;
   }
 
@@ -115,18 +113,8 @@ export class TextIndexWorker implements TextIndexApi {
 
   sync(files: Iterable<VaultFile>): Promise<void> {
     if (this.closed) return Promise.resolve();
-    const list: VaultFile[] = [];
-    this.known.clear();
-    for (const f of files) {
-      if (!isIndexedFile(f.path)) continue;
-      const row = { path: f.path, size: f.size, mtime: f.mtime };
-      list.push(row);
-      this.known.set(f.path, row);
-    }
-    const done = this.call({ op: "sync", files: list });
-    // Depois do `call`: o 1º worker abre com esta lista, não com a de novo da queda.
-    this.synced = true;
-    return done.then(() => {}, log);
+    const json = JSON.stringify(Array.isArray(files) ? files : [...files], ["path", "size", "mtime"]);
+    return this.call({ op: "sync", json }).then(() => {}, log);
   }
 
   update(paths: readonly string[], stat: (p: string) => VaultFile | undefined): Promise<void> {
@@ -136,14 +124,8 @@ export class TextIndexWorker implements TextIndexApi {
     for (const p of paths) {
       if (!isIndexedFile(p)) continue;
       const f = stat(p);
-      if (f) {
-        const row = { path: f.path, size: f.size, mtime: f.mtime };
-        now.push(row);
-        this.known.set(p, row);
-      } else {
-        gone.push(p);
-        this.known.delete(p);
-      }
+      if (f) now.push({ path: f.path, size: f.size, mtime: f.mtime });
+      else gone.push(p);
     }
     if (!now.length && !gone.length) return Promise.resolve();
     return this.call({ op: "update", now, gone }).then(() => {}, log);
