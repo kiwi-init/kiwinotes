@@ -142,6 +142,28 @@ describe("o índice num Worker (P0 #23988)", () => {
     }
   });
 
+  test("pelo worker, o salvo entra com a passada parada no portão (revisão do #252)", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 90; i++) files[`codigo/mod-${i}.ts`] = `export const jambo${i} = ${i};\n`;
+    const f = folder(files);
+    let asked = 0;
+    let openGate!: () => void;
+    const opened = new Promise<void>((r) => (openGate = r));
+    const t = f.worker({}, { wait: () => (asked++, opened) });
+    const done = t.sync(f.all());
+    for (let n = 0; !asked; n++) {
+      if (n > 2000) throw new Error("a passada não pediu o portão");
+      await Bun.sleep(1);
+    }
+    f.write("salvo/b.txt", "jabuticaba\n");
+    await t.update(["salvo/b.txt"], f.stat);
+    expect(paths(await t.search("jabuticaba", 10, f.stat))).toEqual(["salvo/b.txt"]);
+    expect((await t.stats()).batches).toBe(1);
+    openGate();
+    await done;
+    expect(paths(await t.search("jambo42", 10, f.stat))).toEqual(["codigo/mod-42.ts"]);
+  });
+
   test("o portão do main segura cada lote do worker até liberar (spec #24228, T24286)", async () => {
     const files: Record<string, string> = {};
     for (let i = 0; i < 90; i++) files[`codigo/mod-${i}.ts`] = `export const jambo${i} = ${i};\n`;

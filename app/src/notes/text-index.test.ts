@@ -428,6 +428,56 @@ describe("o ritmo e o portão (spec #24228, T24286)", () => {
     expect(pauseAfter(work[1]!)).toBeGreaterThanOrEqual(3 * work[1]!);
   });
 
+  test("o salvo entra na hora, com o portão fechado e uma passada parada nele (revisão do #252)", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 90; i++) files[`codigo/mod-${i}.ts`] = `export const caju${i} = ${i};\n`;
+    const f = folder(files);
+    let asked = 0;
+    let openGate!: () => void;
+    const opened = new Promise<void>((r) => (openGate = r));
+    const t = new TextIndex({
+      root: f.root,
+      dir: path.join(f.base, "dados", "text-index"),
+      pause: async () => {},
+      gate: () => (asked++, opened),
+    });
+    open.push(t);
+    // Um salvo sem passada nenhuma não pergunta ao portão.
+    writeFileSync(path.join(f.root, "a.txt"), "pitanga\n");
+    await t.update(["a.txt"], f.stat);
+    expect(asked).toBe(0);
+    expect((await t.search("pitanga", 10, f.stat)).map((h) => h.path)).toEqual(["a.txt"]);
+    // Uma passada parada no portão, e um salvo no meio: ele entra sem o portão abrir.
+    const before = t.stats.batches;
+    const done = t.sync([...f.all(), f.stat("a.txt")!]);
+    while (!asked) await Bun.sleep(1);
+    writeFileSync(path.join(f.root, "b.txt"), "jabuticaba\n");
+    await t.update(["b.txt"], f.stat);
+    expect((await t.search("jabuticaba", 10, f.stat)).map((h) => h.path)).toEqual(["b.txt"]);
+    expect(t.stats.batches).toBe(before + 1); // só o lote do b.txt: a passada não andou
+    // Muitos salvos não abrem muitas esperas no portão.
+    for (let k = 0; k < 5; k++) {
+      writeFileSync(path.join(f.root, `c${k}.txt`), "jabuticaba\n");
+      await t.update([`c${k}.txt`], f.stat);
+    }
+    expect(asked).toBe(1);
+    openGate();
+    await done;
+    expect((await t.search("caju42", 10, f.stat)).map((h) => h.path)).toEqual(["codigo/mod-42.ts"]);
+  });
+
+  test("fechar o índice solta a passada parada no portão e os salvos dela", async () => {
+    const f = folder({ "x.txt": "graviola\n" });
+    const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), pause: async () => {}, gate: () => new Promise<void>(() => {}) });
+    const done = t.sync(f.all());
+    await Bun.sleep(20);
+    writeFileSync(path.join(f.root, "y.txt"), "graviola\n");
+    const saved = t.update(["y.txt"], f.stat);
+    await t.close();
+    await done;
+    await saved;
+  });
+
   test("o portão segura cada lote até liberar", async () => {
     const files: Record<string, string> = {};
     for (let i = 0; i < 90; i++) files[`codigo/mod-${i}.ts`] = `export const caju${i} = ${i};\n`;

@@ -207,6 +207,11 @@ export class TextIndex {
   private readonly maxBytes: number;
   private readonly pause: (workMs: number) => Promise<void>;
   /** O que a sessão fez (o teste da 2ª abertura e a medição). */
+  /** Passadas (`sync`) na fila ou andando: um `update` no meio entra entre os lotes, sem esperar o portão. */
+  private syncing = 0;
+  private readonly saved: { paths: readonly string[]; stat: (p: string) => VaultFile | undefined; done: () => void }[] = [];
+  private wake: (() => void) | null = null;
+  private gateWait: Promise<void> | null = null;
   readonly stats = { read: 0, nameOnly: 0, removed: 0, skipped: 0, batches: 0, maxBatchText: 0, overCap: 0, alone: 0, docs: 0 };
   /** Os bytes que a última busca leu do disco (o teste do orçamento). */
   lastSearchBytes = 0;
@@ -276,19 +281,30 @@ export class TextIndex {
   sync(files: Iterable<VaultFile>): Promise<void> {
     const want = new Map<string, VaultFile>();
     for (const f of files) if (isIndexedFile(f.path)) want.set(f.path, f);
+    this.syncing++;
     return this.queue(async () => {
-      const db = await this.open();
-      if (this.closed) return;
-      const have = new Map((db.query("SELECT path, mtime, size FROM files").all() as FileRow[]).map((r) => [r.path, r]));
-      const gone = [...have.keys()].filter((p) => !want.has(p));
-      if (gone.length) this.remove(db, gone);
-      const changed = [...want.values()].filter((f) => {
-        const h = have.get(f.path);
-        return !h || h.mtime !== f.mtime || h.size !== f.size;
-      });
-      this.stats.skipped += want.size - changed.length;
-      await this.index(changed);
+      try {
+        await this.pass(want);
+      } finally {
+        await this.drainSaved();
+        this.syncing--;
+      }
     });
+  }
+
+  /** A passada: tira o que saiu e indexa o que é novo ou mudou, com o portão antes de cada lote. */
+  private async pass(want: ReadonlyMap<string, VaultFile>): Promise<void> {
+    const db = await this.open();
+    if (this.closed) return;
+    const have = new Map((db.query("SELECT path, mtime, size FROM files").all() as FileRow[]).map((r) => [r.path, r]));
+    const gone = [...have.keys()].filter((p) => !want.has(p));
+    if (gone.length) this.remove(db, gone);
+    const changed = [...want.values()].filter((f) => {
+      const h = have.get(f.path);
+      return !h || h.mtime !== f.mtime || h.size !== f.size;
+    });
+    this.stats.skipped += want.size - changed.length;
+    await this.index(changed, true);
   }
 
   /**
@@ -296,21 +312,72 @@ export class TextIndex {
    * ignorado.
    */
   update(paths: readonly string[], stat: (p: string) => VaultFile | undefined): Promise<void> {
+    // Com uma passada parada no portão, o salvo não espera atrás dela na fila: entra entre os lotes (revisão do #252).
+    if (this.syncing) {
+      const list = paths.filter(isIndexedFile);
+      if (!list.length) return Promise.resolve();
+      return new Promise<void>((done) => {
+        this.saved.push({ paths: list, stat, done });
+        this.wake?.();
+      });
+    }
     const list = paths.filter(isIndexedFile);
     if (!list.length) return Promise.resolve();
     return this.queue(async () => {
       const db = await this.open();
       if (this.closed) return;
-      const now: VaultFile[] = [];
-      const gone: string[] = [];
-      for (const p of list) {
-        const f = stat(p);
-        if (f) now.push(f);
-        else gone.push(p);
-      }
-      if (gone.length) this.remove(db, gone);
-      await this.index(now);
+      await this.apply(db, list, stat);
     });
+  }
+
+  /** Tira o que saiu e indexa o que mudou, sem o portão: o que a pessoa acabou de salvar. */
+  private async apply(db: Database, list: readonly string[], stat: (p: string) => VaultFile | undefined): Promise<void> {
+    const now: VaultFile[] = [];
+    const gone: string[] = [];
+    for (const p of list) {
+      const f = stat(p);
+      if (f) now.push(f);
+      else gone.push(p);
+    }
+    if (gone.length) this.remove(db, gone);
+    await this.index(now, false);
+  }
+
+  /** Os salvos que chegaram durante uma passada (`update` com `syncing`). */
+  private async drainSaved(): Promise<void> {
+    while (this.saved.length) {
+      const job = this.saved.shift()!;
+      try {
+        if (!this.closed && this.db) await this.apply(this.db, job.paths, job.stat);
+      } catch (e) {
+        console.error("[text-index]", e instanceof Error ? e.message : e);
+      } finally {
+        job.done();
+      }
+    }
+  }
+
+  /**
+   * Espera o portão, mas um salvo que chega no meio entra na hora (revisão do #252): o portão segura só a passada. Uma
+   * espera só por vez, reaproveitada: muitos salvos não abrem muitas esperas no main.
+   */
+  private async waitGate(): Promise<void> {
+    const gate = this.o.gate;
+    if (!gate) return this.drainSaved();
+    for (;;) {
+      await this.drainSaved();
+      if (this.closed) return;
+      this.gateWait ??= gate().finally(() => (this.gateWait = null));
+      const woke = new Promise<false>((r) => (this.wake = () => r(false)));
+      // Um salvo que chegou entre o fim do `drainSaved` e o `wake` acima não acordaria ninguém: confere antes de dormir.
+      if (this.saved.length || this.closed) {
+        this.wake = null;
+        continue;
+      }
+      const open = await Promise.race([this.gateWait.then(() => true as const), woke]);
+      this.wake = null;
+      if (open) return;
+    }
   }
 
   /** O arquivo como o índice o leu (o caminho, o tamanho e o mtime), ou `undefined`: o `stat` da busca no worker (P0 #23988). */
@@ -339,13 +406,14 @@ export class TextIndex {
     this.stats.removed += paths.length;
   }
 
-  private async index(files: readonly VaultFile[]): Promise<void> {
+  /** `gated`: a passada (`sync`) espera o portão antes de cada lote; o salvo (`update`) não. */
+  private async index(files: readonly VaultFile[], gated: boolean): Promise<void> {
     const cap = this.o.batchText ?? BATCH_TEXT;
     let i = 0;
     /** O arquivo que não coube no lote de antes: abre o próximo. */
     let carry: Item | null = null;
     while (i < files.length || carry) {
-      if (this.o.gate) await this.o.gate();
+      if (gated) await this.waitGate();
       if (this.closed) return;
       const started = performance.now();
       const batch: Item[] = [];
@@ -543,6 +611,7 @@ export class TextIndex {
   /** Fecha o banco (a pasta saiu de cena). */
   async close(): Promise<void> {
     this.closed = true;
+    this.wake?.();
     await this.chain;
     this.db?.close();
     this.db = null;
