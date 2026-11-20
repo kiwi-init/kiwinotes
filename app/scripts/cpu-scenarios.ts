@@ -13,6 +13,8 @@
 // |              | pronto, e a pessoa em outro app (o `blur` em cada janela): tela e helper < 1%, tudo < 2%           |
 // | repouso-foco | o mesmo, com a janela na frente e ninguém mexendo                                                  |
 //
+// - Antes de medir o repouso, o roteiro espera o app assentar (`waitQuiet`: janelas de 5 s até a soma ficar na régua
+//   de "tudo", no máximo 60 s) e diz quanto esperou. O trabalho do começo não conta; um timer à toa nunca assenta.
 // - A CPU sai do tempo de CPU acumulado de cada processo (`ps -o time`), no começo e no fim da janela: a média, sem
 //   perder os picos curtos que uma amostra do `top` perde. Em % de um núcleo.
 // - Os processos do WebKit do Playwright são filhos do launchd, não do navegador: entram os que apareceram depois que
@@ -65,6 +67,8 @@ export interface ScenarioResult {
   cpu: CpuByRole | null;
   limits: { label: string; max: number; got: number; ok: boolean }[];
   skipped?: string;
+  /** Os segundos que o repouso esperou o app assentar antes de medir (`waitQuiet`). */
+  warmup?: number;
 }
 
 /** O `TIME` do `ps` (`[[dd-]hh:]mm:ss.cc`) em segundos. */
@@ -121,6 +125,20 @@ async function measureCpu(pids: Map<number, Role>, seconds: number): Promise<Cpu
   }
   for (const k of Object.keys(cpu) as Role[]) cpu[k] = Math.round(cpu[k] * 100) / 100;
   return cpu;
+}
+
+/**
+ * Espera o app assentar: janelas de 5 s até a soma de todos os papéis ficar em `limit` ou passar `maxS`. Devolve os
+ * segundos de espera. Um trabalho do começo (no CI, o helper recém-compilado chegou a 5% numa 1ª janela de 60 s, e
+ * 0,15% no roteiro seguinte do mesmo Mac) não é repouso; um timer rodando à toa nunca assenta e cai na medida.
+ */
+async function waitQuiet(pids: Map<number, Role>, limit: number, maxS: number): Promise<number> {
+  const began = performance.now();
+  while ((performance.now() - began) / 1000 < maxS) {
+    const cpu = await measureCpu(pids, 5);
+    if (Object.values(cpu).reduce((a, b) => a + b, 0) <= limit) break;
+  }
+  return Math.round((performance.now() - began) / 1000);
 }
 
 async function cliRun(data: string, args: string[], env: Env): Promise<{ code: number; out: string }> {
@@ -229,10 +247,13 @@ async function idle(name: string, windows: UiWindow[], limits: Limit[], away: bo
     const pids = new Map<number, Role>([[app.main, "main"]]);
     if (app.helper) pids.set(app.helper, "helper");
     for (const [pid, role] of playwrightWebKit()) if (!before.has(pid)) pids.set(pid, role);
+    const all = limits.find((l) => l.roles.length === 4)?.max ?? 2;
+    const warmup = await waitQuiet(pids, all, 60);
     const cpu = await measureCpu(pids, SECONDS);
     return {
       name,
       seconds: SECONDS,
+      warmup,
       cpu,
       limits: limits.map((l) => {
         const got = Math.round(l.roles.reduce((s, r) => s + cpu[r], 0) * 100) / 100;
@@ -272,7 +293,7 @@ if (import.meta.main) {
     results.push(r);
     if (r.skipped) { console.log(`${name}: pulado (${r.skipped})`); continue; }
     const c = r.cpu!;
-    console.log(`${name} (${r.seconds} s): main ${c.main}% · helper ${c.helper}% · webview ${c.webview}% · gpu ${c.gpu}%`);
+    console.log(`${name} (${r.seconds} s${r.warmup ? `, depois de ${r.warmup} s assentando` : ""}): main ${c.main}% · helper ${c.helper}% · webview ${c.webview}% · gpu ${c.gpu}%`);
     for (const l of r.limits) console.log(`  ${l.ok ? "ok " : "PASSOU"} ${l.label}: ${l.got}% (teto ${l.max}%)`);
   }
   if (OUT) writeFileSync(OUT, JSON.stringify(results, null, 2));
