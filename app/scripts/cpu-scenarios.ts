@@ -7,18 +7,21 @@
 // - **webview:** os processos `WebContent` do WebKit do Playwright que abriram com as janelas;
 // - **gpu:** o processo `GPU` do mesmo WebKit (o WebGL do gato e a composição caem nele).
 //
-//   bun run cpu:scenarios [--only repouso,…] [--seconds 60] [--out <arquivo.json>] [--no-fail]
+//   bun run cpu:scenarios [--only repouso,…] [--seconds 60] [--out <arquivo.json>] [--no-fail] [--require-helper]
 //
 // | repouso      | o Hub, as Notas e os Ajustes abertos e parados, com o agente falso ligado (o gato aparece), o índice |
 // |              | pronto, e a pessoa em outro app (o `blur` em cada janela): tela e helper < 1%, tudo < 2%           |
 // | repouso-foco | o mesmo, com a janela na frente e ninguém mexendo                                                  |
 //
+// - Antes de medir o repouso, o roteiro espera o app assentar (`waitQuiet`: janelas de 5 s até a soma ficar na régua
+//   de "tudo", no máximo 60 s) e diz quanto esperou. O trabalho do começo não conta; um timer à toa nunca assenta.
 // - A CPU sai do tempo de CPU acumulado de cada processo (`ps -o time`), no começo e no fim da janela: a média, sem
 //   perder os picos curtos que uma amostra do `top` perde. Em % de um núcleo.
 // - Os processos do WebKit do Playwright são filhos do launchd, não do navegador: entram os que apareceram depois que
 //   o navegador abriu (pelo caminho do `ms-playwright`). Outro agente com um WebKit aberto ao mesmo tempo se mistura:
 //   pegue `kiwi lock bench --ttl 10m` antes (AGENTS.md).
-// - Sai com exit 1 quando um roteiro passa da régua (`--no-fail` só mostra). Nada do mic, nada na tela, nada das notas
+// - Sai com exit 1 quando um roteiro passa da régua (`--no-fail` só mostra). Sem o helper, o roteiro sai pulado; com
+//   `--require-helper` (o CI, T24486), o pulado também sai com exit 1: o check não fica verde sem medir. Nada do mic, nada na tela, nada das notas
 //   de ninguém: só o app sem tela que o próprio script abre. A saída é só números. Os dados ficam numa pasta `.noindex`,
 //   fora do Spotlight, e saem no fim.
 
@@ -41,6 +44,7 @@ const opt = (f: string) => (argv.includes(f) ? argv[argv.indexOf(f) + 1] : undef
 const SECONDS = Number(opt("--seconds") ?? 60);
 const OUT = opt("--out");
 const FAIL = !argv.includes("--no-fail");
+const REQUIRE_HELPER = argv.includes("--require-helper");
 const HELPER = process.env.KIWI_HELPER || defaultHelper(APP);
 
 type Env = Record<string, string | undefined>;
@@ -63,6 +67,8 @@ export interface ScenarioResult {
   cpu: CpuByRole | null;
   limits: { label: string; max: number; got: number; ok: boolean }[];
   skipped?: string;
+  /** Os segundos que o repouso esperou o app assentar antes de medir (`waitQuiet`). */
+  warmup?: number;
 }
 
 /** O `TIME` do `ps` (`[[dd-]hh:]mm:ss.cc`) em segundos. */
@@ -119,6 +125,20 @@ async function measureCpu(pids: Map<number, Role>, seconds: number): Promise<Cpu
   }
   for (const k of Object.keys(cpu) as Role[]) cpu[k] = Math.round(cpu[k] * 100) / 100;
   return cpu;
+}
+
+/**
+ * Espera o app assentar: janelas de 5 s até a soma de todos os papéis ficar em `limit` ou passar `maxS`. Devolve os
+ * segundos de espera. Um trabalho do começo (no CI, o helper recém-compilado chegou a 5% numa 1ª janela de 60 s, e
+ * 0,15% no roteiro seguinte do mesmo Mac) não é repouso; um timer rodando à toa nunca assenta e cai na medida.
+ */
+async function waitQuiet(pids: Map<number, Role>, limit: number, maxS: number): Promise<number> {
+  const began = performance.now();
+  while ((performance.now() - began) / 1000 < maxS) {
+    const cpu = await measureCpu(pids, 5);
+    if (Object.values(cpu).reduce((a, b) => a + b, 0) <= limit) break;
+  }
+  return Math.round((performance.now() - began) / 1000);
 }
 
 async function cliRun(data: string, args: string[], env: Env): Promise<{ code: number; out: string }> {
@@ -196,10 +216,11 @@ async function idle(name: string, windows: UiWindow[], limits: Limit[], away: bo
   const data = mkdtempSync(path.join(base, "run-"));
   let app: Awaited<ReturnType<typeof headless>> | null = null;
   let browser: Browser | null = null;
+  let registry: ReturnType<typeof fakeRegistry> | null = null;
   const pages: OpenedPage[] = [];
   try {
     smallVault(path.join(data, "vault"));
-    const registry = fakeRegistry([
+    registry = fakeRegistry([
       { name: "@agentclientprotocol/claude-agent-acp", version: "0.106.0", files: { "dist/index.js": "" } },
       { name: "zod", version: "4.6.7", files: { "index.js": "" } },
     ]);
@@ -226,10 +247,13 @@ async function idle(name: string, windows: UiWindow[], limits: Limit[], away: bo
     const pids = new Map<number, Role>([[app.main, "main"]]);
     if (app.helper) pids.set(app.helper, "helper");
     for (const [pid, role] of playwrightWebKit()) if (!before.has(pid)) pids.set(pid, role);
+    const all = limits.find((l) => l.roles.length === 4)?.max ?? 2;
+    const warmup = await waitQuiet(pids, all, 60);
     const cpu = await measureCpu(pids, SECONDS);
     return {
       name,
       seconds: SECONDS,
+      warmup,
       cpu,
       limits: limits.map((l) => {
         const got = Math.round(l.roles.reduce((s, r) => s + cpu[r], 0) * 100) / 100;
@@ -240,6 +264,8 @@ async function idle(name: string, windows: UiWindow[], limits: Limit[], away: bo
     for (const p of pages) await p.close().catch(() => {});
     await browser?.close().catch(() => {});
     await app?.stop().catch(() => {});
+    // O servidor do registro falso segura o processo vivo: sem o `stop`, o script mede e não sai (o CI esperou 10 min).
+    registry?.stop();
     rmSync(data, { recursive: true, force: true });
   }
 }
@@ -267,9 +293,13 @@ if (import.meta.main) {
     results.push(r);
     if (r.skipped) { console.log(`${name}: pulado (${r.skipped})`); continue; }
     const c = r.cpu!;
-    console.log(`${name} (${r.seconds} s): main ${c.main}% · helper ${c.helper}% · webview ${c.webview}% · gpu ${c.gpu}%`);
+    console.log(`${name} (${r.seconds} s${r.warmup ? `, depois de ${r.warmup} s assentando` : ""}): main ${c.main}% · helper ${c.helper}% · webview ${c.webview}% · gpu ${c.gpu}%`);
     for (const l of r.limits) console.log(`  ${l.ok ? "ok " : "PASSOU"} ${l.label}: ${l.got}% (teto ${l.max}%)`);
   }
   if (OUT) writeFileSync(OUT, JSON.stringify(results, null, 2));
   if (FAIL && results.some((r) => r.limits.some((l) => !l.ok))) process.exit(1);
+  if (REQUIRE_HELPER && results.some((r) => r.skipped)) {
+    console.log("--require-helper: um roteiro saiu pulado, e o CI não aceita pular a medida");
+    process.exit(1);
+  }
 }
