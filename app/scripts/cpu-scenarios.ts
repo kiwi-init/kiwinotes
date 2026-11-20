@@ -19,7 +19,7 @@
 // | indexando-md | a pasta grande só de `.md`: as notas não passam pelo índice do conteúdo (ele é dos outros arquivos);|
 // |              | o que sobra no fundo, em `--seconds` depois da lista (a busca aquecida, as tags), com a mesma régua|
 // | cedendo      | a passada de código com a pessoa escrevendo (um `notes.save` por segundo): o portão fecha, a       |
-// |              | passada para e o principal fica < 10%. Depois, 30 s sem escrever: a passada tem de voltar          |
+// |              | passada para e o principal fica < 5%. Depois, 30 s sem escrever: a passada tem de voltar           |
 //
 // - Antes de medir o repouso, o roteiro espera o app assentar (`waitQuiet`: janelas de 5 s até a soma ficar na régua
 //   de "tudo", no máximo 60 s) e diz quanto esperou. O trabalho do começo não conta; um timer à toa nunca assenta.
@@ -378,7 +378,9 @@ async function indexing(name: string, kind: "md" | "code", files: number, typing
     };
     const { avg, peak, active } = await samplePid(main, SECONDS, typing ? write : undefined, kind === "code" && !typing ? MOVING : undefined);
     const limits: { label: string; max: number; got: number; min?: number }[] = typing
-      ? [{ label: "principal com a pessoa escrevendo", max: 10, got: avg }]
+      ? // 5%, não os 10% da régua: sem o portão a média fica em 9,6–13%, e com ele em ~1,8% (revisão #24543). O "voltou"
+        // de baixo depende do relógio do runner; a média sozinha pega a falta do portão.
+        [{ label: "principal com a pessoa escrevendo", max: 5, got: avg }]
       : [{ label: "principal (média)", max: 50, got: avg }, { label: "principal (pico de 1 s)", max: 100, got: peak }];
     // A prova de que o roteiro mediu a passada: ela seguia no fim da janela, ou voltou quando a pessoa parou.
     if (kind === "code" && !typing) {
