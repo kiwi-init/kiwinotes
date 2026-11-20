@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { memReport, processMemory } from "./memory.ts";
+import path from "node:path";
+
+import { memReport, type ProcessMemory, processMemory } from "./memory.ts";
 
 describe.if(process.platform === "darwin")("a RAM de um processo (spec #20953, T21014)", () => {
   test("o principal: agora e pico, em bytes, e o pico nunca abaixo do agora", () => {
@@ -8,13 +10,22 @@ describe.if(process.platform === "darwin")("a RAM de um processo (spec #20953, T
     expect(m.peak).toBeGreaterThanOrEqual(m.now);
   });
 
-  test("uma alocação grande sobe o agora e o pico", () => {
-    const before = processMemory(process.pid)!;
-    const big = new Uint8Array(64e6).fill(1);
-    const after = processMemory(process.pid)!;
+  // Num processo novo (T24621): na suíte, os testes de antes já alocaram e soltaram memória, e a alocação nova reusa
+  // páginas que o processo já conta (no CI, subiu 20 MB em vez de 64).
+  test("uma alocação grande sobe o agora e o pico", async () => {
+    const script = `
+      const { processMemory } = await import(${JSON.stringify(path.join(import.meta.dir, "memory.ts"))});
+      const before = processMemory(process.pid);
+      const big = new Uint8Array(64e6).fill(1);
+      const after = processMemory(process.pid);
+      console.log(JSON.stringify({ before, after, last: big[big.length - 1] }));`;
+    const child = Bun.spawn([process.execPath, "-e", script], { stdout: "pipe", stderr: "inherit" });
+    const out = await new Response(child.stdout).text();
+    expect(await child.exited).toBe(0);
+    const { before, after, last } = JSON.parse(out) as { before: ProcessMemory; after: ProcessMemory; last: number };
     expect(after.now - before.now).toBeGreaterThan(50e6);
     expect(after.peak).toBeGreaterThanOrEqual(after.now);
-    expect(big[big.length - 1]).toBe(1);
+    expect(last).toBe(1);
   });
 
   test("outro processo: o filho que este abriu", async () => {
