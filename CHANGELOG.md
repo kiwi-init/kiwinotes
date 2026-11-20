@@ -4,6 +4,26 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+## [2026.11.8](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.8) (2026-11-19)
+
+- **Teste da RAM: a alocação grande num processo novo (T24621)** ([#260](https://github.com/kiwi-init/kiwinotes/pull/260))
+- **CI: os roteiros de índice da CPU só quando o PR mexe no índice, e o Swift na chave do helper (T24486)** ([#258](https://github.com/kiwi-init/kiwinotes/pull/258))
+- **CPU caixa 4A: os roteiros do índice e o teste do close (T24485)** ([#256](https://github.com/kiwi-init/kiwinotes/pull/256))
+- **CI: os cenários de CPU no bun test (T24486)** ([#255](https://github.com/kiwi-init/kiwinotes/pull/255))
+- **CPU parte 2: o processo principal, com teto, portão e índices em fatias (T24286)** ([#252](https://github.com/kiwi-init/kiwinotes/pull/252))
+- **Docx: as caixas 6, 7 e 8, e o aviso de senha (T23170)** ([#233](https://github.com/kiwi-init/kiwinotes/pull/233))
+- **CPU parte 3: o gato descansa parado, e o cenário de CPU (T24287)** ([#251](https://github.com/kiwi-init/kiwinotes/pull/251))
+- **P0: a busca pelo sentido em 1/4 de um núcleo, parada com a pessoa no Mac (spec #24228, parte 1)** ([#248](https://github.com/kiwi-init/kiwinotes/pull/248))
+- **Docx: o painel de versões (T22797)** ([#211](https://github.com/kiwi-init/kiwinotes/pull/211))
+- **Docx: formatar, colar e o mouse (T23238)** ([#219](https://github.com/kiwi-init/kiwinotes/pull/219))
+- **Docx do gato: a linha de tabela, a rolagem e os elementos testados (T23627)** ([#230](https://github.com/kiwi-init/kiwinotes/pull/230))
+- **Índice do conteúdo num Worker, fora da thread do main (P0 #23988)** ([#246](https://github.com/kiwi-init/kiwinotes/pull/246))
+- **Reuniões: o vocabulário da pessoa medido no banco (T22375)** ([#239](https://github.com/kiwi-init/kiwinotes/pull/239))
+- **Docx: o gravado reabre no Kiwi e numa 2ª leitura (T23915)** ([#237](https://github.com/kiwi-init/kiwinotes/pull/237))
+- **Docx: a contagem ao gravar e a segunda biblioteca (T23352)** ([#235](https://github.com/kiwi-init/kiwinotes/pull/235))
+- **Docx: o Kiwi Cat editando ao vivo (T21231)** ([#212](https://github.com/kiwi-init/kiwinotes/pull/212))
+- **Gota: a corrida no compositor e sem o pulo da seção lenta (#231)** ([#234](https://github.com/kiwi-init/kiwinotes/pull/234))
+
 ## [2026.11.7](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.7) (2026-11-19)
 
 - **Índice do conteúdo: cada transação fica em 1 MB de texto (P0 #23988)** ([#243](https://github.com/kiwi-init/kiwinotes/pull/243))
