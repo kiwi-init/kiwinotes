@@ -14,7 +14,19 @@ describe("ci-changes", () => {
       bunReason: "",
       swift: "skip",
       swiftReason: "o PR não mexe em native/ nem no .github/workflows/ci.yml",
+      cpuIndex: "skip",
+      cpuIndexReason: "o PR não mexe em app/src/notes/ nem em app/src/shared/, no app/scripts/cpu-scenarios.ts nem no .github/workflows/ci.yml",
     });
+  });
+
+  test("os roteiros de índice da CPU: só com o índice, o roteiro ou o workflow no PR, e sempre na main (lead #24565)", () => {
+    for (const f of ["app/src/notes/semantic/exemplo.ts", "app/src/shared/exemplo.ts", "app/scripts/cpu-scenarios.ts", ".github/workflows/ci.yml"]) {
+      expect(plan("pull_request", ["app/ui/hub/main.tsx", f])).toMatchObject({ bun: "run", cpuIndex: "run", cpuIndexReason: "" });
+    }
+    expect(plan("pull_request", ["native/Sources/Exemplo.swift"])).toMatchObject({ swift: "run", cpuIndex: "skip" });
+    expect(plan("pull_request", ["app/src/notesx/exemplo.ts"])).toMatchObject({ cpuIndex: "skip" });
+    expect(plan("pull_request", ["README.md"])).toMatchObject({ bun: "skip", cpuIndex: "skip" });
+    expect(plan("push", ["app/ui/hub/main.tsx"])).toMatchObject({ cpuIndex: "run" });
   });
 
   test("mexer em native/ ou no workflow roda o swift test", () => {
@@ -38,7 +50,7 @@ describe("ci-changes", () => {
   });
 
   test("o push na main roda tudo, e a lista vazia também", () => {
-    const all: Plan = { bun: "run", bunReason: "", swift: "run", swiftReason: "" };
+    const all: Plan = { bun: "run", bunReason: "", swift: "run", swiftReason: "", cpuIndex: "run", cpuIndexReason: "" };
     expect(plan("push", ["README.md"])).toEqual(all);
     expect(plan("pull_request", [])).toEqual(all);
   });

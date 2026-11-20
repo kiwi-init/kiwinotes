@@ -7,7 +7,10 @@
 // - **webview:** os processos `WebContent` do WebKit do Playwright que abriram com as janelas;
 // - **gpu:** o processo `GPU` do mesmo WebKit (o WebGL do gato e a composição caem nele).
 //
-//   bun run cpu:scenarios [--only repouso,…] [--seconds 60] [--out <arquivo.json>] [--no-fail] [--require-helper]
+//   bun run cpu:scenarios [--only repouso,…] [--no-index] [--seconds 60] [--out <arquivo.json>] [--no-fail] [--require-helper]
+//
+// `--no-index` tira os roteiros de índice (`INDEX_SCENARIOS`): o CI de um PR que não mexe no índice só mede o repouso
+// (o `cpu_index` do scripts/ci-changes.ts; ~4 dos ~7 min do passo no runner, lead #24565). Na `main`, roda tudo.
 //
 // | repouso      | o Hub, as Notas e os Ajustes abertos e parados, com o agente falso ligado (o gato aparece), o índice |
 // |              | pronto, e a pessoa em outro app (o `blur` em cada janela): tela e helper < 1%, tudo < 2%           |
@@ -423,8 +426,12 @@ const scenarios: Record<string, () => Promise<ScenarioResult>> = {
   cedendo: () => indexing("cedendo", "code", 30_000, true),
 };
 
+/** Os roteiros do índice do conteúdo: o `--no-index` os tira. */
+export const INDEX_SCENARIOS = new Set(["indexando-md", "indexando-codigo", "cedendo"]);
+
 if (import.meta.main) {
-  const only = opt("--only")?.split(",") ?? Object.keys(scenarios);
+  const only = (opt("--only")?.split(",") ?? Object.keys(scenarios)).filter((n) => !(argv.includes("--no-index") && INDEX_SCENARIOS.has(n)));
+  if (argv.includes("--no-index")) console.log(`--no-index: sem ${[...INDEX_SCENARIOS].join(", ")}`);
   const results: ScenarioResult[] = [];
   for (const name of only) {
     const run = scenarios[name];
