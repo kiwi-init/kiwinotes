@@ -36,6 +36,8 @@ jobs:
       bun_reason: ${{ steps.plan.outputs.bun_reason }}
       swift: ${{ steps.plan.outputs.swift }}
       swift_reason: ${{ steps.plan.outputs.swift_reason }}
+      cpu_index: ${{ steps.plan.outputs.cpu_index }}
+      cpu_index_reason: ${{ steps.plan.outputs.cpu_index_reason }}
     defaults:
       run:
         working-directory: app
@@ -200,12 +202,19 @@ jobs:
       # helper < 1%, tudo < 2%). No mesmo Mac do `bun test`, e não num job à parte (spec #21331: uma máquina por PR).
       # O helper sai do build de debug do `native/`, que o headless acha sozinho; o `.build` fica no cache, porque o
       # FluidAudio leva ~8 min do zero. O `--require-helper` barra o roteiro pulado: o check não fica verde sem medir.
+      # O Xcode e o Swift entram na chave, como no release.yml: um `.build` de outro compilador não se reaproveita, e o
+      # `restore-keys` o devolveria a cada PR depois de a imagem do runner trocar o Xcode (#1714, revisão #24570).
+      - name: Swift toolchain id
+        id: swift
+        if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
+        run: echo "id=$({ xcodebuild -version; swift --version 2>&1 | head -1; } | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
         with:
           path: native/.build
-          key: helper-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/Package.resolved', 'native/Package.swift') }}-${{ hashFiles('native/Sources/**') }}
-          restore-keys: helper-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/Package.resolved', 'native/Package.swift') }}-
+          key: helper-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.resolved', 'native/Package.swift') }}-${{ hashFiles('native/Sources/**') }}
+          restore-keys: helper-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.resolved', 'native/Package.swift') }}-
 
       - name: kiwi-helper
         id: helper
@@ -216,9 +225,19 @@ jobs:
 
       - name: cpu-scenarios
         if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.helper.outcome == 'success' }}
-        # A rede, não a medida: o repouso leva ~4 min, e os roteiros de índice (T24485) ~3 min num M1 Pro.
+        # A rede, não a medida: no runner, o repouso leva ~3 min, e tudo ~7 min (o run 44650127760, do #256).
         timeout-minutes: 20
-        run: bun run cpu:scenarios --require-helper --out "$RUNNER_TEMP/cpu.json"
+        # Os roteiros de índice (~4 min) só quando o PR mexe no índice, e sempre na `main` (lead #24565); o motivo sai no log.
+        env:
+          CPU_INDEX: ${{ needs.changes.outputs.cpu_index }}
+          CPU_INDEX_REASON: ${{ needs.changes.outputs.cpu_index_reason }}
+        run: |
+          if [ "$CPU_INDEX" = "skip" ]; then
+            echo "roteiros de índice pulados: $CPU_INDEX_REASON"
+            bun run cpu:scenarios --require-helper --no-index --out "$RUNNER_TEMP/cpu.json"
+          else
+            bun run cpu:scenarios --require-helper --out "$RUNNER_TEMP/cpu.json"
+          fi
 
   # No Linux (spec #21331): o devkit dos tipos sai do mesmo core fixado que o Hutch usa no Mac (scripts/devkit-types.ts,
   # e o devkit-types.test.ts confere no macOS que é igual).
