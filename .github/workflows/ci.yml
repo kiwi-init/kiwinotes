@@ -61,7 +61,7 @@ jobs:
     name: bun test
     needs: changes
     runs-on: ${{ needs.changes.outputs.bun == 'run' && 'macos-latest' || 'ubuntu-latest' }}
-    # 30 min do `bun test` e dos roteiros de UI, mais o helper (~8 min do zero, ~1 min do cache) e a CPU (~5 min).
+    # 30 min do `bun test` e dos roteiros de UI, mais o helper (~8 min do zero, ~1 min do cache) e a CPU (~5 a 10 min).
     timeout-minutes: 45
     defaults:
       run:
@@ -216,7 +216,8 @@ jobs:
 
       - name: cpu-scenarios
         if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.helper.outcome == 'success' }}
-        timeout-minutes: 10
+        # A rede, não a medida: o repouso leva ~4 min, e os roteiros de índice (T24485) ~3 min num M1 Pro.
+        timeout-minutes: 20
         run: bun run cpu:scenarios --require-helper --out "$RUNNER_TEMP/cpu.json"
 
   # No Linux (spec #21331): o devkit dos tipos sai do mesmo core fixado que o Hutch usa no Mac (scripts/devkit-types.ts,
