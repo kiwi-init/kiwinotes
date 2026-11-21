@@ -2932,7 +2932,7 @@ describe("dois agentes (spec #24666)", () => {
     const m = make();
     await m.svc.enable(true);
     let s = await m.svc.configure({ kind: "gemini" });
-    expect(s).toMatchObject({ kind: "gemini", name: "Gemini", adapter: { phase: "missing" } });
+    expect(s).toMatchObject({ kind: "gemini", name: "Gemini (Antigravity)", adapter: { phase: "missing" } });
     expect((await m.svc.status(true)).gemini).toMatchObject({ installed: true, version: "0.70.0", versionOk: true, loggedIn: false, loginKnown: false });
     // Sem baixar nada: o pedido vai.
     const events = await askAndWait(m, "oi");
@@ -2992,7 +2992,7 @@ describe("dois agentes (spec #24666)", () => {
         return;
       }
       // A troca valeu: o aberto é o Gemini, na sessão dele, e o Claude fechou.
-      expect(await m.svc.status()).toMatchObject({ kind: "gemini", name: "Gemini", program: "open" });
+      expect(await m.svc.status()).toMatchObject({ kind: "gemini", name: "Gemini (Antigravity)", program: "open" });
       if (claudePid) await until(() => !alive(claudePid));
       expect(opened.at(-1)!.params._meta).toBeUndefined();
       expect(existsSync(sessionFileOf(agentDir(m.data), "gemini"))).toBe(true);
@@ -3082,7 +3082,7 @@ describe("dois agentes (spec #24666)", () => {
     writeFileSync(out, "");
     const failed = await askAndWait(m, "oi");
     expect(failed.at(-1)).toMatchObject({ type: "error", code: "E_AGENT_NOT_LOGGED_IN" });
-    expect((failed.at(-1) as { message: string }).message).toContain("O Gemini não está logado");
+    expect((failed.at(-1) as { message: string }).message).toContain("O Gemini (Antigravity) não está logado");
     s = await m.svc.status();
     expect(s.gemini?.loggedIn).toBe(false);
     expect(s.gemini).not.toHaveProperty("loginKnown");

@@ -14,11 +14,11 @@
       "name": "o assunto agent"
     },
     {
-      "waitFor": ".kn-row:has(.kn-row-label:text-is('Gemini (não escolhido)')) .kn-row-hint:not(:has-text('Conferindo'))",
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Gemini (Antigravity) · não escolhido')) .kn-row-hint:not(:has-text('Conferindo'))",
       "name": "o Gemini conferido, sem ser o escolhido"
     },
     {
-      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini (não escolhido)')) .kn-row-hint",
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini (Antigravity) · não escolhido')) .kn-row-hint",
       "text": "O login se confere no primeiro pedido",
       "name": "o login do Gemini ainda não se sabe, e não vira \"não logado\""
     },
@@ -31,12 +31,17 @@
       "name": "desligado, a troca é direta: nada vai a lugar nenhum"
     },
     {
+      "expectText": ".kn-segmented [aria-checked=true]:has-text('Gemini')",
+      "text": "Gemini (Antigravity)",
+      "name": "o nome diz o programa: o Gemini vem pelo Antigravity CLI (spec #25046)"
+    },
+    {
       "expectCount": ".kn-agent-consent",
       "count": 0,
       "name": "sem a tela da troca: ela vem ao ligar (não duas iguais seguidas)"
     },
     {
-      "waitFor": ".kn-row:has(.kn-row-label:text-is('Claude Code (não escolhido)'))",
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Claude Code · não escolhido'))",
       "name": "o Claude Code fica embaixo, para comparar"
     },
     {
@@ -49,7 +54,7 @@
       "name": "liga"
     },
     {
-      "waitFor": ".kn-agent-consent h3:text-is('Antes de ligar o Gemini')",
+      "waitFor": ".kn-agent-consent h3:text-is('Antes de ligar o Gemini (Antigravity)')",
       "name": "o aviso do ADR 0011 com o Gemini"
     },
     {
@@ -81,10 +86,15 @@
       "name": "manda o pedido de teste ao Gemini falso"
     },
     {
-      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini')) .kn-row-hint",
-      "text": "Abra o Gemini no Terminal",
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini (Antigravity)')) .kn-row-hint",
+      "text": "Abra o Antigravity no Terminal e entre com a sua conta",
       "timeout": 30000,
       "name": "o authRequired vira \"não logado\": a linha diz como entrar, pelo próprio Gemini"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini (Antigravity)')) .kn-row-hint",
+      "text": "(digite “agy”)",
+      "name": "e o comando que a pessoa digita no Terminal"
     },
     {
       "expectCount": ".kn-agent-test",

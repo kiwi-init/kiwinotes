@@ -28,9 +28,10 @@ export const AGENTS: Record<AgentKind, { name: string; company: string; install:
   gemini: {
     name: AGENT_NAMES.gemini,
     company: "Google",
-    install: "Instale o Gemini CLI (github.com/google-gemini/gemini-cli)",
-    update: "Atualize o Gemini CLI pelo mesmo jeito que você instalou (npm ou Homebrew)",
-    login: "Abra o Gemini no Terminal (digite “gemini”) e entre com a sua conta. O Kiwi nunca pede a sua senha nem a sua chave.",
+    // O programa é o Antigravity CLI, o `agy` (spec #25046); o login é dele, no Terminal, nunca uma chave no Kiwi.
+    install: "Instale o Antigravity CLI (antigravity.google)",
+    update: "Atualize o Antigravity CLI pelo mesmo jeito que você instalou",
+    login: "Abra o Antigravity no Terminal e entre com a sua conta (digite “agy”). O Kiwi nunca pede a sua senha nem a sua chave.",
     adapter: false,
   },
 };

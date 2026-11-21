@@ -115,14 +115,17 @@ describe("os dois agentes (spec #24666)", () => {
     gemini: { installed: true, version: "0.70.0", loggedIn: true, versionOk: true },
   };
 
-  test("a linha do Gemini: instalar, atualizar e entrar pelo próprio Gemini, sem o Kiwi pedir senha nem chave", () => {
+  test("a linha do Gemini: instalar, atualizar e entrar pelo próprio Antigravity (spec #25046), sem o Kiwi pedir senha nem chave", () => {
     expect(agentLine("gemini", "Gemini", null).text).toBe("Conferindo o Gemini…");
-    expect(agentLine("gemini", "Gemini", { installed: false, loggedIn: false, versionOk: false }).text).toContain("github.com/google-gemini/gemini-cli");
+    expect(agentLine("gemini", "Gemini", { installed: false, loggedIn: false, versionOk: false }).text).toContain("Instale o Antigravity CLI (antigravity.google)");
     const old = agentLine("gemini", "Gemini", { installed: true, version: "0.1.0", loggedIn: true, versionOk: false, versionError: "E_AGENT_TOO_OLD" });
-    expect(old).toEqual({ text: expect.stringContaining("Atualize o Gemini CLI"), ok: false });
+    expect(old).toEqual({ text: expect.stringContaining("Atualize o Antigravity CLI"), ok: false });
     const out = agentLine("gemini", "Gemini", { installed: true, version: "0.70.0", loggedIn: false, versionOk: true });
     expect(out.ok).toBe(false);
-    expect(out.text).toContain("Abra o Gemini no Terminal");
+    expect(out.text).toContain("Abra o Antigravity no Terminal e entre com a sua conta");
+    // O comando que a pessoa digita no Terminal: sem login, é o que diz o que fazer.
+    expect(out.text).toContain("(digite “agy”)");
+    expect(out.text).not.toContain("Gemini CLI");
     expect(out.text).toContain("nunca pede a sua senha nem a sua chave");
     expect(out.text).not.toContain("claude");
     expect(agentLine("gemini", "Gemini", gemini.gemini).text).toBe("Gemini 0.70.0 instalado e logado. O login é dele: o Kiwi nunca vê a sua senha.");
@@ -155,11 +158,11 @@ describe("os dois agentes (spec #24666)", () => {
   });
 
   test("a escolha diz para onde o texto vai, e a troca pede a confirmação com o nome do novo", () => {
-    expect(KIND_OPTIONS.map((o) => o.label)).toEqual(["Claude Code", "Gemini"]);
+    expect(KIND_OPTIONS.map((o) => o.label)).toEqual(["Claude Code", "Gemini (Antigravity)"]);
     expect(kindHint("gemini", true)).toContain("vale a política de dados da Google");
     expect(kindHint("claude", true)).toContain("vale a política de dados da Anthropic");
-    expect(kindHint("gemini", false)).toStartWith("Desligado: nada vai para o Gemini.");
-    expect(switchText("gemini")).toEqual({ title: "Trocar para o Gemini", yes: "Trocar para o Gemini" });
+    expect(kindHint("gemini", false)).toStartWith("Desligado: nada vai para o Gemini (Antigravity).");
+    expect(switchText("gemini")).toEqual({ title: "Trocar para o Gemini (Antigravity)", yes: "Trocar para o Gemini (Antigravity)" });
   });
 
   test("os textos com o nome do agente: a web e o Esforço do onboarding", () => {
@@ -396,10 +399,10 @@ describe("a tela de aviso e a regra de privacidade (ADR 0011)", () => {
   test("com o Gemini, a tela diz o Google e não fala em adaptador (spec #24666)", async () => {
     const adr = await Bun.file(new URL("../../../docs/adr/0011-agente-e-privacidade.md", import.meta.url)).text();
     const t = consentText(AGENTS.gemini.name, AGENTS.gemini.company, AGENTS.gemini.adapter);
-    expect(t.title).toBe("Antes de ligar o Gemini");
+    expect(t.title).toBe("Antes de ligar o Gemini (Antigravity)");
     expect(t.who.join(" ")).toContain("vale a política de dados da Google");
     expect(t.who.join(" ")).not.toContain("adaptador");
-    const fromAdr = (line: string) => line.replaceAll("Gemini", "{agente}").replaceAll("Google", "{empresa}");
+    const fromAdr = (line: string) => line.replaceAll(AGENTS.gemini.name, "{agente}").replaceAll("Google", "{empresa}");
     for (const line of [...t.goes, ...t.never, ...t.who]) expect(adr).toContain(fromAdr(line));
   });
 

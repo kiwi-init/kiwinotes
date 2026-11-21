@@ -180,7 +180,7 @@ export function AgentSection() {
       {[kind, ...KIND_OPTIONS.map((o) => o.value).filter((k) => k !== kind)].map((k) => {
         const line = agentLine(k, AGENTS[k].name, programOf({ ...status, kind: k }));
         return (
-          <Row key={k} label={k === kind ? AGENTS[k].name : `${AGENTS[k].name} (não escolhido)`} hint={line.text}>
+          <Row key={k} label={k === kind ? AGENTS[k].name : `${AGENTS[k].name} · não escolhido`} hint={line.text}>
             <Button onClick={() => void refresh()} disabled={checking}>
               {checking ? "Conferindo…" : line.ok ? "Conferir de novo" : "Tentar de novo"}
             </Button>
