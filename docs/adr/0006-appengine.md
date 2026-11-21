@@ -78,3 +78,13 @@ E o evento `history.added`, que o engine manda ao Histórico aberto a cada ditad
 
 ## TCC
 Uma UI nova não muda o engine (o binário e a assinatura). **Então trocar de UI não zera as permissões.** Só um build novo do engine faz isso enquanto a assinatura for ad hoc (T1074).
+
+## A UI baixada e a rede (T25029, spec #25011)
+- **O canal só fala com o release `ui-channel`.** O `uiChannelFetch` (`app/src/bun/ui-channel-fetch.ts`) é a trava por cima do AppEngine, que seguiria qualquer `bundleUrl` http(s) do manifesto assinado.
+  - Só `https://github.com/kiwi-init/kiwinotes/releases/download/ui-channel/…`, sem query.
+  - O redirect só vai para o armazenamento de arquivos do GitHub.
+  - Um GET sem corpo, sem cookie, sem referrer e sem cabeçalho além do `accept`: nada da pessoa vai junto.
+- **A UI baixada não vai à rede:** a `VIEWS_CSP` barra fetch, XHR, beacon, EventSource, imagem, CSS, fonte, iframe, script, prefetch e form para fora. O `scripts/ui-pack-network.test.ts` prova isso no WebKit, com o controle sem a CSP.
+- **Riscos conhecidos.** Os dois ficam porque só sobe pack assinado pela nossa chave:
+  - **Qualquer porta do `127.0.0.1`.** O `connect-src ws://127.0.0.1:*`, que é a ponte do RPC (#1419), também deixa fetch, XHR, beacon e EventSource irem a qualquer porta local: pela CSP 3, um `ws:` casa com `http:`. Não é a rede, mas um serviço local da pessoa responderia. Fechar pede a porta da ponte exposta no main, um PR na engine, depois do #25011. O teste prende o resto: imagem, CSS, fonte, iframe, script e form não chegam nem ao 127.0.0.1.
+  - **O `window.open`.** O `newWindow: "external"` abre no navegador padrão a URL que a UI pedir. A lista fixa de URLs vem no T25095.
