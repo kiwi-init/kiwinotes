@@ -39,7 +39,8 @@
 //   KIWI_FAKE_AGENT_LOGGED_OUT  com o "gemini": um caminho; enquanto o arquivo existe, é como o LOGGED_IN=0. Um teste
 //                            desloga e loga de novo sem reabrir o falso (T24672)
 //   KIWI_FAKE_AGENT_MODEL    o modelo com que a sessão abre (o padrão é "fable", como se viesse do terminal da pessoa,
-//                            que foi o que a prova de verdade mostrou, #8666); o esforço abre em "high"
+//                            que foi o que a prova de verdade mostrou, #8666); o esforço abre em "high". Com o "gemini",
+//                            o padrão é o "default" (Auto), e a lista é a dos modelos do Gemini (T24673)
 //
 // As opções da sessão (`model` e `effort`) vêm na resposta de `session/new|resume|load`, e o `session/set_config_option`
 // troca o valor e é anotado no log (T8678). Como no adaptador de verdade, o esforço depende do modelo (spec #16793): o
@@ -333,7 +334,10 @@ async function answerFromNotes(client: AgentContext, sessionId: string, question
   return "Não achei nada sobre isso nas suas notas.";
 }
 
-const MODELS = ["default", "opus", "fable", "sonnet", "haiku", "opus-legacy"];
+// Com o "gemini", os modelos no formato dele (T24673): um print do Gemini não pode mostrar um modelo do Claude.
+const MODELS = GEMINI
+  ? ["default", "gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash"]
+  : ["default", "opus", "fable", "sonnet", "haiku", "opus-legacy"];
 const EFFORTS = ["default", "low", "medium", "high", "xhigh", "max"];
 /** Os esforços de cada modelo (spec #16793); um modelo fora daqui tem todos. */
 // O haiku não oferece `default` (spec #16793, revisão #17024): ao entrar nele, o esforço do agente é o `medium`.
@@ -344,7 +348,7 @@ const config = new Map<string, { model: string; effort: string }>();
 function configOf(sessionId: string) {
   let c = config.get(sessionId);
   if (!c) {
-    c = { model: process.env.KIWI_FAKE_AGENT_MODEL ?? "fable", effort: "high" };
+    c = { model: process.env.KIWI_FAKE_AGENT_MODEL ?? (GEMINI ? "default" : "fable"), effort: "high" };
     config.set(sessionId, c);
   }
   return c;
@@ -359,8 +363,10 @@ function configOptions(sessionId: string) {
     // Como o adaptador de verdade: o "default" com o nome de recomendado e o modelo que ele usa na descrição (T8762).
     options: values.map((value) =>
       value === "default"
-        ? { value, name: "Default (recommended)", description: "Sonnet · Best for everyday, complex tasks" }
-        : { value, name: value[0]!.toUpperCase() + value.slice(1) },
+        ? GEMINI
+          ? { value, name: "Auto (Gemini 3)", description: "Let Gemini CLI decide the best model for the task" }
+          : { value, name: "Default (recommended)", description: "Sonnet · Best for everyday, complex tasks" }
+        : { value, name: GEMINI ? value : value[0]!.toUpperCase() + value.slice(1) },
     ),
   });
   const efforts = effortsOf(c.model);
