@@ -1,11 +1,12 @@
 // Como abrir os falsos: com o mesmo Bun que roda o Kiwi (no app, o de dentro do .app; na CLI e nos testes, o do
-// sistema). Nada aqui roda o Claude Code de verdade.
+// sistema). Nada aqui roda o Claude Code nem o Gemini de verdade.
 
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export const FAKE_AGENT_COMMAND: readonly string[] = [process.execPath, path.join(import.meta.dir, "agent.ts")];
 export const FAKE_CLAUDE: readonly string[] = [process.execPath, path.join(import.meta.dir, "claude.ts")];
+export const FAKE_GEMINI: readonly string[] = [process.execPath, path.join(import.meta.dir, "gemini.ts")];
 
 /**
  * Um `claude` falso que é um executável de verdade, numa pasta: o adaptador (spec #8368) só sabe abrir um programa
@@ -22,6 +23,22 @@ export function writeFakeClaudeExecutable(dir: string, env: Record<string, strin
   // `exec -a "$0"`: o processo fica com o nome com que foi chamado, como o `claude` de verdade, e o `ps` da prova vê
   // o caminho que o adaptador abriu, e não o do Bun.
   writeFileSync(file, `#!/bin/bash\n${exports}exec -a "$0" ${q(FAKE_CLAUDE[0]!)} ${q(FAKE_CLAUDE[1]!)} "$@"\n`);
+  chmodSync(file, 0o755);
+  return file;
+}
+
+/**
+ * Um `gemini` falso executável, em `<dir>/gemini` (spec #24666): o `findGemini` acha um arquivo com esse nome numa
+ * pasta, como acharia o de verdade. As variáveis (`KIWI_FAKE_GEMINI_VERSION`, `KIWI_FAKE_GEMINI_LOGGED_IN`) ficam nele.
+ */
+export function writeFakeGeminiExecutable(dir: string, env: Record<string, string> = {}): string {
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "gemini");
+  const q = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
+  const exports = Object.entries(env)
+    .map(([k, v]) => `export ${k}=${q(v)}\n`)
+    .join("");
+  writeFileSync(file, `#!/bin/bash\n${exports}exec -a "$0" ${q(FAKE_GEMINI[0]!)} ${q(FAKE_GEMINI[1]!)} "$@"\n`);
   chmodSync(file, 0o755);
   return file;
 }
