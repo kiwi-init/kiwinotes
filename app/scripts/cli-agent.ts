@@ -39,7 +39,7 @@ import { checkClaudeVersion } from "../src/agent/adapter/version.ts";
 import { claudeStatus, findClaude, type ProgramArgv } from "../src/agent/claude.ts";
 import { AgentActivity, ACTIVITY_LIST_MAX } from "../src/agent/activity.ts";
 import { AgentError } from "../src/agent/errors.ts";
-import { FAKE_AGENT_COMMAND, FAKE_CLAUDE, FAKE_GEMINI, writeFakeClaudeExecutable } from "../src/agent/fake/index.ts";
+import { FAKE_AGENT_COMMAND, FAKE_AGY, FAKE_CLAUDE, writeFakeClaudeExecutable } from "../src/agent/fake/index.ts";
 import { geminiStatus } from "../src/agent/gemini.ts";
 import { geminiHost } from "../src/agent/gemini-host.ts";
 import { AgentHost } from "../src/agent/host.ts";
@@ -79,10 +79,10 @@ function agentKind(argv: string[]): AgentKind | null {
   return isAgentKind(given) ? given : null;
 }
 
-/** O `gemini` que a CLI usa: o falso, ou o `--gemini PATH`. */
+/** O programa do Gemini que a CLI usa: o `agy` falso, ou o `--gemini PATH` (o `agy` ou o `gemini` antigo). */
 function geminiProgram(argv: string[]): { program: ProgramArgv; fake: boolean } {
   const given = option(argv, "--gemini");
-  return given ? { program: [path.resolve(given)], fake: false } : { program: FAKE_GEMINI, fake: true };
+  return given ? { program: [path.resolve(given)], fake: false } : { program: FAKE_AGY, fake: true };
 }
 
 function fail(e: unknown): number {

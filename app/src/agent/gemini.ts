@@ -10,6 +10,7 @@ import { accessSync, constants, mkdirSync, readdirSync, statSync, writeFileSync 
 import os from "node:os";
 import path from "node:path";
 
+import { agyHelpHasAcp, programKind } from "./agy.ts";
 import type { ProgramArgv } from "./claude.ts";
 
 /**
@@ -67,13 +68,18 @@ function isExecutableFile(p: string): boolean {
   }
 }
 
-/** O caminho do `gemini` instalado, ou `null` se não há nenhum. */
-export function findGemini(dirs = geminiSearchDirs()): string | null {
+/** O caminho do executável `name` na primeira pasta que o tem, ou `null`. */
+export function findProgram(name: string, dirs: readonly string[]): string | null {
   for (const dir of dirs) {
-    const candidate = path.join(dir, "gemini");
+    const candidate = path.join(dir, name);
     if (isExecutableFile(candidate)) return candidate;
   }
   return null;
+}
+
+/** O caminho do `gemini` instalado, ou `null` se não há nenhum. */
+export function findGemini(dirs = geminiSearchDirs()): string | null {
+  return findProgram("gemini", dirs);
 }
 
 /** Compara duas versões `a.b.c` (o que vem depois de `-` ou `+` não conta). Negativo se `a` é mais velha. */
@@ -197,10 +203,12 @@ export async function geminiVersion(program: ProgramArgv, timeoutMs = 15_000): P
 
 export interface GeminiStatus {
   installed: boolean;
+  /** "agy" quando é o Antigravity CLI (spec #25046); sem ele, é o `gemini` antigo. */
+  program?: "agy";
   /** O caminho do programa, quando instalado. */
   path?: string;
   version?: string;
-  /** A versão instalada é mais velha que a `GEMINI_MIN_VERSION`. */
+  /** A versão instalada é mais velha que a `GEMINI_MIN_VERSION`; no `agy`, ele não tem o comando `acp`. */
   tooOld?: boolean;
   /**
    * Sempre indefinido: o Gemini não diz se está logado sem abrir uma sessão. O login se vê no `authRequired` da
@@ -212,11 +220,36 @@ export interface GeminiStatus {
 /** Instalado e a versão, para a CLI e para a tela. Não abre sessão e não vai à rede. */
 export async function geminiStatus(program: ProgramArgv | null): Promise<GeminiStatus> {
   if (!program) return { installed: false };
+  if (programKind(program) === "agy") return agyStatus(program);
   const version = await geminiVersion(program);
   const exe = program[program.length - 1];
   return {
     installed: version !== null,
     ...(exe ? { path: exe } : {}),
     ...(version ? { version, ...(geminiVersionOk(version) ? {} : { tooOld: true }) } : {}),
+  };
+}
+
+/**
+ * O `agy` (spec #25046): instalado se o `agy --help` responde, e novo o bastante se a ajuda tem o comando `acp`. A
+ * versão (`agy --version`) é só para mostrar: a doc não diz em que versão o `acp` entrou.
+ */
+async function agyStatus(program: ProgramArgv, timeoutMs = 15_000): Promise<GeminiStatus> {
+  const exe = program[program.length - 1];
+  const where = exe ? { path: exe } : {};
+  let help: RunResult;
+  try {
+    help = await run([...program, "--help"], geminiEnv(program), timeoutMs);
+  } catch {
+    return { installed: false, ...where };
+  }
+  if (help.exitCode !== 0) return { installed: false, ...where };
+  const version = await geminiVersion(program, timeoutMs);
+  return {
+    installed: true,
+    program: "agy",
+    ...where,
+    ...(version ? { version } : {}),
+    ...(agyHelpHasAcp(help.stdout) ? {} : { tooOld: true }),
   };
 }

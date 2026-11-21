@@ -5,6 +5,7 @@
 - Código:
   - [`app/src/agent/host.ts`](../../app/src/agent/host.ts): abre o agente, fala ACP com ele e devolve os eventos;
   - [`app/src/agent/claude.ts`](../../app/src/agent/claude.ts): acha o Claude Code instalado e diz a versão e se ele está logado;
+  - [`app/src/agent/gemini.ts`](../../app/src/agent/gemini.ts) e [`agy.ts`](../../app/src/agent/agy.ts): o Gemini, pelo `agy` (o Antigravity CLI) ou pelo `gemini` antigo;
   - [`app/src/agent/errors.ts`](../../app/src/agent/errors.ts): os erros, com as mensagens que a pessoa lê;
   - [`app/src/agent/fake/`](../../app/src/agent/fake/): o agente falso, que fala ACP, e o `claude` falso;
   - [`app/src/agent/adapter/`](../../app/src/agent/adapter/): o adaptador do Claude Code. A lista fixa (`pinned.ts`), o download (`download.ts`), a régua de versão (`version.ts`), a abertura (`open.ts`) e a prova (`proof.ts`);
@@ -297,6 +298,40 @@ Ele anota os argumentos, a pasta e as variáveis do isolamento no log, para o te
 - a regra de administrador apagando as ferramentas embutidas na lista que o modelo vê;
 - o `-32000` de uma conta sem login;
 - o Node achado pelo app aberto do Finder.
+
+## O Antigravity (T25059, spec #25046)
+O Gemini CLI saiu para contas pessoais em 18/06/2026 (#25046). No lugar dele vem o **Antigravity CLI** (`agy`), que fala ACP sozinho (`agy acp`, protocolo 1, por stdio). O host, o serviço e a tela do Gemini ficam: muda o programa, os argumentos e o isolamento. Tudo abaixo vem da doc oficial (antigravity.google/docs: ACP, CLI, Settings, Permissions, Subagents), sem rodar o de verdade. Os testes usam o `agy` falso (`src/agent/fake/agy.ts`), e o código é o `src/agent/agy.ts`.
+
+**Achar e a versão.**
+- O `findGeminiAgent` procura o `agy` nas mesmas pastas do `findGemini`. Sem o `agy`, fica o `gemini` antigo, que ainda vale numa conta de empresa, com tudo da seção anterior.
+- **Qual programa é** sai do nome do executável (`agy`), e o resto do caminho segue dele.
+- **A mínima é a que tem o `acp`.** O `geminiStatus` roda o `agy --help`: instalado se ele responde, e `tooOld` se a ajuda não tem o comando `acp`. A doc não diz em que versão o `acp` entrou, então o número (`agy --version`) é só para mostrar.
+
+**O login.** É do `agy`: `agy` no Terminal, ou `agy acp --login`. Sem login, o ACP volta com "Authentication required" (-32000). O Kiwi nunca chama o `authenticate`, nunca usa o `GEMINI_API_KEY` e nunca lê a pasta `~/.gemini`. Nunca troca o HOME nem copia credencial: o login fica onde o `agy` guarda.
+
+**O isolamento.** O harry pediu o `agy` enxuto o quanto der, como o Claude (#25063). A pasta de trabalho é a `<dados>/agent/work`, que é o cwd do filho e o da sessão; o Kiwi reescreve o que é dele ali a cada abertura.
+
+| alavanca | como | o que a doc garante | teste |
+|---|---|---|---|
+| `acp --disable-telemetry` | argumento | nada de telemetria do `agy` | `agyArgs` |
+| `--process-per-session` | argumento | a doc pede para o `agy` ver servidores MCP por HTTP, como o do Kiwi | `agyArgs` |
+| `--sandbox` | argumento | os comandos de shell rodam no sandbox do macOS | `agyArgs` |
+| o agente do Kiwi | `--agent kiwi`, com o `<trabalho>/.agents/agents/kiwi.md` | `tools: []` (nenhuma embutida), `mcpServers`, `skills` e `plugins` vazios, `commandExecutionPolicy: off`, `subagent: false` | o arquivo, e o `agy` falso o acha no cwd |
+| os ajustes de workspace | `<trabalho>/.agents/settings.json` | `toolPermission: "strict"`, `enableTerminalSandbox`, `permissions.deny` de `command(*)`, `write_file(*)`, `read_file(*)`, `read_url(*)` e `execute_url(*)`. O deny vence o ask e o allow, em qualquer modo | os ajustes, e o `agy` falso os acha no cwd |
+| nunca sem permissões | nunca `--dangerously-skip-permissions` | | `agyArgs` |
+
+**O que a doc não diz, e fica para a prova do harry:**
+- **Se o `agy` lê um `settings.json` de workspace.** A doc só dá o da pessoa (`~/.gemini/antigravity-cli/settings.json`). O painel `/permissions` tem um escopo "Project", sem caminho. Se ele não ler o do Kiwi, o agente e o `--sandbox` seguram sozinhos.
+- **Se o `tools: []` deixa as ferramentas MCP da sessão.** A doc não diz como uma ferramenta MCP se chama no `tools`, e avisa que um nome errado pode travar o `agy`. Por isso a lista fica vazia. Se a ferramenta do Kiwi não aparecer, o próximo passo é achar o nome dela, nunca liberar as embutidas.
+- **Se o `--agent` aceita o agente do workspace.** A doc da CLI lista a opção; a de Subagents só fala do painel `/agents`.
+
+**O que não se isola** (o `agy` lê, e não há alavanca):
+- **Os servidores MCP da pessoa** (`~/.gemini/config/mcp_config.json`). Não há opção como o `--allowed-mcp-server-names` do Gemini CLI, e um `mcp(*)` no deny negaria o do Kiwi também. O agente do Kiwi não os lista (`mcpServers: []`), mas a doc não diz se isso esconde os globais.
+- **Os hooks da pessoa** (`~/.gemini/config/hooks.json`) e os **plugins** globais (`~/.gemini/config/plugins/`). Não há opção para desligar; o agente do Kiwi não pede nenhum plugin.
+- **Os ajustes e as regras da pessoa** (`~/.gemini/antigravity-cli/settings.json`). As regras dela valem junto com as do Kiwi (a doc das permissões ACP). Um `allow` dela não passa por cima de um deny do Kiwi, se o `agy` ler o do Kiwi.
+- **O pedido que começa por `/`** continua com a marca do `geminiPrompt`.
+
+**O `agy` falso** (`fake/agy.ts`) responde o `--version` e o `--help` (com o `acp`, ou sem ele no `KIWI_FAKE_AGY_NO_ACP=1`), e no `acp` é o agente falso no sabor `agy`. O `initialize` é o dele: o "Antigravity ACP Server", os cinco jeitos de logar (`oauth-personal`, `oauth-business`, `gemini-api-key`, `agent-platform`, `terminal-login`), o `loadSession` e o `session/resume`, que o host prefere. Ele anota os argumentos, a pasta e o que o Kiwi escreveu em `.agents/`. As opções de permissão Allow/Deny, o "Authentication required" e a retomada sem repetir o histórico vêm no T25060.
 
 ## Plano B: abrir o Claude Code direto, sem o adaptador
 Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um isolamento que não segura, ou o projeto parado), entra um segundo motor por trás da mesma interface `AgentHost`. Ele abre o `claude` instalado em modo de programa:

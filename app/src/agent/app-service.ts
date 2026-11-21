@@ -14,9 +14,9 @@ import path from "node:path";
 import { claudeAdapterHost, agentDir, CLAUDE_CODE } from "./adapter/open.ts";
 import type { PinnedPackage } from "./adapter/pinned.ts";
 import { findClaude, type ProgramArgv } from "./claude.ts";
-import { findGemini } from "./gemini.ts";
+import { findGeminiAgent } from "./agy.ts";
 import { geminiHost } from "./gemini-host.ts";
-import { FAKE_AGENT_COMMAND, FAKE_CLAUDE, FAKE_GEMINI } from "./fake/index.ts";
+import { FAKE_AGENT_COMMAND, FAKE_AGY, FAKE_CLAUDE } from "./fake/index.ts";
 import { AgentHost } from "./host.ts";
 import { AgentService } from "./service.ts";
 import type { AgentSettings, AppSettings, SettingsPatch } from "../store/settings.ts";
@@ -48,8 +48,8 @@ export function appAgentService(o: AppAgentOptions): AgentService {
   const boot = Date.now();
   const now = Number.isFinite(clockStart) ? () => clockStart + (Date.now() - boot) : undefined;
   const gemini = (): ProgramArgv | null => {
-    if (fake) return FAKE_GEMINI;
-    const found = findGemini();
+    if (fake) return FAKE_AGY;
+    const found = findGeminiAgent();
     return found ? [found] : null;
   };
   const fakeLog = { KIWI_FAKE_AGENT_LOG: path.join(o.data, "fake-agent.jsonl") };
