@@ -161,7 +161,11 @@ async function waitQuiet(pids: Map<number, Role>, limit: number, maxS: number): 
 }
 
 /** O estado dos modelos de voz no `status` do headless: o `session.stt` e o `session.boosting`. */
-export type ModelState = { stt?: string; boosting?: string };
+export type ModelState = { stt?: string; boosting?: string; download?: { fraction: number; phase: string } };
+
+/** Onde o download parou, para o log: `stt loading, downloading 43%`. Um download travado se vê aqui. */
+export const modelWhere = (s: ModelState) =>
+  `stt ${s.stt ?? "?"}${s.download ? `, ${s.download.phase} ${Math.round(s.download.fraction * 100)}%` : ""}`;
 
 /** O helper ainda prepara um modelo: ao abrir, baixa e compila o Parakeet (o `prepareSTT`), e o CI baixa do zero. */
 export const modelBusy = (s: ModelState) => s.stt == null || s.stt === "starting" || s.stt === "loading" || s.boosting === "loading";
@@ -192,7 +196,7 @@ export async function waitModel(
     if (s.stt === "unavailable") return { skipped: `o modelo de voz não carregou em ${elapsed()} s (unavailable: a rede ou o Hugging Face?), e o repouso não mede um helper sem ele` };
     if (s.boosting === "unavailable") return { skipped: `o modelo do vocabulário não carregou em ${elapsed()} s (unavailable), e o repouso não mede um helper sem ele` };
     if (!modelBusy(s)) return { seconds: elapsed() };
-    if (clock.now() - began >= maxS * 1000) return { skipped: `o modelo de voz não ficou pronto em ${maxS} s (stt ${s.stt ?? "?"}), e o repouso não mede o helper carregando` };
+    if (clock.now() - began >= maxS * 1000) return { skipped: `o modelo de voz não ficou pronto em ${maxS} s (${modelWhere(s)}), e o repouso não mede o helper carregando` };
     await clock.sleep(1000);
   }
 }

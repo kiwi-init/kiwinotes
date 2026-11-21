@@ -41,6 +41,11 @@ describe("o repouso espera o modelo de voz (T25655)", () => {
     expect(r).toEqual({ skipped: "o modelo de voz não ficou pronto em 300 s (stt loading), e o repouso não mede o helper carregando" });
   });
 
+  test("o pulado por tempo diz onde o download parou, para um download travado se ver no log", async () => {
+    const r = await waitModel(states({ stt: "loading", download: { fraction: 0.434, phase: "downloading" } }), 300, fakeClock());
+    expect(r).toEqual({ skipped: "o modelo de voz não ficou pronto em 300 s (stt loading, downloading 43%), e o repouso não mede o helper carregando" });
+  });
+
   test("o teto da espera fica bem acima do pior caso visto no CI sem cache (282 s)", () => {
     expect(MODEL_WAIT_S).toBeGreaterThanOrEqual(2 * 282);
   });
