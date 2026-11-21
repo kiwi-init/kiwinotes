@@ -25,7 +25,7 @@
 // |              | passada para e o principal fica < 5%. Depois, 30 s sem escrever: a passada tem de voltar           |
 //
 // - Antes de medir o repouso, o roteiro espera o helper terminar de preparar o modelo de voz (`waitModel`, T25655: o
-//   download e a compilação do Parakeet numa máquina nova do CI), no máximo 300 s, e diz quanto esperou. O modelo que
+//   download e a compilação do Parakeet numa máquina nova do CI), no máximo 600 s (o CI guarda o modelo no cache), e diz quanto esperou. O modelo que
 //   não carrega, ou não fica pronto a tempo, faz o roteiro sair pulado com o motivo, nunca medir assim mesmo.
 // - Depois, espera o app assentar (`waitQuiet`: janelas de 5 s até a soma ficar na régua
 //   de "tudo", no máximo 60 s) e diz quanto esperou. O trabalho do começo não conta; um timer à toa nunca assenta.
@@ -166,8 +166,13 @@ export type ModelState = { stt?: string; boosting?: string };
 /** O helper ainda prepara um modelo: ao abrir, baixa e compila o Parakeet (o `prepareSTT`), e o CI baixa do zero. */
 export const modelBusy = (s: ModelState) => s.stt == null || s.stt === "starting" || s.stt === "loading" || s.boosting === "loading";
 
-/** O teto da espera pelo modelo de voz: o download do zero e a compilação do CoreML numa máquina nova do CI. */
-export const MODEL_WAIT_S = 300;
+/**
+ * O teto da espera pelo modelo de voz. O CI guarda o modelo no cache (o `fluidaudio-models` do ci.yml), e a espera
+ * cai para segundos; sem o cache (a 1ª vez de uma versão nova do FluidAudio), o download do zero e a compilação do
+ * CoreML levaram 282 s no run 44934881016. O teto fica bem acima disso, para a rede um pouco mais lenta não virar
+ * outro vermelho intermitente.
+ */
+export const MODEL_WAIT_S = 600;
 
 /**
  * Espera o helper terminar de preparar o modelo de voz (T25655). Sem isso, o repouso media o download e a compilação
@@ -190,6 +195,11 @@ export async function waitModel(
     if (clock.now() - began >= maxS * 1000) return { skipped: `o modelo de voz não ficou pronto em ${maxS} s (stt ${s.stt ?? "?"}), e o repouso não mede o helper carregando` };
     await clock.sleep(1000);
   }
+}
+
+/** Depois da medida: o motivo de jogá-la fora se o modelo saiu de pronto no meio (o helper caiu e voltou a carregar). */
+export function modelLeftReady(s: ModelState): string | null {
+  return s.stt === "ready" && !modelBusy(s) ? null : `o modelo de voz saiu de pronto na medida (stt ${s.stt ?? "?"}, boosting ${s.boosting ?? "-"})`;
 }
 
 async function cliRun(data: string, args: string[], env: Env): Promise<{ code: number; out: string }> {
@@ -305,10 +315,8 @@ async function idle(name: string, windows: UiWindow[], limits: Limit[], away: bo
     const warmup = await waitQuiet(pids, all, 60);
     const cpu = await measureCpu(pids, SECONDS);
     // O modelo voltou a carregar no meio (o helper caiu e subiu de novo): a medida não é do repouso.
-    const after = await models();
-    if (modelBusy(after) || after.stt !== "ready") {
-      return { name, seconds: 0, cpu: null, limits: [], skipped: `o modelo de voz saiu de pronto na medida (stt ${after.stt ?? "?"}, boosting ${after.boosting ?? "-"})` };
-    }
+    const left = modelLeftReady(await models());
+    if (left) return { name, seconds: 0, cpu: null, limits: [], skipped: left };
     return {
       name,
       seconds: SECONDS,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { modelBusy, waitModel, type ModelState } from "./cpu-scenarios.ts";
+import { MODEL_WAIT_S, modelBusy, modelLeftReady, waitModel, type ModelState } from "./cpu-scenarios.ts";
 
 /** Um relógio falso: cada `sleep` anda o tempo, sem esperar de verdade. */
 const fakeClock = () => {
@@ -39,5 +39,18 @@ describe("o repouso espera o modelo de voz (T25655)", () => {
   test("passou do teto: pula com o motivo, nunca mede o helper carregando", async () => {
     const r = await waitModel(states({ stt: "loading" }), 300, fakeClock());
     expect(r).toEqual({ skipped: "o modelo de voz não ficou pronto em 300 s (stt loading), e o repouso não mede o helper carregando" });
+  });
+
+  test("o teto da espera fica bem acima do pior caso visto no CI sem cache (282 s)", () => {
+    expect(MODEL_WAIT_S).toBeGreaterThanOrEqual(2 * 282);
+  });
+
+  test("o modelo que sai de pronto no meio da medida joga a medida fora", () => {
+    expect(modelLeftReady({ stt: "ready" })).toBeNull();
+    expect(modelLeftReady({ stt: "ready", boosting: "off" })).toBeNull();
+    expect(modelLeftReady({ stt: "loading" })).toBe("o modelo de voz saiu de pronto na medida (stt loading, boosting -)");
+    expect(modelLeftReady({ stt: "unavailable" })).toContain("stt unavailable");
+    expect(modelLeftReady({ stt: "ready", boosting: "loading" })).toContain("boosting loading");
+    expect(modelLeftReady({})).toContain("stt ?");
   });
 });

@@ -223,6 +223,15 @@ jobs:
         working-directory: native
         run: swift build --product kiwi-helper
 
+      # O modelo de voz do helper (o Parakeet do FluidAudio): o helper o baixa e compila ao abrir, e sem o cache o
+      # repouso esperou 282 s por ele (T25655, run 44934881016). A versão do modelo vem da versão do FluidAudio, que
+      # está no Package.resolved; a escolha do modelo (`.ultra`) fica no Transcriber.swift.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.helper.outcome == 'success' }}
+        with:
+          path: ~/Library/Application Support/FluidAudio/Models
+          key: fluidaudio-models-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/Package.resolved') }}-ultra
+
       - name: cpu-scenarios
         if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.helper.outcome == 'success' }}
         # A rede, não a medida: no runner, o repouso leva ~3 min, e tudo ~7 min (o run 44650127760, do #256).
