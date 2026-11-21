@@ -32,6 +32,10 @@
 //   KIWI_FAKE_AGENT_TOOL_DELAY_MS  uma pausa depois de cada ferramenta do Kiwi, para um print pegar o status no meio
 //   KIWI_FAKE_AGENT_USAGE_DELAY_MS o `/usage` demora isso antes de responder, e respeita o cancelar (T16712)
 //   KIWI_FAKE_AGENT_NO_MCP   "1": não anuncia o HTTP do MCP (`mcpCapabilities`), e o host não manda as ferramentas
+//   KIWI_FAKE_AGENT_FLAVOR   "gemini": ele se apresenta como o Gemini CLI 0.70.0 (spec #24666), aberto pelo `fake/gemini.ts`:
+//                            o `initialize` dele (os quatro jeitos de logar, o `loadSession` e sem `session/resume`), o
+//                            `-32000` na abertura sem login (KIWI_FAKE_GEMINI_LOGGED_IN=0), o 429 do limite, as ferramentas
+//                            no `_meta["gemini-cli"].mcp` e as opções de permissão dele (`proceed_once`, `cancel`)
 //   KIWI_FAKE_AGENT_MODEL    o modelo com que a sessão abre (o padrão é "fable", como se viesse do terminal da pessoa,
 //                            que foi o que a prova de verdade mostrou, #8666); o esforço abre em "high"
 //
@@ -44,10 +48,42 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
 import { agent, ndJsonStream, PROTOCOL_VERSION, RequestError } from "@agentclientprotocol/sdk";
-import type { AgentContext, InitializeResponse, McpServer, PromptResponse } from "@agentclientprotocol/sdk";
+import type { AgentContext, InitializeResponse, McpServer, PermissionOption, PromptResponse } from "@agentclientprotocol/sdk";
 import { asKiwi } from "../tools/as-kiwi";
 
-const resumeMode = process.env.KIWI_FAKE_AGENT_RESUME ?? "resume";
+/** O Gemini falso (spec #24666): o mesmo agente, com o `initialize`, os erros e o formato das ferramentas do Gemini CLI. */
+const GEMINI = process.env.KIWI_FAKE_AGENT_FLAVOR === "gemini";
+const GEMINI_VERSION = process.env.KIWI_FAKE_GEMINI_VERSION ?? "0.70.0";
+// O Gemini CLI sabe o `session/load` e não sabe o `session/resume`.
+const resumeMode = GEMINI ? "load" : (process.env.KIWI_FAKE_AGENT_RESUME ?? "resume");
+
+/**
+ * O `_meta` de uma ferramenta no `tool_call` e no pedido de permissão. O Claude Code (pelo adaptador) diz o nome em
+ * `claudeCode.toolName` (`mcp__kiwi__kiwi`); o Gemini diz o servidor e a ferramenta em `gemini-cli.mcp`, e nada numa
+ * ferramenta embutida.
+ */
+function toolMeta(name: string, kiwi: boolean): Record<string, unknown> | undefined {
+  if (!GEMINI) return { claudeCode: { toolName: kiwi ? `mcp__kiwi__${name}` : name } };
+  return kiwi ? { "gemini-cli": { mcp: { server_name: "kiwi", tool_name: name } } } : undefined;
+}
+/** O `_meta` como campo: nenhum, quando não há (o Gemini numa ferramenta embutida). */
+function metaOf(meta: Record<string, unknown> | undefined): { _meta?: Record<string, unknown> } {
+  return meta ? { _meta: meta } : {};
+}
+/** O título do `tool_call`: o Gemini mostra o nome e o servidor ("kiwi (kiwi MCP Server)"). */
+function toolTitle(name: string, kiwi: boolean): string {
+  return GEMINI && kiwi ? `${name} (kiwi MCP Server)` : name;
+}
+/** As opções de um pedido de permissão: as do Gemini usam os nomes dele. */
+const PERMISSION_OPTIONS: PermissionOption[] = GEMINI
+  ? [
+      { optionId: "proceed_once", name: "Allow", kind: "allow_once" },
+      { optionId: "cancel", name: "Reject", kind: "reject_once" },
+    ]
+  : [
+      { optionId: "allow", name: "Permitir", kind: "allow_once" },
+      { optionId: "reject", name: "Recusar", kind: "reject_once" },
+    ];
 const log = process.env.KIWI_FAKE_AGENT_LOG;
 
 // O pid dele, na pasta onde roda: os testes conferem que o programa fechou de verdade (T8678).
@@ -116,10 +152,10 @@ async function useTool(client: AgentContext, sessionId: string, name: string, ar
     update: {
       sessionUpdate: "tool_call",
       toolCallId,
-      title: call.name,
+      title: toolTitle(call.name, true),
       kind: /^notes_(create|append|write)$/.test(name) ? "edit" : "read",
       status: "in_progress",
-      _meta: { claudeCode: { toolName: `mcp__kiwi__${call.name}` } },
+      _meta: toolMeta(call.name, true),
     },
   });
   const r = await mcp(sessionId, "tools/call", call);
@@ -251,7 +287,7 @@ export const FAKE_REFERENCES = [
  */
 async function webSearchFake(client: AgentContext, sessionId: string, query: string): Promise<string> {
   const toolCallId = `w${++rpcId}`;
-  const call = { toolCallId, title: "WebSearch", kind: "fetch", _meta: { claudeCode: { toolName: "WebSearch" } } };
+  const call = { toolCallId, title: GEMINI ? "GoogleSearch" : "WebSearch", kind: "fetch", _meta: toolMeta(GEMINI ? "google_web_search" : "WebSearch", false) };
   const res = (await client.request("session/request_permission", {
     sessionId,
     toolCall: call,
@@ -375,8 +411,37 @@ async function think(client: AgentContext, sessionId: string): Promise<void> {
   });
 }
 
+/** O `initialize` do Gemini CLI 0.70.0 (acpRpcDispatcher.ts): os quatro jeitos de logar, o `loadSession` e o MCP. */
+function geminiInitialize(): InitializeResponse {
+  return {
+    protocolVersion: PROTOCOL_VERSION,
+    authMethods: [
+      { id: "oauth-personal", name: "Log in with Google", description: "Log in with your Google account" },
+      { id: "gemini-api-key", name: "Gemini API key", description: "Use an API key with Gemini Developer API", _meta: { "api-key": { provider: "google" } } },
+      { id: "vertex-ai", name: "Vertex AI", description: "Use an API key with Vertex AI GenAI API" },
+      { id: "gateway", name: "AI API Gateway", description: "Use a custom AI API Gateway", _meta: { gateway: { protocol: "google", restartRequired: "false" } } },
+    ],
+    agentInfo: { name: "gemini-cli", title: "Gemini CLI", version: GEMINI_VERSION },
+    agentCapabilities: {
+      loadSession: true,
+      promptCapabilities: { image: true, audio: true, embeddedContext: true },
+      mcpCapabilities: process.env.KIWI_FAKE_AGENT_NO_MCP === "1" ? {} : { http: true, sse: true },
+    },
+  } as InitializeResponse;
+}
+
+/**
+ * Sem login, o Gemini recusa a abertura da sessão com o -32000 do `authRequired` e a frase dele
+ * (acpSessionManager.ts), e não abre nada. `KIWI_FAKE_GEMINI_LOGGED_IN=0` faz o falso fazer o mesmo.
+ */
+function geminiLogin(): void {
+  if (GEMINI && process.env.KIWI_FAKE_GEMINI_LOGGED_IN === "0") {
+    throw new RequestError(-32000, "Gemini API key is missing or not configured.");
+  }
+}
+
 const app = agent({ name: "kiwi-fake-agent" })
-  .onRequest("initialize", (): InitializeResponse => ({
+  .onRequest("initialize", ({ params }): InitializeResponse => GEMINI ? (note("initialize", params), geminiInitialize()) : ({
     protocolVersion: PROTOCOL_VERSION,
     agentInfo: { name: "kiwi-fake-agent", title: "Agente falso", version: "1.0.0" },
     agentCapabilities: {
@@ -387,8 +452,15 @@ const app = agent({ name: "kiwi-fake-agent" })
     },
     authMethods: [],
   }))
+  // O Kiwi nunca chama o `authenticate` (ADR 0011): o login é da pessoa, no Terminal. O falso anota e recusa, e o teste
+  // confere que a linha não aparece.
+  .onRequest("authenticate", ({ params }) => {
+    note("authenticate", params);
+    throw RequestError.internalError({ message: "o agente falso não loga" });
+  })
   .onRequest("session/new", ({ params }) => {
     note("session/new", params);
+    geminiLogin();
     const sessionId = crypto.randomUUID();
     rememberServers(sessionId, params.mcpServers);
     saveSessions({ ...sessions(), [sessionId]: 0 });
@@ -402,6 +474,7 @@ const app = agent({ name: "kiwi-fake-agent" })
   })
   .onRequest("session/load", async ({ params, client }) => {
     note("session/load", params);
+    geminiLogin();
     if (!(params.sessionId in sessions())) throw RequestError.sessionNotFound(params.sessionId);
     rememberServers(params.sessionId, params.mcpServers);
     // O `session/load` repete a conversa antiga: o host não pode tomar isso pela resposta do pedido novo.
@@ -566,7 +639,7 @@ const app = agent({ name: "kiwi-fake-agent" })
       await Bun.sleep(1500);
       await client.notify("session/update", {
         sessionId,
-        update: { sessionUpdate: "tool_call", toolCallId: "t4", title: "Read", kind: "read", status: "in_progress", _meta: { claudeCode: { toolName: "Read" } } },
+        update: { sessionUpdate: "tool_call", toolCallId: "t4", title: "Read", kind: "read", status: "in_progress", _meta: toolMeta("Read", false) },
       });
       await Bun.sleep(800);
       await client.notify("session/update", { sessionId, update: { sessionUpdate: "tool_call_update", toolCallId: "t4", status: "completed" } });
@@ -576,10 +649,16 @@ const app = agent({ name: "kiwi-fake-agent" })
 
     switch (text) {
       case "/sem-login":
+        // O Gemini: a sessão aberta que perde o login (o token venceu) volta com o 401 da API do Google.
+        if (GEMINI) throw new RequestError(401, "Request had invalid authentication credentials. Expected OAuth 2 access token.");
         throw RequestError.authRequired(undefined, "Please run /login");
       case "/limite":
+        // O Gemini troca o 429 da API por esta frase, com o código 429 (acpSession.ts).
+        if (GEMINI) throw new RequestError(429, "Rate limit exceeded. Try again later.");
         throw RequestError.internalError({ message: "Claude usage limit reached. Your limit will reset at 5pm." });
       case "/sem-rede":
+        // O Gemini: o erro de rede sobe com o código 500 e a mensagem do `fetch`.
+        if (GEMINI) throw new RequestError(500, "fetch failed: getaddrinfo ENOTFOUND generativelanguage.googleapis.com");
         throw RequestError.internalError({ message: "fetch failed: getaddrinfo ENOTFOUND api.anthropic.com" });
       case "/cai":
         process.exit(3);
@@ -587,11 +666,8 @@ const app = agent({ name: "kiwi-fake-agent" })
       case "/permissao": {
         const res = await client.request("session/request_permission", {
           sessionId,
-          toolCall: { toolCallId: "t1", title: "Bash", kind: "execute", _meta: { claudeCode: { toolName: "Bash" } } },
-          options: [
-            { optionId: "allow", name: "Permitir", kind: "allow_once" },
-            { optionId: "reject", name: "Recusar", kind: "reject_once" },
-          ],
+          toolCall: { toolCallId: "t1", title: GEMINI ? "Shell" : "Bash", kind: "execute", ...metaOf(toolMeta(GEMINI ? "run_shell_command" : "Bash", false)) },
+          options: PERMISSION_OPTIONS,
         });
         const outcome = res.outcome.outcome === "selected" ? res.outcome.optionId : res.outcome.outcome;
         await say(client, sessionId, `permissão: ${outcome}`);
@@ -606,11 +682,8 @@ const app = agent({ name: "kiwi-fake-agent" })
       case "/permissao-kiwi": {
         const res = await client.request("session/request_permission", {
           sessionId,
-          toolCall: { toolCallId: "t3", title: "kiwi", kind: "read", _meta: { claudeCode: { toolName: "mcp__kiwi__kiwi" } } },
-          options: [
-            { optionId: "allow", name: "Permitir", kind: "allow_once" },
-            { optionId: "reject", name: "Recusar", kind: "reject_once" },
-          ],
+          toolCall: { toolCallId: "t3", title: toolTitle("kiwi", true), kind: "read", ...metaOf(toolMeta("kiwi", true)) },
+          options: PERMISSION_OPTIONS,
         });
         const outcome = res.outcome.outcome === "selected" ? res.outcome.optionId : res.outcome.outcome;
         await say(client, sessionId, `permissão: ${outcome}`);
@@ -629,7 +702,7 @@ const app = agent({ name: "kiwi-fake-agent" })
         await think(client, sessionId);
         await client.notify("session/update", {
           sessionId,
-          update: { sessionUpdate: "tool_call", toolCallId: "t2", title: "Read", kind: "read", status: "in_progress", _meta: { claudeCode: { toolName: "Read" } } },
+          update: { sessionUpdate: "tool_call", toolCallId: "t2", title: "Read", kind: "read", status: "in_progress", _meta: toolMeta("Read", false) },
         });
         for (let i = 1; i <= 20; i++) {
           if (cancelled.has(sessionId)) return { stopReason: "cancelled" };

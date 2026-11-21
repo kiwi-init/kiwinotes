@@ -228,6 +228,76 @@ O trecho em que o detector fica em dúvida não é mais segurado sempre: o Kiwi 
 - **O trecho só sai pela capacidade `agent.question`,** para a janela; o evento `agent.questionChanged` leva só os ids (contrato 1.50.0).
 - O que o detector tem certeza que é segredo nunca é perguntado. A notificação com a janela fora da vista é o spec #9839.
 
+## O Gemini (T24671, spec #24666)
+O Gemini CLI fala ACP sozinho (`gemini --acp`), sem adaptador: o `AgentHost` abre o programa instalado. Tudo abaixo foi conferido lendo o código do **Gemini CLI 0.70.0**, sem rodar o de verdade; os testes usam o Gemini falso (`src/agent/fake/gemini.ts`). O código é o `src/agent/gemini.ts`.
+
+**Achar e a versão.**
+- O `findGemini` procura o `gemini` no PATH e depois nas pastas de quem instala:
+  - o Homebrew (`/opt/homebrew/bin`, `/usr/local/bin`);
+  - o npm global (`~/.npm-global/bin` e o `NPM_CONFIG_PREFIX`);
+  - o Volta, o Bun, `~/.local/bin`;
+  - o nvm, da versão do Node mais nova para a mais velha.
+- O `gemini` do npm é um script `#!/usr/bin/env node`. Um app aberto pelo Finder não tem o Node no PATH, então o `geminiEnv` põe a pasta do `gemini` no começo do PATH: o Node do Homebrew, do nvm e do Volta fica nela.
+- `gemini --version` imprime só o número.
+- **A mínima é a 0.70.0.**
+  - O `--acp` existe desde a 0.34.0, mas o isolamento abaixo só foi conferido na 0.70.0.
+  - O Gemini ainda está na série 0.x, em que uma versão nova pode mudar uma opção.
+  - Mais antigo é `E_AGENT_TOO_OLD`.
+  - Subir a mínima, ou baixá-la, pede ler as opções de novo naquela versão.
+
+**O login.**
+- O Gemini não tem um `auth status`. O `geminiStatus` diz instalado e a versão, nunca se está logado (`loggedIn` indefinido).
+- O login só aparece quando a sessão abre. Sem ele, o `session/new` e o `session/load` voltam com o `-32000` do ACP (`authRequired`), com uma frase como "Gemini API key is missing or not configured.", e o `classifyAgentError` já faz disso o `E_AGENT_NOT_LOGGED_IN`.
+- **O Kiwi nunca chama o `authenticate`.** Ele grava o jeito de logar nas configurações da pessoa e pode apagar o login guardado. O login é da pessoa, no Terminal (`gemini`). O Kiwi também nunca lê a pasta `~/.gemini`.
+- Com a sessão aberta, um login que venceu volta como um erro da API (o 401).
+
+**O isolamento.** Pedido pelos argumentos (`geminiArgs`) e pelo ambiente (`geminiEnv`). A pasta é a `<dados>/agent/work`, como a do Claude.
+
+| o que | como |
+|---|---|
+| YOLO e `auto_edit` desligados | `--approval-mode default`: a opção vence o `defaultApprovalMode` das configurações da pessoa |
+| nenhuma extensão da pessoa (com os servidores MCP, os comandos e o `GEMINI.md` delas) | `--extensions none` |
+| nenhum servidor MCP da `settings.json` da pessoa | `--allowed-mcp-server-names kiwi`. O Gemini junta os servidores da pessoa com os do ACP, e a opção deixa só o `kiwi` |
+| nenhuma ferramenta embutida (shell, arquivos, web, memória, skills, subagentes) nem de outro servidor | `--admin-policy <dados>/agent/gemini-policy`: uma regra na camada mais alta do motor de regras, que nega `toolName = "*"` (prioridade 900) e libera `toolName = "*"` com `mcpName = "kiwi"`, o `mcp_kiwi_*` (999). Toda regra precisa de `toolName`, `decision` e `priority`: uma que sai do schema faz o Gemini pular o arquivo inteiro, e o isolamento cai sem aviso. Um teste confere isso. Uma ferramenta negada sem condição some da lista que o modelo vê. As regras da pessoa ficam numa camada abaixo |
+| um processo só, que o host fecha | `GEMINI_CLI_NO_RELAUNCH=1`: ele não se reabre num 2º Node para ter mais memória |
+| nunca abrir o navegador | `NO_BROWSER=true` |
+
+O modo ACP já tira a ferramenta de perguntar à pessoa (`ask_user`).
+
+**O que não se isola** (o próprio Gemini lê, e não há opção):
+- **O `~/.gemini/GEMINI.md` global** e o `GEMINI.md` da pasta de trabalho para cima, até a raiz do git. O da pasta de trabalho não existe, porque ela é do Kiwi; o global vai ao modelo como contexto.
+- **Os hooks da pessoa** (`hooks` na `settings.json`). Eles rodam nos eventos do Gemini.
+- **Os comandos da pessoa** (`~/.gemini/commands`). O Gemini os roda quando o pedido começa por `/`. **O host não deve mandar um pedido que comece por `/`** (T24672).
+- **A política de administrador da empresa:** um `.toml` em `/Library/Application Support/GeminiCli/policies`. Com ele, o Gemini ignora o `--admin-policy`. Os servidores MCP que um administrador exige também entram. É o Mac gerenciado pela empresa, não a pessoa.
+- **As configurações e o login** (`~/.gemini/settings.json`, `.env`, o modelo escolhido): são do próprio Gemini. O `GEMINI_CLI_HOME` mudaria a pasta inteira, mas levaria o login junto, então o Kiwi não o usa.
+- Os outros caminhos de configuração do sistema (`GEMINI_CLI_SYSTEM_SETTINGS_PATH`) só valem para um arquivo do root, o que o Kiwi não pode criar.
+
+**As ferramentas do Kiwi (MCP por HTTP): o Gemini aceita.**
+- O `initialize` diz `mcpCapabilities: { http: true, sse: true }`, e o servidor do Kiwi entra como `httpUrl` com os headers.
+- O modelo vê a ferramenta como `mcp_kiwi_kiwi`. No `tool_call` e no pedido de permissão, o nome vem em `_meta["gemini-cli"].mcp` (`server_name`, `tool_name`), não em `_meta.claudeCode.toolName`. O `toolName()` do host precisa ler os dois (T24672).
+- As opções de permissão são as do Gemini: `proceed_once`, `proceed_always`, `cancel`.
+
+**A sessão e os erros.**
+- O Gemini sabe o `session/load` e não sabe o `session/resume`. O host já volta à sessão pelo `load` (teste no `gemini.test.ts`).
+- O limite volta com o **código 429** e "Rate limit exceeded. Try again later.". O `classifyAgentError` já pega pela frase; conferir o código também é mais firme (T24672).
+- Um erro de rede volta com o código 500 e a mensagem do `fetch` ("fetch failed…"), e cai no `E_AGENT_OFFLINE`.
+- As novas tentativas aparecem como pensamento ("[Retry n/m] …").
+- O gasto vem no `usage` da resposta.
+
+**O Gemini falso** (`fake/gemini.ts`) responde o `--version` e, no `--acp`, é o agente falso no jeito do Gemini:
+- o `initialize`, os quatro jeitos de logar e o MCP;
+- o `-32000` sem login;
+- o 429, o 500 e o 401;
+- só o `load`;
+- as ferramentas e as opções de permissão do Gemini.
+
+Ele anota os argumentos, a pasta e as variáveis do isolamento no log, para o teste conferir. Das outras variáveis do Gemini, anota só os nomes, nunca os valores. Um `authenticate` fica anotado e é recusado, e o teste confere que ele nunca aparece.
+
+**Fica para a prova de verdade do harry, quando o lead pedir:**
+- a regra de administrador apagando as ferramentas embutidas na lista que o modelo vê;
+- o `-32000` de uma conta sem login;
+- o Node achado pelo app aberto do Finder.
+
 ## Plano B: abrir o Claude Code direto, sem o adaptador
 Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um isolamento que não segura, ou o projeto parado), entra um segundo motor por trás da mesma interface `AgentHost`. Ele abre o `claude` instalado em modo de programa:
 - `claude -p --input-format stream-json --output-format stream-json --verbose`;
@@ -252,5 +322,5 @@ Fica para a prova de verdade do harry (`bun run cli agent proof --real`, acima):
 ## Consequências
 - **A tela de Ajustes › Agente** usa o `AgentHost` e o `claudeStatus()`. Ela troca a recusa automática das permissões por uma pergunta à pessoa, quando houver ferramentas.
 - **As ferramentas do Kiwi para o agente** (o índice, a busca, a leitura por seção) entram como um servidor MCP do próprio Kiwi, no `mcpServers` da sessão, sem mexer no isolamento (seção acima, T8956).
-- **Outro agente que fala ACP** (o Gemini, o OpenCode) entra trocando só o programa que o host abre.
+- **Outro agente que fala ACP** entra trocando o programa que o host abre e o jeito de isolar dele. O Gemini é o primeiro (seção acima, T24671). O isolamento é de cada agente: o do Claude vai pelo `_meta` da sessão, e o do Gemini pelos argumentos e por uma regra de administrador.
 - **Atualizar a biblioteca do ACP:** trocar a versão fixa no `package.json` e rodar `bun scripts/third-party-notices.ts`. A 2.0 quebrou a API antiga, então uma versão nova pede rodar os testes do `src/agent/`.
