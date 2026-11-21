@@ -116,6 +116,11 @@ export interface AgentHostOptions {
    * pelos argumentos e pelo ambiente com que abre (`gemini.ts`), e a sessão dele vai sem `_meta`.
    */
   kind?: AgentKind;
+  /**
+   * Como a pessoa entra na conta, quando o agente diz que não está logado: a frase depois de "O {agente} não está
+   * logado." Sem ela, "Entre na sua conta pelo próprio {agente}". O Antigravity diz a dele (spec #25046).
+   */
+  loginHelp?: string;
   /** O ambiente do processo do agente (o padrão é o do Kiwi). */
   env?: Record<string, string | undefined>;
   /** A versão do Kiwi, que vai na apresentação do protocolo (`clientInfo`). */
@@ -249,7 +254,7 @@ export class AgentHost {
         stderr: "pipe",
       });
     } catch (e) {
-      throw classifyAgentError(e, this.o.name);
+      throw classifyAgentError(e, this.o.name, this.o.loginHelp);
     }
     this.proc = proc;
     this.lastExit = null;
@@ -319,7 +324,7 @@ export class AgentHost {
       return await Promise.race([open(), timeout]);
     } catch (e) {
       await this.stop();
-      throw classifyAgentError(e, this.o.name);
+      throw classifyAgentError(e, this.o.name, this.o.loginHelp);
     } finally {
       clearTimeout(timer);
     }
@@ -361,7 +366,7 @@ export class AgentHost {
       writeFileSync(this.sessionFile, JSON.stringify({ sessionId: created.sessionId }) + "\n", { mode: 0o600 });
       return created.sessionId;
     } catch (e) {
-      throw classifyAgentError(e, this.o.name);
+      throw classifyAgentError(e, this.o.name, this.o.loginHelp);
     }
   }
 
@@ -404,7 +409,7 @@ export class AgentHost {
       } catch (e) {
         // A sessão guardada não existe mais (outro agente, ou o agente a apagou): começa uma nova. Um erro de login,
         // de limite ou de rede não se resolve com uma sessão nova, e sobe.
-        const err = classifyAgentError(e, this.o.name);
+        const err = classifyAgentError(e, this.o.name, this.o.loginHelp);
         if (err.code !== "E_AGENT_FAILED") throw err;
       } finally {
         this.replaying = false;
@@ -462,7 +467,7 @@ export class AgentHost {
         this.dropProcess(proc, err);
         throw err;
       }
-      throw classifyAgentError(e, this.o.name);
+      throw classifyAgentError(e, this.o.name, this.o.loginHelp);
     } finally {
       this.turn = null;
     }
@@ -535,7 +540,7 @@ export class AgentHost {
         if (configId === "model") this.noteStartEffort();
         applied.push(configId);
       } catch (e) {
-        const err = classifyAgentError(e, this.o.name);
+        const err = classifyAgentError(e, this.o.name, this.o.loginHelp);
         if (err.code !== "E_AGENT_FAILED") throw err;
         refused.push(configId);
       }

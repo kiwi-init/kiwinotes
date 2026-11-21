@@ -12,6 +12,21 @@ describe("os erros do agente", () => {
     expect(code(RequestError.authRequired())).toBe("E_AGENT_NOT_LOGGED_IN");
   });
 
+  test("sem login, cada agente diz como entrar: o padrão, ou o loginHelp do host (spec #25046)", () => {
+    expect(classifyAgentError(RequestError.authRequired(), "Claude Code").message).toBe(
+      "O Claude Code não está logado. Entre na sua conta pelo próprio Claude Code e tente de novo.",
+    );
+    const help = "Abra o Antigravity no Terminal e entre com a sua conta.";
+    // O -32000 "Authentication required" do `agy acp` (docs do Antigravity), o data.reason e as palavras.
+    for (const e of [new RequestError(-32000, "Authentication required"), new RequestError(-32603, "x", { reason: "auth_required" }), new Error("401 UNAUTHENTICATED")]) {
+      const err = classifyAgentError(e, "Gemini", help);
+      expect(err.code).toBe("E_AGENT_NOT_LOGGED_IN");
+      expect(err.message).toBe(`O Gemini não está logado. ${help}`);
+    }
+    // O loginHelp só muda o login: os outros erros ficam iguais.
+    expect(classifyAgentError(new Error("429 Too Many Requests"), "Gemini", help).message).not.toContain(help);
+  });
+
   test("um data.reason explícito vale antes das palavras", () => {
     expect(code(new RequestError(-32603, "Internal error", { reason: "rate_limited" }))).toBe("E_AGENT_LIMIT");
     expect(code(new RequestError(-32603, "Internal error", { reason: "quota_exhausted" }))).toBe("E_AGENT_LIMIT");
