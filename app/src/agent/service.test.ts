@@ -11,7 +11,7 @@ import type { AgentMemoryView, AgentStatus, AgentTurnEvent } from "../shared/ui-
 import { DEFAULT_AGENT_SETTINGS, SettingsStore, type AgentSettings } from "../store/settings.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
 import { fakeNotices } from "./fake/notices.ts";
-import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
+import { FAKE_AGENT_COMMAND, FAKE_CLAUDE, FAKE_GEMINI } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost, sessionFileOf, WEB_TOOLS } from "./host.ts";
 import { AGENT_NAMES } from "./kinds.ts";
@@ -95,7 +95,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
     // O `/usage` de depois do pedido (ADR 0013) só nos testes dele: nos outros, ele não entra no meio.
     limitProbe: o.limitProbe ?? { delayMs: 3_600_000 },
     ...(o.window ? { window: o.window } : {}),
-    gemini: () => null,
+    gemini: () => FAKE_GEMINI,
     openHost: async ({ kind, configOptions, kiwiTools, webTools, onExit }) =>
       o.host?.(agentDir(data)) ??
       new AgentHost({
@@ -107,7 +107,8 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
         onExit,
         ...(kiwiTools ? { kiwiTools } : {}),
         ...(webTools ? { webTools } : {}),
-        env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}), ...o.env },
+        // O Gemini é o mesmo agente falso com o jeito dele (T24671): o initialize, o login e as ferramentas do Gemini CLI.
+        env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}), ...(kind === "gemini" ? { KIWI_FAKE_AGENT_FLAVOR: "gemini" } : {}), ...o.env },
       }),
     registry: reg.url,
     packages: reg.pinned,
@@ -2897,6 +2898,7 @@ describe("dois agentes (spec #24666)", () => {
     await m.svc.enable(true);
     let s = await m.svc.configure({ kind: "gemini" });
     expect(s).toMatchObject({ kind: "gemini", name: "Gemini", adapter: { phase: "missing" } });
+    expect((await m.svc.status(true)).gemini).toMatchObject({ installed: true, version: "0.70.0", versionOk: true, loggedIn: false, loginKnown: false });
     // Sem baixar nada: o pedido vai.
     const events = await askAndWait(m, "oi");
     expect(events.at(-1)?.type).toBe("done");
