@@ -28,7 +28,7 @@ export type AgentErrorCode =
  */
 export const AGENT_ERROR_MESSAGES: Record<AgentErrorCode, string> = {
   E_AGENT_NOT_INSTALLED: "O {agente} não está instalado neste Mac. Instale e tente de novo.",
-  E_AGENT_NOT_LOGGED_IN: "O {agente} não está logado. Entre na sua conta pelo próprio {agente} e tente de novo.",
+  E_AGENT_NOT_LOGGED_IN: "O {agente} não está logado. {entrar}",
   E_AGENT_LIMIT: "O {agente} atingiu o limite de uso da sua conta. Espere o limite voltar e tente de novo.",
   E_AGENT_OFFLINE: "Sem conexão com a internet. O {agente} precisa de rede para responder.",
   E_AGENT_BUSY: "O {agente} ainda está respondendo o pedido anterior. Espere terminar ou cancele.",
@@ -45,13 +45,20 @@ export const AGENT_ERROR_MESSAGES: Record<AgentErrorCode, string> = {
     "O {agente} instalado (versão {instalada}) mudou de série, e este Kiwi só conhece a da {esperada}. O agente fica indisponível até sair uma atualização do Kiwi Notes.",
 };
 
+/** O padrão de cada variável, quando quem cria o erro não diz outro. */
+const DEFAULT_VARS: Record<string, string> = {
+  // Como entrar: o padrão serve ao Claude Code; o Antigravity diz o dele pelo `loginHelp` do host (spec #25046).
+  entrar: "Entre na sua conta pelo próprio {agente} e tente de novo.",
+};
+
 export class AgentError extends Error {
   readonly code: AgentErrorCode;
   /** O que o agente disse, cru, para o log. Nunca vai para a mensagem da pessoa. */
   readonly detail?: string;
   constructor(code: AgentErrorCode, agentName = "agente", detail?: string, vars: Record<string, string> = {}) {
-    let message = AGENT_ERROR_MESSAGES[code].replaceAll("{agente}", agentName);
-    for (const [k, v] of Object.entries(vars)) message = message.replaceAll(`{${k}}`, v);
+    let message = AGENT_ERROR_MESSAGES[code];
+    for (const [k, v] of Object.entries({ ...DEFAULT_VARS, ...vars })) message = message.replaceAll(`{${k}}`, v);
+    message = message.replaceAll("{agente}", agentName);
     super(message);
     this.name = "AgentError";
     this.code = code;
@@ -83,18 +90,19 @@ function textOf(err: unknown): string {
  * Um erro qualquer (do ACP, do processo ou de rede) vira um `AgentError`. A ordem importa: o `authRequired` do ACP
  * e o `data.reason` vêm antes das palavras, e o limite vem antes do login (uma mensagem de limite costuma dizer "account").
  */
-export function classifyAgentError(err: unknown, agentName = "agente"): AgentError {
+export function classifyAgentError(err: unknown, agentName = "agente", loginHelp?: string): AgentError {
   if (err instanceof AgentError) return err;
+  const notLoggedIn = (detail: string) => new AgentError("E_AGENT_NOT_LOGGED_IN", agentName, detail, loginHelp ? { entrar: loginHelp } : {});
   const detail = textOf(err).slice(0, 2000);
   const e = (err ?? {}) as { code?: unknown; data?: { reason?: unknown } };
   if (e.code === "ENOENT") return new AgentError("E_AGENT_NOT_INSTALLED", agentName, detail);
-  if (e.code === ACP_AUTH_REQUIRED) return new AgentError("E_AGENT_NOT_LOGGED_IN", agentName, detail);
+  if (e.code === ACP_AUTH_REQUIRED) return notLoggedIn(detail);
   const reason = typeof e.data === "object" && e.data ? e.data.reason : undefined;
-  if (reason === "auth_required") return new AgentError("E_AGENT_NOT_LOGGED_IN", agentName, detail);
+  if (reason === "auth_required") return notLoggedIn(detail);
   if (reason === "rate_limited" || reason === "quota_exhausted") return new AgentError("E_AGENT_LIMIT", agentName, detail);
   if (reason === "transport_lost" || reason === "offline") return new AgentError("E_AGENT_OFFLINE", agentName, detail);
   if (LIMIT.test(detail)) return new AgentError("E_AGENT_LIMIT", agentName, detail);
   if (OFFLINE.test(detail)) return new AgentError("E_AGENT_OFFLINE", agentName, detail);
-  if (NOT_LOGGED_IN.test(detail)) return new AgentError("E_AGENT_NOT_LOGGED_IN", agentName, detail);
+  if (NOT_LOGGED_IN.test(detail)) return notLoggedIn(detail);
   return new AgentError("E_AGENT_FAILED", agentName, detail);
 }

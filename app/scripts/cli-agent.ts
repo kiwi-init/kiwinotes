@@ -41,7 +41,7 @@ import { AgentActivity, ACTIVITY_LIST_MAX } from "../src/agent/activity.ts";
 import { AgentError } from "../src/agent/errors.ts";
 import { FAKE_AGENT_COMMAND, FAKE_AGY, FAKE_CLAUDE, writeFakeClaudeExecutable } from "../src/agent/fake/index.ts";
 import { geminiStatus } from "../src/agent/gemini.ts";
-import { geminiHost } from "../src/agent/gemini-host.ts";
+import { geminiHost, geminiPrompt } from "../src/agent/gemini-host.ts";
 import { AgentHost } from "../src/agent/host.ts";
 import { isAgentKind, type AgentKind } from "../src/agent/kinds.ts";
 import { assertNotRealData, RealDataError } from "../src/headless/guard.ts";
@@ -246,7 +246,7 @@ export async function runAgent(argv: string[], data: string, headless?: Headless
       const onSigint = () => void host.cancel();
       process.on("SIGINT", onSigint);
       try {
-        const answer = await host.ask(text, (e) => console.log(JSON.stringify({ event: e })));
+        const answer = await host.ask(kind === "gemini" ? geminiPrompt(text) : text, (e) => console.log(JSON.stringify({ event: e })));
         print({ ok: true, value: { ...answer, sessionId: session.sessionId, resumed: session.resumed, agent: session.agent, kind, fake } });
         return 0;
       } finally {
