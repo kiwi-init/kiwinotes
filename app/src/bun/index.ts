@@ -113,7 +113,8 @@ const tray = new Tray({
   if (registry.state === "moved") console.warn(`[updates] install registry pointed at ${registry.recorded}; moved to ${registry.movedTo}`);
   else if (registry.state === "skipped" && registry.reason !== "not a packaged .app") console.warn(`[updates] install registry: ${registry.reason}`);
 }
-const updates = new AppUpdates({ updater: Updater });
+// "Buscar atualizações" em Ajustes (T25110): lido a cada checagem; desligado, o Updater não vai à rede.
+const updates = new AppUpdates({ updater: Updater, enabled: async () => (await stores.globalSettings.load()).checkUpdates });
 let appVersion = "";
 let appChannel: AppChannel = "dev";
 void Updater.getLocalInfo().then((i) => {
@@ -149,6 +150,7 @@ provideAbout({
   view: updatesNow,
   check: async () => (await updates.check(), updatesNow()),
   apply: async () => (await updates.apply(), updatesNow()),
+  checkUpdatesChanged: (on) => updates.settingChanged(on),
 });
 updates.onChange(() => void sendToWindow("hub", "updates.status", updatesNow()));
 

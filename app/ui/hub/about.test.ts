@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import { uiCapabilities } from "../../src/bun/ui-capabilities.ts";
 import { directInvoke } from "../../src/bun/ui-engine.ts";
-import { releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
+import { releaseNotesUrl, UPDATES_OFF_BY_SETTING, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { CREDITS, creditsLine, downloadProgress, updateBand } from "./aboutText.ts";
 
 const at = "2026-11-04T12:30:00.000Z";
@@ -156,5 +156,38 @@ describe("o atualizador de mentira do headless (KIWI_FAKE_UPDATES, T17098)", () 
     expect(about.view()).toEqual({ state: "ready", version: "2026.11.3", lastCheck: null });
     expect(await about.check()).toMatchObject({ state: "ready" });
     expect(await about.apply()).toEqual({ state: "applying", lastCheck: null });
+  });
+});
+
+describe("Buscar atualizações (T25110)", () => {
+  test("desligado pela pessoa, a faixa diz o que deixa de acontecer, sem botão; o do build segue como antes", () => {
+    expect(updateBand({ state: "off", reason: UPDATES_OFF_BY_SETTING, lastCheck: null })).toEqual({
+      tone: "quiet",
+      title: "Atualizações desligadas",
+      detail: "O Kiwi não procura versão nova nem aparência nova.",
+      bar: null,
+      notesOf: null,
+      action: null,
+    });
+    expect(updateBand({ state: "off", reason: "KIWI_DEBUG=1", lastCheck: null }).detail).toBe("Neste build (KIWI_DEBUG=1).");
+  });
+
+  test("o settings.set guarda o checkUpdates, só true ou false, e avisa o Sobre", async () => {
+    const saved: unknown[] = [];
+    const turned: boolean[] = [];
+    const view: UpdatesView = { state: "idle", lastCheck: null };
+    const caps = uiCapabilities({
+      settings: { load: async () => ({}), save: async (patch: unknown) => (saved.push(patch), patch) },
+      about: { info: () => ({ version: "2026.11.1", channel: "stable", releaseUrl: null }), view: () => view, check: async () => view, apply: async () => view, checkUpdatesChanged: (on: boolean) => void turned.push(on) },
+    } as unknown as Parameters<typeof uiCapabilities>[0]);
+    for (const bad of ["false", 0, null]) expect(await directInvoke(caps, "settings.set", { checkUpdates: bad })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(saved).toEqual([]);
+    expect(await directInvoke(caps, "settings.set", { checkUpdates: false })).toMatchObject({ ok: true, value: { checkUpdates: false } });
+    expect(await directInvoke(caps, "settings.set", { checkUpdates: true })).toMatchObject({ ok: true, value: { checkUpdates: true } });
+    expect(saved).toEqual([{ checkUpdates: false }, { checkUpdates: true }]);
+    expect(turned).toEqual([false, true]);
+    // Outro ajuste não mexe nas atualizações.
+    await directInvoke(caps, "settings.set", { cues: false });
+    expect(turned).toEqual([false, true]);
   });
 });

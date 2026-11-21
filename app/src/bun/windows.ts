@@ -382,6 +382,8 @@ async function openWindow(name: WindowName, hidden = false): Promise<void> {
       trustedKeys: UI_TRUSTED_KEYS,
       capabilities: timedUi,
       channel,
+      // "Buscar atualizações" (T25110): desligado, nenhum GET do canal, a partir do próximo e sem reiniciar.
+      checkUpdates: async () => (await stores.globalSettings.load()).checkUpdates,
       show: (ui) => {
         log(name, `showing UI ${ui.uiVersion}${ui.manifest ? "" : " (built-in)"}`);
         const html = decoder.decode(ui.index);
