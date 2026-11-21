@@ -30,7 +30,7 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 - O corpo do PR diz a task (`T3`), o que mudou e como você verificou (os comandos e o que observou).
 - Quem revisa é outra pessoa ou agente (`kiwi task review T3`). O lead faz o merge com squash.
 - **O CI usa uma máquina macOS por PR** (spec #21331; o GitHub dá 5 ao mesmo tempo). O `typecheck` roda no Linux; o `bun test`, no Mac só quando o PR mexe em algo além de `*.md` fora de `app/` e `native/`; o `swift test`, só quando o PR mexe em `native/` ou no `ci.yml`. O check pulado sai verde, no Linux, com o passo `pulado: <motivo>`. Na `main`, roda tudo.
-- **Merge só pelo portão:** `cd app && bun scripts/merge-gate.ts <PR> --merge -- --delete-branch`. Ele aceita o pulado com motivo e barra o check vermelho, o que falta, o que ainda roda e o pulado sem motivo, e faz o squash preso ao sha conferido.
+- **Merge só pelo portão:** `cd app && bun scripts/merge-gate.ts <PR> --merge -- --delete-branch`. Ele aceita o pulado com motivo e barra o check vermelho, o que falta, o que ainda roda e o pulado sem motivo, e faz o squash preso ao sha conferido. Só julga os checks do nosso CI (as Actions deste repo); o de um app de fora, como o "Proof" do Blacksmith, sai como "ignorado (app de fora)" e não barra nem libera (T24794).
 - **Check vermelho por instabilidade:** `gh run rerun <run> --failed`, só os jobs que falharam, nunca o run inteiro (cada job de novo pega outra máquina macOS).
 
 ## Releases
