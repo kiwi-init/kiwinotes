@@ -20,18 +20,19 @@ const SRC = readFileSync(path.join(import.meta.dir, "ui-capabilities.ts"), "utf8
 const SERVICE = readFileSync(path.join(import.meta.dir, "..", "agent", "service.ts"), "utf8");
 
 /** As capacidades que podem ir à rede: o motivo e o que sai do Mac. A lista fixa que o teste prende. */
-const NETWORK_CAPABILITIES: Record<string, { why: string; carries: string }> = {
-  "updates.check": { why: "busca a versão nova no GitHub Releases (ADR 0008), só com o Updater ligado", carries: "um GET do feed do release; nada da pessoa" },
-  "updates.apply": { why: "baixa a versão nova do GitHub Releases (ADR 0008)", carries: "um GET do arquivo do release; nada da pessoa" },
-  "images.remote": { why: "a imagem de fora que a nota mostra (`![](https://…)`), no clique da pessoa", carries: "a URL da imagem, que está na nota" },
-  "notes.semanticStatus": { why: "com a busca pelo sentido ligada, começa o download do modelo (E5 small)", carries: "um GET da URL fixa do modelo; nada da pessoa" },
-  "settings.set": { why: "ligar a busca pelo sentido ou o ditado preciso baixa o modelo (E5 small, Whisper small)", carries: "um GET da URL fixa do modelo; nada da pessoa" },
-  "agent.download": { why: "baixa o adaptador ACP do agente, na versão fixa e conferida (#8368)", carries: "um GET do pacote fixo; nada da pessoa" },
-  "agent.ask": { why: "o pedido vai ao agente que a pessoa ligou (ADR 0011)", carries: "o texto do pedido e os trechos que o agente lê pelas ferramentas do Kiwi" },
-  "agent.prepare": { why: "abre o programa do agente antes do pedido, para responder mais rápido (ADR 0011)", carries: "a abertura da sessão no agente; nenhum texto da pessoa" },
-  "agent.proposalPrepare": { why: "o agente monta a proposta da pessoa (ADR 0011)", carries: "o texto da proposta e os trechos que o agente lê" },
-  "agent.routineRun": { why: "roda uma rotina da pessoa no agente (ADR 0011)", carries: "o texto da rotina e os trechos que o agente lê" },
-  "agent.usageRefresh": { why: "pergunta ao agente o limite de uso de agora (ADR 0011)", carries: "a abertura da sessão no agente; nenhum texto da pessoa" },
+/** As portas (`roots`) também ficam presas: uma capacidade da lista que passe a falar com o agente quebra o teste. */
+const NETWORK_CAPABILITIES: Record<string, { roots: string[]; why: string; carries: string }> = {
+  "updates.check": { roots: ["updater"], why: "busca a versão nova no GitHub Releases (ADR 0008), só com o Updater ligado", carries: "um GET do feed do release; nada da pessoa" },
+  "updates.apply": { roots: ["updater"], why: "baixa a versão nova do GitHub Releases (ADR 0008)", carries: "um GET do arquivo do release; nada da pessoa" },
+  "images.remote": { roots: ["imagem de fora"], why: "a imagem de fora que a nota mostra (`![](https://…)`), no clique da pessoa", carries: "a URL da imagem, que está na nota" },
+  "notes.semanticStatus": { roots: ["modelo da busca"], why: "com a busca pelo sentido ligada, começa o download do modelo (E5 small)", carries: "um GET da URL fixa do modelo; nada da pessoa" },
+  "settings.set": { roots: ["modelo da busca", "modelo do ditado"], why: "ligar a busca pelo sentido ou o ditado preciso baixa o modelo (E5 small, Whisper small)", carries: "um GET da URL fixa do modelo; nada da pessoa" },
+  "agent.download": { roots: ["agente"], why: "baixa o adaptador ACP do agente, na versão fixa e conferida (#8368)", carries: "um GET do pacote fixo; nada da pessoa" },
+  "agent.ask": { roots: ["agente"], why: "o pedido vai ao agente que a pessoa ligou (ADR 0011)", carries: "o texto do pedido e os trechos que o agente lê pelas ferramentas do Kiwi" },
+  "agent.prepare": { roots: ["agente"], why: "abre o programa do agente antes do pedido, para responder mais rápido (ADR 0011)", carries: "a abertura da sessão no agente; nenhum texto da pessoa" },
+  "agent.proposalPrepare": { roots: ["agente"], why: "o agente monta a proposta da pessoa (ADR 0011)", carries: "o texto da proposta e os trechos que o agente lê" },
+  "agent.routineRun": { roots: ["agente"], why: "roda uma rotina da pessoa no agente (ADR 0011)", carries: "o texto da rotina e os trechos que o agente lê" },
+  "agent.usageRefresh": { roots: ["agente"], why: "pergunta ao agente o limite de uso de agora (ADR 0011)", carries: "a abertura da sessão no agente; nenhum texto da pessoa" },
 };
 
 /**
@@ -201,7 +202,7 @@ describe("nenhuma capacidade vai à rede fora da lista (T25029, spec #25011)", (
 
   test("as capacidades que vão à rede são exatamente as da lista, cada uma com o motivo e o que leva", () => {
     expect(Object.fromEntries([...s.direct].sort())).toEqual(
-      Object.fromEntries(Object.keys(NETWORK_CAPABILITIES).sort().map((c) => [c, s.direct.get(c) ?? ["(não vai à rede: tire da lista)"]])),
+      Object.fromEntries(Object.entries(NETWORK_CAPABILITIES).sort(([a], [b]) => (a < b ? -1 : 1)).map(([c, e]) => [c, e.roots])),
     );
     for (const [cap, { why, carries }] of Object.entries(NETWORK_CAPABILITIES)) {
       expect(UI_CAPABILITIES as readonly string[]).toContain(cap);
