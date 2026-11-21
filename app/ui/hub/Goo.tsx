@@ -25,13 +25,11 @@ import "./goo.css";
 import { useEffect, useId, useLayoutEffect, useRef } from "react";
 
 import { GOO_FALLBACK_MS, type GooPhase, type GooRect, type GooSide, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars, gooWatchDiff } from "./goo.ts";
-import { GOO_BEATS, type GooGeom, type GooParts, gooDropParts, gooHeadAnchor, roundRect } from "./goo-shape.ts";
+import { GOO_BEATS, GOO_HOLD_MS, type GooGeom, type GooParts, gooDropParts, gooHeadAnchor, roundRect } from "./goo-shape.ts";
 
 const SIDES: GooSide[] = ["start", "end"];
 /** As partes da camada de baixo; a cabeça vai na camada da corrida. */
 const PARTS = ["edge", "speck"] as const;
-/** Um quadro mais longo que isto (dois quadros de 60 Hz) segura o relógio fora da corrida. */
-const HOLD_MS = 34;
 const FRAME_MS = 1000 / 60;
 /** Quantos pontos do caminho da cabeça a animação do compositor leva (o erro entre eles fica abaixo de 0,5 px). */
 const RUN_KEYS = 48;
@@ -243,7 +241,7 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       frame = 0;
       const gap = lastTick ? now - lastTick : 0;
       lastTick = now;
-      if (gap > HOLD_MS) {
+      if (gap > GOO_HOLD_MS) {
         for (const side of SIDES) if (runs[side]) hold(side, gap - FRAME_MS);
       }
       for (const side of SIDES) draw(side);

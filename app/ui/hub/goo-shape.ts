@@ -22,6 +22,9 @@ import type { GooRect, GooSide } from "./goo.ts";
  * antes (75, 120 e 175 ms), e a chegada passa de 83 para 130 ms: ali a gota se abre da lágrima (~35 px) até a largura
  * dos botões (até 130 px), e em 5 quadros de 60 Hz eram até 48 px por quadro, um tranco em vez de uma mola.
  */
+/** Um quadro mais longo que isto (dois quadros de 60 Hz) segura o relógio da gota fora da corrida (Goo.tsx). */
+export const GOO_HOLD_MS = 34;
+
 export const GOO_BEATS = {
   /** Até aqui, a barriga. */
   belly: 0.15,
