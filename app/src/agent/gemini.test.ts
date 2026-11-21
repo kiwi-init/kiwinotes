@@ -139,11 +139,28 @@ describe("o isolamento", () => {
     expect(readdirSync(dir)).toEqual(["kiwi.toml"]);
     const toml = readFileSync(path.join(dir, "kiwi.toml"), "utf8");
     expect(toml).toBe(GEMINI_POLICY);
-    const rules = toml.split("[[rule]]").slice(1).map((r) => Object.fromEntries([...r.matchAll(/^(\w+) = (.+)$/gm)].map((m) => [m[1], m[2]])));
+    const { rule: rules } = Bun.TOML.parse(toml) as { rule: Record<string, unknown>[] };
     expect(rules).toEqual([
-      { toolName: '"*"', decision: '"deny"', priority: "900", denyMessage: '"O Kiwi Notes só libera as ferramentas dele."' },
-      { mcpName: '"kiwi"', decision: '"allow"', priority: "999" },
+      { toolName: "*", decision: "deny", priority: 900, denyMessage: "O Kiwi Notes só libera as ferramentas dele." },
+      { toolName: "*", mcpName: "kiwi", decision: "allow", priority: 999 },
     ]);
+  });
+
+  // O Gemini 0.70.0 pula o arquivo inteiro quando uma regra sai do schema (`packages/core/src/policy/toml-loader.ts`:
+  // o `PolicyRuleSchema` e o `continue` depois do `schema_validation`): o `deny` cairia junto e as ferramentas
+  // embutidas voltariam sem aviso. Toda regra precisa de `toolName` (texto ou lista), `decision` e `priority` inteira de
+  // 0 a 999; os outros campos são os que o schema conhece.
+  test("toda regra cabe no schema do Gemini 0.70.0 (senão ele pula o arquivo e o isolamento cai)", () => {
+    const { rule: rules } = Bun.TOML.parse(GEMINI_POLICY) as { rule: Record<string, unknown>[] };
+    expect(rules.length).toBeGreaterThan(0);
+    const known = new Set(["toolName", "subagent", "mcpName", "toolAnnotations", "argsPattern", "commandPrefix", "commandRegex", "decision", "priority", "modes", "interactive", "denyMessage", "allowRedirection", "allowCommandSubstitution"]);
+    for (const r of rules) {
+      const t = r.toolName;
+      expect(typeof t === "string" || (Array.isArray(t) && t.every((x) => typeof x === "string"))).toBe(true);
+      expect(["allow", "deny", "ask_user"]).toContain(r.decision as string);
+      expect(Number.isInteger(r.priority) && (r.priority as number) >= 0 && (r.priority as number) <= 999).toBe(true);
+      for (const k of Object.keys(r)) expect(known.has(k) ? k : `campo que o schema não conhece: ${k}`).toBe(k);
+    }
   });
 
   test("o ambiente: a pasta do gemini no começo do PATH (o Node do npm), um processo só e sem navegador", () => {

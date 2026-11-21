@@ -113,6 +113,10 @@ export function geminiEnv(program: ProgramArgv, env: Record<string, string | und
  * A regra de administrador do Kiwi (o motor de regras do Gemini, a camada mais alta): nega toda ferramenta, embutida
  * ou de outro servidor MCP, e libera só as do servidor do Kiwi. Uma ferramenta negada sem condição some da lista que o
  * modelo vê. As da pessoa (`~/.gemini/policies`) ficam numa camada abaixo e não passam por cima.
+ *
+ * Toda regra precisa de `toolName`, `decision` e `priority` (0–999): é o schema do 0.70.0
+ * (`packages/core/src/policy/toml-loader.ts`, o `PolicyRuleSchema`). Um arquivo com uma regra fora dele é pulado
+ * inteiro, e o isolamento cairia sem aviso. O `toolName = "*"` com o `mcpName = "kiwi"` vira `mcp_kiwi_*`.
  */
 export const GEMINI_POLICY = `# O Kiwi Notes abre o Gemini com esta regra (--admin-policy). Ela é refeita a cada abertura.
 # Só as ferramentas do Kiwi; nenhuma embutida (shell, arquivos, web) e nenhum outro servidor MCP.
@@ -124,6 +128,7 @@ priority = 900
 denyMessage = "O Kiwi Notes só libera as ferramentas dele."
 
 [[rule]]
+toolName = "*"
 mcpName = "${GEMINI_KIWI_SERVER}"
 decision = "allow"
 priority = 999
