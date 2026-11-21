@@ -75,7 +75,7 @@ interface Made {
   store: SettingsStore;
 }
 
-function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter; doubtTimeoutMs?: number; now?: () => number; limitProbe?: { delayMs?: number; retryMs?: number; everyMs?: number }; window?: { maxTokens?: number; idleMs?: number }; env?: Record<string, string>; agy?: boolean } = {}): Made {
+function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter; doubtTimeoutMs?: number; now?: () => number; limitProbe?: { delayMs?: number; retryMs?: number; everyMs?: number }; window?: { maxTokens?: number; idleMs?: number }; env?: Record<string, string>; agy?: boolean; appLog?: (line: string) => void } = {}): Made {
   const data = o.data ?? tmp();
   const reg = o.reg ?? registry();
   const store = new SettingsStore(data);
@@ -128,6 +128,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
     registry: reg.url,
     packages: reg.pinned,
     idleMs: o.idleMs ?? 60_000,
+    ...(o.appLog ? { log: o.appLog } : {}),
   });
   services.push(svc);
   const statuses: AgentStatus[] = [];
@@ -3179,6 +3180,46 @@ describe("o Antigravity (spec #25046): os testes do #24666 com o agy falso", () 
     await askAndWait(again, "oi");
     const resumed = again.log().filter((l) => l.method === "session/resume").map((l) => l.params.sessionId);
     expect(resumed.at(-1)).toBe(claudeSession);
+  });
+
+  test("o esforço do agy pela categoria thought_level (T25553): os níveis dele na tela, o Padrão dele, escolher pelo id dele, e o log", async () => {
+    const lines: string[] = [];
+    const m = make({ agy: true, appLog: (l) => lines.push(l) });
+    await m.svc.enable(true);
+    await m.svc.configure({ kind: "gemini" });
+    expect((await askAndWait(m, "oi")).at(-1)?.type).toBe("done");
+    let s = await m.svc.status();
+    // A tela: o Padrão do Kiwi e os níveis com os nomes que o agente deu.
+    expect(effortOptions(s)).toEqual([
+      { value: "default", label: "Padrão" },
+      { value: "fake_low", label: "Pouco" },
+      { value: "fake_high", label: "Muito" },
+    ]);
+    // O Padrão com níveis que o Kiwi não conhece: fica o do agente, sem nenhum set_config_option.
+    expect(s.session?.effort).toBe("fake_high");
+    expect(m.log().filter((l) => l.method === "session/set_config_option")).toEqual([]);
+    await m.svc.configure({ effort: "fake_low" });
+    expect((await askAndWait(m, "de novo")).at(-1)?.type).toBe("done");
+    s = await m.svc.status();
+    expect(s.session?.effort).toBe("fake_low");
+    expect(effortValue(s)).toBe("fake_low");
+    const sets = m.log().filter((l) => l.method === "session/set_config_option").map((l) => [l.params.configId, l.params.value]);
+    expect(sets).toEqual([["fake_thinking", "fake_low"]]);
+    // Uma linha por formato, só com os ids e as categorias.
+    expect(lines.filter((l) => l.includes("opções da sessão"))).toEqual(["[agent] opções da sessão (gemini): model, fake_thinking (thought_level)"]);
+  });
+
+  test("um agy sem opção de esforço (T25553): a lista vazia, e a linha Esforço diz que ele não deixa escolher", async () => {
+    const lines: string[] = [];
+    const m = make({ agy: true, env: { KIWI_FAKE_AGENT_NO_EFFORT: "1" }, appLog: (l) => lines.push(l) });
+    await m.svc.enable(true);
+    await m.svc.configure({ kind: "gemini" });
+    expect((await askAndWait(m, "oi")).at(-1)?.type).toBe("done");
+    const s = await m.svc.status();
+    expect(s.efforts?.[s.model]).toEqual([]);
+    expect(effortHint(s)).toBe(`O ${s.name} não deixa escolher o esforço: ele decide sozinho quanto pensar.`);
+    expect(m.log().filter((l) => l.method === "session/set_config_option")).toEqual([]);
+    expect(lines.filter((l) => l.includes("opções da sessão"))).toEqual(["[agent] opções da sessão (gemini): model"]);
   });
 
   test("um pedido que começa por / chega ao agy com a marca, nunca como comando", async () => {

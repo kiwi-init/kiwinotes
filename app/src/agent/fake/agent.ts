@@ -63,6 +63,8 @@ import { asKiwi } from "../tools/as-kiwi";
 const AGY = process.env.KIWI_FAKE_AGENT_FLAVOR === "agy";
 const GEMINI = AGY || process.env.KIWI_FAKE_AGENT_FLAVOR === "gemini";
 const GEMINI_VERSION = process.env.KIWI_FAKE_GEMINI_VERSION ?? "0.70.0";
+/** O id do esforço no `agy` falso (T25553), inventado: o de verdade só o log do harry diz. */
+const AGY_EFFORT_ID = "fake_thinking";
 const AGY_VERSION = process.env.KIWI_FAKE_AGY_VERSION ?? "1.4.0";
 // O Gemini CLI sabe o `session/load` e não sabe o `session/resume`. O `agy` sabe os dois (o `agyInitialize`).
 const resumeMode = GEMINI ? "load" : (process.env.KIWI_FAKE_AGENT_RESUME ?? "resume");
@@ -359,12 +361,14 @@ const EFFORTS = ["default", "low", "medium", "high", "xhigh", "max"];
 // O haiku não oferece `default` (spec #16793, revisão #17024): ao entrar nele, o esforço do agente é o `medium`.
 const MODEL_EFFORTS: Record<string, string[]> = { sonnet: ["default", "low", "medium", "high"], haiku: ["low", "medium"], "opus-legacy": [] };
 const MODEL_START: Record<string, string> = { haiku: "medium" };
-const effortsOf = (model: string) => MODEL_EFFORTS[model] ?? EFFORTS;
+// O `agy` falso: níveis inventados, fora dos do Claude e sem `default` (T25553, revisão #25572); ele entra no mais alto.
+const AGY_EFFORTS: Record<string, string> = { fake_low: "Pouco", fake_high: "Muito" };
+const effortsOf = (model: string) => (AGY ? Object.keys(AGY_EFFORTS) : (MODEL_EFFORTS[model] ?? EFFORTS));
 const config = new Map<string, { model: string; effort: string }>();
 function configOf(sessionId: string) {
   let c = config.get(sessionId);
   if (!c) {
-    c = { model: process.env.KIWI_FAKE_AGENT_MODEL ?? (GEMINI ? "default" : "fable"), effort: "high" };
+    c = { model: process.env.KIWI_FAKE_AGENT_MODEL ?? (GEMINI ? "default" : "fable"), effort: AGY ? "fake_high" : "high" };
     config.set(sessionId, c);
   }
   return c;
@@ -382,11 +386,14 @@ function configOptions(sessionId: string) {
         ? GEMINI
           ? { value, name: "Auto", description: "Let Gemini CLI decide the best model for the task" }
           : { value, name: "Default (recommended)", description: "Sonnet · Best for everyday, complex tasks" }
-        : { value, name: GEMINI ? GEMINI_MODEL_NAMES[value] ?? value : value[0]!.toUpperCase() + value.slice(1) },
+        : { value, name: AGY_EFFORTS[value] ?? (GEMINI ? GEMINI_MODEL_NAMES[value] ?? value : value[0]!.toUpperCase() + value.slice(1)) },
     ),
   });
-  const efforts = effortsOf(c.model);
-  return [select("model", "Modelo", c.model, MODELS), ...(efforts.length ? [select("effort", "Esforço", c.effort, efforts)] : [])];
+  // `KIWI_FAKE_AGENT_NO_EFFORT=1`: um agente sem opção de esforço em modelo nenhum (T25553).
+  const efforts = process.env.KIWI_FAKE_AGENT_NO_EFFORT === "1" ? [] : effortsOf(c.model);
+  // O `agy` falso dá outro id ao esforço e diz só a categoria do ACP (T25553): o id é inventado; o Kiwi acha pela categoria.
+  const effort = AGY ? { ...select(AGY_EFFORT_ID, "Thinking", c.effort, efforts), category: "thought_level" } : select("effort", "Esforço", c.effort, efforts);
+  return [select("model", "Modelo", c.model, MODELS), ...(efforts.length ? [effort] : [])];
 }
 
 /** O `usage_update` com o uso da janela (o `SDKRateLimitInfo` em `_meta["_claude/rateLimit"]`), como o adaptador manda. */
@@ -538,8 +545,8 @@ const app = agent({ name: "kiwi-fake-agent" })
     const c = configOf(params.sessionId);
     if (params.configId === "model" && typeof value === "string" && MODELS.includes(value)) {
       c.model = value;
-      if (!effortsOf(value).includes(c.effort)) c.effort = MODEL_START[value] ?? "default";
-    } else if (params.configId === "effort" && typeof value === "string" && effortsOf(c.model).includes(value)) c.effort = value;
+      if (!effortsOf(value).includes(c.effort)) c.effort = AGY ? "fake_high" : (MODEL_START[value] ?? "default");
+    } else if (params.configId === (AGY ? AGY_EFFORT_ID : "effort") && typeof value === "string" && effortsOf(c.model).includes(value)) c.effort = value;
     else throw RequestError.invalidParams(undefined, `não sei ${params.configId}=${String(value)}`);
     return { configOptions: configOptions(params.sessionId) };
   })

@@ -316,3 +316,47 @@ describe("o agy: permissões, sessão e login no host (T25060)", () => {
     expect(readLog(out.log).map((l) => l.method)).toContain("session/resume");
   });
 });
+
+describe("o esforço do agy pela categoria do ACP (T25553)", () => {
+  async function agy(data: string, configOptions?: () => Record<string, string>) {
+    const log = path.join(data, "fake-log.jsonl");
+    const { host } = await geminiHost({
+      data,
+      program: [writeFakeAgyExecutable(path.join(data, "bin"))],
+      env: { ...process.env, KIWI_FAKE_AGENT_LOG: log },
+      host: configOptions ? { configOptions } : {},
+    });
+    hosts.push(host);
+    return { host, log };
+  }
+
+  test("o esforço com outro id, a categoria thought_level e níveis próprios: listado com os nomes dele e trocado pelo id dele", async () => {
+    const { host, log } = await agy(tmp(), () => ({ effort: "fake_low" }));
+    await host.start();
+    expect(host.choices("effort")).toEqual([
+      { value: "fake_low", name: "Pouco" },
+      { value: "fake_high", name: "Muito" },
+    ]);
+    expect(host.configValues.effort).toBe("fake_low");
+    // O `set_config_option` vai com o id que o agente deu, não com o `effort` do Kiwi.
+    const sets = readLog(log).filter((l) => l.method === "session/set_config_option").map((l) => l.params.configId);
+    expect(sets).toEqual(["fake_thinking"]);
+    expect(await host.applyConfig({ effort: "fake_high" })).toEqual({ applied: ["effort"], refused: [] });
+    expect(host.configValues.effort).toBe("fake_high");
+  });
+
+  test("o Padrão, com níveis que o Kiwi não conhece: fica o do agente, sem recusar nem mandar nada", async () => {
+    const { host, log } = await agy(tmp(), () => ({ effort: "default" }));
+    await host.start();
+    expect(host.configValues.effort).toBe("fake_high");
+    expect(await host.applyConfig({ effort: "default" })).toEqual({ applied: [], refused: [] });
+    expect(readLog(log).filter((l) => l.method === "session/set_config_option")).toEqual([]);
+  });
+
+  test("o log diz os ids e as categorias, sem os valores", async () => {
+    const { host } = await agy(tmp());
+    await host.start();
+    expect(host.configShape).toBe("model, fake_thinking (thought_level)");
+    expect(host.configShape).not.toContain("high");
+  });
+});

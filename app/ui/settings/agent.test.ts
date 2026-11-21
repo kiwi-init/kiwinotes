@@ -278,6 +278,17 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     expect(effortHint({ ...base, model: "haiku", efforts })).toBe("As opções de esforço deste modelo aparecem depois do primeiro pedido com ele.");
   });
 
+  test("um agente que não manda esforço em modelo nenhum: a linha diz que é ele que não deixa escolher (T25553)", () => {
+    const gemini = { ...base, kind: "gemini" as const, name: "Gemini (Antigravity)" };
+    const none = { default: [], "gemini-hydrogen": [] };
+    expect(effortOptions({ ...gemini, model: "default", efforts: none })).toEqual([]);
+    expect(effortHint({ ...gemini, model: "default", efforts: none })).toBe("O Gemini (Antigravity) não deixa escolher o esforço: ele decide sozinho quanto pensar.");
+    // Um modelo do mesmo agente com esforço: aí é só este modelo que não tem.
+    expect(effortHint({ ...gemini, model: "default", efforts: { ...none, "gemini-argon": [{ value: "low", name: "Low" }] } })).toBe(
+      "Este modelo não tem nível de esforço: ele responde sempre do mesmo jeito.",
+    );
+  });
+
   test("a linha do Esforço, e a do modo econômico, dizem que no econômico vale o esforço do modelo barato", () => {
     const what = "Mais esforço pensa mais antes de responder e gasta mais do seu plano. Fica salvo para este modelo e vale a partir do próximo pedido.";
     // No Padrão (spec #19273), a linha diz que vale o mais baixo; com um nível escolhido, não.
