@@ -175,3 +175,24 @@ describe("publishChannel", () => {
     expect(readdirSync(b)).toEqual([]);
   });
 });
+
+describe("o ensaio pela CLI", () => {
+  test("--rehearsal assina com a chave descartável, mesmo com um UI_SIGNING_KEY no ambiente", async () => {
+    const secret = generateSigningKey();
+    const out = tmp();
+    const run = Bun.spawn(
+      ["bun", path.join(import.meta.dirname, "ui-channel-publish.ts"), "--rehearsal", "--dist", fakeDist(["settings", "history", "notes", "hub", "intro"]),
+        "--out", out, "--app-contract", "1.95.0", "--source-time", String(T1), "--base-url", BASE],
+      { env: { ...process.env, UI_SIGNING_KEY: secret.privateKeyPem }, stdout: "pipe", stderr: "pipe" },
+    );
+    const [code, stdout, stderr] = await Promise.all([run.exited, new Response(run.stdout).text(), new Response(run.stderr).text()]);
+    expect(stderr).toBe("");
+    expect(code).toBe(0);
+    const throwaway = /throwaway key ([0-9a-f]{16})/.exec(stdout)?.[1];
+    expect(throwaway).toBeDefined();
+    expect(throwaway).not.toBe(secret.keyId);
+    const manifest = JSON.parse(readFileSync(path.join(out, manifestAssetName("settings")), "utf8"));
+    expect(manifest.keyId).toBe(throwaway);
+    expect(stdout).not.toContain("PRIVATE");
+  });
+});

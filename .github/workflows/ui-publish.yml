@@ -6,7 +6,7 @@
 # - "Run workflow" à mão: com rehearsal ligado (o padrão), assina com uma chave descartável e publica no
 #   `ui-channel-rehearsal`, que nenhum app lê. Sem rehearsal, é como o tag.
 #
-# Recusa, sem publicar nada: um commit que não tem o último release `v*` (a tela voltaria para trás), uma UI de contrato
+# Recusa, sem publicar nada: um commit fora da main (o ensaio sai de qualquer branch), um commit que não tem o último release `v*` (a tela voltaria para trás), uma UI de contrato
 # mais novo que o do app publicado (só com release), um commit que não é mais novo que o da UI no canal, e uma chave
 # fora do ui-keys.ts do app publicado. O app só aceita o endereço do release (T25028/T25029). Quem solta é o releaser, com a regra de ok
 # do harry, como o release.
@@ -80,8 +80,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REHEARSAL: ${{ github.event_name == 'workflow_dispatch' && inputs.rehearsal }}
+          RELEASE: ${{ steps.where.outputs.release }}
         run: |
           set -euo pipefail
+          # A tela de todo mundo só sai de código revisado: um commit da main (o ensaio, de qualquer branch).
+          if [[ "$RELEASE" == "ui-channel" ]]; then
+            git merge-base --is-ancestor HEAD origin/main || { echo "only a commit on main publishes the UI"; exit 1; }
+          fi
           contract_at() { git show "$1:app/src/shared/ui-contract.ts" | sed -nE 's/^export const UI_CONTRACT_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)";.*/\1/p'; }
           latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)
           if [[ -z "$latest" && "$REHEARSAL" == "true" ]]; then

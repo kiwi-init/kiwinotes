@@ -201,7 +201,7 @@ if (import.meta.main) {
   const appDir = path.resolve(import.meta.dirname, "..");
   try {
     const published = await publishChannel({
-      distDir: path.join(appDir, "dist"),
+      distDir: flag("--dist") ? path.resolve(flag("--dist")!) : path.join(appDir, "dist"),
       outDir: path.resolve(need("--out")),
       privateKeyPem: key,
       appContract: need("--app-contract"),
