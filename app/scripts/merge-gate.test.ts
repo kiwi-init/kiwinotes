@@ -12,6 +12,7 @@ const run = (name: string, conclusion: string, id: number, startedAt = "2026-01-
   conclusion,
   detailsUrl: job(id),
   startedAt,
+  workflowName: "ci",
 });
 const ran: Step[] = [
   { name: "Set up job", conclusion: "success" },
@@ -42,7 +43,7 @@ describe("merge-gate", () => {
 
   test("barra o vermelho, o cancelado e o que ainda roda", () => {
     const v = judge(
-      [run("bun test", "FAILURE", 1), run("typecheck", "CANCELLED", 2), { __typename: "CheckRun", name: "swift test", status: "IN_PROGRESS", conclusion: null, detailsUrl: job(3) }],
+      [run("bun test", "FAILURE", 1), run("typecheck", "CANCELLED", 2), { __typename: "CheckRun", name: "swift test", status: "IN_PROGRESS", conclusion: null, detailsUrl: job(3), workflowName: "ci" }],
       () => ran,
       REPO,
     );
@@ -123,6 +124,21 @@ describe("merge-gate", () => {
     expect(isOwnCi(run("bun test", "SUCCESS", 1), "EXEMPLO/App")).toBe(true);
     expect(isOwnCi({ ...run("x", "SUCCESS", 1), detailsUrl: "https://github.com/outro/app/actions/runs/1/job/1" }, REPO)).toBe(false);
     expect(isOwnCi(foreign("Proof", "SKIPPED"), REPO)).toBe(false);
-    expect(isOwnCi({ __typename: "StatusContext", context: "ci/externo", state: "SUCCESS", targetUrl: job(1) }, REPO)).toBe(false);
+    // Com o link das nossas Actions no `detailsUrl`: só a linha do `StatusContext` o deixa de fora.
+    expect(isOwnCi({ __typename: "StatusContext", context: "ci/externo", state: "SUCCESS", targetUrl: job(1), detailsUrl: job(1), workflowName: "ci" }, REPO)).toBe(false);
+  });
+
+  // T24807 (revisão do T24794, #24805).
+  test("um link do próprio repo fora das Actions é de fora (o check de outro app, a varredura de código)", () => {
+    for (const url of [`https://github.com/${REPO}/runs/1`, `https://github.com/${REPO}/security/code-scanning/1`, `https://github.com/${REPO}/actions`]) {
+      expect(isOwnCi({ ...run("x", "SUCCESS", 1), detailsUrl: url }, REPO)).toBe(false);
+    }
+  });
+
+  test("sem o nome do workflow é de fora, mesmo com o link das nossas Actions (um app de fora pode pôr qualquer link)", () => {
+    expect(isOwnCi({ ...run("x", "SUCCESS", 1), workflowName: "" }, REPO)).toBe(false);
+    expect(isOwnCi({ ...run("x", "SUCCESS", 1), workflowName: undefined }, REPO)).toBe(false);
+    const v = judge([run("bun test", "SUCCESS", 1), run("typecheck", "SUCCESS", 2), { ...run("swift test", "SUCCESS", 3), workflowName: "" }], () => ran, REPO);
+    expect(v.find((x) => x.name === "swift test" && x.state !== "ignorado (app de fora)")).toMatchObject({ state: "falta", ok: false });
   });
 });
