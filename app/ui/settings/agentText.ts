@@ -1,6 +1,7 @@
 // Os textos da seção Agente dos Ajustes (spec #8373, T8762), separados da tela para os testes lerem cada estado sem
 // navegador. O nome do agente ("Claude Code") aparece só como texto, sem logo (ADR 0011).
 
+import { AGENT_NAMES } from "../../src/agent/kinds.ts";
 import type { AgentClaudeStatus, AgentKind, AgentModelChoice, AgentNoticeState, AgentStatus, AgentTurnEvent } from "../../src/shared/ui-contract.ts";
 
 /** O tamanho do adaptador, para o texto antes do download (a lista fixa do #8368 soma uns 4,4 MB). */
@@ -12,11 +13,12 @@ export type { AgentKind };
 
 /**
  * O que muda de um agente para o outro na tela: o nome, a empresa (para onde o texto vai), como instalar, atualizar e
- * entrar na conta. O login é sempre do próprio agente, no Terminal: o Kiwi nunca pede, lê nem guarda senha ou chave.
+ * entrar na conta. O nome é o do motor (`AGENT_NAMES`), o mesmo das mensagens. O login é sempre do próprio agente,
+ * no Terminal: o Kiwi nunca pede, lê nem guarda senha ou chave.
  */
 export const AGENTS: Record<AgentKind, { name: string; company: string; install: string; update: string; login: string; adapter: boolean }> = {
   claude: {
-    name: "Claude Code",
+    name: AGENT_NAMES.claude,
     company: "Anthropic",
     install: "Instale pelo site da Anthropic (claude.com/claude-code)",
     update: "No Terminal, digite “claude update”",
@@ -24,7 +26,7 @@ export const AGENTS: Record<AgentKind, { name: string; company: string; install:
     adapter: true,
   },
   gemini: {
-    name: "Gemini",
+    name: AGENT_NAMES.gemini,
     company: "Google",
     install: "Instale o Gemini CLI (github.com/google-gemini/gemini-cli)",
     update: "Atualize o Gemini CLI pelo mesmo jeito que você instalou (npm ou Homebrew)",

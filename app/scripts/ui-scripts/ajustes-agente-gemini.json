@@ -14,6 +14,14 @@
       "name": "o assunto agent"
     },
     {
+      "waitFor": ".kn-section:has(h2:text-is('O gasto do agente'))",
+      "name": "antes da troca: o Claude Code ligado e pronto, e o medidor dele aparece"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Adaptador'))",
+      "name": "e a linha do adaptador dele"
+    },
+    {
       "waitFor": ".kn-row:has(.kn-row-label:text-is('Gemini (não escolhido)')) .kn-row-hint:not(:has-text('Conferindo'))",
       "name": "o Gemini conferido, sem ser o escolhido"
     },
@@ -44,8 +52,7 @@
       "wait": 400
     },
     {
-      "screenshot": "1-trocar.png",
-      "selector": ".kn-section:has(h2:text-is('Agente'))"
+      "screenshot": "1-trocar.png"
     },
     {
       "click": ".kn-agent-consent button:has-text('Trocar para o Gemini')",
@@ -60,32 +67,14 @@
       "name": "o Claude Code fica embaixo, para comparar"
     },
     {
+      "waitFor": ".kn-section:has(h2:text-is('O gasto do agente'))",
+      "state": "detached",
+      "name": "o medidor do Claude some com o Gemini, mesmo com o adaptador do Claude baixado"
+    },
+    {
       "expectCount": ".kn-row:has(.kn-row-label:text-is('Adaptador'))",
       "count": 0,
-      "name": "sem a linha do adaptador"
-    },
-    {
-      "click": ".kn-row:has(.kn-row-label:text-is('Ligar o agente')) [role=switch]",
-      "name": "liga"
-    },
-    {
-      "waitFor": ".kn-agent-consent h3:text-is('Antes de ligar o Gemini')",
-      "name": "o aviso do ADR 0011 com o Gemini"
-    },
-    {
-      "click": ".kn-agent-consent button:has-text('Ligar o Gemini')",
-      "name": "aceita e liga"
-    },
-    {
-      "waitFor": ".kn-onb",
-      "name": "o onboarding abre"
-    },
-    {
-      "press": "Escape"
-    },
-    {
-      "waitFor": ".kn-onb",
-      "state": "detached"
+      "name": "com o agente ligado, sem a linha do adaptador"
     },
     {
       "waitFor": ".kn-agent-test",
@@ -104,11 +93,6 @@
       "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini')) .kn-row-hint",
       "text": "instalado e logado",
       "name": "depois da abertura, o login se sabe"
-    },
-    {
-      "expectCount": ".kn-section:has(h2:text-is('O gasto do agente'))",
-      "count": 0,
-      "name": "o medidor do Claude some com o Gemini"
     },
     {
       "wait": 400

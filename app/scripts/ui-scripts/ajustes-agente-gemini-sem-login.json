@@ -27,33 +27,13 @@
       "name": "escolhe o Gemini"
     },
     {
-      "waitFor": ".kn-agent-consent h3:text-is('Trocar para o Gemini')",
-      "name": "a troca mostra antes o que vai para o Gemini"
-    },
-    {
-      "expectText": ".kn-agent-consent",
-      "text": "vale a política de dados da Google",
-      "name": "com a empresa do Gemini"
-    },
-    {
-      "expectCount": ".kn-agent-consent :text('adaptador')",
-      "count": 0,
-      "name": "e sem falar em adaptador"
-    },
-    {
-      "wait": 400
-    },
-    {
-      "screenshot": "1-trocar.png",
-      "selector": ".kn-section:has(h2:text-is('Agente'))"
-    },
-    {
-      "click": ".kn-agent-consent button:has-text('Trocar para o Gemini')",
-      "name": "confirma a troca"
-    },
-    {
       "waitFor": ".kn-segmented [aria-checked=true]:has-text('Gemini')",
-      "name": "o Gemini escolhido"
+      "name": "desligado, a troca é direta: nada vai a lugar nenhum"
+    },
+    {
+      "expectCount": ".kn-agent-consent",
+      "count": 0,
+      "name": "sem a tela da troca: ela vem ao ligar (não duas iguais seguidas)"
     },
     {
       "waitFor": ".kn-row:has(.kn-row-label:text-is('Claude Code (não escolhido)'))",
@@ -86,6 +66,11 @@
     {
       "waitFor": ".kn-onb",
       "state": "detached"
+    },
+    {
+      "expectCount": ".kn-row:has(.kn-row-label:text-is('Adaptador'))",
+      "count": 0,
+      "name": "ligado com o Gemini, sem a linha do adaptador"
     },
     {
       "waitFor": ".kn-agent-test",

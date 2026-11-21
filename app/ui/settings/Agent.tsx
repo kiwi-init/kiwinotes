@@ -148,10 +148,15 @@ export function AgentSection() {
   const a = status.adapter;
   const needsAdapter = AGENTS[kind].adapter;
 
-  /** Trocar de agente: a tela do novo antes, e só o "Trocar" muda (o serviço fecha o aberto). */
+  /**
+   * Trocar de agente: com ele ligado, a tela do novo antes, e só o "Trocar" muda (o serviço fecha o aberto). Desligado,
+   * nada vai a lugar nenhum, e a mesma tela vem ao ligar: a troca é direta, sem duas telas iguais seguidas (T24673).
+   */
   const choose = (to: AgentKind) => {
     setConsenting(false);
-    setSwitching(to === kind ? null : to);
+    if (to === kind) return setSwitching(null);
+    if (!status.enabled) return void confirmSwitch(to);
+    setSwitching(to);
   };
   const confirmSwitch = async (to: AgentKind) => {
     setSwitching(null);

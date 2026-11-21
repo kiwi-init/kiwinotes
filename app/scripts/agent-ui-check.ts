@@ -535,8 +535,9 @@ try {
   ok = (await scenario("nao-instalado", "ajustes-agente-estado.json", { KIWI_FAKE_CLAUDE_VERSION: "x" })) && ok;
   ok = (await scenario("nao-logado", "ajustes-agente-estado.json", { KIWI_FAKE_CLAUDE_LOGGED_IN: "0" })) && ok;
   ok = (await scenario("versao-antiga", "ajustes-agente-estado.json", { KIWI_FAKE_CLAUDE_VERSION: "2.0.9" })) && ok;
-  // O Gemini (spec #24666): a troca, ligar sem adaptador e o Testar com o Gemini falso; e o login que falta.
-  ok = (await scenario("gemini", "ajustes-agente-gemini.json", {}, { prefix: "gemini-" })) && ok;
+  // O Gemini (spec #24666): a troca com o Claude Code ligado e pronto (o medidor e o adaptador dele somem), e o Testar
+  // com o Gemini falso; e, com o agente desligado, a troca direta e o login que falta.
+  ok = (await scenario("gemini", "ajustes-agente-gemini.json", {}, { before: agentReady, prefix: "gemini-" })) && ok;
   const loggedOut = path.join(work, "gemini-logged-out.flag");
   writeFileSync(loggedOut, "");
   ok = (await scenario("gemini-sem-login", "ajustes-agente-gemini-sem-login.json", { KIWI_FAKE_AGENT_LOGGED_OUT: loggedOut }, { prefix: "gemini-" })) && ok;
