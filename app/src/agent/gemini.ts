@@ -174,20 +174,22 @@ export function geminiArgs(policyDir: string): string[] {
 interface RunResult {
   exitCode: number | null;
   stdout: string;
+  /** O agy 1.5.13 escreve a ajuda aqui, e não no stdout (T25486). */
+  stderr: string;
   timedOut: boolean;
 }
 
 async function run(argv: readonly string[], env: Record<string, string>, timeoutMs: number): Promise<RunResult> {
-  const proc = Bun.spawn([...argv], { stdin: "ignore", stdout: "pipe", stderr: "ignore", env: { ...process.env, ...env } });
+  const proc = Bun.spawn([...argv], { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
     proc.kill("SIGKILL");
   }, timeoutMs);
-  const stdout = await new Response(proc.stdout).text();
+  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
   const exitCode = await proc.exited;
   clearTimeout(timer);
-  return { exitCode: timedOut ? null : exitCode, stdout, timedOut };
+  return { exitCode: timedOut ? null : exitCode, stdout, stderr, timedOut };
 }
 
 /** A versão do Gemini CLI (`gemini --version` diz só "0.70.0"), ou `null` se ele não respondeu. */
@@ -231,7 +233,7 @@ export async function geminiStatus(program: ProgramArgv | null): Promise<GeminiS
 }
 
 /**
- * O `agy` (spec #25046): instalado se o `agy --help` responde, e novo o bastante se a ajuda tem o comando `acp`. A
+ * O `agy` (spec #25046): instalado se o `agy --help` responde, e novo o bastante se a ajuda (stdout ou stderr) tem o comando `acp`. A
  * versão (`agy --version`) é só para mostrar: a doc não diz em que versão o `acp` entrou.
  */
 async function agyStatus(program: ProgramArgv, timeoutMs = 15_000): Promise<GeminiStatus> {
@@ -250,6 +252,7 @@ async function agyStatus(program: ProgramArgv, timeoutMs = 15_000): Promise<Gemi
     program: "agy",
     ...where,
     ...(version ? { version } : {}),
-    ...(agyHelpHasAcp(help.stdout) ? {} : { tooOld: true }),
+    // A ajuda vem no stdout ou no stderr: o agy 1.5.13 usa o stderr (T25486).
+    ...(agyHelpHasAcp(`${help.stdout}\n${help.stderr}`) ? {} : { tooOld: true }),
   };
 }

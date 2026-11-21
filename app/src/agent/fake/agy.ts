@@ -25,7 +25,8 @@ if (args[0] === "--version") {
 
 if (args[0] === "--help") {
   const acp = process.env.KIWI_FAKE_AGY_NO_ACP === "1" ? "" : "  acp        Start the Agent Client Protocol server over stdio\n";
-  console.log(`Usage: agy [options] [command]\n\nCommands:\n${acp}  login      Sign in\n\nOptions:\n  --version  Print the version\n`);
+  // No stderr, como o agy 1.5.13 de verdade (T25486).
+  console.error(`Usage: agy [options] [command]\n\nCommands:\n${acp}  login      Sign in\n\nOptions:\n  --version  Print the version\n`);
   process.exit(0);
 }
 

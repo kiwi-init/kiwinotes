@@ -74,8 +74,23 @@ describe("achar o agy (T25059)", () => {
   });
 
   test("o acp na ajuda: como comando, não no meio de outra palavra", () => {
-    expect(agyHelpHasAcp("Commands:\n  acp        Start the ACP server\n")).toBe(true);
-    expect(agyHelpHasAcp("Commands:\n  login  Sign in\n  --no-acpx\n")).toBe(false);
+    for (const ok of [
+      "Commands:\n  acp        Start the ACP server\n",
+      "Commands:\n  acp  Start the Agent Client Protocol (ACP) stdio server\n",
+      "Usage:\n  agy acp [options]\n",
+      "Commands:\n  acp, a     Start the ACP server\n",
+      "Commands:\n\tacp\n",
+      "Commands:\n  acp:  Start\n",
+    ])
+      expect(agyHelpHasAcp(ok)).toBe(true);
+    for (const bad of [
+      "Commands:\n  login  Sign in\n  --no-acpx\n",
+      "Commands:\n  login  Sign in to use acp later\n",
+      "Commands:\n  acpx  Outro\n",
+      "Commands:\n  login  Sign in (ACP)\n",
+      "",
+    ])
+      expect(agyHelpHasAcp(bad)).toBe(false);
   });
 });
 
@@ -83,6 +98,16 @@ describe("o estado do agy, pelo falso", () => {
   test("instalado, com a versão e o acp", async () => {
     const program = writeFakeAgyExecutable(path.join(tmp(), "bin"));
     expect(await geminiStatus([program])).toEqual({ installed: true, program: "agy", path: program, version: "1.4.0" });
+  });
+
+  test("a ajuda no stderr, como o agy 1.5.13: tem o acp, não é velho (T25486)", async () => {
+    const program = writeFakeAgyExecutable(path.join(tmp(), "bin"));
+    const help = Bun.spawnSync([program, "--help"]);
+    // O falso imita o real: nada no stdout, a ajuda inteira no stderr.
+    expect(help.stdout.toString()).toBe("");
+    expect(help.stderr.toString()).toContain("  acp ");
+    const status = await geminiStatus([program]);
+    expect(status.tooOld).toBeUndefined();
   });
 
   test("sem o comando acp: velho demais", async () => {
