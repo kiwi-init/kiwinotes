@@ -705,6 +705,7 @@ try {
   }
 
   // 3. A seção lenta: a gota segura o tempo do quadro preso, sem pular.
+  let slowWarned = false;
   const sl = await openWindow(browser, ctx, { ...base, scale: 1, theme: "light", motion: true });
   try {
     await ready(sl.page);
@@ -721,8 +722,9 @@ try {
       const why = `a gota pulou na ${dir}: o relógio andou ${(r.step * 100).toFixed(1)}% num desenho (máximo ${SLOW_STEP * 100}%) com um quadro de ${SLOW_BLOCK_MS} ms`;
       // No CI, a VM tem quadros lentos além do preso (o maior intervalo passa de 200 ms): o passo vai para o log, como
       // o tempo da seção 2, e quem barra é a máquina local (T25620).
-      if (process.env.CI) console.log(`aviso (CI, não barra): ${why}`);
-      else assert.fail(why);
+      if (!process.env.CI) assert.fail(why);
+      console.log(`aviso (CI, não barra): ${why}`);
+      slowWarned = true;
     }
   } finally {
     await sl.close();
@@ -751,7 +753,7 @@ try {
     const t = metrics[`${theme}.tempoReal`] as { worst: number };
     console.log(`ok ${theme}: ida e volta quadro a quadro, com pescoço, gota solta e sem rastro; pior quadro em tempo real ${t.worst.toFixed(1)} ms (meta ${SLOW_FRAME_MS})`);
   }
-  console.log(`ok seção lenta: a gota segura o quadro preso de ${SLOW_BLOCK_MS} ms, sem pular`);
+  console.log(`ok seção lenta: a gota segura o quadro preso de ${SLOW_BLOCK_MS} ms, ${slowWarned ? "com o passo só no aviso (CI)" : "sem pular"}`);
   console.log("ok reduzir movimento (Mac e Kiwi): sem gota; os botões entram com o fade, que o base.css corta para 0,01 ms");
   console.log(`quadros, vídeos e metrics.json em ${out}`);
 } finally {
