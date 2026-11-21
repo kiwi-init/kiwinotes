@@ -93,6 +93,7 @@ async function scenario(
       renameSync(path.join(shots, f), path.join(out, to));
     }
     const failed = report.steps?.find((s) => s.error)?.error;
+    if (process.env.KIWI_AGENT_UI_DEBUG) console.log(JSON.stringify(report.steps?.map((s: any) => [s.name ?? s.waitFor ?? s.click, s.error ?? "ok"]), null, 1));
     console.log(`${report.ok ? "ok  " : "FALHOU"} ${name}${failed ? `: ${failed}` : ""}${report.problems?.length ? ` · ${report.problems.join(" | ")}` : ""}`);
     return report.ok && !report.problems?.length;
   } finally {
@@ -535,6 +536,11 @@ try {
   ok = (await scenario("nao-instalado", "ajustes-agente-estado.json", { KIWI_FAKE_CLAUDE_VERSION: "x" })) && ok;
   ok = (await scenario("nao-logado", "ajustes-agente-estado.json", { KIWI_FAKE_CLAUDE_LOGGED_IN: "0" })) && ok;
   ok = (await scenario("versao-antiga", "ajustes-agente-estado.json", { KIWI_FAKE_CLAUDE_VERSION: "2.0.9" })) && ok;
+  // O Gemini (spec #24666): a troca, ligar sem adaptador e o Testar com o Gemini falso; e o login que falta.
+  ok = (await scenario("gemini", "ajustes-agente-gemini.json", {}, { prefix: "gemini-" })) && ok;
+  const loggedOut = path.join(work, "gemini-sem-login");
+  writeFileSync(loggedOut, "");
+  ok = (await scenario("gemini-sem-login", "ajustes-agente-gemini-sem-login.json", { KIWI_FAKE_AGENT_LOGGED_OUT: loggedOut }, { prefix: "gemini-" })) && ok;
   ok = (await scenario("sem-rede", "ajustes-agente-sem-rede.json", { KIWI_ADAPTER_REGISTRY: "http://127.0.0.1:9" })) && ok;
   ok = (await scenario("notas", "ajustes-agente-notas.json", { KIWI_FAKE_AGENT_TOOL_DELAY_MS: "1500" })) && ok;
   ok = (await scenario("escrita", writeScript(), {}, { window: "notes", before: agentReady, prefix: "escrita-" })) && ok;

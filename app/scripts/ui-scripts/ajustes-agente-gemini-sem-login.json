@@ -1,0 +1,116 @@
+{
+  "window": "hub",
+  "size": "900x1400",
+  "steps": [
+    {
+      "waitFor": ".kn-tab",
+      "name": "o hub abre"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')"
+    },
+    {
+      "click": ".kn-prefs-item[data-topic=agent]",
+      "name": "o assunto agent"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Gemini (não escolhido)')) .kn-row-hint:not(:has-text('Conferindo'))",
+      "name": "o Gemini conferido, sem ser o escolhido"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini (não escolhido)')) .kn-row-hint",
+      "text": "O login se confere no primeiro pedido",
+      "name": "o login do Gemini ainda não se sabe, e não vira \"não logado\""
+    },
+    {
+      "click": ".kn-segmented button:has-text('Gemini')",
+      "name": "escolhe o Gemini"
+    },
+    {
+      "waitFor": ".kn-agent-consent h3:text-is('Trocar para o Gemini')",
+      "name": "a troca mostra antes o que vai para o Gemini"
+    },
+    {
+      "expectText": ".kn-agent-consent",
+      "text": "vale a política de dados da Google",
+      "name": "com a empresa do Gemini"
+    },
+    {
+      "expectCount": ".kn-agent-consent :text('adaptador')",
+      "count": 0,
+      "name": "e sem falar em adaptador"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "1-trocar.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "click": ".kn-agent-consent button:has-text('Trocar para o Gemini')",
+      "name": "confirma a troca"
+    },
+    {
+      "waitFor": ".kn-segmented [aria-checked=true]:has-text('Gemini')",
+      "name": "o Gemini escolhido"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Claude Code (não escolhido)'))",
+      "name": "o Claude Code fica embaixo, para comparar"
+    },
+    {
+      "expectCount": ".kn-row:has(.kn-row-label:text-is('Adaptador'))",
+      "count": 0,
+      "name": "sem a linha do adaptador"
+    },
+    {
+      "click": ".kn-row:has(.kn-row-label:text-is('Ligar o agente')) [role=switch]",
+      "name": "liga"
+    },
+    {
+      "waitFor": ".kn-agent-consent h3:text-is('Antes de ligar o Gemini')",
+      "name": "o aviso do ADR 0011 com o Gemini"
+    },
+    {
+      "click": ".kn-agent-consent button:has-text('Ligar o Gemini')",
+      "name": "aceita e liga"
+    },
+    {
+      "waitFor": ".kn-onb",
+      "name": "o onboarding abre"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": ".kn-onb",
+      "state": "detached"
+    },
+    {
+      "waitFor": ".kn-agent-test",
+      "name": "o Testar aparece sem baixar nada"
+    },
+    {
+      "click": ".kn-agent-test button:has-text('Testar')",
+      "name": "manda o pedido de teste ao Gemini falso"
+    },
+    {
+      "waitFor": ".kn-agent-test-out[data-phase=error]",
+      "timeout": 30000,
+      "name": "o pedido falha sem login"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini')) .kn-row-hint",
+      "text": "Abra o Gemini no Terminal",
+      "name": "a linha diz como entrar, pelo próprio Gemini"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "3-sem-login.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    }
+  ]
+}
