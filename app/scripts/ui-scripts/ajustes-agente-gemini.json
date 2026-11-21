@@ -95,6 +95,25 @@
       "name": "depois da abertura, o login se sabe"
     },
     {
+      "expectCount": "select[aria-label='Modelo do agente'] option",
+      "count": 4,
+      "name": "os modelos que o Gemini falso oferece: Auto, Hydrogen, Argon e Neon"
+    },
+    {
+      "expectText": "select[aria-label='Modelo do agente']",
+      "text": "Hydrogen",
+      "name": "com os nomes do Gemini, nenhum do Claude"
+    },
+    {
+      "select": "select[aria-label='Modelo do agente']",
+      "value": "gemini-neon",
+      "name": "escolhe o Neon"
+    },
+    {
+      "waitFor": "select[aria-label='Modelo do agente']:has(option[value='gemini-neon']:checked)",
+      "name": "o Neon escolhido"
+    },
+    {
       "wait": 400
     },
     {

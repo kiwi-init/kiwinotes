@@ -334,9 +334,10 @@ async function answerFromNotes(client: AgentContext, sessionId: string, question
   return "Não achei nada sobre isso nas suas notas.";
 }
 
-// Com o "gemini", os modelos no formato dele (T24673): um print do Gemini não pode mostrar um modelo do Claude.
+// Com o "gemini", os modelos mais novos dele (T24673, harry #24856): um print do Gemini não pode mostrar um modelo do Claude.
+const GEMINI_MODEL_NAMES: Record<string, string> = { "gemini-hydrogen": "Hydrogen", "gemini-argon": "Argon", "gemini-neon": "Neon" };
 const MODELS = GEMINI
-  ? ["default", "gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash"]
+  ? ["default", "gemini-hydrogen", "gemini-argon", "gemini-neon"]
   : ["default", "opus", "fable", "sonnet", "haiku", "opus-legacy"];
 const EFFORTS = ["default", "low", "medium", "high", "xhigh", "max"];
 /** Os esforços de cada modelo (spec #16793); um modelo fora daqui tem todos. */
@@ -364,9 +365,9 @@ function configOptions(sessionId: string) {
     options: values.map((value) =>
       value === "default"
         ? GEMINI
-          ? { value, name: "Auto (Gemini 3)", description: "Let Gemini CLI decide the best model for the task" }
+          ? { value, name: "Auto", description: "Let Gemini CLI decide the best model for the task" }
           : { value, name: "Default (recommended)", description: "Sonnet · Best for everyday, complex tasks" }
-        : { value, name: GEMINI ? value : value[0]!.toUpperCase() + value.slice(1) },
+        : { value, name: GEMINI ? GEMINI_MODEL_NAMES[value] ?? value : value[0]!.toUpperCase() + value.slice(1) },
     ),
   });
   const efforts = effortsOf(c.model);

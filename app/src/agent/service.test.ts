@@ -3010,7 +3010,8 @@ describe("dois agentes (spec #24666)", () => {
     await m.svc.configure({ kind: "gemini" });
     await askAndWait(m, "oi");
     const models = (await m.svc.status()).models;
-    expect(models.map((x) => x.value)).toEqual(["default", "gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash"]);
+    expect(models.map((x) => x.value)).toEqual(["default", "gemini-hydrogen", "gemini-argon", "gemini-neon"]);
+    expect(models.map((x) => x.name)).toEqual(["Auto", "Hydrogen", "Argon", "Neon"]);
     expect(JSON.stringify(models)).not.toMatch(/sonnet|opus|haiku|fable|claude/i);
     await m.svc.close();
   });
