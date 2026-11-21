@@ -30,7 +30,9 @@ describe("os erros do agente", () => {
   test("os erros do Gemini (spec #24666) caem nos mesmos casos, com a mensagem em português e sem o texto dele", () => {
     const g = (e: unknown) => classifyAgentError(e, "Gemini");
     expect(g(RequestError.authRequired()).code).toBe("E_AGENT_NOT_LOGGED_IN");
-    expect(g(new Error("Please set an Auth method in your settings.json or specify GEMINI_API_KEY")).code).toBe("E_AGENT_NOT_LOGGED_IN");
+    expect(g(new Error("Please set an Auth method in your settings.json")).code).toBe("E_AGENT_NOT_LOGGED_IN");
+    expect(g(new Error("Gemini API key is missing or not configured.")).code).toBe("E_AGENT_NOT_LOGGED_IN");
+    expect(g(new Error("API key not valid. Please pass a valid API key.")).code).toBe("E_AGENT_NOT_LOGGED_IN");
     expect(g(new Error("[API Error: 401 UNAUTHENTICATED]")).code).toBe("E_AGENT_NOT_LOGGED_IN");
     const limit = g(RequestError.internalError({ message: "[API Error: RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'exemplo']" }));
     expect(limit.code).toBe("E_AGENT_LIMIT");
