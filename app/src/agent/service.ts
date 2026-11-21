@@ -389,6 +389,11 @@ export class AgentService {
   private lastTurn: string | null = null;
   /** O `/usage` em segundo plano depois de um pedido (ADR 0013), e quando foi o último. */
   private limitProbe: Promise<void> | null = null;
+  /**
+   * Pedidos entre a chamada do `ask` e o `this.turn` deles (há `await`s no meio): o `/usage` de depois do pedido
+   * anterior não começa nessa janela, senão o agente recusa o pedido com E_AGENT_BUSY (main vermelha do #292).
+   */
+  private askStarting = 0;
   private limitProbedAt = -Infinity;
   /**
    * O `/usage` do medidor andando (T16712). Não é um pedido: não ocupa o `turn`, e cede a vez a um pedido da pessoa.
@@ -1272,7 +1277,7 @@ export class AgentService {
     const check = () => {
       this.limitProbeTimer = null;
       // Outro pedido já começou (ou já acabou): o /usage deste é pulado.
-      if (this.lastTurn !== after || this.turn || this.limitProbe || this.usageRun) return;
+      if (this.lastTurn !== after || this.turn || this.askStarting || this.limitProbe || this.usageRun) return;
       const now = (this.d.now ?? Date.now)();
       if (now - this.limitProbedAt < (o.everyMs ?? LIMIT_PROBE_EVERY_MS)) return;
       const host = this.host;
@@ -1986,6 +1991,16 @@ export class AgentService {
 
   /** Manda um pedido e volta logo, com o id. A resposta chega pelo `agent.turn`. */
   async ask(text: string): Promise<{ id: string }> {
+    // Marcado antes do 1º `await`: o `/usage` do pedido anterior não começa até este ter o turno (ou falhar).
+    this.askStarting++;
+    try {
+      return await this.startAsk(text);
+    } finally {
+      this.askStarting--;
+    }
+  }
+
+  private async startAsk(text: string): Promise<{ id: string }> {
     // O `/usage` de depois do pedido anterior ainda rodando (são milissegundos): ele é cancelado, e o pedido não espera
     // a resposta dele. O agente responde um prompt por vez.
     if (this.limitProbe) {
