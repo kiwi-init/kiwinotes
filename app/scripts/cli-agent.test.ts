@@ -5,6 +5,7 @@ import { existsSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { tempDir } from "../test/tmp.ts";
+import { AGY_LOGIN_HELP } from "../src/agent/gemini-host.ts";
 
 const CLI = path.join(import.meta.dir, "cli.ts");
 const dirs: string[] = [];
@@ -145,7 +146,18 @@ describe("o Gemini (spec #24666), com o gemini falso", () => {
     expect(r.exit).toBe(1);
     expect(r.result).toMatchObject({ ok: false, code: "E_AGENT_NOT_LOGGED_IN" });
     expect(r.result!.message).toContain("O Gemini não está logado");
+    // O `agy` falso é o padrão da CLI (spec #25046): a mensagem diz como entrar no Antigravity.
+    expect(r.result!.message).toContain(AGY_LOGIN_HELP);
     expect(r.result!.message).not.toMatch(/auth|required/i);
+  });
+
+  test("o agy retoma a sessão pelo session/resume e diz quem é: o Antigravity", async () => {
+    const data = tmp();
+    const first = await cli(["ask", "oi", "--agent", "gemini", "--data", data], { KIWI_FAKE_AGENT_RESUME: "resume" });
+    expect(first.exit).toBe(0);
+    expect(first.result!.value.agent).toMatchObject({ name: expect.stringMatching(/Antigravity/) });
+    const second = await cli(["ask", "de novo", "--agent", "gemini", "--data", data], { KIWI_FAKE_AGENT_RESUME: "resume" });
+    expect(second.result!.value).toMatchObject({ resumed: true, sessionId: first.result!.value.sessionId });
   });
 
   test("um agente que não existe: uso errado", async () => {

@@ -11,7 +11,8 @@ import type { AgentMemoryView, AgentStatus, AgentTurnEvent } from "../shared/ui-
 import { DEFAULT_AGENT_SETTINGS, SettingsStore, type AgentSettings } from "../store/settings.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
 import { fakeNotices } from "./fake/notices.ts";
-import { FAKE_AGENT_COMMAND, FAKE_CLAUDE, FAKE_GEMINI } from "./fake/index.ts";
+import { FAKE_AGENT_COMMAND, FAKE_AGY, FAKE_CLAUDE, FAKE_GEMINI } from "./fake/index.ts";
+import { AGY_LOGIN_HELP, GEMINI_NOT_A_COMMAND, geminiHost } from "./gemini-host.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost, sessionFileOf, WEB_TOOLS } from "./host.ts";
 import { AGENT_NAMES } from "./kinds.ts";
@@ -74,7 +75,7 @@ interface Made {
   store: SettingsStore;
 }
 
-function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter; doubtTimeoutMs?: number; now?: () => number; limitProbe?: { delayMs?: number; retryMs?: number; everyMs?: number }; window?: { maxTokens?: number; idleMs?: number }; env?: Record<string, string> } = {}): Made {
+function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter; doubtTimeoutMs?: number; now?: () => number; limitProbe?: { delayMs?: number; retryMs?: number; everyMs?: number }; window?: { maxTokens?: number; idleMs?: number }; env?: Record<string, string>; agy?: boolean } = {}): Made {
   const data = o.data ?? tmp();
   const reg = o.reg ?? registry();
   const store = new SettingsStore(data);
@@ -97,9 +98,21 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
     // O `/usage` de depois do pedido (ADR 0013) só nos testes dele: nos outros, ele não entra no meio.
     limitProbe: o.limitProbe ?? { delayMs: 3_600_000 },
     ...(o.window ? { window: o.window } : {}),
-    gemini: () => FAKE_GEMINI,
+    gemini: () => (o.agy ? FAKE_AGY : FAKE_GEMINI),
     openHost: async ({ kind, configOptions, kiwiTools, webTools, onExit }) =>
       o.host?.(agentDir(data)) ??
+      // O Antigravity (spec #25046): o `agy` falso pelo `geminiHost` de verdade, com os argumentos, o ambiente e o
+      // loginHelp que o app usa.
+      (o.agy && kind === "gemini"
+        ? (
+            await geminiHost({
+              data,
+              program: FAKE_AGY,
+              env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}), ...o.env },
+              host: { configOptions, onExit, ...(kiwiTools ? { kiwiTools } : {}), ...(webTools ? { webTools } : {}) },
+            })
+          ).host
+        : null) ??
       new AgentHost({
         name: AGENT_NAMES[kind],
         kind,
@@ -3113,5 +3126,75 @@ describe("dois agentes (spec #24666)", () => {
     const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => JSON.stringify(l.params.prompt));
     expect(prompts.some((p) => p.includes("/usage"))).toBe(false);
     expect((await m.svc.status()).busy).toBe(false);
+  });
+});
+
+describe("o Antigravity (spec #25046): os testes do #24666 com o agy falso", () => {
+  test("trocar de agente: o Claude fecha, o agy abre na sessão dele e a retoma; de volta, o Claude retoma a dele", async () => {
+    const m = make({ agy: true, env: { KIWI_FAKE_AGENT_RESUME: "resume" } });
+    await readyNow(m);
+    await askAndWait(m, "oi");
+    const claudePid = m.pid();
+    expect(alive(claudePid)).toBe(true);
+    const claudeSession = JSON.parse(readFileSync(sessionFileOf(agentDir(m.data), "claude"), "utf8")).sessionId as string;
+
+    const s = await m.svc.configure({ kind: "gemini" });
+    expect(s.program).toBe("closed");
+    await until(() => !alive(claudePid));
+    expect((await askAndWait(m, "oi")).at(-1)?.type).toBe("done");
+    // Abriu o `agy acp`, não o Gemini CLI: o argv do falso e o initialize do Antigravity.
+    expect(m.log().some((l) => l.method === "argv" && (l.params.argv as string[] | undefined)?.[0] === "acp")).toBe(true);
+    const agySession = JSON.parse(readFileSync(sessionFileOf(agentDir(m.data), "gemini"), "utf8")).sessionId as string;
+    expect(agySession).not.toBe(claudeSession);
+    expect(m.log().find((l) => l.method === "session/new" && !l.params._meta)).toBeDefined();
+
+    // O app fechado e aberto de novo: o agy retoma a própria sessão pelo session/resume.
+    await m.svc.close();
+    const again = make({ agy: true, data: m.data, reg: m.reg, env: { KIWI_FAKE_AGENT_RESUME: "resume" } });
+    await again.svc.enable(true);
+    expect((await askAndWait(again, "de novo")).at(-1)?.type).toBe("done");
+    expect(again.log().filter((l) => l.method === "session/resume").map((l) => l.params.sessionId)).toContain(agySession);
+
+    // De volta ao Claude: a sessão dele, nunca a do agy.
+    await again.svc.configure({ kind: "claude" });
+    await askAndWait(again, "oi");
+    const resumed = again.log().filter((l) => l.method === "session/resume").map((l) => l.params.sessionId);
+    expect(resumed.at(-1)).toBe(claudeSession);
+  });
+
+  test("um pedido que começa por / chega ao agy com a marca, nunca como comando", async () => {
+    const m = make({ agy: true });
+    await m.svc.enable(true);
+    await m.svc.configure({ kind: "gemini" });
+    expect((await askAndWait(m, "/resumo Projeto X")).at(-1)?.type).toBe("done");
+    expect((await askAndWait(m, "Resuma a nota /Projetos/exemplo.md")).at(-1)?.type).toBe("done");
+    const sent = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toBe(`${GEMINI_NOT_A_COMMAND}\n/resumo Projeto X`);
+    expect(sent[1]).toBe("Resuma a nota /Projetos/exemplo.md");
+  });
+
+  test("sem login: o -32000 do agy vira E_AGENT_NOT_LOGGED_IN com a frase do Antigravity, e entrar destrava", async () => {
+    const out = path.join(tmp(), "sem-login");
+    const m = make({ agy: true, env: { KIWI_FAKE_AGENT_LOGGED_OUT: out } });
+    await m.svc.enable(true);
+    await m.svc.configure({ kind: "gemini" });
+    expect((await m.svc.status(true)).gemini).toMatchObject({ installed: true, loggedIn: false, loginKnown: false });
+
+    writeFileSync(out, "");
+    const failed = await askAndWait(m, "oi");
+    expect(failed.at(-1)).toMatchObject({ type: "error", code: "E_AGENT_NOT_LOGGED_IN" });
+    const message = (failed.at(-1) as { message: string }).message;
+    expect(message).toContain(AGY_LOGIN_HELP);
+    // Em português, sem o texto em inglês do agy.
+    expect(message).not.toMatch(/authentication|required/i);
+    let s = await m.svc.status();
+    expect(s.gemini?.loggedIn).toBe(false);
+    expect(s.gemini).not.toHaveProperty("loginKnown");
+
+    rmSync(out);
+    expect((await askAndWait(m, "oi")).at(-1)?.type).toBe("done");
+    s = await m.svc.status(true);
+    expect(s.gemini).toMatchObject({ loggedIn: true });
   });
 });
