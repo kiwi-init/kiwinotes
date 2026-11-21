@@ -4,6 +4,10 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+## [2026.11.11](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.11) (2026-11-21)
+
+- **Hotfix: o agy 1.5.13 não é "mais antigo": a ajuda vem no stderr (T25486)** ([#297](https://github.com/kiwi-init/kiwinotes/pull/297))
+
 ## [2026.11.10](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.10) (2026-11-21)
 
 - **Antigravity 3: o nome e o estado na tela (T25061)** ([#286](https://github.com/kiwi-init/kiwinotes/pull/286))
