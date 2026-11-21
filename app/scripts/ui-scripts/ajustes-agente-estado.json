@@ -13,11 +13,12 @@
       "name": "o assunto agent da barra lateral (#11966)"
     },
     {
-      "waitFor": ".kn-section:has(h2:text-is('Agente')) .kn-row-hint:not(:has-text('Conferindo'))"
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Claude Code')) .kn-row-hint:not(:has-text('Conferindo'))"
     },
     {
-      "expectText": ".kn-section:has(h2:text-is('Agente')) .kn-row-label",
-      "text": "Claude Code"
+      "expectText": ".kn-section:has(h2:text-is('Agente')) .kn-segmented [aria-checked=true]",
+      "text": "Claude Code",
+      "name": "o Claude Code escolhido de fábrica (spec #24666)"
     },
     {
       "wait": 400

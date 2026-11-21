@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentStatus, AgentUsageView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button, Row, Section } from "../src/kit/index.tsx";
+import { kindOf } from "./agentText.ts";
 import { Placar } from "./Placar.tsx";
 import { at, limitLine, outLine, SUBAGENT_NOTE, subscriptionLine, sumLine, tokens } from "./usageText.ts";
 
@@ -29,7 +30,9 @@ export function UsageMeter() {
     };
   }, []);
 
-  const ready = !!status?.enabled && status.adapter.phase === "ready";
+  // O medidor é do Claude Code (o `/usage` dele, spec #11084). Com o Gemini, ele some, sem inventar número (spec
+  // #24666), mesmo com o adaptador do Claude ainda baixado.
+  const ready = !!status?.enabled && kindOf(status) === "claude" && status.adapter.phase === "ready";
 
   const refresh = useCallback(() => {
     setRefreshing(true);

@@ -3004,6 +3004,18 @@ describe("dois agentes (spec #24666)", () => {
     expect(s.model).toBe("gemini-exemplo");
   });
 
+  test("o Gemini falso oferece os modelos dele, nenhum do Claude (T24673)", async () => {
+    const m = make();
+    await m.svc.enable(true);
+    await m.svc.configure({ kind: "gemini" });
+    await askAndWait(m, "oi");
+    const models = (await m.svc.status()).models;
+    expect(models.map((x) => x.value)).toEqual(["default", "gemini-hydrogen", "gemini-argon", "gemini-neon"]);
+    expect(models.map((x) => x.name)).toEqual(["Auto", "Hydrogen", "Argon", "Neon"]);
+    expect(JSON.stringify(models)).not.toMatch(/sonnet|opus|haiku|fable|claude/i);
+    await m.svc.close();
+  });
+
   test("o login do Gemini: desconhecido até abrir, logado ao abrir, e não logado pelo authRequired", async () => {
     const out = path.join(tmp(), "sem-login");
     const m = make({ env: { KIWI_FAKE_AGENT_LOGGED_OUT: out } });

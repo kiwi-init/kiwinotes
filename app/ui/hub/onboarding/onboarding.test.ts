@@ -9,9 +9,9 @@ test("os 10 passos na ordem do spec, cada um com título e frase (o do Control, 
   expect(STEP_COUNT).toBe(10);
   expect(ONBOARDING_STEPS.map((s) => STEP_TEXT[s].title.length > 0 && (s === "control" || STEP_TEXT[s].hint.length > 0))).toEqual(Array(10).fill(true));
   expect(STEP_TEXT.control.hint).toBe("");
-  // Spec #17709: o passo 1 acorda o Kiwi Cat; a frase de baixo diz o que se instala, o Claude Code.
+  // Spec #17709: o passo 1 acorda o Kiwi Cat; a frase de baixo diz o que se instala: o agente escolhido (spec #24666).
   expect(STEP_TEXT.claude.title).toBe("Oi! Vamos acordar o Kiwi Cat");
-  expect(STEP_TEXT.claude.hint).toContain("o Claude Code está instalado");
+  expect(STEP_TEXT.claude.hint).toContain("(o Claude Code ou o Gemini) está instalado");
   expect([stepAt(1), stepAt(4), stepAt(10), stepAt(0), stepAt(12)]).toEqual(["claude", "guardrail", "done", "claude", "done"]);
   expect(progressLine(3)).toBe("Passo 3 de 10");
 });
@@ -22,6 +22,19 @@ test("o passo 1 só deixa seguir com o Claude Code logado e a ponte baixada", ()
   expect(canLeaveClaude({ ...ok, adapter: { phase: "missing" } })).toBe(false);
   expect(canLeaveClaude({ ...ok, claude: { ...ok.claude, loggedIn: false } })).toBe(false);
   expect(canLeaveClaude({ ...ok, claude: null })).toBe(false);
+});
+
+test("o passo 1 com o Gemini: sem a ponte, e o login que ainda não se conferiu deixa seguir (spec #24666)", () => {
+  const gemini = { installed: true, loggedIn: false, versionOk: true, loginKnown: false };
+  const g = { kind: "gemini" as const, claude: null, gemini, adapter: { phase: "missing" } };
+  // Sem a ponte: o Gemini fala ACP sozinho.
+  expect(canLeaveClaude(g)).toBe(true);
+  // O `authRequired` já disse que falta o login.
+  expect(canLeaveClaude({ ...g, gemini: { installed: true, loggedIn: false, versionOk: true } })).toBe(false);
+  expect(canLeaveClaude({ ...g, gemini: { ...gemini, versionOk: false } })).toBe(false);
+  expect(canLeaveClaude({ ...g, gemini: null })).toBe(false);
+  // O Claude logado e com a ponte não serve quando o escolhido é o Gemini.
+  expect(canLeaveClaude({ ...g, gemini: null, claude: { installed: true, loggedIn: true, versionOk: true }, adapter: { phase: "ready" } })).toBe(false);
 });
 
 test("o cartão final: o jeito de falar, os projetos e o atalho", () => {

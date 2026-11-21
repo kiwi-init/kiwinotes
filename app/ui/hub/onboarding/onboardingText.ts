@@ -6,9 +6,10 @@ import { DEFAULT_SHORTCUTS, parseShortcut, shortcutLabel } from "../../../src/sh
 import type { ProjectReason } from "../../../src/notes/project-finder.ts";
 import type { ProjectInfo } from "../../../src/notes/projects.ts";
 import type { AgentTurnEvent, AgentVoiceUi, ProjectCandidate, ProjectSearchView } from "../../../src/shared/ui-contract.ts";
+import { AGENTS, kindOf, loginUnknown, programOf, type AgentKind, type ProgramState } from "../../settings/agentText.ts";
 
 export const STEP_TEXT: Record<OnboardingStep, { title: string; hint: string }> = {
-  claude: { title: "Oi! Vamos acordar o Kiwi Cat", hint: "O Kiwi confere se o Claude Code está instalado e logado, baixa a ponte com ele e manda um oi para testar." },
+  claude: { title: "Oi! Vamos acordar o Kiwi Cat", hint: "O Kiwi confere se o seu agente (o Claude Code ou o Gemini) está instalado e logado, baixa a ponte quando é o Claude Code e manda um oi para testar." },
   // Sem subtítulo (revisão do T13145): o cartão (que leva o aviso do microfone) e a frase embaixo já dizem como.
   control: { title: "Aperta o Control e fala oi", hint: "" },
   tone: { title: "O seu jeito", hint: "Como o agente fala com você: curto ou detalhado, formal ou informal." },
@@ -30,11 +31,13 @@ export const stepAt = (n: number): OnboardingStep => ONBOARDING_STEPS[Math.min(M
 export const progressLine = (n: number) => `Passo ${n} de ${STEP_COUNT}`;
 
 /**
- * O passo 1 é o único que segura a pessoa (spec #11955: sem o Claude Code logado, o agente não liga). O "Pular" dele só
- * vale quando o Claude Code serve e a ponte está baixada; o teste é opcional.
+ * O passo 1 é o único que segura a pessoa (spec #11955: sem o agente logado, ele não liga). O "Pular" dele só vale quando
+ * o agente escolhido serve e, no Claude Code, a ponte está baixada (o Gemini fala ACP sozinho, spec #24666); o teste é
+ * opcional. O Gemini antes do primeiro pedido não diz o login (`loginKnown: false`), e o oi é o que confere.
  */
-export function canLeaveClaude(s: { claude: { installed: boolean; loggedIn: boolean; versionOk: boolean } | null; adapter: { phase: string } }): boolean {
-  return !!s.claude?.installed && s.claude.loggedIn && s.claude.versionOk && s.adapter.phase === "ready";
+export function canLeaveClaude(s: { claude: ProgramState | null; adapter: { phase: string }; kind?: AgentKind; gemini?: ProgramState | null }): boolean {
+  const c = programOf(s);
+  return !!c?.installed && (c.loggedIn || loginUnknown(c)) && c.versionOk && (!AGENTS[kindOf(s)].adapter || s.adapter.phase === "ready");
 }
 
 /** O jeito de falar no cartão final: a 1ª linha das instruções, curta; sem instruções, o padrão. */

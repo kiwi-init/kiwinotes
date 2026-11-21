@@ -27,7 +27,7 @@ export function ModelRows({
         <Select label="Modelo do agente" value={status.model} options={modelOptions(status)} onChange={(model) => run(() => api.agent.configure({ model }))} />
       </Row>
       {/* O esforço do modelo escolhido: as escolhas que o agente oferece nele; sem esforço, só a linha. */}
-      <Row label="Esforço" hint={unknown ? prepareHint(prepare) : effortHint(status)}>
+      <Row label="Esforço" hint={unknown ? prepareHint(prepare, status.name) : effortHint(status)}>
         {efforts?.length ? (
           <Select label="Esforço do modelo" value={effortValue(status)} options={efforts} onChange={(effort) => run(() => api.agent.configure({ effort }))} />
         ) : unknown ? (

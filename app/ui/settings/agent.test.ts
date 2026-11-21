@@ -19,6 +19,14 @@ import {
   effortOptions,
   effortValue,
   economyHint,
+  agentLine,
+  AGENTS,
+  KIND_OPTIONS,
+  kindHint,
+  kindOf,
+  programOf,
+  switchText,
+  webHint,
   modelAbout,
   modelHint,
   modelOptions,
@@ -94,6 +102,69 @@ describe("o Claude Code instalado", () => {
     expect(claudeLine("Claude Code", { installed: true, version: "2.0.9", loggedIn: false, versionOk: false, versionError: "E_AGENT_TOO_OLD" }).text).toContain(
       "claude update",
     );
+  });
+});
+
+describe("os dois agentes (spec #24666)", () => {
+  const gemini: AgentStatus = {
+    ...base,
+    kind: "gemini",
+    name: "Gemini",
+    enabled: true,
+    consented: true,
+    gemini: { installed: true, version: "0.70.0", loggedIn: true, versionOk: true },
+  };
+
+  test("a linha do Gemini: instalar, atualizar e entrar pelo próprio Gemini, sem o Kiwi pedir senha nem chave", () => {
+    expect(agentLine("gemini", "Gemini", null).text).toBe("Conferindo o Gemini…");
+    expect(agentLine("gemini", "Gemini", { installed: false, loggedIn: false, versionOk: false }).text).toContain("github.com/google-gemini/gemini-cli");
+    const old = agentLine("gemini", "Gemini", { installed: true, version: "0.1.0", loggedIn: true, versionOk: false, versionError: "E_AGENT_TOO_OLD" });
+    expect(old).toEqual({ text: expect.stringContaining("Atualize o Gemini CLI"), ok: false });
+    const out = agentLine("gemini", "Gemini", { installed: true, version: "0.70.0", loggedIn: false, versionOk: true });
+    expect(out.ok).toBe(false);
+    expect(out.text).toContain("Abra o Gemini no Terminal");
+    expect(out.text).toContain("nunca pede a sua senha nem a sua chave");
+    expect(out.text).not.toContain("claude");
+    expect(agentLine("gemini", "Gemini", gemini.gemini).text).toBe("Gemini 0.70.0 instalado e logado. O login é dele: o Kiwi nunca vê a sua senha.");
+  });
+
+  test("o login que o Gemini ainda não disse não vira \"não logado\", e o Testar fica liberado", () => {
+    const unknown = { installed: true, version: "0.70.0", loggedIn: false, versionOk: true, loginKnown: false as const };
+    const l = agentLine("gemini", "Gemini", unknown);
+    expect(l.ok).toBe(true);
+    expect(l.text).toContain("O login se confere no primeiro pedido");
+    expect(l.text).not.toContain("não está logado");
+    expect(canTest({ ...gemini, gemini: unknown })).toBe(true);
+  });
+
+  test("o Gemini testa sem o adaptador, e o Claude pronto não conta quando o escolhido é o Gemini", () => {
+    expect(gemini.adapter.phase).toBe("missing");
+    expect(canTest(gemini)).toBe(true);
+    expect(canTest({ ...gemini, gemini: null, adapter: { version: "0.106.0", phase: "ready" } })).toBe(false);
+    expect(canTest({ ...gemini, gemini: { ...gemini.gemini!, loggedIn: false } })).toBe(false);
+    expect(canTest({ ...gemini, enabled: false })).toBe(false);
+    // E o contrário: com o Claude escolhido, o Gemini pronto não conta.
+    expect(canTest({ ...gemini, kind: "claude", name: "Claude Code", claude: null })).toBe(false);
+  });
+
+  test("o estado de cada um sai do programa certo, e um engine sem `kind` é o Claude", () => {
+    expect(programOf(gemini)).toBe(gemini.gemini);
+    expect(programOf({ ...gemini, kind: "claude" })).toBe(gemini.claude);
+    expect(kindOf({})).toBe("claude");
+    expect(kindOf(gemini)).toBe("gemini");
+  });
+
+  test("a escolha diz para onde o texto vai, e a troca pede a confirmação com o nome do novo", () => {
+    expect(KIND_OPTIONS.map((o) => o.label)).toEqual(["Claude Code", "Gemini"]);
+    expect(kindHint("gemini", true)).toContain("vale a política de dados da Google");
+    expect(kindHint("claude", true)).toContain("vale a política de dados da Anthropic");
+    expect(kindHint("gemini", false)).toStartWith("Desligado: nada vai para o Gemini.");
+    expect(switchText("gemini")).toEqual({ title: "Trocar para o Gemini", yes: "Trocar para o Gemini" });
+  });
+
+  test("os textos com o nome do agente: a web e o Esforço do onboarding", () => {
+    expect(webHint({ webSearch: true, name: "Gemini" })).toContain("feita pelo Gemini");
+    expect(prepareHint("opening", "Gemini")).toBe("Abrindo o Gemini para ver os níveis de esforço deste modelo…");
   });
 });
 
@@ -319,6 +390,16 @@ describe("a tela de aviso e a regra de privacidade (ADR 0011)", () => {
     const t = consentText("Claude Code");
     expect(t.title).toBe("Antes de ligar o Claude Code");
     const fromAdr = (line: string) => line.replaceAll("Claude Code", "{agente}").replaceAll("Anthropic", "{empresa}");
+    for (const line of [...t.goes, ...t.never, ...t.who]) expect(adr).toContain(fromAdr(line));
+  });
+
+  test("com o Gemini, a tela diz o Google e não fala em adaptador (spec #24666)", async () => {
+    const adr = await Bun.file(new URL("../../../docs/adr/0011-agente-e-privacidade.md", import.meta.url)).text();
+    const t = consentText(AGENTS.gemini.name, AGENTS.gemini.company, AGENTS.gemini.adapter);
+    expect(t.title).toBe("Antes de ligar o Gemini");
+    expect(t.who.join(" ")).toContain("vale a política de dados da Google");
+    expect(t.who.join(" ")).not.toContain("adaptador");
+    const fromAdr = (line: string) => line.replaceAll("Gemini", "{agente}").replaceAll("Google", "{empresa}");
     for (const line of [...t.goes, ...t.never, ...t.who]) expect(adr).toContain(fromAdr(line));
   });
 

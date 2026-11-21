@@ -1,0 +1,131 @@
+{
+  "window": "hub",
+  "size": "900x1400",
+  "steps": [
+    {
+      "waitFor": ".kn-tab",
+      "name": "o hub abre"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')"
+    },
+    {
+      "click": ".kn-prefs-item[data-topic=agent]",
+      "name": "o assunto agent"
+    },
+    {
+      "waitFor": ".kn-section:has(h2:text-is('O gasto do agente'))",
+      "name": "antes da troca: o Claude Code ligado e pronto, e o medidor dele aparece"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Adaptador'))",
+      "name": "e a linha do adaptador dele"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Gemini (não escolhido)')) .kn-row-hint:not(:has-text('Conferindo'))",
+      "name": "o Gemini conferido, sem ser o escolhido"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini (não escolhido)')) .kn-row-hint",
+      "text": "O login se confere no primeiro pedido",
+      "name": "o login do Gemini ainda não se sabe, e não vira \"não logado\""
+    },
+    {
+      "click": ".kn-segmented button:has-text('Gemini')",
+      "name": "escolhe o Gemini"
+    },
+    {
+      "waitFor": ".kn-agent-consent h3:text-is('Trocar para o Gemini')",
+      "name": "a troca mostra antes o que vai para o Gemini"
+    },
+    {
+      "expectText": ".kn-agent-consent",
+      "text": "vale a política de dados da Google",
+      "name": "com a empresa do Gemini"
+    },
+    {
+      "expectCount": ".kn-agent-consent :text('adaptador')",
+      "count": 0,
+      "name": "e sem falar em adaptador"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "1-trocar.png"
+    },
+    {
+      "click": ".kn-agent-consent button:has-text('Trocar para o Gemini')",
+      "name": "confirma a troca"
+    },
+    {
+      "waitFor": ".kn-segmented [aria-checked=true]:has-text('Gemini')",
+      "name": "o Gemini escolhido"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Claude Code (não escolhido)'))",
+      "name": "o Claude Code fica embaixo, para comparar"
+    },
+    {
+      "waitFor": ".kn-section:has(h2:text-is('O gasto do agente'))",
+      "state": "detached",
+      "name": "o medidor do Claude some com o Gemini, mesmo com o adaptador do Claude baixado"
+    },
+    {
+      "expectCount": ".kn-row:has(.kn-row-label:text-is('Adaptador'))",
+      "count": 0,
+      "name": "com o agente ligado, sem a linha do adaptador"
+    },
+    {
+      "waitFor": ".kn-agent-test",
+      "name": "o Testar aparece sem baixar nada"
+    },
+    {
+      "click": ".kn-agent-test button:has-text('Testar')",
+      "name": "manda o pedido de teste ao Gemini falso"
+    },
+    {
+      "waitFor": ".kn-agent-test-out[data-phase=done]",
+      "timeout": 30000,
+      "name": "o Gemini falso responde"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini')) .kn-row-hint",
+      "text": "instalado e logado",
+      "name": "depois da abertura, o login se sabe"
+    },
+    {
+      "expectCount": "select[aria-label='Modelo do agente'] option",
+      "count": 4,
+      "name": "os modelos que o Gemini falso oferece: Auto, Hydrogen, Argon e Neon"
+    },
+    {
+      "expectText": "select[aria-label='Modelo do agente']",
+      "text": "Hydrogen",
+      "name": "com os nomes do Gemini, nenhum do Claude"
+    },
+    {
+      "select": "select[aria-label='Modelo do agente']",
+      "value": "gemini-neon",
+      "name": "escolhe o Neon"
+    },
+    {
+      "waitFor": "select[aria-label='Modelo do agente']:has(option[value='gemini-neon']:checked)",
+      "name": "o Neon escolhido"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "scroll": ".kn-section:has(h2:text-is('Agente'))",
+      "y": -20000,
+      "name": "volta ao topo: a seção é mais alta que a janela, e o print do elemento sai em branco"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "screenshot": "2-gemini.png"
+    }
+  ]
+}

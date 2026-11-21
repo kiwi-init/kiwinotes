@@ -1,7 +1,7 @@
 // A primeira abertura (T20795, spec #20780): depois da intro, o Kiwi Cat grande diz oi num balão que se escreve sozinho,
 // com [Vamos lá] e [Agora não]. Daqui saem as telas seguintes, na ordem do lead (#20854, `welcomeNext`):
 // - Vamos lá: o que o Kiwi faz (T20838) → as permissões e o modelo de voz (`FirstRunSetup`, T20796) → o consentimento do
-//   ADR 0011 → o agente liga, e o onboarding dele (`Onboarding`) abre sozinho no passo do Claude Code.
+//   ADR 0011 → o agente liga, e o onboarding dele (`Onboarding`) abre sozinho no passo do agente escolhido.
 // - Agora não: `FirstRunSetup` → o Hub, com o agente desligado.
 // Só o Continuar do `FirstRunSetup` grava `firstRun: "done"`: se o app fechar antes, a boas-vindas volta na próxima abertura.
 import "./onboarding.css";
@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentStatus, AppSettings } from "../../../src/shared/ui-contract.ts";
 import { TAIL_SVG_INNER } from "../../kiwicat-v2/bubbleTail.ts";
 import { Consent } from "../../settings/Agent.tsx";
+import { kindOf } from "../../settings/agentText.ts";
 import { api, has } from "../../src/api.ts";
 import { Button } from "../../src/kit/index.tsx";
 import { FirstRunSetup } from "./FirstRunSetup.tsx";
@@ -121,7 +122,7 @@ function ConsentStep({ status, onDone }: { status: AgentStatus; onDone: () => vo
   return (
     <div className="kn-onb kn-welcome-consent" role="dialog" aria-modal="true" aria-label={`Antes de ligar o ${status.name}`}>
       <section className="kn-onb-step">
-        <Consent name={status.name} onYes={yes} onNo={onDone} />
+        <Consent kind={kindOf(status)} onYes={yes} onNo={onDone} />
         {failure ? <p className="kn-onb-failure" role="alert">{failure}</p> : null}
       </section>
     </div>
