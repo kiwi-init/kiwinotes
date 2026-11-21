@@ -24,7 +24,10 @@
 // | cedendo      | a passada de código com a pessoa escrevendo (um `notes.save` por segundo): o portão fecha, a       |
 // |              | passada para e o principal fica < 5%. Depois, 30 s sem escrever: a passada tem de voltar           |
 //
-// - Antes de medir o repouso, o roteiro espera o app assentar (`waitQuiet`: janelas de 5 s até a soma ficar na régua
+// - Antes de medir o repouso, o roteiro espera o helper terminar de preparar o modelo de voz (`waitModel`, T25655: o
+//   download e a compilação do Parakeet numa máquina nova do CI), no máximo 600 s (o CI guarda o modelo no cache), e diz quanto esperou. O modelo que
+//   não carrega, ou não fica pronto a tempo, faz o roteiro sair pulado com o motivo, nunca medir assim mesmo.
+// - Depois, espera o app assentar (`waitQuiet`: janelas de 5 s até a soma ficar na régua
 //   de "tudo", no máximo 60 s) e diz quanto esperou. O trabalho do começo não conta; um timer à toa nunca assenta.
 // - A CPU sai do tempo de CPU acumulado de cada processo (`ps -o time`), no começo e no fim da janela: a média, sem
 //   perder os picos curtos que uma amostra do `top` perde. Em % de um núcleo.
@@ -83,6 +86,8 @@ export interface ScenarioResult {
   skipped?: string;
   /** Os segundos que o repouso esperou o app assentar antes de medir (`waitQuiet`). */
   warmup?: number;
+  /** Os segundos que o repouso esperou o modelo de voz do helper ficar pronto (`waitModel`, T25655). */
+  model?: number;
 }
 
 /** O `TIME` do `ps` (`[[dd-]hh:]mm:ss.cc`) em segundos. */
@@ -153,6 +158,52 @@ async function waitQuiet(pids: Map<number, Role>, limit: number, maxS: number): 
     if (Object.values(cpu).reduce((a, b) => a + b, 0) <= limit) break;
   }
   return Math.round((performance.now() - began) / 1000);
+}
+
+/** O estado dos modelos de voz no `status` do headless: o `session.stt` e o `session.boosting`. */
+export type ModelState = { stt?: string; boosting?: string; download?: { fraction: number; phase: string } };
+
+/** Onde o download parou, para o log: `stt loading, downloading 43%`. Um download travado se vê aqui. */
+export const modelWhere = (s: ModelState) =>
+  `stt ${s.stt ?? "?"}${s.download ? `, ${s.download.phase} ${Math.round(s.download.fraction * 100)}%` : ""}`;
+
+/** O helper ainda prepara um modelo: ao abrir, baixa e compila o Parakeet (o `prepareSTT`), e o CI baixa do zero. */
+export const modelBusy = (s: ModelState) => s.stt == null || s.stt === "starting" || s.stt === "loading" || s.boosting === "loading";
+
+/**
+ * O teto da espera pelo modelo de voz. O CI guarda o modelo no cache (o `fluidaudio-models` do ci.yml), e a espera
+ * cai para segundos; sem o cache (a 1ª vez de uma versão nova do FluidAudio), o download do zero e a compilação do
+ * CoreML levaram 282 s no run 44934881016. O teto fica bem acima disso, para a rede um pouco mais lenta não virar
+ * outro vermelho intermitente.
+ */
+export const MODEL_WAIT_S = 600;
+
+/**
+ * Espera o helper terminar de preparar o modelo de voz (T25655). Sem isso, o repouso media o download e a compilação
+ * do modelo, que numa máquina nova do CI duram de 5 s a mais de um minuto, conforme a rede: o helper deu 14% numa
+ * tentativa e 0,18% na seguinte, na mesma imagem. Devolve os segundos de espera, ou o motivo de não medir: o modelo não
+ * carregou (`unavailable`, a rede ou o Hugging Face fora do ar) ou passou do teto. O repouso nunca mede assim mesmo.
+ */
+export async function waitModel(
+  read: () => Promise<ModelState>,
+  maxS = MODEL_WAIT_S,
+  clock = { now: () => performance.now(), sleep: (ms: number) => Bun.sleep(ms) },
+): Promise<{ seconds: number } | { skipped: string }> {
+  const began = clock.now();
+  const elapsed = () => Math.round((clock.now() - began) / 1000);
+  for (;;) {
+    const s = await read();
+    if (s.stt === "unavailable") return { skipped: `o modelo de voz não carregou em ${elapsed()} s (unavailable: a rede ou o Hugging Face?), e o repouso não mede um helper sem ele` };
+    if (s.boosting === "unavailable") return { skipped: `o modelo do vocabulário não carregou em ${elapsed()} s (unavailable), e o repouso não mede um helper sem ele` };
+    if (!modelBusy(s)) return { seconds: elapsed() };
+    if (clock.now() - began >= maxS * 1000) return { skipped: `o modelo de voz não ficou pronto em ${maxS} s (${modelWhere(s)}), e o repouso não mede o helper carregando` };
+    await clock.sleep(1000);
+  }
+}
+
+/** Depois da medida: o motivo de jogá-la fora se o modelo saiu de pronto no meio (o helper caiu e voltou a carregar). */
+export function modelLeftReady(s: ModelState): string | null {
+  return s.stt === "ready" && !modelBusy(s) ? null : `o modelo de voz saiu de pronto na medida (stt ${s.stt ?? "?"}, boosting ${s.boosting ?? "-"})`;
 }
 
 async function cliRun(data: string, args: string[], env: Env): Promise<{ code: number; out: string }> {
@@ -257,6 +308,9 @@ async function idle(name: string, windows: UiWindow[], limits: Limit[], away: bo
     const hub = pages[windows.indexOf("hub")];
     if (hub) await hub.page.waitForSelector('.kn-kiwicat[data-ready="true"]', { timeout: 20_000 });
     if (away) for (const p of pages) await p.page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    const models = async (): Promise<ModelState> => ((await app!.ctx.send({ cmd: "status" })).value as { session?: ModelState } | undefined)?.session ?? {};
+    const model = await waitModel(models);
+    if ("skipped" in model) return { name, seconds: 0, cpu: null, limits: [], skipped: model.skipped };
     await Bun.sleep(settleS * 1000);
     const pids = new Map<number, Role>([[app.main, "main"]]);
     if (app.helper) pids.set(app.helper, "helper");
@@ -264,10 +318,14 @@ async function idle(name: string, windows: UiWindow[], limits: Limit[], away: bo
     const all = limits.find((l) => l.roles.length === 4)?.max ?? 2;
     const warmup = await waitQuiet(pids, all, 60);
     const cpu = await measureCpu(pids, SECONDS);
+    // O modelo voltou a carregar no meio (o helper caiu e subiu de novo): a medida não é do repouso.
+    const left = modelLeftReady(await models());
+    if (left) return { name, seconds: 0, cpu: null, limits: [], skipped: left };
     return {
       name,
       seconds: SECONDS,
       warmup,
+      model: model.seconds,
       cpu,
       limits: limits.map((l) => {
         const got = Math.round(l.roles.reduce((s, r) => s + cpu[r], 0) * 100) / 100;
@@ -440,6 +498,7 @@ if (import.meta.main) {
     results.push(r);
     if (r.skipped) { console.log(`${name}: pulado (${r.skipped})`); continue; }
     const c = r.cpu!;
+    if (r.model != null) console.log(`${name}: o modelo de voz ficou pronto depois de ${r.model} s de espera`);
     console.log(`${name} (${r.seconds} s${r.warmup ? `, depois de ${r.warmup} s assentando` : ""}): main ${c.main}% · helper ${c.helper}% · webview ${c.webview}% · gpu ${c.gpu}%${r.peak != null ? ` · pico do main ${r.peak}%` : ""}`);
     for (const l of r.limits) {
       const unit = l.label.endsWith("(s)") ? "" : "%";
