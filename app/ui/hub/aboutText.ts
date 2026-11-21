@@ -1,6 +1,6 @@
 // Os textos da seção Sobre (T2386, spec #16837), fora do componente: assim os testes não carregam o CSS nem o ícone.
 
-import type { AppChannel, UpdatesView } from "../../src/shared/ui-contract.ts";
+import type { AppChannel, UiAppearance, UiWindow, UpdatesView } from "../../src/shared/ui-contract.ts";
 
 export const CHANNEL: Record<AppChannel, string> = {
   stable: "estável",
@@ -105,3 +105,20 @@ export function creditsLine(credits = CREDITS): string {
   if (!credits.length) return "";
   return `Com ${credits.map((c) => `${c.name}, ${c.by.startsWith("Mozilla") ? "da" : "de"} ${c.by} (${c.license})`).join("; ")}.`;
 }
+
+/** O nome de cada janela na lista "Aparência" do Sobre (spec #25011). */
+export const WINDOW_NAME: Record<UiWindow, string> = {
+  hub: "Kiwi Notes",
+  notes: "Notas",
+  settings: "Ajustes",
+  history: "Histórico",
+  intro: "Abertura",
+};
+
+/** Uma linha da lista "Aparência": a janela e a UI dela, a de fábrica ou uma que chegou depois. */
+export function appearanceLine(w: UiAppearance["windows"][number]): { name: string; version: string } {
+  const version = w.builtIn ? `${w.uiVersion} (de fábrica)` : w.uiVersion;
+  return { name: WINDOW_NAME[w.window], version: w.pending ? `${version} · nova pronta: ${w.pending}` : version };
+}
+
+export const REVERT_HINT = "Volta cada janela à aparência que ela tinha antes da última que chegou, sem fechar o app.";

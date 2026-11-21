@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { uiCapabilities } from "../../src/bun/ui-capabilities.ts";
 import { directInvoke } from "../../src/bun/ui-engine.ts";
 import { releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
-import { CREDITS, creditsLine, downloadProgress, updateBand } from "./aboutText.ts";
+import { appearanceLine, CREDITS, creditsLine, downloadProgress, updateBand } from "./aboutText.ts";
 
 const at = "2026-11-04T12:30:00.000Z";
 const hhmm = new Date(at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -156,5 +156,35 @@ describe("o atualizador de mentira do headless (KIWI_FAKE_UPDATES, T17098)", () 
     expect(about.view()).toEqual({ state: "ready", version: "2026.11.3", lastCheck: null });
     expect(await about.check()).toMatchObject({ state: "ready" });
     expect(await about.apply()).toEqual({ state: "applying", lastCheck: null });
+  });
+});
+
+describe("a aparência no Sobre e a faixa Nova aparência pronta (contrato 1.96.0, spec #25011)", () => {
+  const base = {} as unknown as Parameters<typeof uiCapabilities>[0];
+
+  test("sem engine (headless, testes): a de fábrica, nada pendente e nada a voltar", async () => {
+    const caps = uiCapabilities(base);
+    expect(await directInvoke(caps, "ui.status", {})).toEqual({ ok: true, value: { uiVersion: "dev", builtIn: true, pending: null } });
+    expect(await directInvoke(caps, "ui.reload", {})).toMatchObject({ ok: true, value: { pending: null } });
+    expect(await directInvoke(caps, "ui.revert", {})).toEqual({ ok: true, value: { windows: [], canRevert: false } });
+    expect(await directInvoke(caps, "app.about", {})).not.toMatchObject({ ok: true, value: { ui: expect.anything() } });
+    expect(await directInvoke(caps, "ui.reload", { now: true })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+  });
+
+  test("a de mentira do headless (KIWI_FAKE_UI): Recarregar troca, Voltar põe na de fábrica", async () => {
+    const { fakeAppearance, parseFakeUi } = await import("../../src/headless/fake-ui.ts");
+    expect(() => parseFakeUi('{"uiVersion":1}')).toThrow("KIWI_FAKE_UI");
+    const caps = uiCapabilities({ ...base, appearance: fakeAppearance('{"uiVersion":"2026.11.12","builtIn":false,"pending":"2026.11.13","factory":"2026.11.9"}') });
+    expect(await directInvoke(caps, "ui.status", {})).toEqual({ ok: true, value: { uiVersion: "2026.11.12", builtIn: false, pending: "2026.11.13" } });
+    expect(await directInvoke(caps, "app.about", {})).toMatchObject({ ok: true, value: { ui: { canRevert: true, windows: expect.arrayContaining([{ window: "hub", uiVersion: "2026.11.12", builtIn: false, pending: "2026.11.13" }]) } } });
+    expect(await directInvoke(caps, "ui.reload", {})).toEqual({ ok: true, value: { uiVersion: "2026.11.13", builtIn: false, pending: null } });
+    const back = await directInvoke(caps, "ui.revert", {});
+    expect(back).toMatchObject({ ok: true, value: { canRevert: false } });
+    expect(await directInvoke(caps, "ui.status", {})).toEqual({ ok: true, value: { uiVersion: "2026.11.9", builtIn: true, pending: null } });
+  });
+
+  test("cada linha diz a janela, a versão e se é de fábrica ou se há uma nova pronta", () => {
+    expect(appearanceLine({ window: "notes", uiVersion: "2026.11.9", builtIn: true, pending: null })).toEqual({ name: "Notas", version: "2026.11.9 (de fábrica)" });
+    expect(appearanceLine({ window: "settings", uiVersion: "2026.11.12", builtIn: false, pending: "2026.11.13" })).toEqual({ name: "Ajustes", version: "2026.11.12 · nova pronta: 2026.11.13" });
   });
 });
