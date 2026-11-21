@@ -6,7 +6,8 @@
 // `skipped` do GitHub, ou o passo "pulado:" sem texto).
 //
 // Só os checks do nosso CI contam (T24794): os jobs do GitHub Actions deste repo, pelo link
-// `github.com/<dono>/<repo>/actions/runs/…`. Um app de fora (o "Proof" do Blacksmith, que sai `skipped`) aparece como
+// `github.com/<dono>/<repo>/actions/runs/…`, e com o nome do workflow (um app de fora pode pôr qualquer link, mas
+// não um workflow: T24807). Um app de fora (o "Proof" do Blacksmith, que sai `skipped`) aparece como
 // "ignorado (app de fora)": nunca barra e nunca conta como um dos obrigatórios.
 //
 //   bun scripts/merge-gate.ts 135                  # só confere: sai 0 se pode, 1 se não
@@ -31,6 +32,8 @@ export interface Check {
   detailsUrl?: string;
   targetUrl?: string;
   startedAt?: string;
+  /** O workflow do GitHub Actions que rodou o check; vazio no de um app de fora. */
+  workflowName?: string;
 }
 
 export interface Step {
@@ -50,11 +53,13 @@ export interface Verdict {
 const nameOf = (c: Check) => c.name ?? c.context ?? "";
 
 /**
- * Se o check é do nosso CI: um job do GitHub Actions do próprio repo (`dono/repo`), pelo link dele. Um status de commit
- * ou um check de outro app (outro link) é de fora.
+ * Se o check é do nosso CI: um job do GitHub Actions do próprio repo (`dono/repo`), pelo link dele, com o nome do
+ * workflow. Um status de commit, um check de outro app (outro link, ou um link do repo fora das Actions) ou um check
+ * sem workflow é de fora.
  */
 export function isOwnCi(c: Check, repo: string): boolean {
   if (c.__typename === "StatusContext") return false;
+  if (!c.workflowName) return false;
   return (c.detailsUrl ?? "").toLowerCase().startsWith(`https://github.com/${repo.toLowerCase()}/actions/runs/`);
 }
 
