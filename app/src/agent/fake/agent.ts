@@ -36,6 +36,9 @@
 //                            o `initialize` dele (os quatro jeitos de logar, o `loadSession` e sem `session/resume`), o
 //                            `-32000` na abertura sem login (KIWI_FAKE_GEMINI_LOGGED_IN=0), o 429 do limite, as ferramentas
 //                            no `_meta["gemini-cli"].mcp` e as opções de permissão dele (`proceed_once`, `cancel`)
+//                            "agy": o Antigravity CLI (spec #25046), aberto pelo `fake/agy.ts`. Por ora, só o `initialize`
+//                            é dele (os cinco jeitos de logar, `loadSession` e `session/resume`); o resto é o do "gemini"
+//                            até o T25060 (as permissões, o login e a retomada)
 //   KIWI_FAKE_AGENT_LOGGED_OUT  com o "gemini": um caminho; enquanto o arquivo existe, é como o LOGGED_IN=0. Um teste
 //                            desloga e loga de novo sem reabrir o falso (T24672)
 //   KIWI_FAKE_AGENT_MODEL    o modelo com que a sessão abre (o padrão é "fable", como se viesse do terminal da pessoa,
@@ -55,9 +58,11 @@ import type { AgentContext, InitializeResponse, McpServer, PermissionOption, Pro
 import { asKiwi } from "../tools/as-kiwi";
 
 /** O Gemini falso (spec #24666): o mesmo agente, com o `initialize`, os erros e o formato das ferramentas do Gemini CLI. */
-const GEMINI = process.env.KIWI_FAKE_AGENT_FLAVOR === "gemini";
+const AGY = process.env.KIWI_FAKE_AGENT_FLAVOR === "agy";
+const GEMINI = AGY || process.env.KIWI_FAKE_AGENT_FLAVOR === "gemini";
 const GEMINI_VERSION = process.env.KIWI_FAKE_GEMINI_VERSION ?? "0.70.0";
-// O Gemini CLI sabe o `session/load` e não sabe o `session/resume`.
+const AGY_VERSION = process.env.KIWI_FAKE_AGY_VERSION ?? "1.4.0";
+// O Gemini CLI sabe o `session/load` e não sabe o `session/resume`. O `agy` sabe os dois (o `agyInitialize`).
 const resumeMode = GEMINI ? "load" : (process.env.KIWI_FAKE_AGENT_RESUME ?? "resume");
 
 /**
@@ -440,6 +445,30 @@ function geminiInitialize(): InitializeResponse {
 }
 
 /**
+ * O `initialize` do `agy acp` (a doc "ACP" do Antigravity): o protocolo 1, o `agentInfo` "Antigravity ACP Server", os
+ * cinco jeitos de logar, o `session/load` e o `session/resume` (que não repete o histórico), o `list` e o `close`.
+ */
+function agyInitialize(): InitializeResponse {
+  return {
+    protocolVersion: PROTOCOL_VERSION,
+    authMethods: [
+      { id: "oauth-personal", name: "Log in with Google", description: "Sign in with a personal Google account" },
+      { id: "oauth-business", name: "Log in with Google (business)", description: "Sign in with a Google Workspace account" },
+      { id: "gemini-api-key", name: "Gemini API key", description: "Use a Gemini API key" },
+      { id: "agent-platform", name: "Agent Platform", description: "Use Google Cloud Agent Platform" },
+      { id: "terminal-login", name: "Log in from the terminal", description: "Run agy acp --login in a terminal" },
+    ],
+    agentInfo: { name: "Antigravity ACP Server", version: AGY_VERSION },
+    agentCapabilities: {
+      loadSession: true,
+      sessionCapabilities: { resume: {}, list: {}, close: {} },
+      promptCapabilities: { image: true, audio: false, embeddedContext: true },
+      mcpCapabilities: process.env.KIWI_FAKE_AGENT_NO_MCP === "1" ? {} : { http: true, sse: true },
+    },
+  } as InitializeResponse;
+}
+
+/**
  * Sem login, o Gemini recusa a abertura da sessão com o -32000 do `authRequired` e a frase dele
  * (acpSessionManager.ts), e não abre nada. `KIWI_FAKE_GEMINI_LOGGED_IN=0` faz o falso fazer o mesmo.
  */
@@ -451,7 +480,7 @@ function geminiLogin(): void {
 }
 
 const app = agent({ name: "kiwi-fake-agent" })
-  .onRequest("initialize", ({ params }): InitializeResponse => GEMINI ? (note("initialize", params), geminiInitialize()) : ({
+  .onRequest("initialize", ({ params }): InitializeResponse => GEMINI ? (note("initialize", params), AGY ? agyInitialize() : geminiInitialize()) : ({
     protocolVersion: PROTOCOL_VERSION,
     agentInfo: { name: "kiwi-fake-agent", title: "Agente falso", version: "1.0.0" },
     agentCapabilities: {

@@ -6,7 +6,10 @@
 //   parte: o Gemini só diz na abertura da sessão (o `authRequired` do ACP), e o Kiwi nunca lê o `~/.gemini`.
 // - A sessão fica em `session-gemini.json`, separada da do Claude (`host.ts`).
 
+import path from "node:path";
+
 import { agentDir } from "./adapter/open.ts";
+import { agyArgs, agyEnv, programKind, writeAgyWorkspace } from "./agy.ts";
 import { AgentError } from "./errors.ts";
 import { geminiArgs, geminiEnv, geminiStatus, GEMINI_MIN_VERSION, writeGeminiPolicy, type GeminiStatus } from "./gemini.ts";
 import { AgentHost, type AgentHostOptions } from "./host.ts";
@@ -18,7 +21,7 @@ export const GEMINI = AGENT_NAMES.gemini;
 export interface GeminiHostOptions {
   /** A pasta de dados do app (ou a de teste). */
   data: string;
-  /** Como abrir o `gemini`: o instalado (`findGemini()`), o falso nos testes, ou null se não há nenhum. */
+  /** Como abrir: o `agy` instalado (`findAgy()`), o `gemini` antigo, o falso nos testes, ou null se não há nenhum. */
   program: ProgramArgv | null;
   /** O ambiente base (o do Kiwi); o do isolamento vai por cima. */
   env?: Record<string, string | undefined>;
@@ -29,16 +32,22 @@ export interface GeminiHostOptions {
 export async function geminiHost(o: GeminiHostOptions): Promise<{ host: AgentHost; status: GeminiStatus }> {
   const status = await geminiStatus(o.program);
   if (!status.installed || !o.program) throw new AgentError("E_AGENT_NOT_INSTALLED", GEMINI);
-  if (status.tooOld) throw new AgentError("E_AGENT_TOO_OLD", GEMINI, undefined, { instalada: status.version ?? "?", esperada: GEMINI_MIN_VERSION });
+  const agy = programKind(o.program) === "agy";
+  if (status.tooOld) {
+    throw new AgentError("E_AGENT_TOO_OLD", GEMINI, undefined, { instalada: status.version ?? "?", esperada: agy ? "uma com o agy acp" : GEMINI_MIN_VERSION });
+  }
   const dir = agentDir(o.data);
   const env = o.env ?? process.env;
+  // O `agy` (spec #25046): o agente e os ajustes do Kiwi na pasta de trabalho (o cwd do filho e o da sessão), refeitos
+  // a cada abertura. O `gemini` antigo: a regra de administrador (T24671).
+  const args = agy ? (writeAgyWorkspace(path.join(dir, "work")), agyArgs()) : geminiArgs(writeGeminiPolicy(dir));
   const host = new AgentHost({
     name: GEMINI,
     kind: "gemini",
-    // A regra do Kiwi (só as ferramentas dele) é refeita a cada abertura, na pasta do agente (T24671).
-    command: [...o.program, ...geminiArgs(writeGeminiPolicy(dir))],
+    command: [...o.program, ...args],
     dir,
-    env: { ...env, ...geminiEnv(o.program, env) },
+    // O `agy` sem as variáveis do Gemini e do Google da pessoa (`agyEnv`): o login é o dele, nunca uma chave do ambiente.
+    env: { ...(agy ? agyEnv(env) : env), ...geminiEnv(o.program, env) },
     ...o.host,
   });
   return { host, status };

@@ -7,6 +7,7 @@ import path from "node:path";
 export const FAKE_AGENT_COMMAND: readonly string[] = [process.execPath, path.join(import.meta.dir, "agent.ts")];
 export const FAKE_CLAUDE: readonly string[] = [process.execPath, path.join(import.meta.dir, "claude.ts")];
 export const FAKE_GEMINI: readonly string[] = [process.execPath, path.join(import.meta.dir, "gemini.ts")];
+export const FAKE_AGY: readonly string[] = [process.execPath, path.join(import.meta.dir, "agy.ts")];
 
 /**
  * Um `claude` falso que é um executável de verdade, numa pasta: o adaptador (spec #8368) só sabe abrir um programa
@@ -32,13 +33,22 @@ export function writeFakeClaudeExecutable(dir: string, env: Record<string, strin
  * pasta, como acharia o de verdade. As variáveis (`KIWI_FAKE_GEMINI_VERSION`, `KIWI_FAKE_GEMINI_LOGGED_IN`) ficam nele.
  */
 export function writeFakeGeminiExecutable(dir: string, env: Record<string, string> = {}): string {
+  return writeFakeExecutable(dir, "gemini", FAKE_GEMINI, env);
+}
+
+/** Um `agy` falso executável, em `<dir>/agy` (spec #25046): o `findAgy` acha um arquivo com esse nome numa pasta. */
+export function writeFakeAgyExecutable(dir: string, env: Record<string, string> = {}): string {
+  return writeFakeExecutable(dir, "agy", FAKE_AGY, env);
+}
+
+function writeFakeExecutable(dir: string, name: string, fake: readonly string[], env: Record<string, string>): string {
   mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, "gemini");
+  const file = path.join(dir, name);
   const q = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
   const exports = Object.entries(env)
     .map(([k, v]) => `export ${k}=${q(v)}\n`)
     .join("");
-  writeFileSync(file, `#!/bin/bash\n${exports}exec -a "$0" ${q(FAKE_GEMINI[0]!)} ${q(FAKE_GEMINI[1]!)} "$@"\n`);
+  writeFileSync(file, `#!/bin/bash\n${exports}exec -a "$0" ${q(fake[0]!)} ${q(fake[1]!)} "$@"\n`);
   chmodSync(file, 0o755);
   return file;
 }
