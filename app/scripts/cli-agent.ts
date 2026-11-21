@@ -43,7 +43,7 @@ import { FAKE_AGENT_COMMAND, FAKE_AGY, FAKE_CLAUDE, writeFakeClaudeExecutable } 
 import { geminiStatus } from "../src/agent/gemini.ts";
 import { geminiHost, geminiPrompt } from "../src/agent/gemini-host.ts";
 import { AgentHost } from "../src/agent/host.ts";
-import { isAgentKind, type AgentKind } from "../src/agent/kinds.ts";
+import { AGENT_NAMES, isAgentKind, type AgentKind } from "../src/agent/kinds.ts";
 import { assertNotRealData, RealDataError } from "../src/headless/guard.ts";
 
 const USAGE = `usage: bun run cli agent <status|ask|download|remove|proof|activity|undo> [--data DIR]
@@ -58,7 +58,7 @@ const USAGE = `usage: bun run cli agent <status|ask|download|remove|proof|activi
   undo <pedido> [--change N]   desfaz o pedido inteiro, ou só a mudança N (1 é a primeira), pelo headless de pé`;
 
 const NAME = "Claude Code";
-const GEMINI_NAME = "Gemini";
+const GEMINI_NAME = AGENT_NAMES.gemini;
 
 const print = (x: unknown) => console.log(JSON.stringify(x, null, 2));
 

@@ -22,11 +22,11 @@
       "name": "e a linha do adaptador dele"
     },
     {
-      "waitFor": ".kn-row:has(.kn-row-label:text-is('Gemini (não escolhido)')) .kn-row-hint:not(:has-text('Conferindo'))",
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Gemini (Antigravity) · não escolhido')) .kn-row-hint:not(:has-text('Conferindo'))",
       "name": "o Gemini conferido, sem ser o escolhido"
     },
     {
-      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini (não escolhido)')) .kn-row-hint",
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini (Antigravity) · não escolhido')) .kn-row-hint",
       "text": "O login se confere no primeiro pedido",
       "name": "o login do Gemini ainda não se sabe, e não vira \"não logado\""
     },
@@ -35,7 +35,7 @@
       "name": "escolhe o Gemini"
     },
     {
-      "waitFor": ".kn-agent-consent h3:text-is('Trocar para o Gemini')",
+      "waitFor": ".kn-agent-consent h3:text-is('Trocar para o Gemini (Antigravity)')",
       "name": "a troca mostra antes o que vai para o Gemini"
     },
     {
@@ -63,7 +63,7 @@
       "name": "o Gemini escolhido"
     },
     {
-      "waitFor": ".kn-row:has(.kn-row-label:text-is('Claude Code (não escolhido)'))",
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Claude Code · não escolhido'))",
       "name": "o Claude Code fica embaixo, para comparar"
     },
     {
@@ -90,7 +90,7 @@
       "name": "o Gemini falso responde"
     },
     {
-      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini')) .kn-row-hint",
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini (Antigravity)')) .kn-row-hint",
       "text": "instalado e logado",
       "name": "depois da abertura, o login se sabe"
     },

@@ -116,7 +116,7 @@ describe("o Gemini (spec #24666), com o gemini falso", () => {
   test("status: instalado e a versão; o login só se sabe ao abrir, e não há adaptador", async () => {
     const r = await cli(["status", "--agent", "gemini", "--data", tmp()]);
     expect(r.exit).toBe(0);
-    expect(r.result!.value).toMatchObject({ agent: "Gemini", fake: true, installed: true, loginKnown: false });
+    expect(r.result!.value).toMatchObject({ agent: "Gemini (Antigravity)", fake: true, installed: true, loginKnown: false });
     expect(r.result!.value).not.toHaveProperty("adapter");
     expect(r.result!.value).not.toHaveProperty("loggedIn", true);
     const missing = await cli(["status", "--agent", "gemini", "--data", tmp(), "--gemini", path.join(tmp(), "gemini")]);
