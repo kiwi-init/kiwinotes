@@ -62,8 +62,8 @@ const AGY = process.env.KIWI_FAKE_AGENT_FLAVOR === "agy";
 const GEMINI = AGY || process.env.KIWI_FAKE_AGENT_FLAVOR === "gemini";
 const GEMINI_VERSION = process.env.KIWI_FAKE_GEMINI_VERSION ?? "0.70.0";
 const AGY_VERSION = process.env.KIWI_FAKE_AGY_VERSION ?? "1.4.0";
-// O Gemini CLI sabe o `session/load` e não sabe o `session/resume`; o `agy` sabe os dois, e o host prefere o resume.
-const resumeMode = AGY ? "resume" : GEMINI ? "load" : (process.env.KIWI_FAKE_AGENT_RESUME ?? "resume");
+// O Gemini CLI sabe o `session/load` e não sabe o `session/resume`. O `agy` sabe os dois (o `agyInitialize`).
+const resumeMode = GEMINI ? "load" : (process.env.KIWI_FAKE_AGENT_RESUME ?? "resume");
 
 /**
  * O `_meta` de uma ferramenta no `tool_call` e no pedido de permissão. O Claude Code (pelo adaptador) diz o nome em
