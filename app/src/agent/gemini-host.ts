@@ -18,6 +18,9 @@ import type { ProgramArgv } from "./claude.ts";
 
 export const GEMINI = AGENT_NAMES.gemini;
 
+/** Como entrar no `agy` sem login (spec #25046): o login é o dele, no Terminal; o Kiwi nunca pede nem usa chave. */
+export const AGY_LOGIN_HELP = "Abra o Antigravity no Terminal e entre com a sua conta.";
+
 export interface GeminiHostOptions {
   /** A pasta de dados do app (ou a de teste). */
   data: string;
@@ -46,6 +49,7 @@ export async function geminiHost(o: GeminiHostOptions): Promise<{ host: AgentHos
     kind: "gemini",
     command: [...o.program, ...args],
     dir,
+    ...(agy ? { loginHelp: AGY_LOGIN_HELP } : {}),
     // O `agy` sem as variáveis do Gemini e do Google da pessoa (`agyEnv`): o login é o dele, nunca uma chave do ambiente.
     env: { ...(agy ? agyEnv(env) : env), ...geminiEnv(o.program, env) },
     ...o.host,

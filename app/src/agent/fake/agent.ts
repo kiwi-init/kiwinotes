@@ -36,9 +36,11 @@
 //                            o `initialize` dele (os quatro jeitos de logar, o `loadSession` e sem `session/resume`), o
 //                            `-32000` na abertura sem login (KIWI_FAKE_GEMINI_LOGGED_IN=0), o 429 do limite, as ferramentas
 //                            no `_meta["gemini-cli"].mcp` e as opções de permissão dele (`proceed_once`, `cancel`)
-//                            "agy": o Antigravity CLI (spec #25046), aberto pelo `fake/agy.ts`. Por ora, só o `initialize`
-//                            é dele (os cinco jeitos de logar, `loadSession` e `session/resume`); o resto é o do "gemini"
-//                            até o T25060 (as permissões, o login e a retomada)
+//                            "agy": o Antigravity CLI (spec #25046), aberto pelo `fake/agy.ts`: o `initialize` dele (os
+//                            cinco jeitos de logar, `loadSession` e `session/resume`), a retomada pelo `session/resume`
+//                            (sem repetir a conversa), o -32000 "Authentication required" sem login e as opções Allow e
+//                            Deny. Os ids das opções e o `_meta` das ferramentas são suposição (a doc não diz): ficam os
+//                            do "gemini" até o harry rodar o de verdade (T25060)
 //   KIWI_FAKE_AGENT_LOGGED_OUT  com o "gemini": um caminho; enquanto o arquivo existe, é como o LOGGED_IN=0. Um teste
 //                            desloga e loga de novo sem reabrir o falso (T24672)
 //   KIWI_FAKE_AGENT_MODEL    o modelo com que a sessão abre (o padrão é "fable", como se viesse do terminal da pessoa,
@@ -82,8 +84,16 @@ function metaOf(meta: Record<string, unknown> | undefined): { _meta?: Record<str
 function toolTitle(name: string, kiwi: boolean): string {
   return GEMINI && kiwi ? `${name} (kiwi MCP Server)` : name;
 }
-/** As opções de um pedido de permissão: as do Gemini usam os nomes dele. */
-const PERMISSION_OPTIONS: PermissionOption[] = GEMINI
+/**
+ * As opções de um pedido de permissão: as do Gemini usam os nomes dele. As do `agy` são Allow e Deny (a doc "ACP" do
+ * Antigravity); os ids são suposição, e o host só olha o `kind`.
+ */
+const PERMISSION_OPTIONS: PermissionOption[] = AGY
+  ? [
+      { optionId: "agy-allow", name: "Allow", kind: "allow_once" },
+      { optionId: "agy-deny", name: "Deny", kind: "reject_once" },
+    ]
+  : GEMINI
   ? [
       { optionId: "proceed_once", name: "Allow", kind: "allow_once" },
       { optionId: "cancel", name: "Reject", kind: "reject_once" },
@@ -470,12 +480,13 @@ function agyInitialize(): InitializeResponse {
 
 /**
  * Sem login, o Gemini recusa a abertura da sessão com o -32000 do `authRequired` e a frase dele
- * (acpSessionManager.ts), e não abre nada. `KIWI_FAKE_GEMINI_LOGGED_IN=0` faz o falso fazer o mesmo.
+ * (acpSessionManager.ts), e não abre nada. O `agy` dá o mesmo código com "Authentication required" (a doc "ACP" do
+ * Antigravity), também na retomada. `KIWI_FAKE_GEMINI_LOGGED_IN=0` faz o falso fazer o mesmo.
  */
 function geminiLogin(): void {
   const out = process.env.KIWI_FAKE_AGENT_LOGGED_OUT;
   if (GEMINI && (process.env.KIWI_FAKE_GEMINI_LOGGED_IN === "0" || (out && existsSync(out)))) {
-    throw new RequestError(-32000, "Gemini API key is missing or not configured.");
+    throw new RequestError(-32000, AGY ? "Authentication required" : "Gemini API key is missing or not configured.");
   }
 }
 
@@ -507,6 +518,7 @@ const app = agent({ name: "kiwi-fake-agent" })
   })
   .onRequest("session/resume", ({ params }) => {
     note("session/resume", params);
+    geminiLogin();
     if (!(params.sessionId in sessions())) throw RequestError.sessionNotFound(params.sessionId);
     rememberServers(params.sessionId, params.mcpServers);
     return { configOptions: configOptions(params.sessionId) };
