@@ -38,6 +38,7 @@ import { AgentActivity, type ActivityRequest } from "./activity.ts";
 import { keyOf, undo, UndoError, type UndoNotes } from "./undo.ts";
 import { viewChange } from "./change-view.ts";
 import { claudeStatus, type ProgramArgv } from "./claude.ts";
+import { AGENT_NAMES } from "./kinds.ts";
 import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/download.ts";
 import { ADAPTER_PACKAGES, ADAPTER_VERSION, type PinnedPackage } from "./adapter/pinned.ts";
 import { checkClaudeVersion } from "./adapter/version.ts";
@@ -45,6 +46,7 @@ import { adapterRoot, agentDir } from "./adapter/open.ts";
 import type {
   AgentChangeView,
   AgentClaudeStatus,
+  AgentGeminiStatus,
   AgentModelChoice,
   AgentMemoryView,
   AgentProposalSummary,
@@ -315,6 +317,8 @@ export class AgentService {
   private download: { abort: AbortController; done: number; total: number; lastEmit: number } | null = null;
   private downloadError: { code: string; message: string } | undefined;
   private claude: AgentClaudeStatus | null = null;
+  /** O Gemini CLI instalado (spec #24666): null até a primeira conferência. */
+  private gemini: AgentGeminiStatus | null = null;
   /** Os modelos que o agente ofereceu da última vez que abriu (T8762), lidos de `<dados>/agent/models.json` na 1ª vez. */
   private models: AgentModelChoice[] | null = null;
   /** Os esforços que o agente oferece em cada modelo (spec #16793), como ficaram guardados; `[]` é um modelo sem esforço. */
@@ -847,11 +851,12 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "effortByModel" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
+  private snapshot(): Omit<AgentStatus, "name" | "kind" | "enabled" | "consented" | "model" | "effort" | "effortByModel" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
       claude: this.claude,
+      gemini: this.gemini,
       adapter: {
         version: ADAPTER_VERSION,
         phase: this.download ? "downloading" : installed ? "ready" : this.downloadError ? "error" : "missing",
@@ -934,8 +939,10 @@ export class AgentService {
   }
 
   private statusFrom(snap: ReturnType<AgentService["snapshot"]>, s: AgentSettings): AgentStatus {
+    const kind = s.kind ?? "claude";
     return {
-      name: this.name,
+      name: AGENT_NAMES[kind],
+      kind,
       enabled: s.enabled,
       consented: s.consented,
       ...snap,

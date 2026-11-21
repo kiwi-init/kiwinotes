@@ -17,6 +17,7 @@ import { type CatColorChoice, DEFAULT_CAT_COLOR, isCatColorChoice } from "../sha
 import { CAT_SIZE, type CatPosition, catSize, DEFAULT_CAT_POSITION, isCatPosition } from "../shared/kiwicat-place.ts";
 import { folderPath } from "../notes/paths.ts";
 import { type AgentOnboarding, DEFAULT_AGENT_ONBOARDING, sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
+import type { AgentKind } from "../shared/ui-contract.ts";
 import { type AgentRoutines, DEFAULT_AGENT_ROUTINES, sanitizeAgentRoutines } from "../shared/agent-routines.ts";
 import { readJson, writeJson } from "./files.ts";
 
@@ -89,6 +90,8 @@ export interface AppSettings {
 }
 
 export interface AgentSettings {
+  /** O agente escolhido (spec #24666): o Claude Code por padrão, ou o Gemini CLI. Um por vez. */
+  kind: AgentKind;
   enabled: boolean;
   consented: boolean;
   /** Um valor da opção `model` do agente; "default" é o padrão do Claude Code, e não o modelo do terminal da pessoa. */
@@ -170,6 +173,7 @@ export function sanitizeAgentMeetingSettings(input: unknown): AgentMeetingSettin
 }
 
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
+  kind: "claude",
   enabled: false,
   consented: false,
   model: "default",
@@ -214,6 +218,7 @@ export function effortOf(s: Pick<AgentSettings, "effort" | "effortByModel">, mod
 export function sanitizeAgentSettings(input: unknown): AgentSettings {
   const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
+    kind: o.kind === "gemini" ? "gemini" : "claude",
     enabled: o.enabled === true,
     consented: o.consented === true,
     model: isAgentChoice(o.model) ? o.model : DEFAULT_AGENT_SETTINGS.model,

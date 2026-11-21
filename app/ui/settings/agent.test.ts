@@ -31,6 +31,7 @@ import {
 
 const base: AgentStatus = {
   name: "Claude Code",
+  kind: "claude",
   enabled: false,
   consented: false,
   economy: false,
@@ -41,6 +42,7 @@ const base: AgentStatus = {
   webSearch: true,
   onboarding: { state: "pending", step: 1 },
   claude: { installed: true, version: "2.1.322", loggedIn: true, method: "claude.ai", versionOk: true },
+  gemini: null,
   adapter: { version: "0.106.0", phase: "missing" },
   program: "closed",
   busy: false,
