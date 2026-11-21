@@ -156,6 +156,8 @@ test("o esforço por modelo (spec #16793): um ajuste antigo, só com o effort, m
   // Um valor ruim, dos dois lados, sai; a lista tem teto.
   expect(sanitizeSettings({ agent: { effortByModel: { "../x": "low", opus: 3, sonnet: "baixo demais!", haiku: "medium" } } }).agent.effortByModel).toEqual({ haiku: "medium" });
   expect(sanitizeSettings({ agent: { effortByModel: ["low"] } }).agent.effortByModel).toEqual({});
+  // O sublinhado vale (T25553): um agente como o `agy` pode dar ids assim; o `_` no começo e a barra, não.
+  expect(sanitizeSettings({ agent: { effortByModel: { "modelo_x": "nivel_baixo", "_x": "low", "a/b": "low" } } }).agent.effortByModel).toEqual({ modelo_x: "nivel_baixo" });
   const many = Object.fromEntries(Array.from({ length: MAX_EFFORT_MODELS + 10 }, (_, i) => [`m${i}`, "low"]));
   expect(Object.keys(sanitizeSettings({ agent: { effortByModel: many } }).agent.effortByModel)).toHaveLength(MAX_EFFORT_MODELS);
 });

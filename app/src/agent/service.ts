@@ -339,6 +339,8 @@ export class AgentService {
   private models: AgentModelChoice[] | null = null;
   /** Os esforços que o agente oferece em cada modelo (spec #16793), como ficaram guardados; `[]` é um modelo sem esforço. */
   private efforts: Record<string, AgentModelChoice[]> | null = null;
+  /** O último formato das opções que foi ao log (T25553). */
+  private loggedShape: string | null = null;
   private applied: Record<string, string> = {};
   private readonly statusListeners = new Set<(s: AgentStatus) => void>();
   private readonly turnListeners = new Set<(e: AgentTurnEvent) => void>();
@@ -948,6 +950,12 @@ export class AgentService {
         this.d.log?.(`[agent] ${what}: ${String((e as Error)?.message ?? e)}`);
       }
     };
+    // Os ids e as categorias das opções que o agente trouxe (T25553), uma vez por formato: só os nomes, sem valores.
+    const shape = host.configShape;
+    if (`${this.kind} ${shape}` !== this.loggedShape) {
+      this.loggedShape = `${this.kind} ${shape}`;
+      this.d.log?.(`[agent] opções da sessão (${this.kind}): ${shape || "nenhuma"}`);
+    }
     const models = host.choices("model");
     if (models.length && JSON.stringify(models) !== JSON.stringify(this.knownModels())) {
       this.models = models;

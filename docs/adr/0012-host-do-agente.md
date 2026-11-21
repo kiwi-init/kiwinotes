@@ -129,6 +129,7 @@ O app passa a ligar o agente, baixar o adaptador, mandar um pedido e desligar, p
   - o padrão é `default` nos dois, o padrão do Claude Code;
   - um valor que o agente não oferece fica de fora, e a sessão segue com o que tinha (`applyConfig` devolve o `refused`);
   - o `agent.status` mostra o que o Kiwi pede (`model`, `effort`) e o que a sessão aberta tem (`session`);
+  - **o papel, não só o id (T25553):** o `model` e o `effort` são os ids do adaptador do Claude. Sem uma opção com esse id, o host usa a da categoria do ACP (`model`, `thought_level`) e manda o `set_config_option` com o id que o agente deu. O Antigravity não mostrava o Esforço (harry #25549). Os ids aceitam o `_`. Se nenhum modelo do agente tem esforço, a linha Esforço diz que o agente não deixa escolher. O log diz os ids e as categorias das opções de cada sessão (`[agent] opções da sessão`), sem os valores;
   - **a conferir no roteiro do harry:** o `fable` veio do `SettingsManager` do adaptador. O que o `setModel("default")` vira no Claude Code de verdade (o padrão da conta, ou de novo o do `settings.json`) só a sessão de verdade mostra.
 - **Desligado, nada abre nem vai à rede.** `agent.ask` e `agent.download` dão `E_AGENT_DISABLED`. O `agent.status` sem `refresh` não abre programa nenhum. O `refresh` (a seção abriu, o "Tentar de novo") roda só o `claude --version` e o `claude auth status`, como o `claudeStatus` do host.
 - **Os códigos novos:**

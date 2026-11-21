@@ -1596,7 +1596,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       // Qual agente (spec #24666): o Claude Code ou o Gemini.
       if (a.kind !== undefined && !isAgentKind(a.kind)) throw bad(`agent.configure: kind must be one of ${AGENT_KINDS.join(", ")}`);
       for (const k of ["model", "effort"] as const) {
-        if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
+        if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash, underscore)`);
       }
       if (a.economy !== undefined && typeof a.economy !== "boolean") throw bad("agent.configure: economy must be true or false");
       if (a.controlShortcut !== undefined && typeof a.controlShortcut !== "boolean") throw bad("agent.configure: controlShortcut must be a boolean");

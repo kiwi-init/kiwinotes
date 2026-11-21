@@ -85,6 +85,12 @@ export const LEAN_SESSION_OPTIONS = {
 /** Os esforços do Claude Code, do mais baixo ao mais alto: sem escolha da pessoa, vai o mais baixo oferecido (#19294). */
 export const EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max"] as const;
 
+/**
+ * A categoria do ACP de cada papel que o Kiwi escolhe (T25553): uma opção com outro id, mas desta categoria, faz o
+ * papel. O esforço é a `thought_level`: no Antigravity, a linha Esforço não aparecia (harry #25549).
+ */
+export const CONFIG_CATEGORY: Record<string, string> = { model: "model", effort: "thought_level" };
+
 export type AgentEvent =
   | { type: "status"; status: "thinking" }
   | { type: "status"; status: "running"; tool: string }
@@ -479,11 +485,35 @@ export class AgentHost {
     if (model && effort && !this.startEffort.has(model)) this.startEffort.set(model, effort);
   }
 
-  /** O valor atual de cada opção da sessão aberta (`model`, `effort`, `mode`…), como o agente diz. */
+  /**
+   * A opção da sessão que faz o papel de `configId` (T25553): a do mesmo id e, sem ela, a da categoria do ACP para o
+   * papel (`model`, `thought_level`). O adaptador do Claude chama o esforço de `effort`; outro agente pode dar outro id
+   * a ele e dizer só a categoria.
+   */
+  private option(configId: string): SessionConfigOption | undefined {
+    const byId = this.config.find((o) => o.id === configId);
+    if (byId) return byId;
+    const category = CONFIG_CATEGORY[configId];
+    return category ? this.config.find((o) => (o as { category?: unknown }).category === category) : undefined;
+  }
+
+  /** O valor atual de cada opção da sessão aberta (`model`, `effort`, `mode`…), como o agente diz; o esforço e o modelo também pelo papel. */
   get configValues(): Record<string, string> {
     const out: Record<string, string> = {};
     for (const o of this.config) if ("currentValue" in o && typeof o.currentValue === "string") out[o.id] = o.currentValue;
+    for (const role of Object.keys(CONFIG_CATEGORY)) {
+      const o = this.option(role);
+      if (!(role in out) && o && "currentValue" in o && typeof o.currentValue === "string") out[role] = o.currentValue;
+    }
     return out;
+  }
+
+  /** O id e a categoria de cada opção da sessão, para o log (T25553): só os nomes que o agente dá, nunca os valores. */
+  get configShape(): string {
+    return this.config.map((o) => {
+      const category = (o as { category?: unknown }).category;
+      return typeof category === "string" ? `${o.id} (${category})` : o.id;
+    }).join(", ");
   }
 
   /**
@@ -491,7 +521,7 @@ export class AgentHost {
    * Os grupos (`options` dentro de `options`) viram uma lista só. Vazio sem a sessão aberta ou sem a opção (T8762).
    */
   choices(configId: string): { value: string; name: string; description?: string }[] {
-    const option = this.config.find((o) => o.id === configId);
+    const option = this.option(configId);
     if (!option || !("options" in option) || !Array.isArray(option.options)) return [];
     type Choice = { value?: unknown; name?: unknown; description?: unknown; options?: Choice[] };
     const flat = (option.options as unknown as Choice[]).flatMap((x) => (Array.isArray(x.options) ? x.options : [x]));
@@ -513,7 +543,7 @@ export class AgentHost {
     const refused: string[] = [];
     if (!this.conn || !this.sessionId) return { applied, refused };
     for (const [configId, asked] of Object.entries(wanted)) {
-      const option = this.config.find((o) => o.id === configId);
+      const option = this.option(configId);
       if (!option || !("options" in option)) continue;
       const offered = (option.options as unknown as { value?: string; options?: { value: string }[] }[]).flatMap(
         (x): { value?: string }[] => (x.options ? x.options : [x]),
@@ -535,7 +565,7 @@ export class AgentHost {
         continue;
       }
       try {
-        const res = await this.untilExit(this.conn.agent.request("session/set_config_option", { sessionId: this.sessionId, configId, value }));
+        const res = await this.untilExit(this.conn.agent.request("session/set_config_option", { sessionId: this.sessionId, configId: option.id, value }));
         if (Array.isArray(res.configOptions)) this.config = res.configOptions;
         if (configId === "model") this.noteStartEffort();
         applied.push(configId);

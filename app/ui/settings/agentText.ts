@@ -199,10 +199,14 @@ export function effortValue(s: Pick<AgentStatus, "model" | "effort" | "efforts" 
 
 const effortName = (v: string) => EFFORT_NAMES[v] ?? v;
 
-export function effortHint(s: Pick<AgentStatus, "model" | "effort" | "efforts" | "economy" | "session">): string {
+export function effortHint(s: Pick<AgentStatus, "name" | "model" | "effort" | "efforts" | "economy" | "session">): string {
   const options = effortOptions(s);
   if (options === null) return "As opções de esforço deste modelo aparecem depois do primeiro pedido com ele.";
-  if (!options.length) return "Este modelo não tem nível de esforço: ele responde sempre do mesmo jeito.";
+  if (!options.length) {
+    // Nenhum modelo já visto deste agente tem esforço (T25553): é o agente que não deixa escolher, não só este modelo.
+    if (Object.values(s.efforts ?? {}).every((e) => !e.length)) return `O ${s.name} não deixa escolher o esforço: ele decide sozinho quanto pensar.`;
+    return "Este modelo não tem nível de esforço: ele responde sempre do mesmo jeito.";
+  }
   const what = "Mais esforço pensa mais antes de responder e gasta mais do seu plano. Fica salvo para este modelo e vale a partir do próximo pedido.";
   const shown = effortValue(s);
   const missing = shown !== s.effort ? ` O nível salvo, ${effortName(s.effort)}, não existe neste modelo: vale o ${effortName(shown)}.` : "";

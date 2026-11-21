@@ -197,9 +197,9 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   routines: DEFAULT_AGENT_ROUTINES,
 };
 
-/** Um id de modelo ou de esforço que vale: letras, números, ponto e hífen, até 64. */
+/** Um id de modelo ou de esforço que vale: letras, números, ponto, hífen e sublinhado (um agente como o `agy` pode usar, T25553), até 64. */
 export function isAgentChoice(v: unknown): v is string {
-  return typeof v === "string" && /^[A-Za-z0-9][A-Za-z0-9.\-]{0,63}$/.test(v);
+  return typeof v === "string" && /^[A-Za-z0-9][A-Za-z0-9._\-]{0,63}$/.test(v);
 }
 
 /** Até quantos modelos guardam o esforço: a lista do agente tem uns 10, e um modelo que saiu dela fica guardado. */
