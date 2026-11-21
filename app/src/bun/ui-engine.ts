@@ -146,6 +146,11 @@ export interface UiEngineOptions {
   probationMs?: number;
   /** "Buscar atualizações" em Ajustes (T25110), lido a cada GET do canal. Sem ele, ligado. */
   checkUpdates?: () => boolean | Promise<boolean>;
+  /**
+   * Se a UI nova pode trocar a da tela agora (spec #25011). Com `false`, ela espera o `applyUpdate()` (o Recarregar da
+   * faixa "Nova aparência pronta") ou a próxima abertura da janela.
+   */
+  canSwap?: () => boolean;
 }
 
 /** A pasta que a janela serve como views:// (o `viewsRoot`). Fora do .app, para não mexer na assinatura. */
@@ -169,6 +174,7 @@ export function createUiEngine(o: UiEngineOptions): AppEngine {
       prefix: "internal",
       builtIn: o.builtIn,
       show: o.show,
+      ...(o.canSwap ? { canSwap: o.canSwap } : {}),
     },
   });
 }

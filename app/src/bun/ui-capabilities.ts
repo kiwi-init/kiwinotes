@@ -7,7 +7,7 @@ import { isSpellingLanguage, isSpellingWord, NO_SPELLING, spellingResult, type S
 // main (T1192). Cada handler valida os argumentos e responde `E_BAD_ARGS` quando eles não servem. Nada genérico: não
 // há "rodar comando" nem "ler arquivo qualquer".
 
-import type { AppAbout, DictionaryTerm, HistoryEntry, HistoryPage, HubSection, Snippet, UpdatesView,
+import type { AppAbout, DictionaryTerm, HistoryEntry, HistoryPage, HubSection, Snippet, UiAppearance, UiStatus, UpdatesView,
 } from "../shared/ui-contract.ts";
 import { CLIPBOARD_MAX_CHARS, UI_CAPABILITIES, type UiCapabilities, type UiCapability,
 } from "../shared/ui-contract.ts";
@@ -146,6 +146,17 @@ export interface CapabilityDeps {
     /** "Buscar atualizações" mudou (T25110): a faixa do Sobre passa a desligada, ou volta, sem nenhum GET. */
     checkUpdatesChanged?(on: boolean): void;
   };
+  /**
+   * A aparência (spec #25011): a UI de cada janela, a faixa "Nova aparência pronta" e o "Voltar à anterior". O
+   * `status` e o `reload` daqui são os de fora de uma janela (o headless); cada janela do app troca os dois pelos do
+   * engine dela (windows.ts). Sem isto (testes), a UI de fábrica e nada a trocar.
+   */
+  appearance?: {
+    status(): UiStatus;
+    reload(): UiStatus | Promise<UiStatus>;
+    about(): UiAppearance;
+    revert(): Promise<UiAppearance>;
+  };
   /** O vault das notas (T1316). Aberto na 1ª chamada: o ~/KiwiNotes só nasce quando alguém usa as notas. */
   notes: Pick<
     Vault,
@@ -243,6 +254,8 @@ export interface CapabilityDeps {
 }
 
 /** As atualizações sem o Updater por perto (o headless, os testes): nada vai à rede. */
+/** A UI de uma janela sem engine (os testes): a de fábrica, sem nada a trocar. */
+const UI_BUILT_IN: UiStatus = { uiVersion: "dev", builtIn: true, pending: null };
 const UPDATES_OFF: UpdatesView = { state: "off", reason: "sem o atualizador no headless e nos testes", lastCheck: null,
 };
 
@@ -860,10 +873,10 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "app.about": (args) => {
       noArgs(args, "app.about");
-      if (!deps.about) return { version: "dev", channel: "dev", releaseUrl: null, updates: UPDATES_OFF,
-        } satisfies AppAbout;
-      return { ...deps.about.info(), updates: deps.about.view(),
-      } satisfies AppAbout;
+      // A aparência de cada janela (spec #25011), com ou sem o atualizador.
+      const ui = deps.appearance ? { ui: deps.appearance.about() } : {};
+      if (!deps.about) return { version: "dev", channel: "dev", releaseUrl: null, updates: UPDATES_OFF, ...ui } satisfies AppAbout;
+      return { ...deps.about.info(), updates: deps.about.view(), ...ui } satisfies AppAbout;
     },
     "diagnostics.save": async (args) => {
       noArgs(args, "diagnostics.save");
@@ -884,6 +897,18 @@ export function uiCapabilities(deps: CapabilityDeps,
     "updates.apply": async (args) => {
       noArgs(args, "updates.apply");
       return deps.about ? deps.about.apply() : UPDATES_OFF;
+    },
+    "ui.status": (args) => {
+      noArgs(args, "ui.status");
+      return deps.appearance?.status() ?? UI_BUILT_IN;
+    },
+    "ui.reload": async (args) => {
+      noArgs(args, "ui.reload");
+      return deps.appearance ? deps.appearance.reload() : UI_BUILT_IN;
+    },
+    "ui.revert": async (args) => {
+      noArgs(args, "ui.revert");
+      return deps.appearance ? deps.appearance.revert() : { windows: [], canRevert: false };
     },
     "intro.done": (args) => {
       noArgs(args, "intro.done");

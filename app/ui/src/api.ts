@@ -129,6 +129,17 @@ export const api = {
     /** Um quadro travado (1.68.0, spec #12918), para o log local. */
     slowFrame: (where: string, ms: number) => invoke("diagnostics.slowFrame", { where, ms }),
   },
+  /**
+   * A aparência da janela (1.99.0, spec #25011): a UI nova que o canal baixou espera o Recarregar da faixa "Nova
+   * aparência pronta"; o Sobre mostra a de cada janela e volta à anterior.
+   */
+  ui: {
+    status: () => invoke("ui.status", {}),
+    /** Troca para a UI nova sem fechar a janela: a página recarrega e esta promessa pode não voltar. */
+    reload: () => invoke("ui.reload", {}),
+    revert: () => invoke("ui.revert", {}),
+    onUpdateReady: (fn: (s: UiEvents["ui.updateReady"]) => void) => on("ui.updateReady", fn),
+  },
   updates: {
     /** Checa na hora; resolve quando a checagem termina (pronta, na última versão ou com erro). */
     check: () => invoke("updates.check", {}),
