@@ -27,6 +27,24 @@ describe("os erros do agente", () => {
     expect(code(new Error("Invalid API key · Please run /login"))).toBe("E_AGENT_NOT_LOGGED_IN");
   });
 
+  test("os erros do Gemini (spec #24666) caem nos mesmos casos, com a mensagem em português e sem o texto dele", () => {
+    const g = (e: unknown) => classifyAgentError(e, "Gemini");
+    expect(g(RequestError.authRequired()).code).toBe("E_AGENT_NOT_LOGGED_IN");
+    expect(g(new Error("Please set an Auth method in your settings.json")).code).toBe("E_AGENT_NOT_LOGGED_IN");
+    expect(g(new Error("Gemini API key is missing or not configured.")).code).toBe("E_AGENT_NOT_LOGGED_IN");
+    expect(g(new Error("API key not valid. Please pass a valid API key.")).code).toBe("E_AGENT_NOT_LOGGED_IN");
+    expect(g(new Error("[API Error: 401 UNAUTHENTICATED]")).code).toBe("E_AGENT_NOT_LOGGED_IN");
+    const limit = g(RequestError.internalError({ message: "[API Error: RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'exemplo']" }));
+    expect(limit.code).toBe("E_AGENT_LIMIT");
+    expect(limit.message).toBe("O Gemini atingiu o limite de uso da sua conta. Espere o limite voltar e tente de novo.");
+    expect(limit.message).not.toContain("RESOURCE_EXHAUSTED");
+    expect(limit.detail).toContain("RESOURCE_EXHAUSTED");
+    expect(g(new Error("[API Error: 429 Too Many Requests]")).code).toBe("E_AGENT_LIMIT");
+    expect(g(new Error("fetch failed: getaddrinfo ENOTFOUND generativelanguage.exemplo")).code).toBe("E_AGENT_OFFLINE");
+    expect(g(Object.assign(new Error("spawn gemini ENOENT"), { code: "ENOENT" })).code).toBe("E_AGENT_NOT_INSTALLED");
+    expect(g(new Error("algo estranho")).message).toBe("O Gemini falhou ao responder. Tente de novo.");
+  });
+
   test("o limite vence o login: a mensagem de limite costuma falar da conta", () => {
     expect(code(new Error("You've hit your usage limit for this account. Log in to a different account?"))).toBe("E_AGENT_LIMIT");
   });

@@ -3,6 +3,8 @@
 //
 //   bun run cli agent status [--data DIR] [--claude PATH]      o Claude Code está instalado? logado? qual versão?
 //   bun run cli agent ask "texto" [--data DIR] [--new]         um pedido; os eventos saem um por linha, e a resposta no fim
+//   … status|ask --agent gemini [--gemini PATH]                o mesmo com o Gemini (spec #24666), pelo `gemini` falso:
+//                                                              sem adaptador, e o login só se sabe ao abrir a sessão
 //   bun run cli agent download [--data DIR] [--registry URL]   baixa o adaptador do Claude Code (spec #8368), a lista fixa
 //   bun run cli agent remove [--data DIR]                      apaga o adaptador baixado
 //   bun run cli agent proof [--data DIR] [--real] [--tools]    abre uma sessão pelo adaptador, sem pedido, e mostra o
@@ -37,13 +39,17 @@ import { checkClaudeVersion } from "../src/agent/adapter/version.ts";
 import { claudeStatus, findClaude, type ProgramArgv } from "../src/agent/claude.ts";
 import { AgentActivity, ACTIVITY_LIST_MAX } from "../src/agent/activity.ts";
 import { AgentError } from "../src/agent/errors.ts";
-import { FAKE_AGENT_COMMAND, FAKE_CLAUDE, writeFakeClaudeExecutable } from "../src/agent/fake/index.ts";
+import { FAKE_AGENT_COMMAND, FAKE_CLAUDE, FAKE_GEMINI, writeFakeClaudeExecutable } from "../src/agent/fake/index.ts";
+import { geminiStatus } from "../src/agent/gemini.ts";
+import { geminiHost } from "../src/agent/gemini-host.ts";
 import { AgentHost } from "../src/agent/host.ts";
+import { isAgentKind, type AgentKind } from "../src/agent/kinds.ts";
 import { assertNotRealData, RealDataError } from "../src/headless/guard.ts";
 
 const USAGE = `usage: bun run cli agent <status|ask|download|remove|proof|activity|undo> [--data DIR]
   status [--claude PATH]       o Claude Code (o falso, para os agentes): instalado, versão, login e o adaptador
   ask "texto" [--new]          um pedido ao agente falso; --new começa uma sessão nova
+  status|ask --agent gemini    o mesmo com o Gemini falso (--gemini PATH aponta outro programa no lugar dele)
   download [--registry URL]    baixa o adaptador do Claude Code (a lista fixa, conferida)
   remove                       apaga o adaptador baixado
   proof [--real] [--tools]     abre uma sessão pelo adaptador, sem pedido; --real usa o Claude Code de verdade (só o harry);
@@ -52,6 +58,7 @@ const USAGE = `usage: bun run cli agent <status|ask|download|remove|proof|activi
   undo <pedido> [--change N]   desfaz o pedido inteiro, ou só a mudança N (1 é a primeira), pelo headless de pé`;
 
 const NAME = "Claude Code";
+const GEMINI_NAME = "Gemini";
 
 const print = (x: unknown) => console.log(JSON.stringify(x, null, 2));
 
@@ -64,6 +71,18 @@ function option(argv: string[], name: string): string | undefined {
 function claudeProgram(argv: string[]): { program: ProgramArgv; fake: boolean } {
   const given = option(argv, "--claude");
   return given ? { program: [path.resolve(given)], fake: false } : { program: FAKE_CLAUDE, fake: true };
+}
+
+/** O agente do `--agent` (o Claude, se faltar); null se não existe. */
+function agentKind(argv: string[]): AgentKind | null {
+  const given = option(argv, "--agent") ?? "claude";
+  return isAgentKind(given) ? given : null;
+}
+
+/** O `gemini` que a CLI usa: o falso, ou o `--gemini PATH`. */
+function geminiProgram(argv: string[]): { program: ProgramArgv; fake: boolean } {
+  const given = option(argv, "--gemini");
+  return given ? { program: [path.resolve(given)], fake: false } : { program: FAKE_GEMINI, fake: true };
 }
 
 function fail(e: unknown): number {
@@ -105,6 +124,17 @@ export async function runAgent(argv: string[], data: string, headless?: Headless
     const { id: _, ...reply } = r;
     print(reply);
     return reply.ok ? 0 : 1;
+  }
+  const kind = agentKind(rest);
+  if (!kind) {
+    console.error(USAGE);
+    return 2;
+  }
+  if (sub === "status" && kind === "gemini") {
+    const { program, fake } = geminiProgram(rest);
+    // O login do Gemini não tem conferência à parte: só a abertura da sessão diz (o `authRequired`). O Kiwi não lê o ~/.gemini.
+    print({ ok: true, value: { agent: GEMINI_NAME, fake, ...(await geminiStatus(program)), loginKnown: false } });
+    return 0;
   }
   if (sub === "status") {
     const { program, fake } = claudeProgram(rest);
@@ -196,18 +226,28 @@ export async function runAgent(argv: string[], data: string, headless?: Headless
     }
     try {
       assertNotRealData(data);
-      const { program } = claudeProgram(rest);
-      const s = await claudeStatus(program);
-      if (!s.installed) throw new AgentError("E_AGENT_NOT_INSTALLED", NAME);
-      if (!s.loggedIn) throw new AgentError("E_AGENT_NOT_LOGGED_IN", NAME);
-      const host = new AgentHost({ name: NAME, command: FAKE_AGENT_COMMAND, dir: path.join(data, "agent") });
+      let host: AgentHost;
+      let fake = true;
+      if (kind === "gemini") {
+        // O Gemini fala ACP sozinho: o `gemini --acp` falso é o próprio agente. Sem login, o `start()` falha com o
+        // `authRequired`, que vira o E_AGENT_NOT_LOGGED_IN.
+        const g = geminiProgram(rest);
+        fake = g.fake;
+        host = (await geminiHost({ data, program: g.program })).host;
+      } else {
+        const { program } = claudeProgram(rest);
+        const s = await claudeStatus(program);
+        if (!s.installed) throw new AgentError("E_AGENT_NOT_INSTALLED", NAME);
+        if (!s.loggedIn) throw new AgentError("E_AGENT_NOT_LOGGED_IN", NAME);
+        host = new AgentHost({ name: NAME, command: FAKE_AGENT_COMMAND, dir: path.join(data, "agent") });
+      }
       if (rest.includes("--new")) host.forgetSession();
       const session = await host.start();
       const onSigint = () => void host.cancel();
       process.on("SIGINT", onSigint);
       try {
         const answer = await host.ask(text, (e) => console.log(JSON.stringify({ event: e })));
-        print({ ok: true, value: { ...answer, sessionId: session.sessionId, resumed: session.resumed, agent: session.agent, fake: true } });
+        print({ ok: true, value: { ...answer, sessionId: session.sessionId, resumed: session.resumed, agent: session.agent, kind, fake } });
         return 0;
       } finally {
         process.off("SIGINT", onSigint);

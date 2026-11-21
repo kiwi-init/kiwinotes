@@ -267,7 +267,9 @@ export type { NoteModel };
 // 1.93.0 (T21231, spec #21155): as `docxOps` no `agent.wrote`, as mudanças que o Kiwi fez num docx, para o docx aberto
 //   mostrar cada uma, e o `paragraph` no `files.editing`, o parágrafo do docx com o cursor da pessoa. Só acréscimo.
 // 1.94.0 (T23627, spec #21155): o `insertRow` nas `docxOps`, a linha de tabela que o Kiwi insere num docx. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.94.0";
+// 1.95.0 (T24672, spec #24666): o Gemini como 2º agente. O `kind` ("claude" ou "gemini") e o `gemini` no `AgentStatus`,
+//   e o `kind` no `agent.configure`: trocar fecha o agente aberto, e cada um tem a sua sessão. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.95.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -671,7 +673,7 @@ export interface UiCapabilities {
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
   /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". `meetings` (1.57.0, spec #8360): "Suas
    * reuniões", inteiro; o que não vale volta ao padrão. */
-  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string; webSearch?: boolean; onboarding?: Partial<AgentOnboarding>; routines?: Partial<Record<RoutineKind, Partial<Pick<AgentRoutine, "on" | "time" | "weekday" | "folder">>>> }; result: AgentStatus };
+  "agent.configure": { args: { kind?: AgentKind; model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string; webSearch?: boolean; onboarding?: Partial<AgentOnboarding>; routines?: Partial<Record<RoutineKind, Partial<Pick<AgentRoutine, "on" | "time" | "weekday" | "folder">>>> }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -1072,6 +1074,9 @@ export interface AgentActivityRequest {
 }
 
 /** O Claude Code instalado, quando conferido (`agent.status` com `refresh`). */
+/** Os agentes que o Kiwi sabe abrir (spec #24666): um por vez, escolhido em Ajustes › Agente. */
+export type AgentKind = "claude" | "gemini";
+
 export interface AgentClaudeStatus {
   installed: boolean;
   version?: string;
@@ -1082,10 +1087,21 @@ export interface AgentClaudeStatus {
   versionError?: "E_AGENT_TOO_OLD" | "E_AGENT_TOO_NEW";
 }
 
+/** O Gemini CLI instalado (1.95.0, spec #24666): a forma do Claude, sem o `method`. */
+export interface AgentGeminiStatus extends Omit<AgentClaudeStatus, "method"> {
+  /**
+   * `false` enquanto o login não se conferiu: o Gemini não tem um `auth status`, e só diz na abertura da sessão (o
+   * `authRequired` do ACP). A tela mostra "o login se confere no primeiro pedido". Depois da 1ª abertura, some.
+   */
+  loginKnown?: false;
+}
+
 /** O estado do agente no app (1.41.0, T8678). */
 export interface AgentStatus {
-  /** O nome que a pessoa vê ("Claude Code"). */
+  /** O nome que a pessoa vê, o do agente escolhido ("Claude Code" ou "Gemini"). */
   name: string;
+  /** O agente escolhido (1.95.0, spec #24666): o Claude Code por padrão. */
+  kind: AgentKind;
   enabled: boolean;
   /** O modo econômico (1.54.0, spec #11084). */
   economy: boolean;
@@ -1105,6 +1121,9 @@ export interface AgentStatus {
   consented: boolean;
   /** null até a primeira conferência (`agent.status {refresh: true}`). */
   claude: AgentClaudeStatus | null;
+  /** O Gemini CLI (1.95.0, spec #24666), na mesma forma e sem `method`: null até a primeira conferência. */
+  gemini: AgentGeminiStatus | null;
+  /** O adaptador do Claude Code (spec #8368). Com o Gemini, que fala ACP sozinho, não se usa. */
   adapter: {
     version: string;
     phase: "missing" | "downloading" | "ready" | "error";

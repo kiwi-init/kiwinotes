@@ -59,6 +59,7 @@ import { homePending } from "./home-pending.ts";
 import { homeWeek } from "./home-week.ts";
 import { type AgentService, AgentServiceError } from "../agent/service.ts";
 import { ACTIVITY_LIST_MAX } from "../agent/activity.ts";
+import { AGENT_KINDS, isAgentKind, type AgentKind } from "../agent/kinds.ts";
 import { isAgentChoice } from "../store/settings.ts";
 import type { IntroLayout } from "../shared/intro-layout.ts";
 
@@ -1590,8 +1591,10 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "agent.configure": (args) => {
       const a = object(args, "agent.configure");
-      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary" && k !== "instructions" && k !== "webSearch" && k !== "onboarding" && k !== "routines");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary" && k !== "instructions" && k !== "webSearch" && k !== "onboarding" && k !== "routines" && k !== "kind");
       if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
+      // Qual agente (spec #24666): o Claude Code ou o Gemini.
+      if (a.kind !== undefined && !isAgentKind(a.kind)) throw bad(`agent.configure: kind must be one of ${AGENT_KINDS.join(", ")}`);
       for (const k of ["model", "effort"] as const) {
         if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
       }
@@ -1628,6 +1631,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       }
       return agentCall((agent) =>
         agent.configure({
+          ...(a.kind !== undefined ? { kind: a.kind as AgentKind } : {}),
           model: a.model as string | undefined,
           effort: a.effort as string | undefined,
           economy: a.economy as boolean | undefined,

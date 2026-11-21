@@ -13,8 +13,10 @@ import path from "node:path";
 
 import { claudeAdapterHost, agentDir, CLAUDE_CODE } from "./adapter/open.ts";
 import type { PinnedPackage } from "./adapter/pinned.ts";
-import { findClaude } from "./claude.ts";
-import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
+import { findClaude, type ProgramArgv } from "./claude.ts";
+import { findGemini } from "./gemini.ts";
+import { geminiHost } from "./gemini-host.ts";
+import { FAKE_AGENT_COMMAND, FAKE_CLAUDE, FAKE_GEMINI } from "./fake/index.ts";
 import { AgentHost } from "./host.ts";
 import { AgentService } from "./service.ts";
 import type { AgentSettings, AppSettings, SettingsPatch } from "../store/settings.ts";
@@ -45,18 +47,27 @@ export function appAgentService(o: AppAgentOptions): AgentService {
   const clockStart = headless && env.KIWI_CLOCK_START ? Date.parse(env.KIWI_CLOCK_START) : NaN;
   const boot = Date.now();
   const now = Number.isFinite(clockStart) ? () => clockStart + (Date.now() - boot) : undefined;
+  const gemini = (): ProgramArgv | null => {
+    if (fake) return FAKE_GEMINI;
+    const found = findGemini();
+    return found ? [found] : null;
+  };
+  const fakeLog = { KIWI_FAKE_AGENT_LOG: path.join(o.data, "fake-agent.jsonl") };
   return new AgentService({
     data: o.data,
-    name: CLAUDE_CODE,
     settings,
+    gemini,
     claude: () => {
       if (fake) return FAKE_CLAUDE;
       const found = findClaude();
       return found ? [found] : null;
     },
-    openHost: fake
-      ? async ({ configOptions, kiwiTools, webTools, onExit }) =>
-          new AgentHost({
+    openHost: async ({ kind, configOptions, kiwiTools, webTools, onExit }) => {
+      const host = { configOptions, onExit, ...(kiwiTools ? { kiwiTools } : {}), ...(webTools ? { webTools } : {}) };
+      // O Gemini (spec #24666): o instalado, ou o falso no headless, abertos do mesmo jeito.
+      if (kind === "gemini") return (await geminiHost({ data: o.data, program: gemini(), env: fake ? { ...process.env, ...fakeLog } : env, host })).host;
+      return fake
+        ? new AgentHost({
             name: CLAUDE_CODE,
             command: FAKE_AGENT_COMMAND,
             dir: agentDir(o.data),
@@ -64,10 +75,10 @@ export function appAgentService(o: AppAgentOptions): AgentService {
             onExit,
             ...(kiwiTools ? { kiwiTools } : {}),
             ...(webTools ? { webTools } : {}),
-            env: { ...process.env, KIWI_FAKE_AGENT_LOG: path.join(o.data, "fake-agent.jsonl") },
+            env: { ...process.env, ...fakeLog },
           })
-      : async ({ configOptions, kiwiTools, webTools, onExit }) =>
-          (await claudeAdapterHost({ data: o.data, claudePath: findClaude(), host: { configOptions, onExit, ...(kiwiTools ? { kiwiTools } : {}), ...(webTools ? { webTools } : {}) } })).host,
+        : (await claudeAdapterHost({ data: o.data, claudePath: findClaude(), host })).host;
+    },
     ...(headless && env.KIWI_ADAPTER_REGISTRY ? { registry: env.KIWI_ADAPTER_REGISTRY } : {}),
     ...(packages ? { packages } : {}),
     ...(idle && Number.isFinite(idle) && idle > 0 ? { idleMs: idle } : {}),

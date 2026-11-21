@@ -1,7 +1,7 @@
 // `bun run cli agent …` (T8478): a CLI de ponta a ponta, com o `claude` falso e o agente falso.
 
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { tempDir } from "../test/tmp.ts";
@@ -108,6 +108,48 @@ describe("agent ask", () => {
   test("sem texto, uso errado", async () => {
     expect((await cli(["ask"])).exit).toBe(2);
     expect((await cli(["voar"])).exit).toBe(2);
+  });
+});
+
+describe("o Gemini (spec #24666), com o gemini falso", () => {
+  test("status: instalado e a versão; o login só se sabe ao abrir, e não há adaptador", async () => {
+    const r = await cli(["status", "--agent", "gemini", "--data", tmp()]);
+    expect(r.exit).toBe(0);
+    expect(r.result!.value).toMatchObject({ agent: "Gemini", fake: true, installed: true, loginKnown: false });
+    expect(r.result!.value).not.toHaveProperty("adapter");
+    expect(r.result!.value).not.toHaveProperty("loggedIn", true);
+    const missing = await cli(["status", "--agent", "gemini", "--data", tmp(), "--gemini", path.join(tmp(), "gemini")]);
+    expect(missing.result!.value).toMatchObject({ installed: false, fake: false });
+  });
+
+  test("ask: a resposta, na sessão do Gemini, retomada no pedido seguinte; a do Claude não muda", async () => {
+    const data = tmp();
+    const first = await cli(["ask", "oi", "--agent", "gemini", "--data", data]);
+    expect(first.exit).toBe(0);
+    expect(first.result!.value).toMatchObject({ kind: "gemini", fake: true, resumed: false });
+    expect(existsSync(path.join(data, "agent", "session-gemini.json"))).toBe(true);
+    expect(existsSync(path.join(data, "agent", "session-claude.json"))).toBe(false);
+    const second = await cli(["ask", "de novo", "--agent", "gemini", "--data", data]);
+    expect(second.result!.value).toMatchObject({ resumed: true, sessionId: first.result!.value.sessionId });
+    // O Claude abre a sessão dele, nova.
+    const claude = await cli(["ask", "oi", "--data", data]);
+    expect(claude.result!.value).toMatchObject({ kind: "claude", resumed: false });
+    expect(claude.result!.value.sessionId).not.toBe(first.result!.value.sessionId);
+  });
+
+  test("sem login: o authRequired vira E_AGENT_NOT_LOGGED_IN, em português, sem o texto do Gemini", async () => {
+    const data = tmp();
+    const out = path.join(data, "sem-login");
+    writeFileSync(out, "");
+    const r = await cli(["ask", "oi", "--agent", "gemini", "--data", data], { KIWI_FAKE_AGENT_LOGGED_OUT: out });
+    expect(r.exit).toBe(1);
+    expect(r.result).toMatchObject({ ok: false, code: "E_AGENT_NOT_LOGGED_IN" });
+    expect(r.result!.message).toContain("O Gemini não está logado");
+    expect(r.result!.message).not.toMatch(/auth|required/i);
+  });
+
+  test("um agente que não existe: uso errado", async () => {
+    expect((await cli(["status", "--agent", "codex", "--data", tmp()])).exit).toBe(2);
   });
 });
 

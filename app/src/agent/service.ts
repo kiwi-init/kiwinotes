@@ -38,6 +38,9 @@ import { AgentActivity, type ActivityRequest } from "./activity.ts";
 import { keyOf, undo, UndoError, type UndoNotes } from "./undo.ts";
 import { viewChange } from "./change-view.ts";
 import { claudeStatus, type ProgramArgv } from "./claude.ts";
+import { AGENT_NAMES, type AgentKind, isAgentKind } from "./kinds.ts";
+import { geminiStatus } from "./gemini.ts";
+import { geminiPrompt } from "./gemini-host.ts";
 import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/download.ts";
 import { ADAPTER_PACKAGES, ADAPTER_VERSION, type PinnedPackage } from "./adapter/pinned.ts";
 import { checkClaudeVersion } from "./adapter/version.ts";
@@ -45,6 +48,7 @@ import { adapterRoot, agentDir } from "./adapter/open.ts";
 import type {
   AgentChangeView,
   AgentClaudeStatus,
+  AgentGeminiStatus,
   AgentModelChoice,
   AgentMemoryView,
   AgentProposalSummary,
@@ -139,7 +143,7 @@ import {
   type ProposalProject,
 } from "./proposals.ts";
 import type { MemorySink, ProposalDraft, ProposalSink, SummaryDraft } from "./tools/tools.ts";
-import { DEFAULT_AGENT_MEETING_SETTINGS, effortOf, isAgentChoice, sanitizeAgentMeetingSettings, sanitizeEffortByModel, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
+import { DEFAULT_AGENT_MEETING_SETTINGS, DEFAULT_AGENT_SETTINGS, effortOf, isAgentChoice, sanitizeAgentMeetingSettings, sanitizeEffortByModel, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
 import type { Notices } from "../bun/notices.ts";
 import { WaitingNotice, type NoticeState } from "./notice.ts";
 import { LiveWrites, liveWriter } from "./live-write.ts";
@@ -214,11 +218,15 @@ export interface AgentServiceDeps {
   };
   /** Como abrir o `claude` para conferir a versão e o login (o instalado, ou o falso nos testes); null se não há. */
   claude(): ProgramArgv | null;
+  /** Como abrir o `gemini` para conferir a versão (spec #24666): o instalado, ou o falso nos testes; null se não há. */
+  gemini?(): ProgramArgv | null;
   /**
    * Monta o host do agente (sem abrir): no app, o adaptador apontado para o Claude Code instalado, depois das
    * conferências; nos testes, o agente falso. Recebe o que o host precisa do serviço.
    */
   openHost(o: {
+    /** O agente a abrir (spec #24666). */
+    kind: AgentKind;
     configOptions: () => Record<string, string>;
     kiwiTools?: AgentHostOptions["kiwiTools"];
     /** "Pesquisar na web" (spec #11908): o host pergunta a cada pedido de permissão do agente. */
@@ -303,7 +311,17 @@ function fromAgentError(e: unknown, name: string): AgentServiceError {
 }
 
 export class AgentService {
-  private readonly name: string;
+  /** O agente escolhido (spec #24666), do último `settings.load()`/`save()`: vale para o nome e o que é de um só. */
+  private kind: AgentKind = "claude";
+  /** Os ajustes, que anotam o `kind` a cada leitura e gravação. */
+  private readonly settings: AgentServiceDeps["settings"];
+  /** Se a última abertura do Gemini abriu a sessão (o login dele só se vê ali); null até a primeira. */
+  private geminiLogin: boolean | null = null;
+
+  /** O nome que a pessoa vê: o do agente escolhido. */
+  private get name(): string {
+    return this.kind === "claude" ? (this.d.name ?? AGENT_NAMES.claude) : AGENT_NAMES[this.kind];
+  }
   private host: AgentHost | null = null;
   private opening: Promise<AgentHost> | null = null;
   /** O host que ainda está abrindo: o `stopProgram` e o `killNow` fecham ele também, sem esperar a abertura (revisão). */
@@ -315,6 +333,8 @@ export class AgentService {
   private download: { abort: AbortController; done: number; total: number; lastEmit: number } | null = null;
   private downloadError: { code: string; message: string } | undefined;
   private claude: AgentClaudeStatus | null = null;
+  /** O Gemini CLI instalado (spec #24666): null até a primeira conferência. */
+  private gemini: AgentGeminiStatus | null = null;
   /** Os modelos que o agente ofereceu da última vez que abriu (T8762), lidos de `<dados>/agent/models.json` na 1ª vez. */
   private models: AgentModelChoice[] | null = null;
   /** Os esforços que o agente oferece em cada modelo (spec #16793), como ficaram guardados; `[]` é um modelo sem esforço. */
@@ -418,7 +438,10 @@ export class AgentService {
   private undoing: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly d: AgentServiceDeps) {
-    this.name = d.name ?? "Claude Code";
+    this.settings = {
+      load: async () => this.noteKind(await d.settings.load()),
+      save: async (patch) => this.noteKind(await d.settings.save(patch)),
+    };
     this.reader = d.reader ?? null;
     this.writer = d.writer ? this.live(d.writer) : null;
     this.activity = new AgentActivity({ dir: path.join(agentDir(d.data), "activity") });
@@ -842,23 +865,24 @@ export class AgentService {
 
   /** O estado. Com `refresh`, confere o Claude Code instalado (abre o `claude --version` e o `auth status`). */
   async status(refresh = false): Promise<AgentStatus> {
-    if (refresh) await this.checkClaude();
-    return this.statusFrom(this.snapshot(), await this.d.settings.load());
+    if (refresh) await this.checkAgents();
+    return this.statusFrom(this.snapshot(), await this.settings.load());
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "effortByModel" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
+  private snapshot(): Omit<AgentStatus, "name" | "kind" | "enabled" | "consented" | "model" | "effort" | "effortByModel" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
-    const values = this.host?.running ? this.host.configValues : null;
+    const values = this.currentHost?.configValues ?? null;
     return {
       claude: this.claude,
+      gemini: this.gemini,
       adapter: {
         version: ADAPTER_VERSION,
         phase: this.download ? "downloading" : installed ? "ready" : this.downloadError ? "error" : "missing",
         ...(this.download ? { done: this.download.done, total: this.download.total } : {}),
         ...(this.downloadError && !this.download ? { error: this.downloadError } : {}),
       },
-      program: this.host?.running ? "open" : this.opening ? "opening" : "closed",
+      program: this.currentHost ? "open" : this.opening ? "opening" : "closed",
       busy: !!this.turn || !!this.usageRun,
       session: values ? { model: values.model, effort: values.effort } : null,
       models: this.knownModels(),
@@ -867,7 +891,8 @@ export class AgentService {
   }
 
   private get modelsFile(): string {
-    return path.join(agentDir(this.d.data), "models.json");
+    // Cada agente tem a sua lista (spec #24666); a do Claude continua no arquivo de antes.
+    return path.join(agentDir(this.d.data), this.kind === "claude" ? "models.json" : `models-${this.kind}.json`);
   }
 
   /** A lista de modelos guardada: a seção mostra as escolhas mesmo com o programa fechado, depois de ele abrir uma vez. */
@@ -885,7 +910,7 @@ export class AgentService {
   }
 
   private get effortsFile(): string {
-    return path.join(agentDir(this.d.data), "efforts.json");
+    return path.join(agentDir(this.d.data), this.kind === "claude" ? "efforts.json" : `efforts-${this.kind}.json`);
   }
 
   /**
@@ -934,8 +959,10 @@ export class AgentService {
   }
 
   private statusFrom(snap: ReturnType<AgentService["snapshot"]>, s: AgentSettings): AgentStatus {
+    const kind = s.kind ?? "claude";
     return {
-      name: this.name,
+      name: AGENT_NAMES[kind],
+      kind,
       enabled: s.enabled,
       consented: s.consented,
       ...snap,
@@ -961,6 +988,62 @@ export class AgentService {
     const cheap = s.economy ? cheapestModel(this.knownModels()) : null;
     const model = cheap ?? s.model;
     return { model, effort: effortOf(s, model) };
+  }
+
+  /** Anota o agente escolhido de uns ajustes lidos ou gravados, e os devolve. */
+  private noteKind(s: AgentSettings): AgentSettings {
+    const kind = isAgentKind(s.kind) ? s.kind : "claude";
+    if (kind !== this.kind) {
+      // As listas guardadas são do agente de antes.
+      this.models = null;
+      this.efforts = null;
+    }
+    this.kind = kind;
+    return s;
+  }
+
+  /**
+   * O programa aberto, se ele é do agente escolhido. Um host de outro agente (uma troca que correu com um pedido) nunca é
+   * reusado: o próximo pedido abre o escolhido (revisão do T24672).
+   */
+  private get currentHost(): AgentHost | null {
+    return this.host?.running && this.host.kind === this.kind ? this.host : null;
+  }
+
+  /** O agente escolhido precisa do adaptador e ele não está baixado. Só o Claude Code usa adaptador (spec #24666). */
+  private adapterMissing(): boolean {
+    return this.kind === "claude" && !installedAdapter({ root: this.root }, this.packages);
+  }
+
+  /** Confere os dois agentes instalados, para a tela mostrar o estado de cada um (spec #24666). */
+  private async checkAgents(): Promise<void> {
+    await Promise.all([this.checkClaude(), this.checkGemini()]);
+  }
+
+  /**
+   * O Gemini CLI instalado e a versão. O login dele não tem conferência à parte: só a abertura da sessão diz (o
+   * `authRequired`), e o Kiwi nunca lê o `~/.gemini`. Até lá, `loginKnown: false`.
+   */
+  private async checkGemini(): Promise<void> {
+    const st = await geminiStatus(this.d.gemini?.() ?? null);
+    const tooOld = st.installed && st.tooOld === true;
+    this.gemini = {
+      installed: st.installed,
+      ...(st.version ? { version: st.version } : {}),
+      loggedIn: this.geminiLogin === true,
+      ...(this.geminiLogin === null ? { loginKnown: false as const } : {}),
+      versionOk: st.installed && !tooOld,
+      ...(tooOld ? { versionError: "E_AGENT_TOO_OLD" as const } : {}),
+    };
+  }
+
+  /** O que a abertura do Gemini disse do login (spec #24666): abriu, logado; `authRequired`, não logado. */
+  private noteGeminiLogin(loggedIn: boolean): void {
+    this.geminiLogin = loggedIn;
+    if (this.gemini) {
+      const { loginKnown: _unknown, ...rest } = this.gemini;
+      this.gemini = { ...rest, loggedIn };
+    }
   }
 
   private async checkClaude(): Promise<void> {
@@ -1078,9 +1161,9 @@ export class AgentService {
    * o plano. Com um pedido rodando, só devolve o estado: o próximo pedido aplica a escolha. O mesmo com um `/usage` andando.
    */
   async prepare(): Promise<AgentStatus> {
-    const s = await this.d.settings.load();
+    const s = await this.settings.load();
     if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
-    if (!installedAdapter({ root: this.root }, this.packages)) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
+    if (this.adapterMissing()) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
     // Um pedido, o `/usage` do medidor (T16712) ou o de depois do pedido: o agente está ocupado, e o próximo pedido
     // aplica a escolha (revisão #17024).
     const busy = () => !!this.turn || !!this.usageRun || !!this.limitProbe;
@@ -1088,7 +1171,7 @@ export class AgentService {
     // A sessão aberta aqui já sai com a web do interruptor: o 1º pedido não precisa reabrir.
     this.webNow = s.webSearch === true;
     try {
-      if (!this.host?.running) await this.openProgram();
+      if (!this.currentHost) await this.openProgram();
       else {
         const wanted = this.wantedConfig(s);
         if (!busy() && this.host && (wanted.model !== this.applied.model || wanted.effort !== this.applied.effort)) {
@@ -1113,6 +1196,10 @@ export class AgentService {
    * já tinha, sem erro.
    */
   async usageRefresh(): Promise<AgentUsageView> {
+    // O `/usage` é um comando do Claude Code (spec #24666): com o Gemini, o medidor fica só com o que o ACP disse.
+    // Aqui sem `await`, pelo agente já carregado (a marca abaixo tem de entrar antes do 1º `await`); de novo depois
+    // de carregar os ajustes, lá dentro.
+    if (this.kind !== "claude") return this.usageView();
     // Um pedido da pessoa já andando: o /usage não entra no meio dele (o botão do medidor fica desligado com `busy`).
     if (this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
     // Um `/usage` já andando (o medidor apareceu e a pessoa clicou em Atualizar): o mesmo serve aos dois.
@@ -1129,11 +1216,12 @@ export class AgentService {
     run.done = (async () => {
       try {
         await this.limitProbe;
-        const s = await this.d.settings.load();
+        const s = await this.settings.load();
+        if (this.kind !== "claude") return;
         if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
-        if (!installedAdapter({ root: this.root }, this.packages)) throw new AgentError("E_ADAPTER_MISSING", this.name);
+        if (this.adapterMissing()) throw new AgentError("E_ADAPTER_MISSING", this.name);
         if (run.yielded) return;
-        const host = this.host?.running ? this.host : await this.openProgram();
+        const host = this.currentHost ?? (await this.openProgram());
         if (run.yielded) return;
         run.asking = true;
         const answer = await host.ask(USAGE_COMMAND);
@@ -1176,6 +1264,8 @@ export class AgentService {
    * cada 10 min, porque cada `/usage` fica na conversa. O número vira o "depois" deste pedido e o "antes" do próximo.
    */
   private probeLimit(after: string): void {
+    // Só o Claude Code responde ao `/usage` (spec #24666).
+    if (this.kind !== "claude") return;
     if (this.limitProbeTimer) clearTimeout(this.limitProbeTimer);
     const o = this.d.limitProbe ?? {};
     let tries = 0;
@@ -1282,7 +1372,7 @@ export class AgentService {
 
   /** O que a pessoa escolheu em Ajustes › Agente › "Suas reuniões". */
   private async meetingSettings(): Promise<AgentMeetingSettings> {
-    return (await this.d.settings.load()).meetings ?? DEFAULT_AGENT_MEETING_SETTINGS;
+    return (await this.settings.load()).meetings ?? DEFAULT_AGENT_MEETING_SETTINGS;
   }
 
   private proposalSummary(p: MeetingProposal, s: MeetingNoteSettings): AgentProposalSummary {
@@ -1347,7 +1437,7 @@ export class AgentService {
 
   /** O que a pessoa escolheu para o resumo executivo (spec #11546). */
   private async summarySettings(): Promise<SummarySettings> {
-    return (await this.d.settings.load()).summary ?? DEFAULT_SUMMARY_SETTINGS;
+    return (await this.settings.load()).summary ?? DEFAULT_SUMMARY_SETTINGS;
   }
 
   /** O dia local de hoje, `AAAA-MM-DD`. */
@@ -1625,9 +1715,9 @@ export class AgentService {
    */
   async meetingReady(path: string): Promise<void> {
     try {
-      const s = await this.d.settings.load();
+      const s = await this.settings.load();
       if (!s.enabled || !s.consented || (s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS).propose !== "auto") return;
-      if (!this.reader || !this.writer || !installedAdapter({ root: this.root }, this.packages)) return;
+      if (!this.reader || !this.writer || this.adapterMissing()) return;
       if (this.meetingsQueued.includes(path) || this.proposals.hasMeeting(path)) return;
       const meeting = (await this.reader.meetings()).find((m) => m.path === path && !m.live);
       if (!meeting) return;
@@ -1709,9 +1799,9 @@ export class AgentService {
     if (this.routineChecking || this.closed) return;
     this.routineChecking = true;
     try {
-      const s = await this.d.settings.load();
+      const s = await this.settings.load();
       if (!s.enabled || !s.consented || this.turn) return;
-      if (!this.reader || !this.writer || !installedAdapter({ root: this.root }, this.packages)) return;
+      if (!this.reader || !this.writer || this.adapterMissing()) return;
       const routines = sanitizeAgentRoutines(s.routines);
       const now = new Date(this.clock());
       const due = dueRoutine(routines, now);
@@ -1725,7 +1815,7 @@ export class AgentService {
 
   /** "Rodar agora" (`agent.routineRun`): o pedido da rotina já, ligada ou não. Uma nova, pelo id. */
   async routineRun(ref: RoutineRef): Promise<{ id: string }> {
-    const s = await this.d.settings.load();
+    const s = await this.settings.load();
     if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
     if (ref.kind === "custom" && !sanitizeAgentRoutines(s.routines).custom.some((x) => x.id === ref.id)) throw routineGone();
     return this.startRoutine(ref, true);
@@ -1766,8 +1856,8 @@ export class AgentService {
   private routineEdits: Promise<unknown> = Promise.resolve();
   private saveRoutines(change: (current: AgentRoutines) => Promise<AgentRoutines>, also: Partial<AgentSettings> = {}): Promise<void> {
     const next = this.routineEdits.then(async () => {
-      const current = sanitizeAgentRoutines((await this.d.settings.load()).routines);
-      await this.d.settings.save({ ...also, routines: await change(current) });
+      const current = sanitizeAgentRoutines((await this.settings.load()).routines);
+      await this.settings.save({ ...also, routines: await change(current) });
       this.emitStatus();
     });
     this.routineEdits = next.catch(() => {});
@@ -1782,7 +1872,7 @@ export class AgentService {
    */
   private async startRoutine(ref: RoutineRef, manual: boolean): Promise<{ id: string }> {
     const now = this.clock();
-    const s = await this.d.settings.load();
+    const s = await this.settings.load();
     const routines = sanitizeAgentRoutines(s.routines);
     const custom = ref.kind === "custom" ? routines.custom.find((x) => x.id === ref.id) : undefined;
     if (ref.kind === "custom" && !custom) throw routineGone();
@@ -1826,12 +1916,12 @@ export class AgentService {
 
   /** Liga. Na primeira vez, só com o aceite da tela do ADR 0011. Não baixa nem abre nada. */
   async enable(consent = false): Promise<AgentStatus> {
-    const s = await this.d.settings.load();
+    const s = await this.settings.load();
     if (!s.consented && !consent) throw fail("E_AGENT_CONSENT");
     // A primeira vez que o agente liga abre o onboarding (spec #11955). Quem já o tinha ligado antes dele, só pelo
     // "Refazer o onboarding" em Ajustes.
     const first = sanitizeAgentOnboarding(s.onboarding).state === "pending";
-    await this.d.settings.save({ enabled: true, consented: true, ...(first ? { onboarding: { state: "open", step: 1 } } : {}) });
+    await this.settings.save({ enabled: true, consented: true, ...(first ? { onboarding: { state: "open", step: 1 } } : {}) });
     this.emitStatus();
     return this.status();
   }
@@ -1851,9 +1941,10 @@ export class AgentService {
 
   /** Começa o download do adaptador e volta logo. O fim (ou o erro) chega pelo `agent.status`. */
   async startDownload(): Promise<AgentStatus> {
-    const s = await this.d.settings.load();
+    const s = await this.settings.load();
     if (!s.enabled) throw fail("E_AGENT_DISABLED");
-    if (this.download || installedAdapter({ root: this.root }, this.packages)) return this.status();
+    // O Gemini fala ACP sozinho: não há adaptador a baixar (spec #24666).
+    if (this.kind !== "claude" || this.download || installedAdapter({ root: this.root }, this.packages)) return this.status();
     const abort = new AbortController();
     const total = this.packages.reduce((sum, p) => sum + p.size, 0);
     const dl = { abort, done: 0, total, lastEmit: 0 };
@@ -1903,9 +1994,9 @@ export class AgentService {
     }
     if (typeof text !== "string" || !text.trim()) throw new AgentServiceError("E_BAD_ARGS", "agent.ask: o texto do pedido está vazio");
     if (text.length > AGENT_MAX_TEXT) throw new AgentServiceError("E_BAD_ARGS", `agent.ask: o pedido passa de ${AGENT_MAX_TEXT} caracteres`);
-    const s = await this.d.settings.load();
+    const s = await this.settings.load();
     if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
-    if (!installedAdapter({ root: this.root }, this.packages)) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
+    if (this.adapterMissing()) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
     // Sem `await` daqui até o `this.turn = turn`: um /usage do medidor que comece agora já encontra o pedido.
     await this.yieldUsage();
     if (this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
@@ -1935,7 +2026,7 @@ export class AgentService {
     let asked: { host: AgentHost; prompt: string } | null = null;
     let answered = "";
     try {
-      let host = this.host?.running ? this.host : null;
+      let host = this.currentHost;
       if (!host) {
         this.emitTurn({ id: turn.id, type: "status", status: "opening" });
         host = await this.openProgram();
@@ -2027,7 +2118,8 @@ export class AgentService {
         faroDoPlacar(this.turnFaro),
       );
       asked = { host, prompt };
-      const answer = await host.ask(prompt, (e) => {
+      // Com o Gemini, um pedido que começa por `/` não vira um comando da pessoa (ADR 0012, T24672).
+      const answer = await host.ask(host.kind === "gemini" ? geminiPrompt(prompt) : prompt, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
         // O uso da janela (spec #11084) não é um evento do pedido: vai para o medidor, e o aviso, uma vez, para o balão.
         if (e.type === "limit") {
@@ -2318,7 +2410,7 @@ export class AgentService {
   private openProgram(): Promise<AgentHost> {
     this.opening ??= (async () => {
       const epoch = this.epoch;
-      const s = await this.d.settings.load();
+      const s = await this.settings.load();
       this.economyNow = s.economy;
       const wanted = () => this.wantedConfig(s);
       // Um servidor que tenha sobrado de uma abertura anterior fecha antes do novo (revisão do T8956).
@@ -2347,7 +2439,15 @@ export class AgentService {
             servers: () => [(config ??= tools.start())],
           }
         : undefined;
+      const kind = this.kind;
+      // Um host de outro agente que ficou aberto fecha antes: nunca dois programas, nem o de antes reusado.
+      const stale = this.host;
+      if (stale && stale.kind !== kind) {
+        this.host = null;
+        if (stale.running) await stale.stop();
+      }
       const host = await this.d.openHost({
+        kind,
         configOptions: wanted,
         ...(kiwiTools ? { kiwiTools } : {}),
         webTools: () => this.webNow,
@@ -2365,10 +2465,19 @@ export class AgentService {
       } catch (e) {
         await host.stop();
         this.stopTools(tools);
+        // O login do Gemini só se vê aqui (spec #24666): o `authRequired` da sessão diz que falta.
+        if (kind === "gemini" && e instanceof AgentError && e.code === "E_AGENT_NOT_LOGGED_IN") this.noteGeminiLogin(false);
         throw e;
       } finally {
         if (this.pending === host) this.pending = null;
       }
+      // A pessoa trocou de agente enquanto este abria: ele fecha, e nada vai a ele.
+      if (kind !== this.kind) {
+        await host.stop();
+        this.stopTools(tools);
+        throw new AgentError("E_AGENT_FAILED", this.name, "trocou de agente enquanto o programa abria");
+      }
+      if (kind === "gemini") this.noteGeminiLogin(true);
       this.applied = wanted();
       this.host = host;
       this.rememberModels(host);
@@ -2407,14 +2516,14 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean; onboarding?: unknown; routines?: unknown }): Promise<AgentStatus> {
+  async configure(o: { kind?: AgentKind; model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean; onboarding?: unknown; routines?: unknown }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
     // O onboarding (spec #11955): o passo em que a pessoa está, fechar (`done`) e o "Refazer" (`open` no passo 1).
     // As rotinas (spec #12150): ligar ou mudar a hora arma a rotina agora (um horário de antes não dispara).
     // Pela fila das rotinas (revisão do T13010): ligar uma pronta junto com um "Nova rotina" não perde a nova.
     if (o.routines !== undefined) await this.saveRoutines(async (current) => patchRoutines(current, o.routines, this.clock()));
     if (o.onboarding !== undefined) {
-      const now = sanitizeAgentOnboarding((await this.d.settings.load()).onboarding);
+      const now = sanitizeAgentOnboarding((await this.settings.load()).onboarding);
       patch.onboarding = sanitizeAgentOnboarding({ ...now, ...(o.onboarding && typeof o.onboarding === "object" ? o.onboarding : {}) });
     }
     // O resumo executivo (spec #11546): os blocos e o período, inteiros e saneados.
@@ -2441,7 +2550,7 @@ export class AgentService {
     // O esforço é do modelo (spec #16793): do que veio junto, ou do escolhido agora. Vale a partir do próximo pedido,
     // pelo `set_config_option`, sem mexer numa resposta em andamento.
     if (o.effort !== undefined) {
-      const now = await this.d.settings.load();
+      const now = await this.settings.load();
       const model = o.model ?? now.model;
       patch.effortByModel = sanitizeEffortByModel({ ...now.effortByModel, [model]: o.effort });
     }
@@ -2451,7 +2560,24 @@ export class AgentService {
     }
     // Spec #9876: "Falar com o agente pelo Control".
     if (o.controlShortcut !== undefined) patch.controlShortcut = o.controlShortcut;
-    if (Object.keys(patch).length) await this.d.settings.save(patch);
+    // Trocar de agente (spec #24666): o aberto fecha antes de gravar, e o próximo pedido abre o escolhido, na sessão dele.
+    // O modelo é de cada agente: o de agora fica guardado, e volta o que o outro tinha.
+    if (o.kind !== undefined) {
+      if (!isAgentKind(o.kind)) throw new AgentServiceError("E_BAD_ARGS", `agente desconhecido: ${String(o.kind)}`);
+      const now = await this.settings.load();
+      const from = isAgentKind(now.kind) ? now.kind : "claude";
+      if (o.kind !== from) {
+        if (this.turn || this.usageRun) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
+        // O agente novo é gravado antes de fechar o de agora: um pedido que chega durante o fechamento já abre o
+        // escolhido, e um que abria o de antes é parado (revisão do T24672).
+        const byKind = { ...now.modelByKind, [from]: patch.model ?? now.model };
+        delete patch.model;
+        await this.settings.save({ kind: o.kind, modelByKind: byKind, model: byKind[o.kind] ?? DEFAULT_AGENT_SETTINGS.model });
+        this.subscription = null;
+        await this.stopProgram(`trocou de agente: ${from} → ${o.kind}`);
+      }
+    }
+    if (Object.keys(patch).length) await this.settings.save(patch);
     this.emitStatus();
     return this.status();
   }
@@ -2510,8 +2636,8 @@ export class AgentService {
     this.notice = new WaitingNotice({
       ...o,
       card: () => this.questions.current(),
-      enabled: async () => (await this.d.settings.load()).notifyWaiting !== false,
-      setEnabled: async (on) => void (await this.d.settings.save({ notifyWaiting: on })),
+      enabled: async () => (await this.settings.load()).notifyWaiting !== false,
+      setEnabled: async (on) => void (await this.settings.save({ notifyWaiting: on })),
       onChange: (s) => {
         for (const fn of this.noticeListeners) fn(s);
       },
@@ -2522,7 +2648,7 @@ export class AgentService {
   /** A linha de Ajustes › Agente (`agent.notice`): a permissão do macOS e o liga/desliga. */
   async noticeState(): Promise<NoticeState> {
     if (this.notice) return this.notice.state();
-    return { permission: "unavailable", enabled: (await this.d.settings.load()).notifyWaiting !== false };
+    return { permission: "unavailable", enabled: (await this.settings.load()).notifyWaiting !== false };
   }
 
   /** "Ligar as notificações" (`agent.noticeAllow`): o único caminho que pede a permissão ao macOS. */
@@ -2533,7 +2659,7 @@ export class AgentService {
   /** O liga/desliga "Avisar quando o agente esperar uma resposta" (`agent.noticeSet`). */
   async noticeSet(on: boolean): Promise<NoticeState> {
     if (this.notice) return this.notice.setEnabled(on);
-    await this.d.settings.save({ notifyWaiting: on });
+    await this.settings.save({ notifyWaiting: on });
     return this.noticeState();
   }
 

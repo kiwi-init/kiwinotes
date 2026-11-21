@@ -1,17 +1,20 @@
 // O agente dentro do app (spec #8339, T8678): o serviço que as capacidades `agent.*` chamam, com o agente falso, um
 // registro do npm falso e local e os ajustes de verdade numa pasta tmp. Nada aqui abre o Claude Code nem vai à internet.
 
-import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type { AgentMemoryView, AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
 import { DEFAULT_AGENT_SETTINGS, SettingsStore, type AgentSettings } from "../store/settings.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
 import { fakeNotices } from "./fake/notices.ts";
-import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
+import { FAKE_AGENT_COMMAND, FAKE_CLAUDE, FAKE_GEMINI } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
-import { AgentHost, WEB_TOOLS } from "./host.ts";
+import { AgentHost, sessionFileOf, WEB_TOOLS } from "./host.ts";
+import { AGENT_NAMES } from "./kinds.ts";
 import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS, SUMMARY_ECONOMY_QUESTION } from "./service.ts";
 import { ROUTINE_LABELS, routineDeclined, routineEconomyQuestion } from "./routines.ts";
 import { DEFAULT_AGENT_ROUTINES } from "../shared/agent-routines.ts";
@@ -92,17 +95,20 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
     // O `/usage` de depois do pedido (ADR 0013) só nos testes dele: nos outros, ele não entra no meio.
     limitProbe: o.limitProbe ?? { delayMs: 3_600_000 },
     ...(o.window ? { window: o.window } : {}),
-    openHost: async ({ configOptions, kiwiTools, webTools, onExit }) =>
+    gemini: () => FAKE_GEMINI,
+    openHost: async ({ kind, configOptions, kiwiTools, webTools, onExit }) =>
       o.host?.(agentDir(data)) ??
       new AgentHost({
-        name: "Claude Code",
+        name: AGENT_NAMES[kind],
+        kind,
         command: FAKE_AGENT_COMMAND,
         dir: agentDir(data),
         configOptions,
         onExit,
         ...(kiwiTools ? { kiwiTools } : {}),
         ...(webTools ? { webTools } : {}),
-        env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}), ...o.env },
+        // O Gemini é o mesmo agente falso com o jeito dele (T24671): o initialize, o login e as ferramentas do Gemini CLI.
+        env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}), ...(kind === "gemini" ? { KIWI_FAKE_AGENT_FLAVOR: "gemini" } : {}), ...o.env },
       }),
     registry: reg.url,
     packages: reg.pinned,
@@ -2883,5 +2889,194 @@ describe("o Kiwi escrevendo ao vivo: o agent.wrote (spec #20843, T20868)", () =>
     } finally {
       l.close();
     }
+  });
+});
+
+describe("dois agentes (spec #24666)", () => {
+  test("o Gemini abre sem o adaptador, sem o _meta do Claude, e na sessão dele", async () => {
+    const m = make();
+    await m.svc.enable(true);
+    let s = await m.svc.configure({ kind: "gemini" });
+    expect(s).toMatchObject({ kind: "gemini", name: "Gemini", adapter: { phase: "missing" } });
+    expect((await m.svc.status(true)).gemini).toMatchObject({ installed: true, version: "0.70.0", versionOk: true, loggedIn: false, loginKnown: false });
+    // Sem baixar nada: o pedido vai.
+    const events = await askAndWait(m, "oi");
+    expect(events.at(-1)?.type).toBe("done");
+    const opened = m.log().find((l) => l.method === "session/new")!;
+    expect(opened.params._meta).toBeUndefined();
+    expect(existsSync(sessionFileOf(agentDir(m.data), "gemini"))).toBe(true);
+    expect(existsSync(sessionFileOf(agentDir(m.data), "claude"))).toBe(false);
+    // O download do adaptador não começa com o Gemini.
+    s = await m.svc.startDownload();
+    expect(s.adapter.phase).toBe("missing");
+    expect(m.reg.requests).toEqual([]);
+  });
+
+  test("trocar de agente fecha o aberto, e cada um retoma a própria sessão", async () => {
+    const m = make({ env: { KIWI_FAKE_AGENT_RESUME: "resume" } });
+    await readyNow(m);
+    await askAndWait(m, "oi");
+    const claudePid = m.pid();
+    expect(alive(claudePid)).toBe(true);
+    const claudeSession = JSON.parse(readFileSync(sessionFileOf(agentDir(m.data), "claude"), "utf8")).sessionId as string;
+
+    const s = await m.svc.configure({ kind: "gemini" });
+    expect(s.program).toBe("closed");
+    await until(() => !alive(claudePid));
+    await askAndWait(m, "oi");
+    const geminiSession = JSON.parse(readFileSync(sessionFileOf(agentDir(m.data), "gemini"), "utf8")).sessionId as string;
+    expect(geminiSession).not.toBe(claudeSession);
+
+    // De volta ao Claude: retoma a sessão dele, não a do Gemini.
+    await m.svc.configure({ kind: "claude" });
+    await askAndWait(m, "oi");
+    const resumed = m.log().filter((l) => l.method === "session/resume").map((l) => l.params.sessionId);
+    expect(resumed.at(-1)).toBe(claudeSession);
+    expect(resumed).not.toContain(geminiSession);
+  });
+
+  // A troca e um pedido juntos, nas duas ordens: o pedido que corre com a troca não pode abrir nem reusar o Claude, e o
+  // seguinte vai ao Gemini, na sessão dele (revisão do T24672).
+  for (const order of ["a troca antes", "o pedido antes"] as const) {
+    test(`trocar e pedir juntos (${order}): o aberto é o escolhido, nunca o de antes`, async () => {
+      const m = make();
+      await readyNow(m);
+      const claudePid = m.pid();
+      const asked = () => m.svc.ask("oi");
+      const switched = () => m.svc.configure({ kind: "gemini" });
+      const [first, second] = await Promise.allSettled(order === "a troca antes" ? [switched(), asked()] : [asked(), switched()]);
+      const sw = order === "a troca antes" ? first! : second!;
+      await untilIdle(m);
+      await askAndWait(m, "de novo");
+      const opened = m.log().filter((l) => l.method === "session/new" || l.method === "session/load" || l.method === "session/resume");
+      if (sw.status === "rejected") {
+        // O pedido pegou a vez: a troca é recusada, e tudo fica no Claude.
+        expect((sw.reason as AgentServiceError).code).toBe("E_AGENT_BUSY");
+        expect(await m.svc.status()).toMatchObject({ kind: "claude", program: "open" });
+        expect(opened.at(-1)!.params._meta).toBeDefined();
+        return;
+      }
+      // A troca valeu: o aberto é o Gemini, na sessão dele, e o Claude fechou.
+      expect(await m.svc.status()).toMatchObject({ kind: "gemini", name: "Gemini", program: "open" });
+      if (claudePid) await until(() => !alive(claudePid));
+      expect(opened.at(-1)!.params._meta).toBeUndefined();
+      expect(existsSync(sessionFileOf(agentDir(m.data), "gemini"))).toBe(true);
+    });
+  }
+
+  test("um pedido que começa por / não chega ao Gemini como comando (ADR 0012)", async () => {
+    const m = make();
+    await m.svc.enable(true);
+    await m.svc.configure({ kind: "gemini" });
+    const events = await askAndWait(m, "/resumo Projeto X");
+    expect(events.at(-1)?.type).toBe("done");
+    const sent = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
+    expect(sent.length).toBeGreaterThan(0);
+    for (const t of sent) expect(t.trimStart().startsWith("/")).toBe(false);
+    expect(sent.at(-1)).toContain("/resumo Projeto X");
+  });
+
+  test("trocar no meio de um pedido: E_AGENT_BUSY, e nada muda", async () => {
+    const m = make();
+    await readyNow(m);
+    const { id } = await m.svc.ask("/ate-cancelar");
+    await until(() => m.turns.some((e) => e.id === id && e.type === "text"));
+    expect((await rejection(m.svc.configure({ kind: "gemini" }))).code).toBe("E_AGENT_BUSY");
+    expect((await m.svc.status()).kind).toBe("claude");
+    await m.svc.cancel();
+    await untilIdle(m);
+  });
+
+  test("um agente que não existe é recusado", async () => {
+    const m = make();
+    expect((await rejection(m.svc.configure({ kind: "codex" as never }))).code).toBe("E_BAD_ARGS");
+  });
+
+  test("o modelo é de cada agente: voltar ao Claude traz o dele", async () => {
+    const m = make();
+    await m.svc.configure({ model: "opus" });
+    let s = await m.svc.configure({ kind: "gemini" });
+    expect(s.model).toBe("default");
+    s = await m.svc.configure({ model: "gemini-exemplo" });
+    s = await m.svc.configure({ kind: "claude" });
+    expect(s.model).toBe("opus");
+    s = await m.svc.configure({ kind: "gemini" });
+    expect(s.model).toBe("gemini-exemplo");
+  });
+
+  test("o login do Gemini: desconhecido até abrir, logado ao abrir, e não logado pelo authRequired", async () => {
+    const out = path.join(tmp(), "sem-login");
+    const m = make({ env: { KIWI_FAKE_AGENT_LOGGED_OUT: out } });
+    await m.svc.enable(true);
+    await m.svc.configure({ kind: "gemini" });
+    let s = await m.svc.status(true);
+    expect(s.gemini).toMatchObject({ loggedIn: false, loginKnown: false });
+
+    writeFileSync(out, "");
+    const failed = await askAndWait(m, "oi");
+    expect(failed.at(-1)).toMatchObject({ type: "error", code: "E_AGENT_NOT_LOGGED_IN" });
+    expect((failed.at(-1) as { message: string }).message).toContain("O Gemini não está logado");
+    s = await m.svc.status();
+    expect(s.gemini?.loggedIn).toBe(false);
+    expect(s.gemini).not.toHaveProperty("loginKnown");
+
+    rmSync(out);
+    expect((await askAndWait(m, "oi")).at(-1)?.type).toBe("done");
+    s = await m.svc.status(true);
+    expect(s.gemini).toMatchObject({ loggedIn: true });
+    expect(s.gemini).not.toHaveProperty("loginKnown");
+  });
+
+  test("o Kiwi nunca lê o ~/.gemini: o estado, o pedido e a troca, com as leituras do processo vigiadas", async () => {
+    // O agente (o processo filho) pode ler o que é dele, numa casa falsa; o Kiwi, não. A vigia olha qualquer caminho
+    // com ".gemini", seja qual for a casa: o `os.homedir()` do Bun não segue o HOME trocado depois de abrir.
+    const home = tmp();
+    mkdirSync(path.join(home, ".gemini"));
+    writeFileSync(path.join(home, ".gemini", "oauth_creds.json"), JSON.stringify({ token: "exemplo" }));
+    // O `import` e o `require` dão objetos diferentes do node:fs: a vigia fica nos dois. Elas passam adiante: só anotam.
+    const fsObjects = [...new Set([fs, require("node:fs")])] as (typeof fs)[];
+    const fspObjects = [...new Set([fsp, require("node:fs/promises")])] as (typeof fsp)[];
+    const watched = [
+      ...fsObjects.flatMap((o) => [spyOn(o, "readFileSync"), spyOn(o, "existsSync"), spyOn(o, "statSync"), spyOn(o, "readdirSync"), spyOn(o, "openSync"), spyOn(o, "readFile"), spyOn(o, "open")]),
+      ...fspObjects.flatMap((o) => [spyOn(o, "readFile"), spyOn(o, "readdir"), spyOn(o, "stat"), spyOn(o, "open")]),
+      spyOn(Bun, "file"),
+    ];
+    const touched = () => watched.flatMap((s) => s.mock.calls.map((c) => String(c[0]))).filter((p) => p.includes(".gemini"));
+    try {
+      const m = make({ env: { HOME: home } });
+      await m.svc.enable(true);
+      await m.svc.configure({ kind: "gemini" });
+      await m.svc.status(true);
+      expect((await askAndWait(m, "oi")).at(-1)?.type).toBe("done");
+      await m.svc.status(true);
+      await m.svc.configure({ kind: "claude" });
+      await m.svc.configure({ kind: "gemini" });
+      await m.svc.status(true);
+      expect(touched()).toEqual([]);
+      // A vigia pega mesmo, pelos dois caminhos.
+      fs.existsSync(path.join(home, ".gemini"));
+      require("node:fs").readFileSync(path.join(home, ".gemini", "oauth_creds.json"));
+      expect(touched()).toHaveLength(2);
+    } finally {
+      for (const s of watched) s.mockRestore();
+    }
+  });
+
+  test("o medidor com o Gemini: nenhum /usage, nem o do Atualizar nem o de depois do pedido", async () => {
+    const m = make({ limitProbe: { delayMs: 10, everyMs: 0 } });
+    await m.svc.enable(true);
+    await m.svc.configure({ kind: "gemini" });
+    await askAndWait(m, "oi");
+    await m.svc.usageRefresh();
+    await Bun.sleep(200);
+    expect(m.log().filter((l) => l.method === "session/usage")).toEqual([]);
+    // Um serviço novo (o app reaberto), com o Gemini salvo e os ajustes ainda não lidos: o Atualizar também não vai.
+    const again = make({ data: m.data, reg: m.reg });
+    await again.svc.usageRefresh();
+    await Bun.sleep(100);
+    expect(again.log().filter((l) => l.method === "session/usage")).toEqual([]);
+    const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => JSON.stringify(l.params.prompt));
+    expect(prompts.some((p) => p.includes("/usage"))).toBe(false);
+    expect((await m.svc.status()).busy).toBe(false);
   });
 });
