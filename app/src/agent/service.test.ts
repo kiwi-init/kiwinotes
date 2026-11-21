@@ -1502,6 +1502,25 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
       expect(usages(m)).toBe(1);
     });
 
+    test("o /usage não entra entre o começo do pedido e o turno dele: o pedido nunca dá E_AGENT_BUSY (main vermelha do #292)", async () => {
+      // O `/usage` demora, e os ajustes do pedido carregam devagar: o relógio do /usage do "um" dispara bem nessa janela.
+      const m = make({ limitProbe: { delayMs: 50 }, env: { KIWI_FAKE_AGENT_USAGE_DELAY_MS: "2000" } });
+      await readyNow(m);
+      await askAndWait(m, "um");
+      const load = m.store.load.bind(m.store);
+      let slow = true;
+      m.store.load = async () => {
+        if (slow) {
+          slow = false;
+          for (let i = 0; i < 15 && usages(m) === 0; i++) await Bun.sleep(20);
+        }
+        return load();
+      };
+      const turn = await askAndWait(m, "dois");
+      expect(turn.find((e) => e.type === "error")).toBeUndefined();
+      expect(turn.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining("turno 2") });
+    });
+
     test("com a conversa do gato na tela, ele espera ela acabar", async () => {
       const m = make({ limitProbe: { delayMs: 20, retryMs: 40 } });
       let open = true;
