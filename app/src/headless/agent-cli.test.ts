@@ -7,6 +7,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { fakeRegistry } from "../agent/fake/registry.ts";
+import { AGENT_NAMES } from "../agent/kinds.ts";
 import { tempDir } from "../../test/tmp.ts";
 import { applyLiveEdits } from "../shared/live-edits.ts";
 
@@ -357,7 +358,7 @@ describe("o agente pela CLI headless (T8678)", () => {
     await invoke("agent.enable");
     const claudePid = Number(readFileSync(path.join(data, "agent", "work", ".fake-agent.pid"), "utf8"));
     const switched = (await invoke("agent.configure", { kind: "gemini" })).json!;
-    expect(switched).toMatchObject({ ok: true, value: { kind: "gemini", name: "Gemini", program: "closed" } });
+    expect(switched).toMatchObject({ ok: true, value: { kind: "gemini", name: AGENT_NAMES.gemini, program: "closed" } });
     await until(async () => !alive(claudePid));
     expect((await invoke("agent.status", { refresh: true })).json!.value.gemini).toMatchObject({ installed: true, versionOk: true, loginKnown: false });
 
