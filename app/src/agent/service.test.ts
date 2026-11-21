@@ -70,6 +70,8 @@ interface Made {
   claudeChecks: () => number;
   log: () => { method: string; params: Record<string, unknown> }[];
   pid: () => number | null;
+  /** Os ajustes gravados, para um teste mudar o que o serviço vai ler sem passar pelo `configure`. */
+  store: SettingsStore;
 }
 
 function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter; doubtTimeoutMs?: number; now?: () => number; limitProbe?: { delayMs?: number; retryMs?: number; everyMs?: number }; window?: { maxTokens?: number; idleMs?: number }; env?: Record<string, string> } = {}): Made {
@@ -123,6 +125,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
     svc,
     data,
     reg,
+    store,
     statuses,
     turns,
     claudeChecks: () => checks,
@@ -2974,6 +2977,26 @@ describe("dois agentes (spec #24666)", () => {
     expect(sent.length).toBeGreaterThan(0);
     for (const t of sent) expect(t.trimStart().startsWith("/")).toBe(false);
     expect(sent.at(-1)).toContain("/resumo Projeto X");
+  });
+
+  // Uma das duas defesas da troca, sozinha (revisão do T24672, #24813): o agente mudou nos ajustes sem o `configure`
+  // fechar o aberto. O host do Claude, ainda vivo, não é reusado: o próximo pedido fecha ele e abre o Gemini.
+  test("um host de outro agente, ainda aberto, nunca é reusado", async () => {
+    const m = make();
+    await readyNow(m);
+    await askAndWait(m, "oi");
+    const claudePid = m.pid()!;
+    expect(alive(claudePid)).toBe(true);
+
+    await m.store.save({ agent: { ...(await m.store.load()).agent, kind: "gemini" } });
+    expect(alive(claudePid)).toBe(true);
+
+    await askAndWait(m, "de novo");
+    expect(await m.svc.status()).toMatchObject({ kind: "gemini", program: "open" });
+    await until(() => !alive(claudePid));
+    const opened = m.log().filter((l) => l.method === "session/new" || l.method === "session/load" || l.method === "session/resume");
+    expect(opened.at(-1)!.params._meta).toBeUndefined();
+    expect(existsSync(sessionFileOf(agentDir(m.data), "gemini"))).toBe(true);
   });
 
   test("trocar no meio de um pedido: E_AGENT_BUSY, e nada muda", async () => {
