@@ -99,6 +99,20 @@ export function agyArgs(): string[] {
   return ["acp", "--disable-telemetry", "--process-per-session", "--sandbox", "--agent", AGY_AGENT];
 }
 
+/** As variáveis que não passam ao `agy`: as do Gemini e do Google (spec #25046). */
+export const AGY_SCRUBBED_ENV = /^(GEMINI_|GOOGLE_)/;
+
+/**
+ * O ambiente do `agy` sem nenhuma variável `GEMINI_*` ou `GOOGLE_*` do ambiente do Kiwi. Uma chave
+ * (`GEMINI_API_KEY`, `GOOGLE_API_KEY`), a troca para a Vertex (`GOOGLE_GENAI_USE_VERTEXAI`) ou uma credencial
+ * (`GOOGLE_APPLICATION_CREDENTIALS`) no ambiente trocariam o login da pessoa por outro, e o Kiwi passaria a decidir o
+ * login (ADR 0011). Sai o prefixo inteiro, não uma lista, para uma variável nova não passar. As que o Kiwi põe
+ * (`geminiEnv`) entram depois.
+ */
+export function agyEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  return Object.fromEntries(Object.entries(env).filter(([k]) => !AGY_SCRUBBED_ENV.test(k)));
+}
+
 /** Se o `agy` tem o ACP: o `acp` aparece como comando no `agy --help`. */
 export function agyHelpHasAcp(help: string): boolean {
   return /^\s*acp\b/m.test(help);

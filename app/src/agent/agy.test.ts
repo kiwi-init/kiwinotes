@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { AGY_AGENT, AGY_AGENT_FILE, AGY_SETTINGS, agyArgs, agyHelpHasAcp, findAgy, findGeminiAgent, programKind, writeAgyWorkspace } from "./agy.ts";
+import { AGY_AGENT, AGY_AGENT_FILE, AGY_SETTINGS, agyArgs, agyEnv, agyHelpHasAcp, findAgy, findGeminiAgent, programKind, writeAgyWorkspace } from "./agy.ts";
 import { AgentError } from "./errors.ts";
 import { FAKE_AGY, FAKE_GEMINI, writeFakeAgyExecutable } from "./fake/index.ts";
 import { geminiStatus } from "./gemini.ts";
@@ -136,6 +136,14 @@ describe("o isolamento do agy (ADR 0012, seção O Antigravity)", () => {
     for (const r of deny) expect(r).toMatch(/^[a-z_]+\([^)]+\)$/);
   });
 
+  test("o ambiente: sai todo GEMINI_* e GOOGLE_*, e o resto fica", () => {
+    expect(agyEnv({ PATH: "/usr/bin", HOME: "/Users/exemplo", GEMINI_API_KEY: "exemplo", GOOGLE_CLOUD_PROJECT: "prj-exemplo", NO_BROWSER: "true" })).toEqual({
+      PATH: "/usr/bin",
+      HOME: "/Users/exemplo",
+      NO_BROWSER: "true",
+    });
+  });
+
   test("grava o agente e os ajustes em <trabalho>/.agents/, e reescreve o que a pessoa ou outro programa mudou", () => {
     const work = path.join(tmp(), "agent", "work");
     expect(writeAgyWorkspace(work)).toBe(work);
@@ -152,15 +160,24 @@ describe("o isolamento do agy (ADR 0012, seção O Antigravity)", () => {
 });
 
 describe("o agy falso pelo host (T25059)", () => {
-  function open(data: string, env: Record<string, string> = {}) {
+  function open(data: string, env: Record<string, string> = {}, kiwiEnv: Record<string, string> = {}) {
     const program = writeFakeAgyExecutable(path.join(data, "bin"), env);
     const log = path.join(data, "fake-log.jsonl");
-    return { program, log, opened: geminiHost({ data, program: [program], env: { ...process.env, KIWI_FAKE_AGENT_LOG: log } }) };
+    return { program, log, opened: geminiHost({ data, program: [program], env: { ...process.env, ...kiwiEnv, KIWI_FAKE_AGENT_LOG: log } }) };
   }
+
+  /** O que estaria no ambiente do Kiwi e não pode chegar ao `agy`: chaves, a Vertex, uma credencial (valores inventados). */
+  const LOGIN_VARS = {
+    GEMINI_API_KEY: "exemplo",
+    GOOGLE_API_KEY: "exemplo",
+    GOOGLE_GENAI_USE_VERTEXAI: "true",
+    GOOGLE_APPLICATION_CREDENTIALS: "/Users/exemplo/credencial.json",
+    GEMINI_MODEL: "exemplo",
+  };
 
   test("abre o agy acp com o isolamento, na pasta de trabalho com o agente e os ajustes, e responde", async () => {
     const data = tmp();
-    const { log, opened } = open(data);
+    const { log, opened } = open(data, {}, LOGIN_VARS);
     const { host, status } = await opened;
     hosts.push(host);
     expect(status).toMatchObject({ installed: true, program: "agy", version: "1.4.0" });
@@ -168,7 +185,9 @@ describe("o agy falso pelo host (T25059)", () => {
     expect(s.agent).toEqual({ name: "Antigravity ACP Server", version: "1.4.0" });
     expect((await host.ask("oi")).text).toContain('Você disse: "oi"');
 
-    const argv = readLog(log).find((l) => l.method === "argv")!.params as { argv: string[]; cwd: string; workspace: { agent: string; settings: string } };
+    const argv = readLog(log).find((l) => l.method === "argv")!.params as { argv: string[]; cwd: string; geminiVars: string[]; workspace: { agent: string; settings: string } };
+    // Nenhuma variável do Gemini ou do Google do ambiente do Kiwi chega ao `agy`: só a que o Kiwi põe.
+    expect(argv.geminiVars).toEqual(["GEMINI_CLI_NO_RELAUNCH"]);
     expect(argv.argv).toEqual(agyArgs());
     expect(argv.cwd).toBe(path.join(data, "agent", "work"));
     // O `agy` acha o agente e os ajustes na pasta em que foi aberto.

@@ -9,7 +9,7 @@
 import path from "node:path";
 
 import { agentDir } from "./adapter/open.ts";
-import { agyArgs, programKind, writeAgyWorkspace } from "./agy.ts";
+import { agyArgs, agyEnv, programKind, writeAgyWorkspace } from "./agy.ts";
 import { AgentError } from "./errors.ts";
 import { geminiArgs, geminiEnv, geminiStatus, GEMINI_MIN_VERSION, writeGeminiPolicy, type GeminiStatus } from "./gemini.ts";
 import { AgentHost, type AgentHostOptions } from "./host.ts";
@@ -46,7 +46,8 @@ export async function geminiHost(o: GeminiHostOptions): Promise<{ host: AgentHos
     kind: "gemini",
     command: [...o.program, ...args],
     dir,
-    env: { ...env, ...geminiEnv(o.program, env) },
+    // O `agy` sem as variáveis do Gemini e do Google da pessoa (`agyEnv`): o login é o dele, nunca uma chave do ambiente.
+    env: { ...(agy ? agyEnv(env) : env), ...geminiEnv(o.program, env) },
     ...o.host,
   });
   return { host, status };

@@ -308,6 +308,9 @@ O Gemini CLI saiu para contas pessoais em 18/06/2026 (#25046). No lugar dele vem
 - **A mínima é a que tem o `acp`.** O `geminiStatus` roda o `agy --help`: instalado se ele responde, e `tooOld` se a ajuda não tem o comando `acp`. A doc não diz em que versão o `acp` entrou, então o número (`agy --version`) é só para mostrar.
 
 **O login.** É do `agy`: `agy` no Terminal, ou `agy acp --login`. Sem login, o ACP volta com "Authentication required" (-32000). O Kiwi nunca chama o `authenticate`, nunca usa o `GEMINI_API_KEY` e nunca lê a pasta `~/.gemini`. Nunca troca o HOME nem copia credencial: o login fica onde o `agy` guarda.
+- **O ambiente do `agy` sai sem nenhuma variável `GEMINI_*` ou `GOOGLE_*` do ambiente do Kiwi** (`agyEnv`), menos as que o Kiwi põe (`GEMINI_CLI_NO_RELAUNCH`). Uma chave (`GEMINI_API_KEY`, `GOOGLE_API_KEY`), a Vertex (`GOOGLE_GENAI_USE_VERTEXAI`) ou uma credencial (`GOOGLE_APPLICATION_CREDENTIALS`) no ambiente trocaria o login da pessoa por cobrança na chave, e o Kiwi passaria a decidir o login (ADR 0011). Sai o prefixo inteiro, não uma lista, para uma variável nova não passar.
+- O `gemini` antigo continua recebendo o ambiente como está: o login por chave é um dos jeitos dele, escolhido pela pessoa nas configurações do próprio Gemini.
+- **A prova do harry** confere se uma conta empresa no `agy` precisa do `GOOGLE_CLOUD_PROJECT`, que também sai.
 
 **O isolamento.** O harry pediu o `agy` enxuto o quanto der, como o Claude (#25063). A pasta de trabalho é a `<dados>/agent/work`, que é o cwd do filho e o da sessão; o Kiwi reescreve o que é dele ali a cada abertura.
 
