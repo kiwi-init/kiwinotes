@@ -570,9 +570,14 @@ describe("canal remoto: o release ui-channel (spec #25011)", () => {
   });
 
   test("uma UI nova chega pelo release: só o GET do manifesto e o do pack, nas URLs fixas", async () => {
-    const fetchSpy = spyOn(globalThis, "fetch");
     const local = startChannel();
     cleanups.push(local.stop);
+    // O fetch global só chega ao canal falso local; a internet, nunca (nem com o código errado).
+    const realFetch = globalThis.fetch;
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: string | URL | Request, init?: RequestInit) => {
+      if (!String(input).startsWith(`${local.base}/`)) throw new Error(`no internet in tests: ${String(input)}`);
+      return realFetch(input, init);
+    }) as typeof fetch);
     const release = fakeRelease(local);
     try {
       const r = rig(null, { channel: { kind: "remote", manifestUrl: remoteManifestUrl("settings") }, remoteFetch: release.remoteFetch });
@@ -597,7 +602,6 @@ describe("canal remoto: o release ui-channel (spec #25011)", () => {
         expect(init?.body).toBeUndefined();
         expect(init?.headers).toBeUndefined();
       }
-      // Só o canal falso local foi chamado pelo fetch global, nunca a internet.
       for (const [input] of fetchSpy.mock.calls) expect(String(input).startsWith(`${local.base}/`)).toBe(true);
     } finally {
       fetchSpy.mockRestore();
