@@ -9,6 +9,7 @@ import {
   contractError,
   keyError,
   manifestAssetName,
+  parseTrustedKeys,
   publishChannel,
   staleError,
 } from "./ui-channel-publish.ts";
@@ -78,6 +79,17 @@ describe("a chave", () => {
     expect(problem).toContain(`the signing key ${other.keyId} isn't in`);
     expect(problem).not.toContain("PRIVATE");
     expect(keyError("não é pem", trusted)).toContain("isn't an Ed25519");
+  });
+});
+
+describe("as chaves do app publicado", () => {
+  test("lê as do ui-keys.ts de verdade, e uma chave que o app ainda não tem é recusada", () => {
+    const keys = parseTrustedKeys(readFileSync(path.join(import.meta.dirname, "../src/bun/ui-keys.ts"), "utf8"));
+    expect(Object.keys(keys).length).toBeGreaterThan(0);
+    for (const [id, pub] of Object.entries(keys)) expect(pub).toHaveLength(43), expect(id).toHaveLength(16);
+    const fresh = generateSigningKey();
+    expect(keyError(fresh.privateKeyPem, keys)).toContain("isn't in");
+    expect(() => parseTrustedKeys("export const UI_TRUSTED_KEYS = {};")).toThrow("no trusted keys");
   });
 });
 

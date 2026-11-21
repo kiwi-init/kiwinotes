@@ -16,7 +16,8 @@
 //   que o app não tem. O pack leva `requiresContract: ^<contrato>`, e um app mais velho recusa antes do download;
 // - uma UI de um commit que não é mais novo que o da UI no canal (`--source-time` contra o `uiVersion` publicado).
 //
-// A chave vem só da variável `UI_SIGNING_KEY` (o segredo da org), nunca de arquivo, e nunca é impressa.
+// A chave vem só da variável `UI_SIGNING_KEY` (o segredo do repo), nunca de arquivo, e nunca é impressa. Com
+// `--app-keys <ui-keys.ts do app publicado>`, ela tem de estar no app que vai receber a UI, não só no commit.
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -85,6 +86,14 @@ export function staleError(next: string, previous: string | null): string | null
   if (!a) throw new Error(`not a channel uiVersion: ${next}`);
   if (!b) return null;
   return a > b ? null : `the UI ${next} isn't newer than the published ${previous}`;
+}
+
+/** As chaves de um `ui-keys.ts` (o do app publicado, por `git show`), sem importar o arquivo. */
+export function parseTrustedKeys(source: string): Record<string, string> {
+  const keys: Record<string, string> = {};
+  for (const m of source.matchAll(/"([0-9a-f]{16})"\s*:\s*"([A-Za-z0-9_-]{43})"/g)) keys[m[1]!] = m[2]!;
+  if (Object.keys(keys).length === 0) throw new Error("no trusted keys in the published app's ui-keys.ts");
+  return keys;
 }
 
 /** A chave assina algo que o app aceita? Uma chave fora do `ui-keys.ts` publicaria packs que todo app recusa. */
@@ -186,7 +195,7 @@ if (import.meta.main) {
   const throwaway = rehearsal ? generateSigningKey() : null;
   const key = throwaway ? throwaway.privateKeyPem : process.env.UI_SIGNING_KEY;
   if (!key) {
-    console.error("ui-channel-publish: UI_SIGNING_KEY is empty (the org secret)");
+    console.error("ui-channel-publish: UI_SIGNING_KEY is empty (the repo secret)");
     process.exit(2);
   }
   const appDir = path.resolve(import.meta.dirname, "..");
@@ -199,7 +208,11 @@ if (import.meta.main) {
       sourceTimeSec: Number(need("--source-time")),
       baseUrl: need("--base-url"),
       previousBase: flag("--previous-base"),
-      ...(throwaway ? { trusted: { [throwaway.keyId]: throwaway.publicKey } } : {}),
+      ...(throwaway
+        ? { trusted: { [throwaway.keyId]: throwaway.publicKey } }
+        : flag("--app-keys")
+          ? { trusted: parseTrustedKeys(readFileSync(flag("--app-keys")!, "utf8")) }
+          : {}),
     });
     if (throwaway) console.log(`ui-channel-publish: rehearsal, signed with a throwaway key ${throwaway.keyId}`);
     for (const p of published) console.log(`ui-channel-publish: ${p.window} ${p.uiVersion} seq ${p.seq} ${p.requiresContract} → ${p.bundle}`);

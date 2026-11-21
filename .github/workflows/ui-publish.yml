@@ -1,14 +1,14 @@
 # A UI nova sem release (spec #25011, parte 2, T25030): assina as telas e sobrescreve o release `ui-channel`, de onde o
 # app baixa a "Nova aparência pronta". Só a tela muda; o engine, o helper e as capacidades continuam no release.yml.
 #
-# - tag `ui-ANO.MÊS.N` (por exemplo `ui-2026.11.1`): publica no `ui-channel`, assinado com o segredo da org
-#   `UI_SIGNING_KEY` (Ed25519; a pública em app/src/bun/ui-keys.ts). Quem põe o segredo é o harry; ninguém lê a chave;
+# - tag `ui-ANO.MÊS.N` (por exemplo `ui-2026.11.1`): publica no `ui-channel`, assinado com o segredo do repo
+#   `UI_SIGNING_KEY` (Ed25519, gerada direto no segredo; a pública em app/src/bun/ui-keys.ts). Ninguém vê a chave;
 # - "Run workflow" à mão: com rehearsal ligado (o padrão), assina com uma chave descartável e publica no
 #   `ui-channel-rehearsal`, que nenhum app lê. Sem rehearsal, é como o tag.
 #
 # Recusa, sem publicar nada: um commit que não tem o último release `v*` (a tela voltaria para trás), uma UI de contrato
 # mais novo que o do app publicado (só com release), um commit que não é mais novo que o da UI no canal, e uma chave
-# fora do ui-keys.ts. O app só aceita o endereço do release (T25028/T25029). Quem solta é o releaser, com a regra de ok
+# fora do ui-keys.ts do app publicado. O app só aceita o endereço do release (T25028/T25029). Quem solta é o releaser, com a regra de ok
 # do harry, como o release.
 
 name: ui-publish
@@ -88,10 +88,13 @@ jobs:
             # Um repo de ensaio sem release: o contrato do próprio commit.
             echo "no published app (rehearsal): using this commit's contract"
             contract=$(contract_at HEAD)
+            cp src/bun/ui-keys.ts "$RUNNER_TEMP/app-ui-keys.ts"
           else
             [[ "$latest" == v* ]] || { echo "the latest release ($latest) isn't an app release v*"; exit 1; }
             git merge-base --is-ancestor "$latest" HEAD || { echo "this commit doesn't contain the published app $latest; the UI would go back"; exit 1; }
             contract=$(contract_at "$latest")
+            # As chaves que o app publicado confia: uma chave nova só vale depois de um release com ela.
+            git show "$latest:app/src/bun/ui-keys.ts" > "$RUNNER_TEMP/app-ui-keys.ts"
           fi
           [[ -n "$contract" ]] || { echo "no UI_CONTRACT_VERSION found"; exit 1; }
           echo "published app: ${latest:-(none)}, contract $contract"
@@ -113,7 +116,8 @@ jobs:
         run: |
           set -euo pipefail
           bun scripts/ui-channel-publish.ts $REHEARSAL --out ../out --app-contract "${{ steps.app.outputs.contract }}" \
-            --source-time "${{ steps.app.outputs.time }}" --base-url "$BASE" --previous-base "$BASE"
+            --source-time "${{ steps.app.outputs.time }}" --base-url "$BASE" --previous-base "$BASE" \
+            --app-keys "$RUNNER_TEMP/app-ui-keys.ts"
           ls -la ../out
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
