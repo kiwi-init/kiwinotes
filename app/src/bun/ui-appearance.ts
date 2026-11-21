@@ -68,16 +68,30 @@ export function closedWindowStatus(dir: string, builtIn: BuiltInVersion): UiStat
   return m ? { uiVersion: m.uiVersion, builtIn: false, pending: null } : { uiVersion: builtIn.uiVersion, builtIn: true, pending: null };
 }
 
+/** A UI na tela de uma janela aberta: a instalada (o sha dela) ou a de fábrica (null). */
+export type OnScreen = { sha256: string } | null;
+
 /**
- * O estado depois do "Voltar à aparência anterior": a UI que subiria e as mais novas que ela (`next`, `retry`) vão para
- * o `bad`, e saem do `current` e das boas. Sobe a anterior boa, ou a de fábrica. Null: não há UI instalada a desfazer.
+ * O estado depois do "Voltar à aparência anterior". O alvo é a UI que a pessoa vê: numa janela aberta, a da tela
+ * (`onScreen`); numa fechada, a que subiria na próxima abertura. O alvo e as mais novas que ele (o `next` que espera o
+ * Recarregar, o `retry`) vão para o `bad` e saem do `current` e das boas; sobe a anterior boa, ou a de fábrica.
+ * Com a de fábrica na tela, não há anterior: só a nova que espera é descartada, para o Voltar não ser desfeito pelo
+ * Recarregar ou pela próxima abertura. Null: nada a desfazer.
  */
-export function revertedState(state: Record<string, unknown> | null, builtIn: BuiltInVersion): Record<string, unknown> | null {
-  const target = installedToBoot(state, builtIn);
-  if (!state || !target) return null;
-  const bad = { ...badOf(state) };
-  const drop = [target, manifestOf(state.next), manifestOf(state.retry)].filter((m): m is Manifest => m !== null && m.seq >= target.seq);
-  for (const m of drop) bad[m.sha256] = REVERT_REASON;
+export function revertedState(state: Record<string, unknown> | null, builtIn: BuiltInVersion, onScreen?: OnScreen): Record<string, unknown> | null {
+  if (!state) return null;
+  const bad = badOf(state);
+  const installed = [manifestOf(state.next), manifestOf(state.retry), manifestOf(state.current), ...goodOf(state)].filter(
+    (m): m is Manifest => m !== null && !(m.sha256 in bad) && m.seq > builtIn.seq,
+  );
+  const target = onScreen === undefined ? installedToBoot(state, builtIn) : onScreen && installed.find((m) => m.sha256 === onScreen.sha256);
+  const waiting = [manifestOf(state.next), manifestOf(state.retry)].filter((m): m is Manifest => m !== null && !(m.sha256 in bad));
+  // Uma instalada na tela que o engine.json não conhece mais: não há o que mexer com segurança.
+  if (onScreen && !target) return null;
+  const drop = target ? [target, ...waiting.filter((m) => m.seq >= target.seq)] : waiting;
+  if (drop.length === 0) return null;
+  const nextBad = { ...bad };
+  for (const m of drop) nextBad[m.sha256] = REVERT_REASON;
   const gone = new Set(drop.map((m) => m.sha256));
   const keep = (m: Manifest | null) => (m && !gone.has(m.sha256) ? m : null);
   const good = goodOf(state).filter((m) => !gone.has(m.sha256));
@@ -89,17 +103,20 @@ export function revertedState(state: Record<string, unknown> | null, builtIn: Bu
     next: keep(manifestOf(state.next)),
     retry: keep(manifestOf(state.retry)),
     good,
-    bad,
+    bad: nextBad,
     strikes,
     // Como o engine faz ao banir: o teto do esquema de dados volta ao das boas que ficaram.
     dataSchemaHighWater: Math.max(0, ...good.map((m) => m.dataSchema)),
   };
 }
 
-/** Volta a janela à aparência anterior, com o engine dela parado. Devolve se havia o que desfazer. */
-export function revertWindow(dir: string, builtIn: BuiltInVersion): boolean {
+/**
+ * Volta a janela à aparência anterior, com o engine dela parado. `onScreen`: a UI na tela de uma janela aberta (sem ele,
+ * a janela está fechada). Devolve se havia o que desfazer.
+ */
+export function revertWindow(dir: string, builtIn: BuiltInVersion, onScreen?: OnScreen): boolean {
   if (!existsSync(engineFile(dir))) return false;
-  const next = revertedState(readState(dir), builtIn);
+  const next = revertedState(readState(dir), builtIn, onScreen);
   if (!next) return false;
   // Gravado de uma vez (tmp + rename): um engine.json pela metade faria o engine começar do zero.
   const tmp = `${engineFile(dir)}.tmp`;
