@@ -112,6 +112,23 @@ export function channelSource(choice: UiChannelChoice, remoteFetch: typeof fetch
   return { manifestUrl: "http://127.0.0.1/kiwinotes-ui-channel-off/manifest.json", fetch: channelOff, pollIntervalMs: 24 * 60 * 60_000 };
 }
 
+/**
+ * O fetch do canal com o "Buscar atualizações" (T25110): lê o ajuste a cada pedido (o manifesto ao abrir e a cada 6 h,
+ * e o pack) e, desligado, recusa sem ir à rede. Ligar de novo vale no próximo pedido, sem reiniciar.
+ */
+export function gateFetch(inner: typeof fetch, allowed: () => boolean | Promise<boolean>): typeof fetch {
+  return (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    if (!(await allowed())) throw new Error("the UI channel is off (Buscar atualizações is off)");
+    return inner(input, init);
+  }) as unknown as typeof fetch;
+}
+
+/** O `channelSource` com o `gateFetch`: o canal desligado já não vai à rede e fica como está. */
+function gatedSource(src: ReturnType<typeof channelSource>, choice: UiChannelChoice, checkUpdates: UiEngineOptions["checkUpdates"]) {
+  if (!checkUpdates || choice.kind === "off") return src;
+  return { ...src, fetch: gateFetch(src.fetch ?? fetch, checkUpdates) };
+}
+
 export interface UiEngineOptions {
   name: UiWindow;
   /** <dados>/appengine/<janela>: o estado do engine e do canal, os packs e a pasta servida. */
@@ -127,6 +144,8 @@ export interface UiEngineOptions {
   remoteFetch?: typeof fetch;
   readyTimeoutMs?: number;
   probationMs?: number;
+  /** "Buscar atualizações" em Ajustes (T25110), lido a cada GET do canal. Sem ele, ligado. */
+  checkUpdates?: () => boolean | Promise<boolean>;
 }
 
 /** A pasta que a janela serve como views:// (o `viewsRoot`). Fora do .app, para não mexer na assinatura. */
@@ -140,7 +159,7 @@ export function createUiEngine(o: UiEngineOptions): AppEngine {
     readyTimeoutMs: o.readyTimeoutMs,
     probationMs: o.probationMs,
     channel: {
-      ...channelSource(o.channel, o.remoteFetch),
+      ...gatedSource(channelSource(o.channel, o.remoteFetch), o.channel, o.checkUpdates),
       trustedKeys: o.trustedKeys,
       root: path.join(o.dir, "packs"),
       stateFile: path.join(o.dir, "channel.json"),

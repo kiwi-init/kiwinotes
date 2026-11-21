@@ -1,6 +1,6 @@
 // Os textos da seção Sobre (T2386, spec #16837), fora do componente: assim os testes não carregam o CSS nem o ícone.
 
-import type { AppChannel, UpdatesView } from "../../src/shared/ui-contract.ts";
+import { type AppChannel, UPDATES_OFF_BY_SETTING, type UpdatesView } from "../../src/shared/ui-contract.ts";
 
 export const CHANNEL: Record<AppChannel, string> = {
   stable: "estável",
@@ -42,6 +42,9 @@ export function updateBand(v: UpdatesView): UpdateBand {
   const check = (label = "Verificar atualizações") => ({ kind: "check" as const, label });
   switch (v.state) {
     case "off":
+      // Desligado pela pessoa (T25110): diz o que deixa de acontecer, e o interruptor fica logo abaixo.
+      if (v.reason === UPDATES_OFF_BY_SETTING)
+        return { tone: "quiet", title: "Atualizações desligadas", detail: "O Kiwi não procura versão nova nem aparência nova.", bar: null, notesOf: null, action: null };
       return { tone: "quiet", title: "Atualizações desligadas", detail: `Neste build (${v.reason}).`, bar: null, notesOf: null, action: null };
     case "checking":
       return { tone: "busy", title: "Procurando atualizações…", detail: "Conferindo no GitHub.", bar: null, notesOf: null, action: null };
@@ -105,3 +108,7 @@ export function creditsLine(credits = CREDITS): string {
   if (!credits.length) return "";
   return `Com ${credits.map((c) => `${c.name}, ${c.by.startsWith("Mozilla") ? "da" : "de"} ${c.by} (${c.license})`).join("; ")}.`;
 }
+
+/** O interruptor do Sobre (T25110): o que ele liga, e que desligado nada vai à rede para isso. */
+export const CHECK_UPDATES_HINT =
+  "Procura no GitHub uma versão nova do app e da aparência das janelas. Desligado, o Kiwi não faz nenhum pedido para isso.";
