@@ -265,7 +265,7 @@ describe("o agy: permissões, sessão e login no host (T25060)", () => {
     const e = await rejection(host.start());
     expect(e.code).toBe("E_AGENT_NOT_LOGGED_IN");
     expect(e.message).not.toContain("Antigravity");
-    expect(e.message).toContain("Entre na sua conta pelo próprio Gemini");
+    expect(e.message).toContain(`Entre na sua conta pelo próprio ${GEMINI}`);
   });
 
   test("retomar não repete a conversa; deslogado na retomada, o mesmo erro do login", async () => {
