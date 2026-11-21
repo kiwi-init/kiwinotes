@@ -2985,24 +2985,20 @@ describe("dois agentes (spec #24666)", () => {
   });
 
   test("o Kiwi nunca lê o ~/.gemini: o estado, o pedido e a troca, com as leituras do processo vigiadas", async () => {
+    // O agente (o processo filho) pode ler o que é dele, numa casa falsa; o Kiwi, não. A vigia olha qualquer caminho
+    // com ".gemini", seja qual for a casa: o `os.homedir()` do Bun não segue o HOME trocado depois de abrir.
     const home = tmp();
     mkdirSync(path.join(home, ".gemini"));
     writeFileSync(path.join(home, ".gemini", "oauth_creds.json"), JSON.stringify({ token: "exemplo" }));
-    const before = process.env.HOME;
-    process.env.HOME = home;
-    // Passam adiante: só anotam o caminho. O agente (o processo filho) pode ler o que é dele; o Kiwi, não.
+    // O `import` e o `require` dão objetos diferentes do node:fs: a vigia fica nos dois. Elas passam adiante: só anotam.
+    const fsObjects = [...new Set([fs, require("node:fs")])] as (typeof fs)[];
+    const fspObjects = [...new Set([fsp, require("node:fs/promises")])] as (typeof fsp)[];
     const watched = [
-      spyOn(fs, "readFileSync"),
-      spyOn(fs, "existsSync"),
-      spyOn(fs, "statSync"),
-      spyOn(fs, "readdirSync"),
-      spyOn(fs, "openSync"),
-      spyOn(fsp, "readFile"),
-      spyOn(fsp, "readdir"),
-      spyOn(fsp, "stat"),
-      spyOn(fsp, "open"),
+      ...fsObjects.flatMap((o) => [spyOn(o, "readFileSync"), spyOn(o, "existsSync"), spyOn(o, "statSync"), spyOn(o, "readdirSync"), spyOn(o, "openSync"), spyOn(o, "readFile"), spyOn(o, "open")]),
+      ...fspObjects.flatMap((o) => [spyOn(o, "readFile"), spyOn(o, "readdir"), spyOn(o, "stat"), spyOn(o, "open")]),
       spyOn(Bun, "file"),
     ];
+    const touched = () => watched.flatMap((s) => s.mock.calls.map((c) => String(c[0]))).filter((p) => p.includes(".gemini"));
     try {
       const m = make({ env: { HOME: home } });
       await m.svc.enable(true);
@@ -3013,14 +3009,13 @@ describe("dois agentes (spec #24666)", () => {
       await m.svc.configure({ kind: "claude" });
       await m.svc.configure({ kind: "gemini" });
       await m.svc.status(true);
-      const touched = watched.flatMap((s) => s.mock.calls.map((c) => String(c[0]))).filter((p) => p.includes(".gemini"));
-      expect(touched).toEqual([]);
-      // A vigia pega mesmo: uma leitura do ~/.gemini aparece nela.
+      expect(touched()).toEqual([]);
+      // A vigia pega mesmo, pelos dois caminhos.
       fs.existsSync(path.join(home, ".gemini"));
-      expect(watched[1]!.mock.calls.some((c) => String(c[0]).includes(".gemini"))).toBe(true);
+      require("node:fs").readFileSync(path.join(home, ".gemini", "oauth_creds.json"));
+      expect(touched()).toHaveLength(2);
     } finally {
       for (const s of watched) s.mockRestore();
-      process.env.HOME = before;
     }
   });
 
