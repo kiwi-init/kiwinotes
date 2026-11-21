@@ -31,8 +31,6 @@ export interface AppAgentOptions {
   log?: (msg: string) => void;
 }
 
-/** O `gemini` falso (T24671): o mesmo arquivo responde ao `--version` e fala ACP no `--acp`. */
-
 export function appAgentService(o: AppAgentOptions): AgentService {
   const env = o.env ?? process.env;
   const headless = env.KIWI_HEADLESS === "1";

@@ -15,7 +15,6 @@ import type { ProgramArgv } from "./claude.ts";
 
 export const GEMINI = AGENT_NAMES.gemini;
 
-
 export interface GeminiHostOptions {
   /** A pasta de dados do app (ou a de teste). */
   data: string;
