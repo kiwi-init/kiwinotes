@@ -3027,6 +3027,11 @@ describe("dois agentes (spec #24666)", () => {
     await m.svc.usageRefresh();
     await Bun.sleep(200);
     expect(m.log().filter((l) => l.method === "session/usage")).toEqual([]);
+    // Um serviço novo (o app reaberto), com o Gemini salvo e os ajustes ainda não lidos: o Atualizar também não vai.
+    const again = make({ data: m.data, reg: m.reg });
+    await again.svc.usageRefresh();
+    await Bun.sleep(100);
+    expect(again.log().filter((l) => l.method === "session/usage")).toEqual([]);
     const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => JSON.stringify(l.params.prompt));
     expect(prompts.some((p) => p.includes("/usage"))).toBe(false);
     expect((await m.svc.status()).busy).toBe(false);

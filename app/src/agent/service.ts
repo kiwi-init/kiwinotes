@@ -1188,7 +1188,8 @@ export class AgentService {
    */
   async usageRefresh(): Promise<AgentUsageView> {
     // O `/usage` é um comando do Claude Code (spec #24666): com o Gemini, o medidor fica só com o que o ACP disse.
-    await this.settings.load();
+    // Aqui sem `await`, pelo agente já carregado (a marca abaixo tem de entrar antes do 1º `await`); de novo depois
+    // de carregar os ajustes, lá dentro.
     if (this.kind !== "claude") return this.usageView();
     // Um pedido da pessoa já andando: o /usage não entra no meio dele (o botão do medidor fica desligado com `busy`).
     if (this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
@@ -1207,6 +1208,7 @@ export class AgentService {
       try {
         await this.limitProbe;
         const s = await this.settings.load();
+        if (this.kind !== "claude") return;
         if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
         if (this.adapterMissing()) throw new AgentError("E_ADAPTER_MISSING", this.name);
         if (run.yielded) return;
