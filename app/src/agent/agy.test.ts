@@ -9,7 +9,7 @@ import { AGY_AGENT, AGY_AGENT_FILE, AGY_SETTINGS, agyArgs, agyEnv, agyHelpHasAcp
 import { AgentError } from "./errors.ts";
 import { FAKE_AGY, FAKE_GEMINI, writeFakeAgyExecutable } from "./fake/index.ts";
 import { geminiStatus } from "./gemini.ts";
-import { AGY_LOGIN_HELP, geminiHost } from "./gemini-host.ts";
+import { AGY_LOGIN_HELP, GEMINI, geminiHost } from "./gemini-host.ts";
 import type { AgentHost } from "./host.ts";
 import { tempDir } from "../../test/tmp.ts";
 
@@ -254,7 +254,7 @@ describe("o agy: permissões, sessão e login no host (T25060)", () => {
     const { host, log } = await agy(tmp(), { KIWI_FAKE_GEMINI_LOGGED_IN: "0" });
     const e = await rejection(host.start());
     expect(e.code).toBe("E_AGENT_NOT_LOGGED_IN");
-    expect(e.message).toBe(`O Gemini não está logado. ${AGY_LOGIN_HELP}`);
+    expect(e.message).toBe(`O ${GEMINI} não está logado. ${AGY_LOGIN_HELP}`);
     expect(e.detail).toContain("Authentication required");
     expect(readLog(log).map((l) => l.method)).not.toContain("authenticate");
   });

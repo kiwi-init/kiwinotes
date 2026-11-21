@@ -1,11 +1,11 @@
 // `bun run cli agent …` (T8478): a CLI de ponta a ponta, com o `claude` falso e o agente falso.
 
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { tempDir } from "../test/tmp.ts";
-import { AGY_LOGIN_HELP } from "../src/agent/gemini-host.ts";
+import { AGY_LOGIN_HELP, GEMINI, GEMINI_NOT_A_COMMAND } from "../src/agent/gemini-host.ts";
 
 const CLI = path.join(import.meta.dir, "cli.ts");
 const dirs: string[] = [];
@@ -145,7 +145,7 @@ describe("o Gemini (spec #24666), com o gemini falso", () => {
     const r = await cli(["ask", "oi", "--agent", "gemini", "--data", data], { KIWI_FAKE_AGENT_LOGGED_OUT: out });
     expect(r.exit).toBe(1);
     expect(r.result).toMatchObject({ ok: false, code: "E_AGENT_NOT_LOGGED_IN" });
-    expect(r.result!.message).toContain("O Gemini não está logado");
+    expect(r.result!.message).toContain(`O ${GEMINI} não está logado`);
     // O `agy` falso é o padrão da CLI (spec #25046): a mensagem diz como entrar no Antigravity.
     expect(r.result!.message).toContain(AGY_LOGIN_HELP);
     expect(r.result!.message).not.toMatch(/auth|required/i);
@@ -158,6 +158,20 @@ describe("o Gemini (spec #24666), com o gemini falso", () => {
     expect(first.result!.value.agent).toMatchObject({ name: expect.stringMatching(/Antigravity/) });
     const second = await cli(["ask", "de novo", "--agent", "gemini", "--data", data], { KIWI_FAKE_AGENT_RESUME: "resume" });
     expect(second.result!.value).toMatchObject({ resumed: true, sessionId: first.result!.value.sessionId });
+  });
+
+  test("o / no começo do pedido vai com a marca, e não vira um comando do Gemini (ADR 0012)", async () => {
+    const data = tmp();
+    const log = path.join(data, "fake-log.jsonl");
+    const r = await cli(["ask", "/resumo Projeto X", "--agent", "gemini", "--data", data], { KIWI_FAKE_AGENT_LOG: log });
+    expect(r.exit).toBe(0);
+    const sent = readFileSync(log, "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l) as { method: string; params: { prompt?: { text: string }[] } })
+      .filter((l) => l.method === "session/prompt")
+      .map((l) => l.params.prompt![0]!.text);
+    expect(sent).toEqual([`${GEMINI_NOT_A_COMMAND}\n/resumo Projeto X`]);
   });
 
   test("um agente que não existe: uso errado", async () => {

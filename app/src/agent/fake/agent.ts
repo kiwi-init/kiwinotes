@@ -39,8 +39,8 @@
 //                            "agy": o Antigravity CLI (spec #25046), aberto pelo `fake/agy.ts`: o `initialize` dele (os
 //                            cinco jeitos de logar, `loadSession` e `session/resume`), a retomada pelo `session/resume`
 //                            (sem repetir a conversa), o -32000 "Authentication required" sem login e as opções Allow e
-//                            Deny. Os ids das opções e o `_meta` das ferramentas são suposição (a doc não diz): ficam os
-//                            do "gemini" até o harry rodar o de verdade (T25060)
+//                            Deny. A doc não diz os ids nem o `_meta`: os ids são inventados (`agy-allow`, `agy-deny`) e o
+//                            `_meta` das ferramentas fica o do "gemini", até o harry rodar o de verdade (T25060)
 //   KIWI_FAKE_AGENT_LOGGED_OUT  com o "gemini": um caminho; enquanto o arquivo existe, é como o LOGGED_IN=0. Um teste
 //                            desloga e loga de novo sem reabrir o falso (T24672)
 //   KIWI_FAKE_AGENT_MODEL    o modelo com que a sessão abre (o padrão é "fable", como se viesse do terminal da pessoa,
@@ -86,7 +86,7 @@ function toolTitle(name: string, kiwi: boolean): string {
 }
 /**
  * As opções de um pedido de permissão: as do Gemini usam os nomes dele. As do `agy` são Allow e Deny (a doc "ACP" do
- * Antigravity); os ids são suposição, e o host só olha o `kind`.
+ * Antigravity); os ids são inventados (`agy-allow`, `agy-deny`), e o host só olha o `kind`.
  */
 const PERMISSION_OPTIONS: PermissionOption[] = AGY
   ? [
