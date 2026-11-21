@@ -269,7 +269,11 @@ export type { NoteModel };
 // 1.94.0 (T23627, spec #21155): o `insertRow` nas `docxOps`, a linha de tabela que o Kiwi insere num docx. Só acréscimo.
 // 1.95.0 (T24672, spec #24666): o Gemini como 2º agente. O `kind` ("claude" ou "gemini") e o `gemini` no `AgentStatus`,
 //   e o `kind` no `agent.configure`: trocar fecha o agente aberto, e cada um tem a sua sessão. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.95.0";
+// 1.97.0 (T25110, spec #25011): "Buscar atualizações", o `checkUpdates` nas settings (ligado por padrão). Desligado, o
+//   Updater e o canal da UI não vão à rede, e o `updates` do Sobre fica `off` com o `UPDATES_OFF_BY_SETTING`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.97.0";
+/** O `reason` do `updates` desligado quando foi a pessoa, em Ajustes (1.97.0, T25110), e não o build. */
+export const UPDATES_OFF_BY_SETTING = "desligado em Buscar atualizações";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */

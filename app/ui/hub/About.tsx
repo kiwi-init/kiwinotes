@@ -11,9 +11,9 @@ import { useEffect, useState } from "react";
 
 import { type AppAbout, releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
-import { Button } from "../src/kit/index.tsx";
+import { Button, Row, Switch } from "../src/kit/index.tsx";
 import { PRIVACY_RULE } from "../settings/agentText.ts";
-import { CHANNEL, CREDITS, DIAG_HINT, updateBand } from "./aboutText.ts";
+import { CHANNEL, CHECK_UPDATES_HINT, CREDITS, DIAG_HINT, updateBand } from "./aboutText.ts";
 import appIcon from "./app-icon.webp";
 
 /** Abre um link do GitHub fora do app (no navegador padrão, pelo `newWindow: "external"` da janela). */
@@ -115,6 +115,7 @@ export function About() {
               </Button>
             ) : null}
           </div>
+          <CheckUpdates onChanged={(v) => setView(v)} />
         </div>
       </div>
 
@@ -160,6 +161,40 @@ function Licenses({ onBack }: { onBack: () => void }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * "Buscar atualizações" (T25110, spec #25011): ligado por padrão. Desligado, nem o Updater nem o canal da UI vão à rede,
+ * a partir da próxima checagem e sem reiniciar. Depois de salvar, a faixa de cima é lida de novo.
+ */
+function CheckUpdates({ onChanged }: { onChanged: (v: UpdatesView) => void }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    api.settings.get().then((s) => setOn(s.checkUpdates), () => {});
+  }, []);
+  if (on === null) return null;
+  const change = (next: boolean) => {
+    setFailed(false);
+    setOn(next);
+    api.settings.set({ checkUpdates: next }).then(
+      (s) => {
+        setOn(s.checkUpdates);
+        api.app.about().then((a) => onChanged(a.updates), () => {});
+      },
+      () => {
+        setOn(!next);
+        setFailed(true);
+      },
+    );
+  };
+  return (
+    <div className="kn-about-check">
+      <Row label="Buscar atualizações" hint={failed ? "Não deu para salvar. Tente de novo." : CHECK_UPDATES_HINT}>
+        <Switch label="Buscar atualizações" checked={on} onChange={change} />
+      </Row>
     </div>
   );
 }

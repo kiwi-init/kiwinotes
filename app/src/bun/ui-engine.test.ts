@@ -33,6 +33,7 @@ import {
   devServerAllowed,
   directInvoke,
   enginePreload,
+  gateFetch,
   oneAtATime,
   remoteManifestUrl,
   UI_CHANNEL_POLL_MS,
@@ -101,7 +102,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: "prisma-original", posicao: "center", tamanho: 1 }, firstRun: "done" };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: "prisma-original", posicao: "center", tamanho: 1 }, firstRun: "done" };
   let t = 0;
   return {
     calls,
@@ -183,7 +184,10 @@ afterEach(() => {
   for (const fn of cleanups.splice(0)) fn();
 });
 
-function rig(manifestUrl: string | null, opts: { readyTimeoutMs?: number; channel?: UiChannelChoice; remoteFetch?: typeof fetch } = {}) {
+function rig(
+  manifestUrl: string | null,
+  opts: { readyTimeoutMs?: number; channel?: UiChannelChoice; remoteFetch?: typeof fetch; checkUpdates?: () => boolean | Promise<boolean> } = {},
+) {
   const dir = tempDir("kiwinotes-ui-engine-test-");
   const shown: HostUi[] = [];
   const events: AppEngineEvent[] = [];
@@ -196,6 +200,7 @@ function rig(manifestUrl: string | null, opts: { readyTimeoutMs?: number; channe
     capabilities: uiCapabilities(deps),
     channel: opts.channel ?? (manifestUrl ? { kind: "local", manifestUrl } : { kind: "off", reason: "test" }),
     remoteFetch: opts.remoteFetch,
+    checkUpdates: opts.checkUpdates,
     show: (ui) => void shown.push(ui),
     readyTimeoutMs: opts.readyTimeoutMs ?? 2_000,
     probationMs: 50,
@@ -620,6 +625,63 @@ describe("canal remoto: o release ui-channel (spec #25011)", () => {
     expect(await r.engine.channel.check()).toMatchObject({ result: "offline" });
     expect(release.calls).toEqual([]);
     expect(r.last()).toBe("<p>fábrica</p>");
+  });
+});
+
+// ---------------------------------------------------------------- Buscar atualizações (T25110)
+
+describe("Buscar atualizações desligado: o canal da UI não faz GET nenhum (T25110)", () => {
+  test("remoto: desligado, nem o GET de abrir nem o da checagem; ligar vale no próximo, sem reiniciar", async () => {
+    const local = startChannel();
+    cleanups.push(local.stop);
+    const release = fakeRelease(local);
+    local.publish("settings", BUILT_IN_SEQ + 1, "<p>do release</p>", { bundleBase: UI_CHANNEL_REMOTE });
+    let on = false;
+    const r = rig(null, { channel: { kind: "remote", manifestUrl: remoteManifestUrl("settings") }, remoteFetch: release.remoteFetch, checkUpdates: async () => on });
+    await r.engine.start();
+    await r.until((e) => e.type === "built-in");
+    // Recusado antes da rede: o engine não acha nada e fica na de fábrica.
+    for (let i = 0; i < 2; i++) expect((await r.engine.channel.check()).result).not.toBe("available");
+    expect(release.calls).toEqual([]);
+    expect(r.last()).toBe("<p>fábrica</p>");
+
+    on = true;
+    // Uma checagem que já estava na fila (o engine junta as que chegam juntas) pode ainda responder a de antes.
+    let result = "";
+    for (let i = 0; i < 3 && result !== "available"; i++) result = (await r.engine.channel.check()).result;
+    expect(result).toBe("available");
+    await waitFor(() => r.last() === "<p>do release</p>");
+    expect(release.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("o canal local de dev também para; o desligado do build fica desligado", async () => {
+    const local = startChannel();
+    cleanups.push(local.stop);
+    local.publish("settings", BUILT_IN_SEQ + 1, "<p>local</p>");
+    const realFetch = globalThis.fetch;
+    const seen: string[] = [];
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: string | URL | Request, init?: RequestInit) => {
+      seen.push(String(input));
+      return realFetch(input, init);
+    }) as typeof fetch);
+    try {
+      const r = rig(`${local.base}/settings/manifest.json`, { checkUpdates: () => false });
+      await r.engine.start();
+      await r.until((e) => e.type === "built-in");
+      expect((await r.engine.channel.check()).result).not.toBe("available");
+      expect(seen).toEqual([]);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    const inner = Object.assign(async () => new Response("x"), {}) as unknown as typeof fetch;
+    let n = 0;
+    const counted = (async (i: string | URL | Request, init?: RequestInit) => (n++, inner(i, init))) as unknown as typeof fetch;
+    const gated = gateFetch(counted, () => false);
+    await expect(gated("https://example.com/x")).rejects.toThrow("Buscar atualizações is off");
+    expect(n).toBe(0);
+    expect(await (await gateFetch(counted, () => true)("https://example.com/x")).text()).toBe("x");
+    expect(n).toBe(1);
   });
 });
 

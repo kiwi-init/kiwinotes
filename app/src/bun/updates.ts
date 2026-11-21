@@ -16,7 +16,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { AppChannel, UpdatesLastCheck, UpdatesView } from "../shared/ui-contract.ts";
+import { type AppChannel, type UpdatesLastCheck, UPDATES_OFF_BY_SETTING, type UpdatesView } from "../shared/ui-contract.ts";
 
 export const IDENTIFIER = "app.kiwinotes.desktop";
 /** O time do Developer ID que assina o Kiwi Notes (Jonatas Walker, T1349). */
@@ -210,7 +210,15 @@ export interface UpdatesDeps {
   log?: (message: string) => void;
   /** Agora (os testes fixam a hora da última checagem). */
   now?: () => Date;
+  /**
+   * "Buscar atualizações" em Ajustes (T25110), lido a cada checagem: desligado, a rodada não chama o Updater e nada vai
+   * à rede. Sem ele, ligado.
+   */
+  enabled?: () => boolean | Promise<boolean>;
 }
+
+/** O motivo do `off` quando é a pessoa que desligou em Ajustes (não o build): volta a ligar sem reiniciar. */
+export const OFF_BY_SETTING = "turned off in Settings";
 
 /** A atualização do app: checa, baixa, confere e oferece. Quem mostra a oferta é o menu (`onChange`). */
 export class AppUpdates {
@@ -309,7 +317,8 @@ export class AppUpdates {
 
   /** Uma rodada: checa, baixa e confere. Duas chamadas juntas viram uma. Nunca lança. */
   check(): Promise<UpdateState> {
-    if (this.state.kind === "off" || this.state.kind === "ready" || this.state.kind === "applying") return Promise.resolve(this.state);
+    const offByBuild = this.state.kind === "off" && this.state.reason !== OFF_BY_SETTING;
+    if (offByBuild || this.state.kind === "ready" || this.state.kind === "applying") return Promise.resolve(this.state);
     // Uma checagem já em andamento (inclusive baixando) responde à 2ª chamada, em vez de começar outra.
     this.running ??= this.round().finally(() => {
       this.running = undefined;
@@ -333,7 +342,23 @@ export class AppUpdates {
     this.set(this.state); // avisa o hub aberto (updates.status)
   }
 
+  /**
+   * "Buscar atualizações" mudou em Ajustes (T25110): a faixa do Sobre diz na hora, sem checar nada. Ligar de novo só
+   * volta ao parado; a próxima checagem (a do relógio ou o botão) é quem vai à rede.
+   */
+  settingChanged(on: boolean): void {
+    if (!on && (this.state.kind === "idle" || this.state.kind === "checking")) this.set({ kind: "off", reason: OFF_BY_SETTING });
+    else if (on && this.state.kind === "off" && this.state.reason === OFF_BY_SETTING) this.set({ kind: "idle" });
+  }
+
   private async round(): Promise<UpdateState> {
+    // Desligado em Ajustes (T25110): nem o Updater é chamado, e nada vai à rede.
+    if (!(await (this.deps.enabled?.() ?? true))) {
+      if (this.state.kind !== "off") this.log("off (Buscar atualizações is off in Settings)");
+      this.set({ kind: "off", reason: OFF_BY_SETTING });
+      return this.state;
+    }
+    if (this.state.kind === "off") this.set({ kind: "idle" });
     const u = this.deps.updater;
     // Antes de checar de novo: se a última troca falhou e o callback não pegou, registra agora.
     await this.noteFailedSwap();
@@ -429,6 +454,7 @@ export function updateMenuLabel(s: UpdateState, currentVersion: string): string 
 
 /** O motivo de estar desligado, para a pessoa (o do `updatesOff` é técnico e vai para o log). */
 export function offReasonText(reason: string): string {
+  if (reason === OFF_BY_SETTING) return UPDATES_OFF_BY_SETTING;
   if (reason.startsWith("KIWI_DEBUG")) return "modo de teste dos agentes";
   if (reason.startsWith("channel dev")) return "build de desenvolvimento";
   if (reason.startsWith("channel")) return "build fora dos canais de release";
