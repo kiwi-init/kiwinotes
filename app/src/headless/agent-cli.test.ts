@@ -136,6 +136,7 @@ describe("o agente pela CLI headless (T8678)", () => {
 
   test("os argumentos errados são recusados", async () => {
     expect((await invoke("agent.status", { x: 1 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect((await invoke("agent.configure", { kind: "codex" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.configure", { model: "../x" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.ask", { text: 3 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.ask", { text: "  " })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
@@ -351,6 +352,22 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect((await invoke("agent.undo", { request: write, change: 0 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.undo", { request: write, x: 1 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
   }, 90_000);
+
+  test("trocar para o Gemini pela capacidade (spec #24666): o Gemini falso responde, na sessão dele, e volta ao Claude", async () => {
+    await invoke("agent.enable");
+    const claudePid = Number(readFileSync(path.join(data, "agent", "work", ".fake-agent.pid"), "utf8"));
+    const switched = (await invoke("agent.configure", { kind: "gemini" })).json!;
+    expect(switched).toMatchObject({ ok: true, value: { kind: "gemini", name: "Gemini", program: "closed" } });
+    await until(async () => !alive(claudePid));
+    expect((await invoke("agent.status", { refresh: true })).json!.value.gemini).toMatchObject({ installed: true, versionOk: true, loginKnown: false });
+
+    const id = (await invoke("agent.ask", { text: "oi" })).json!.value.id as string;
+    await until(async () => (await agentEvents()).some((e) => e.event === "agent.turn" && e.payload.id === id && e.payload.type === "done"));
+    expect((await invoke("agent.status")).json!.value).toMatchObject({ kind: "gemini", program: "open", gemini: { loggedIn: true } });
+    expect(existsSync(path.join(data, "agent", "session-gemini.json"))).toBe(true);
+
+    expect((await invoke("agent.configure", { kind: "claude" })).json).toMatchObject({ ok: true, value: { kind: "claude", name: "Claude Code", program: "closed" } });
+  }, 60_000);
 
   test("quando o app sai, o programa do agente sai junto", async () => {
     await invoke("agent.enable");
