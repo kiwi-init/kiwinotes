@@ -353,8 +353,10 @@ async function revertAppearance(): Promise<UiAppearance> {
     const ui = uis.get(name);
     const builtIn = ui?.builtIn ?? builtInVersionOf(name);
     if (!builtIn) continue;
+    // Aberta, o alvo é a UI da tela, mesmo com uma nova esperando o Recarregar; fechada, a que sobe ao abrir.
+    const onScreen = ui ? (ui.engine?.showing ? { sha256: ui.engine.showing.sha256 } : null) : undefined;
     ui?.engine?.stop();
-    const reverted = revertWindow(uiDir(name), builtIn);
+    const reverted = revertWindow(uiDir(name), builtIn, onScreen);
     log(name, reverted ? "appearance reverted" : "no installed UI to revert");
     if (ui) await ui.restart();
   }

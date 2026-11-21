@@ -533,6 +533,41 @@ describe("Nova aparência pronta e Voltar (spec #25011)", () => {
     await waitFor(() => again.last() === "<p>nova</p>");
   });
 
+  test("o Voltar com uma nova esperando o Recarregar: sai da da tela num clique, e a que esperava não sobe", async () => {
+    const channel = startChannel();
+    cleanups.push(channel.stop);
+    const dir = tempDir("kiwinotes-ui-engine-test-");
+    const builtIn = { uiVersion: "0.1.0", seq: BUILT_IN_SEQ };
+    const r = rig(channelUrl(channel.base, "settings"), { dir, canSwap: () => false });
+    await r.engine.start();
+    await r.until((e) => e.type === "built-in");
+    // A "um" e depois a "dois" entram pelo Recarregar e passam da prova.
+    for (const [seq, html] of [[BUILT_IN_SEQ + 1, "<p>um</p>"], [BUILT_IN_SEQ + 2, "<p>dois</p>"]] as const) {
+      channel.publish("settings", seq, html);
+      await r.engine.channel.check();
+      await waitFor(() => r.events.filter((e) => e.type === "waiting").length === seq - BUILT_IN_SEQ);
+      r.engine.applyUpdate();
+      await waitFor(() => r.last() === html);
+      r.engine.ready();
+      await waitFor(() => r.events.filter((e) => e.type === "promoted").length === seq - BUILT_IN_SEQ);
+    }
+    // A "três" baixa e espera, com a "dois" na tela.
+    channel.publish("settings", BUILT_IN_SEQ + 3, "<p>três</p>");
+    await r.engine.channel.check();
+    await waitFor(() => r.events.filter((e) => e.type === "waiting").length === 3);
+    expect(r.last()).toBe("<p>dois</p>");
+    const onScreen = { sha256: r.engine.showing!.sha256 };
+    r.engine.stop();
+
+    expect(revertWindow(dir, builtIn, onScreen)).toBe(true);
+    const back = rig(null, { dir, canSwap: () => false });
+    await back.engine.start();
+    await waitFor(() => back.last() === "<p>um</p>");
+    back.engine.ready();
+    await Bun.sleep(50);
+    expect(back.last()).toBe("<p>um</p>");
+  });
+
   test("o Voltar com o engine parado: a anterior boa sobe, e a desfeita não volta pelo canal", async () => {
     const channel = startChannel();
     cleanups.push(channel.stop);

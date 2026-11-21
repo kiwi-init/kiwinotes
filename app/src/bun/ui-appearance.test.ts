@@ -40,7 +40,7 @@ describe("a UI de uma janela fechada", () => {
 });
 
 describe("Voltar à aparência anterior", () => {
-  test("a da tela e as mais novas vão para o bad; a anterior boa fica, e o teto do esquema volta ao dela", () => {
+  test("janela fechada: o alvo é a que subiria ao abrir (o next), e cada Voltar desce uma até a de fábrica", () => {
     const state = { current: ui(102, 3), next: ui(103, 4), retry: null, good: [ui(101, 2), ui(102, 3)], bad: { old: "antes" }, strikes: { "sha-103": 1 }, dataSchemaHighWater: 4, extra: "fica" };
     const after = revertedState(state, builtIn)!;
     expect(after.bad).toEqual({ old: "antes", "sha-103": REVERT_REASON });
@@ -60,6 +60,34 @@ describe("Voltar à aparência anterior", () => {
     expect(installedToBoot(factory, builtIn)).toBeNull();
     expect(factory.dataSchemaHighWater).toBe(0);
     expect(revertedState(factory, builtIn)).toBeNull();
+  });
+
+  test("janela aberta, dois na tela e três esperando o Recarregar: um clique sai na um", () => {
+    const state = { current: ui(102, 3), next: ui(103, 4), good: [ui(101, 2), ui(102, 3)], bad: {}, strikes: {}, dataSchemaHighWater: 4 };
+    const after = revertedState(state, builtIn, { sha256: "sha-102" })!;
+    expect(Object.keys(after.bad as object).sort()).toEqual(["sha-102", "sha-103"]);
+    expect(after.current).toBeNull();
+    expect(after.next).toBeNull();
+    expect(installedToBoot(after, builtIn)?.seq).toBe(101);
+    expect(after.dataSchemaHighWater).toBe(2);
+  });
+
+  test("janela aberta: uma mais velha que a da tela, numa retry, não sai junto", () => {
+    const after = revertedState({ current: ui(103), retry: ui(102), good: [ui(101), ui(103)] }, builtIn, { sha256: "sha-103" })!;
+    expect(Object.keys(after.bad as object)).toEqual(["sha-103"]);
+    expect(installedToBoot(after, builtIn)?.seq).toBe(102);
+  });
+
+  test("janela aberta na de fábrica com uma nova esperando: a nova é descartada, e o Recarregar não desfaz o Voltar", () => {
+    const after = revertedState({ current: null, next: ui(102), good: [] }, builtIn, null)!;
+    expect(after.bad).toEqual({ "sha-102": REVERT_REASON });
+    expect(installedToBoot(after, builtIn)).toBeNull();
+    // Na de fábrica e sem nada esperando, não há o que desfazer.
+    expect(revertedState({ current: null, good: [] }, builtIn, null)).toBeNull();
+  });
+
+  test("janela aberta com uma UI na tela que o engine.json não conhece: não mexe", () => {
+    expect(revertedState({ current: ui(102), good: [ui(102)] }, builtIn, { sha256: "sha-outra" })).toBeNull();
   });
 
   test("revertWindow grava de uma vez, só para a pessoa, e sem o arquivo não faz nada", () => {
