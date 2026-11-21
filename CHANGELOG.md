@@ -4,6 +4,17 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+## [2026.11.10](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.10) (2026-11-21)
+
+- **Antigravity 3: o nome e o estado na tela (T25061)** ([#286](https://github.com/kiwi-init/kiwinotes/pull/286))
+- **Agente: o /usage de depois do pedido não deixa o próximo com E_AGENT_BUSY (T25060)** ([#294](https://github.com/kiwi-init/kiwinotes/pull/294))
+- **Antigravity 2: permissões, sessão e login do agy no host (T25060)** ([#292](https://github.com/kiwi-init/kiwinotes/pull/292))
+- **hub-goo-check: folga de ponto flutuante no SLOW_STEP (T25197)** ([#288](https://github.com/kiwi-init/kiwinotes/pull/288))
+- **Antigravity 1: achar o agy, o falso e a ADR (T25059)** ([#284](https://github.com/kiwi-init/kiwinotes/pull/284))
+- **Nova aparência 2: publicar a UI no CI (T25030)** ([#280](https://github.com/kiwi-init/kiwinotes/pull/280))
+- **Gemini: o teste de que um host de outro agente nunca é reusado (T24672)** ([#273](https://github.com/kiwi-init/kiwinotes/pull/273))
+- **Portão do merge: o workflowName e os testes do link (T24807)** ([#271](https://github.com/kiwi-init/kiwinotes/pull/271))
+
 ## [2026.11.9](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.9) (2026-11-21)
 
 - **Gemini 3: Ajustes › Agente e os nomes (T24673)** ([#269](https://github.com/kiwi-init/kiwinotes/pull/269))
