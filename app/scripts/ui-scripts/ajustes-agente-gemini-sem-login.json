@@ -110,8 +110,15 @@
       "wait": 400
     },
     {
-      "screenshot": "3-sem-login.png",
-      "selector": ".kn-section:has(h2:text-is('Agente'))"
+      "scroll": ".kn-section:has(h2:text-is('Agente'))",
+      "y": -20000,
+      "name": "volta ao topo: a seção é mais alta que a janela, e o print do elemento sai em branco"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "screenshot": "3-sem-login.png"
     }
   ]
 }
