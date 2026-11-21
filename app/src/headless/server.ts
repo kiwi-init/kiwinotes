@@ -186,8 +186,11 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     : session
       ? { live: () => session.setupLive(), request: async (p) => void console.log(`[headless] setup.request (not asked): ${p}`), done: () => {} }
       : undefined;
+  // A aparência de mentira (T25031): `KIWI_FAKE_UI` é a UI das janelas, para a faixa "Nova aparência pronta" e o Sobre.
+  const appearance = process.env.KIWI_FAKE_UI ? (await import("./fake-ui.ts")).fakeAppearance(process.env.KIWI_FAKE_UI) : undefined;
   const capabilities = uiCapabilities({
     about,
+    appearance,
     setup,
     spelling,
     meetings,

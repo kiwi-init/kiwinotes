@@ -284,3 +284,31 @@
   font-size: var(--t-meta);
   color: var(--text-3);
 }
+
+/* A aparência de cada janela (spec #25011): uma lista curta, discreta, acima do rodapé. */
+.kn-about-appearance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 20px;
+}
+.kn-about-subtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-2);
+}
+.kn-about-windows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 16px;
+  row-gap: 2px;
+  font-size: var(--text-sm);
+}
+.kn-about-windows li {
+  display: contents;
+}

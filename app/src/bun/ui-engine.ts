@@ -80,6 +80,11 @@ export interface UiEngineOptions {
   manifestUrl: string | null;
   readyTimeoutMs?: number;
   probationMs?: number;
+  /**
+   * Se a UI nova pode trocar a da tela agora (spec #25011). Com `false`, ela espera o `applyUpdate()` (o Recarregar da
+   * faixa "Nova aparência pronta") ou a próxima abertura da janela.
+   */
+  canSwap?: () => boolean;
 }
 
 /** A pasta que a janela serve como views:// (o `viewsRoot`). Fora do .app, para não mexer na assinatura. */
@@ -104,6 +109,7 @@ export function createUiEngine(o: UiEngineOptions): AppEngine {
       prefix: "internal",
       builtIn: o.builtIn,
       show: o.show,
+      ...(o.canSwap ? { canSwap: o.canSwap } : {}),
     },
   });
 }
