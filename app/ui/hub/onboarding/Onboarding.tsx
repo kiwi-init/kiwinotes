@@ -17,7 +17,7 @@ import { ControlRow } from "../../settings/ControlRow.tsx";
 import { ModelRows, type Prepare } from "../../settings/ModelRows.tsx";
 import { CatColorRow, CatPlaceRow } from "../../settings/CatRow.tsx";
 import { NoteModelEditor } from "../../settings/NoteModel.tsx";
-import { adapterLine, applyTurn, claudeLine, IDLE_TEST, type TestState } from "../../settings/agentText.ts";
+import { adapterLine, agentLine, AGENTS, applyTurn, IDLE_TEST, kindOf, programOf, type TestState } from "../../settings/agentText.ts";
 import type { createKiwiCat } from "../../kiwicat/cat.ts";
 import { CatActivity } from "../cat-state.ts";
 import {
@@ -126,14 +126,17 @@ async function askWhenFree(text: string, onWait: () => void): Promise<string> {
   }
 }
 
-/** Passo 1: o Claude Code instalado e logado, a ponte baixada no clique, e um oi para testar. */
+/** Passo 1: o agente escolhido instalado e logado, a ponte baixada no clique (só o Claude Code), e um oi para testar. */
 function ClaudeStep({ status }: { status: AgentStatus }) {
   const [checking, setChecking] = useState(false);
   const [test, setTest] = useState<TestState>(IDLE_TEST);
   const [failure, setFailure] = useState<string | null>(null);
   useEffect(() => api.agent.onTurn((e) => setTest((t) => applyTurn(t, e, status.name))), [status.name]);
-  const claude = claudeLine(status.name, status.claude);
-  const phase = status.adapter.phase;
+  const kind = kindOf(status);
+  const claude = agentLine(kind, status.name, programOf(status));
+  // O Gemini fala ACP sozinho (spec #24666): sem a linha da ponte, e ela conta como pronta.
+  const needsAdapter = AGENTS[kind].adapter;
+  const phase = needsAdapter ? status.adapter.phase : "ready";
   const call = (fn: () => Promise<unknown>) => {
     setFailure(null);
     return fn().catch((e: unknown) => setFailure(e instanceof Error ? e.message : String(e)));
@@ -180,21 +183,23 @@ function ClaudeStep({ status }: { status: AgentStatus }) {
         <span className="kn-onb-check-text">{claude.text}</span>
         {!claude.ok ? <Button onClick={() => void check()} disabled={checking}>{checking ? "Conferindo…" : "Conferir de novo"}</Button> : null}
       </div>
-      <div className="kn-onb-check" data-ok={phase === "ready"}>
-        <span className="kn-onb-check-text">{adapterLine(status)}</span>
-        {phase === "missing" || phase === "error" ? (
-          <Button variant="primary" onClick={() => void call(() => api.agent.download())} disabled={!claude.ok}>
-            {phase === "error" ? "Tentar de novo" : "Baixar"}
-          </Button>
-        ) : null}
-      </div>
+      {needsAdapter ? (
+        <div className="kn-onb-check" data-ok={phase === "ready"}>
+          <span className="kn-onb-check-text">{adapterLine(status)}</span>
+          {phase === "missing" || phase === "error" ? (
+            <Button variant="primary" onClick={() => void call(() => api.agent.download())} disabled={!claude.ok}>
+              {phase === "error" ? "Tentar de novo" : "Baixar"}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {ready && status.enabled ? (
         <div className="kn-onb-row kn-onb-model">
           <ModelRows status={status} run={choose} prepare={prepare} />
         </div>
       ) : null}
       <div className="kn-onb-check" data-ok={test.phase === "done"}>
-        <span className="kn-onb-check-text">{test.phase === "done" ? "O Claude Code respondeu." : "Mande um oi para testar."}</span>
+        <span className="kn-onb-check-text">{test.phase === "done" ? `O ${status.name} respondeu.` : "Mande um oi para testar."}</span>
         <Button onClick={() => void hello()} disabled={!ready || test.phase === "running"}>
           {test.phase === "running" ? "Esperando…" : "Mandar um oi"}
         </Button>

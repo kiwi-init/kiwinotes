@@ -8,17 +8,58 @@ export const ADAPTER_SIZE_LABEL = "4,4 MB";
 
 const MB = (bytes: number) => (bytes / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 
-/** O comando que a pessoa roda no Terminal para entrar na conta: o login é do próprio Claude Code, nunca do Kiwi. */
-export const LOGIN_HOW = "No Terminal, digite “claude” e entre na sua conta por ele. O Kiwi nunca pede a sua senha.";
+/** Os agentes que o Kiwi sabe abrir (spec #24666): um por vez, escolhido em Ajustes › Agente. */
+export type AgentKind = "claude" | "gemini";
 
-/** A linha do Claude Code instalado: o que a pessoa tem, e o que fazer quando falta algo. */
+/**
+ * O que muda de um agente para o outro na tela: o nome, a empresa (para onde o texto vai), como instalar, atualizar e
+ * entrar na conta. O login é sempre do próprio agente, no Terminal: o Kiwi nunca pede, lê nem guarda senha ou chave.
+ */
+export const AGENTS: Record<AgentKind, { name: string; company: string; install: string; update: string; login: string; adapter: boolean }> = {
+  claude: {
+    name: "Claude Code",
+    company: "Anthropic",
+    install: "Instale pelo site da Anthropic (claude.com/claude-code)",
+    update: "No Terminal, digite “claude update”",
+    login: "No Terminal, digite “claude” e entre na sua conta por ele. O Kiwi nunca pede a sua senha.",
+    adapter: true,
+  },
+  gemini: {
+    name: "Gemini",
+    company: "Google",
+    install: "Instale o Gemini CLI (github.com/google-gemini/gemini-cli)",
+    update: "Atualize o Gemini CLI pelo mesmo jeito que você instalou (npm ou Homebrew)",
+    login: "Abra o Gemini no Terminal (digite “gemini”) e entre com a sua conta. O Kiwi nunca pede a sua senha nem a sua chave.",
+    adapter: false,
+  },
+};
+
+/** O agente escolhido; um engine anterior ao Gemini não manda o `kind`, e é o Claude. */
+export const kindOf = (s: object | null | undefined): AgentKind => ((s as { kind?: string } | null | undefined)?.kind === "gemini" ? "gemini" : "claude");
+
+/** O comando que a pessoa roda no Terminal para entrar na conta: o login é do próprio Claude Code, nunca do Kiwi. */
+export const LOGIN_HOW = AGENTS.claude.login;
+
+/** A linha do Claude Code instalado (o onboarding usa esta): a de `agentLine` com o Claude. */
 export function claudeLine(name: string, c: AgentClaudeStatus | null): { text: string; ok: boolean } {
+  return agentLine("claude", name, c);
+}
+
+/** O login ainda não conferido (`loginKnown: false`, o Gemini antes de a sessão abrir). */
+export const loginUnknown = (c: ProgramState): boolean => c.loginKnown === false;
+
+/** O pedaço do estado do programa que as linhas leem (o `claude` ou o `gemini` do status). */
+export type ProgramState = Pick<AgentClaudeStatus, "installed" | "loggedIn" | "versionOk"> & { loginKnown?: boolean };
+
+/** A linha do agente instalado: o que a pessoa tem, e o que fazer quando falta algo. */
+export function agentLine(kind: AgentKind, name: string, c: AgentClaudeStatus | null): { text: string; ok: boolean } {
+  const a = AGENTS[kind];
   if (!c) return { text: `Conferindo o ${name}…`, ok: false };
   if (!c.installed) {
-    return { text: `O ${name} não está instalado neste Mac. Instale pelo site da Anthropic (claude.com/claude-code) e toque em Tentar de novo.`, ok: false };
+    return { text: `O ${name} não está instalado neste Mac. ${a.install} e toque em Tentar de novo.`, ok: false };
   }
   if (c.versionError === "E_AGENT_TOO_OLD") {
-    return { text: `O ${name} ${c.version ?? ""} é mais antigo que o que o Kiwi precisa. No Terminal, digite “claude update” e toque em Tentar de novo.`.replace("  ", " "), ok: false };
+    return { text: `O ${name} ${c.version ?? ""} é mais antigo que o que o Kiwi precisa. ${a.update} e toque em Tentar de novo.`.replace("  ", " "), ok: false };
   }
   if (c.versionError === "E_AGENT_TOO_NEW") {
     return {
@@ -26,8 +67,11 @@ export function claudeLine(name: string, c: AgentClaudeStatus | null): { text: s
       ok: false,
     };
   }
-  if (!c.loggedIn) return { text: `O ${name} ${c.version ?? ""} está instalado, mas não está logado. ${LOGIN_HOW}`.replace("  ", " "), ok: false };
-  const how = c.method === "claude.ai" ? "com a sua conta do Claude" : c.method ? `com ${c.method}` : "";
+  // O Gemini só diz o login quando a sessão abre (o `authRequired`): até lá, não se sabe, e o "Testar" fica liberado.
+  if (loginUnknown(c)) return { text: `${name} ${c.version ?? ""} instalado. O login se confere no primeiro pedido; o Kiwi nunca vê a sua senha.`.replace("  ", " "), ok: true };
+  if (!c.loggedIn) return { text: `O ${name} ${c.version ?? ""} está instalado, mas não está logado. ${a.login}`.replace("  ", " "), ok: false };
+  // O Gemini não diz o jeito do login (o Kiwi só sabe pelo `authRequired`): nada além de "logado".
+  const how = kind !== "claude" ? "" : c.method === "claude.ai" ? "com a sua conta do Claude" : c.method ? `com ${c.method}` : "";
   return { text: `${name} ${c.version ?? ""} instalado e logado${how ? ` ${how}` : ""}. O login é dele: o Kiwi nunca vê a sua senha.`.replace("  ", " "), ok: true };
 }
 
@@ -117,10 +161,10 @@ export const EFFORT_NAMES: Record<string, string> = {
 export type Prepare = "opening" | "ready" | "failed";
 
 /** A frase do Esforço no onboarding, antes de o agente dizer as opções do modelo. */
-export function prepareHint(prepare: Prepare): string {
+export function prepareHint(prepare: Prepare, name = "Claude Code"): string {
   return prepare === "opening"
-    ? "Abrindo o Claude Code para ver os níveis de esforço deste modelo…"
-    : "Não deu para abrir o Claude Code agora, então fica no Padrão. Dá para trocar em Ajustes › Agente depois do primeiro pedido.";
+    ? `Abrindo o ${name} para ver os níveis de esforço deste modelo…`
+    : `Não deu para abrir o ${name} agora, então fica no Padrão. Dá para trocar em Ajustes › Agente depois do primeiro pedido.`;
 }
 
 /**
@@ -258,11 +302,19 @@ export function applyTurn(t: TestState, e: AgentTurnEvent, name: string): TestSt
 
 /** Pode testar: o Claude Code serve, o agente está ligado e o adaptador baixado. */
 export function canTest(s: AgentStatus): boolean {
-  return !!s.claude?.installed && s.claude.loggedIn && s.claude.versionOk && s.enabled && s.adapter.phase === "ready";
+  const kind = kindOf(s);
+  const c = programOf(s);
+  return !!c?.installed && (c.loggedIn || loginUnknown(c)) && c.versionOk && s.enabled && (!AGENTS[kind].adapter || s.adapter.phase === "ready");
+}
+
+/** O estado do programa do agente escolhido: o `claude` ou o `gemini` do status. */
+export function programOf<C extends ProgramState>(s: { claude: C | null; kind?: AgentKind; gemini?: C | null }): C | null {
+  return kindOf(s) === "gemini" ? (s.gemini ?? null) : s.claude;
 }
 
 /** O texto da tela "Antes de ligar o …" (ADR 0011, a seção "O texto da tela"), com o nome e a empresa do agente. */
-export function consentText(name: string, company = "Anthropic"): { title: string; goes: string[]; never: string[]; who: string[] } {
+/** `adapter`: o agente precisa do adaptador baixado (o Claude Code); o Gemini fala ACP sozinho, sem download. */
+export function consentText(name: string, company = "Anthropic", adapter = true): { title: string; goes: string[]; never: string[]; who: string[] } {
   return {
     title: `Antes de ligar o ${name}`,
     goes: [
@@ -277,7 +329,7 @@ export function consentText(name: string, company = "Anthropic"): { title: strin
     ],
     who: [
       `O Kiwi conversa com o ${name} aqui no seu Mac. Quem manda para a nuvem é o ${name}, com a sua conta, e vale a política de dados da ${company}. O Kiwi não tem servidor e nunca vê a sua senha.`,
-      `Para conversar com o ${name}, o Kiwi baixa um adaptador agora. Nada seu vai junto.`,
+      ...(adapter ? [`Para conversar com o ${name}, o Kiwi baixa um adaptador agora. Nada seu vai junto.`] : []),
       "Você desliga quando quiser, em Ajustes › Agente.",
     ],
   };
@@ -327,8 +379,8 @@ export function economyHint(s: AgentStatus): string {
 
 /** "Pesquisar na web" (spec #11908): o rótulo e o que muda, ligado por padrão (spec #19273). */
 export const WEB_LABEL = "Pesquisar na web";
-export function webHint(s: Pick<AgentStatus, "webSearch">): string {
-  const what = "Com a permissão, o texto do pedido pode virar uma busca na web, feita pelo Claude Code, com o login dele. O Kiwi não chama nenhum serviço.";
+export function webHint(s: Pick<AgentStatus, "webSearch"> & { name?: string }): string {
+  const what = `Com a permissão, o texto do pedido pode virar uma busca na web, feita pelo ${s.name ?? "Claude Code"}, com o login dele. O Kiwi não chama nenhum serviço.`;
   return s.webSearch ? `Ligado. ${what} O balão mostra quando ele está na web.` : `Desligado: o Kiwi recusa a busca e a leitura de páginas do agente. ${what}`;
 }
 
@@ -347,4 +399,25 @@ export function controlHint(blocked: boolean, hold = "o Control", controlAlone =
   return controlAlone
     ? `${base} O ditado da Apple pode usar "pressionar Control duas vezes": troque em Ajustes do Sistema › Teclado › Ditado › Atalho.`
     : base;
+}
+
+/** A escolha do agente (spec #24666): o rótulo, as opções e a dica, que diz para onde o texto vai. */
+export const KIND_LABEL = "Qual agente";
+export const KIND_OPTIONS: { value: AgentKind; label: string }[] = [
+  { value: "claude", label: AGENTS.claude.name },
+  { value: "gemini", label: AGENTS.gemini.name },
+];
+
+export function kindHint(kind: AgentKind, enabled: boolean): string {
+  const a = AGENTS[kind];
+  const where = `O que você pedir vai para o ${a.name}, com a sua conta, e vale a política de dados da ${a.company}.`;
+  return enabled ? `${where} Um agente por vez; trocar fecha o que está aberto e não mistura as conversas.` : `Desligado: nada vai para o ${a.name}. ${where}`;
+}
+
+/**
+ * Trocar de agente mostra antes a tela "o que vai" do novo (spec #24666: trocar pede o clique da pessoa), porque o texto
+ * passa a ir para outra empresa. O título e o botão dizem a troca.
+ */
+export function switchText(to: AgentKind): { title: string; yes: string } {
+  return { title: `Trocar para o ${AGENTS[to].name}`, yes: `Trocar para o ${AGENTS[to].name}` };
 }

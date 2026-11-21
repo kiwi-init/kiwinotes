@@ -8,7 +8,7 @@ export const PARTES: { key: keyof AgentPlacarPartes; label: string; hint: string
   { key: "achar", label: "Achar", hint: "o agente procurando nas notas" },
   { key: "ler", label: "Ler", hint: "o agente lendo notas e reuniões" },
   { key: "bagagem", label: "Bagagem", hint: "a conversa recente" },
-  { key: "fixo", label: "Fixo", hint: "o que o Claude Code leva em toda ida" },
+  { key: "fixo", label: "Fixo", hint: "o que o agente leva em toda ida" },
 ];
 
 const fmt = (v: number, digits = 1) => v.toLocaleString("pt-BR", { maximumFractionDigits: digits });
