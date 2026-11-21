@@ -651,6 +651,7 @@ describe("o programa do agente fecha", () => {
     await askAndWait(m, "um");
     const pid = m.pid();
     await until(() => !alive(pid), 5000);
+    expect((await m.svc.status()).program).toBe("closed");
     const again = await askAndWait(m, "dois");
     expect(again.some((e) => e.type === "status" && e.status === "opening")).toBe(true);
     expect(again.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining("turno 2") });
@@ -1142,6 +1143,7 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     // Nada abriu o programa do agente de novo.
     expect(m.pid()).toBe(pid);
     expect(alive(pid)).toBe(false);
+    expect((await m.svc.status()).program).toBe("closed");
     await expect(m.svc.undo("nao-existe")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
   });
 
