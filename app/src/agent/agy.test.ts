@@ -9,7 +9,7 @@ import { AGY_AGENT, AGY_AGENT_FILE, AGY_SETTINGS, agyArgs, agyEnv, agyHelpHasAcp
 import { AgentError } from "./errors.ts";
 import { FAKE_AGY, FAKE_GEMINI, writeFakeAgyExecutable } from "./fake/index.ts";
 import { geminiStatus } from "./gemini.ts";
-import { geminiHost } from "./gemini-host.ts";
+import { AGY_LOGIN_HELP, geminiHost } from "./gemini-host.ts";
 import type { AgentHost } from "./host.ts";
 import { tempDir } from "../../test/tmp.ts";
 
@@ -224,5 +224,70 @@ describe("o agy falso pelo host (T25059)", () => {
     expect(e).toBeInstanceOf(AgentError);
     expect(e.code).toBe("E_AGENT_TOO_OLD");
     expect(existsSync(path.join(data, "agent"))).toBe(false);
+  });
+});
+
+describe("o agy: permissões, sessão e login no host (T25060)", () => {
+  const server = { type: "http" as const, name: "kiwi", url: "http://127.0.0.1:1/mcp", headers: [{ name: "X-Kiwi-Token", value: "t" }] };
+
+  async function agy(data: string, env: Record<string, string> = {}, program: readonly string[] | null = null) {
+    const log = path.join(data, "fake-log.jsonl");
+    const exe = program ?? [writeFakeAgyExecutable(path.join(data, "bin"), env)];
+    const { host } = await geminiHost({
+      data,
+      program: exe,
+      env: { ...process.env, ...env, KIWI_FAKE_AGENT_LOG: log },
+      host: { kiwiTools: { servers: () => [server], prefix: "mcp__kiwi__" } },
+    });
+    hosts.push(host);
+    return { host, log };
+  }
+
+  test("Allow e Deny pelo kind, e não pelo id: a ferramenta do Kiwi passa, o shell não", async () => {
+    const { host } = await agy(tmp());
+    await host.start();
+    expect((await host.ask("/permissao-kiwi")).text).toContain("permissão: agy-allow");
+    expect((await host.ask("/permissao")).text).toContain("permissão: agy-deny");
+  });
+
+  test("sem login: o -32000 vira o E_AGENT_NOT_LOGGED_IN com a frase do Antigravity, sem authenticate", async () => {
+    const { host, log } = await agy(tmp(), { KIWI_FAKE_GEMINI_LOGGED_IN: "0" });
+    const e = await rejection(host.start());
+    expect(e.code).toBe("E_AGENT_NOT_LOGGED_IN");
+    expect(e.message).toBe(`O Gemini não está logado. ${AGY_LOGIN_HELP}`);
+    expect(e.detail).toContain("Authentication required");
+    expect(readLog(log).map((l) => l.method)).not.toContain("authenticate");
+  });
+
+  test("o gemini antigo, sem login, fica com a frase de sempre", async () => {
+    const data = tmp();
+    const { host } = await agy(data, { KIWI_FAKE_GEMINI_LOGGED_IN: "0" }, FAKE_GEMINI);
+    const e = await rejection(host.start());
+    expect(e.code).toBe("E_AGENT_NOT_LOGGED_IN");
+    expect(e.message).not.toContain("Antigravity");
+    expect(e.message).toContain("Entre na sua conta pelo próprio Gemini");
+  });
+
+  test("retomar não repete a conversa; deslogado na retomada, o mesmo erro do login", async () => {
+    const data = tmp();
+    const first = await agy(data);
+    await first.host.start();
+    await first.host.ask("oi");
+    await first.host.stop();
+    hosts.splice(hosts.indexOf(first.host), 1);
+
+    const again = await agy(data);
+    expect(await again.host.start()).toMatchObject({ resumed: true });
+    const r = await again.host.ask("de novo");
+    expect(r.text).toContain('Você disse: "de novo"');
+    expect(r.text).not.toContain("conversa antiga");
+    await again.host.stop();
+    hosts.splice(hosts.indexOf(again.host), 1);
+
+    const out = await agy(data, { KIWI_FAKE_GEMINI_LOGGED_IN: "0" });
+    const e = await rejection(out.host.start());
+    expect(e.code).toBe("E_AGENT_NOT_LOGGED_IN");
+    expect(e.message).toContain(AGY_LOGIN_HELP);
+    expect(readLog(out.log).map((l) => l.method)).toContain("session/resume");
   });
 });
