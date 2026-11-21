@@ -488,8 +488,9 @@ async function realtime(p: Page, section: string) {
 /**
  * Fora da corrida, o relógio da gota anda com o tempo real, mas nunca mais que `GOO_HOLD_MS` entre dois desenhos: um
  * quadro mais longo segura o relógio (Goo.tsx). Então o passo de cada par de desenhos, em ms do relógio, fica abaixo
- * do intervalo do par e do `GOO_HOLD_MS`, com esta folga. A folga cobre a diferença entre o tempo do quadro (o do
- * relógio) e o `performance.now()` do desenho, que o trabalho do quadro atrasa. Um quadro lento da VM do CI anda o que
+ * do intervalo do par e do `GOO_HOLD_MS`, com esta folga. O intervalo é o do tempo do quadro
+ * (`document.timeline.currentTime`, o relógio da animação), não o `performance.now()` do desenho, que o trabalho do
+ * quadro atrasa. A folga cobre o arredondamento entre o relógio e o tick. Um quadro lento da VM do CI anda o que
  * o tempo real dele deixa; um salto (o relógio adiantado sem quadro lento, ou o quadro preso sem segurar, #231) não
  * (T25620). O passo cru contra 8% barrava o quadro de dois 60 Hz na volta, de 400 ms: 34 ms já são 8,5%.
  */
@@ -499,7 +500,7 @@ const SLOW_BLOCK_MS = 80;
 
 /**
  * A troca com um quadro de `SLOW_BLOCK_MS` no 2º quadro da gota. Devolve, a cada desenho da cabeça (um
- * MutationObserver no `d` dela, que roda logo depois do quadro da gota), o tempo e o progresso do relógio.
+ * MutationObserver no `d` dela, que roda logo depois do quadro da gota), o tempo do quadro e o progresso do relógio.
  */
 async function slowSection(p: Page, section: string) {
   await p.evaluate((block) => {
@@ -510,7 +511,7 @@ async function slowSection(p: Page, section: string) {
     w.__slow = [];
     const draws = new MutationObserver(() => {
       const timing = clock()?.effect?.getComputedTiming();
-      w.__slow.push({ at: performance.now(), p: Number(timing?.progress ?? -1), ms: Number(timing?.duration ?? 0), phase: goo.dataset.end ?? "" });
+      w.__slow.push({ at: Number(document.timeline.currentTime ?? performance.now()), p: Number(timing?.progress ?? -1), ms: Number(timing?.duration ?? 0), phase: goo.dataset.end ?? "" });
     });
     draws.observe(head, { attributes: true, attributeFilter: ["d"] });
     let armed = true;
