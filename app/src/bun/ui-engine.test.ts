@@ -24,7 +24,22 @@ import { UI_CAPABILITIES, UI_CONTRACT_VERSION, type AppSettings } from "../share
 import { DEFAULT_AGENT_SETTINGS, type SettingsPatch } from "../store/settings.ts";
 import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
-import { builtInFrom, channelUrl, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime } from "./ui-engine.ts";
+import {
+  builtInFrom,
+  channelSource,
+  channelUrl,
+  channelUrlOrOff,
+  createUiEngine,
+  devServerAllowed,
+  directInvoke,
+  enginePreload,
+  oneAtATime,
+  remoteManifestUrl,
+  UI_CHANNEL_POLL_MS,
+  UI_CHANNEL_REMOTE,
+  type UiChannelChoice,
+  uiChannelFor,
+} from "./ui-engine.ts";
 import { tempDir } from "../../test/tmp.ts";
 
 const key = generateSigningKey();
@@ -134,7 +149,7 @@ function startChannel() {
   });
   return {
     base: `http://127.0.0.1:${server.port}`,
-    publish(window: string, seq: number, index: string, options: { requiresContract?: string } = {}) {
+    publish(window: string, seq: number, index: string, options: { requiresContract?: string; bundleBase?: string } = {}) {
       const site = sites.get(window) ?? { manifest: null, bundles: new Map() };
       sites.set(window, site);
       const uiVersion = `0.2.${seq}`;
@@ -147,7 +162,7 @@ function startChannel() {
           keyId: key.keyId,
           seq,
           uiVersion,
-          bundleUrl: name,
+          bundleUrl: options.bundleBase ? `${options.bundleBase}${name}` : name,
           sha256,
           requiresContract: options.requiresContract ?? "^1.0.0",
           dataSchema: 1,
@@ -168,7 +183,7 @@ afterEach(() => {
   for (const fn of cleanups.splice(0)) fn();
 });
 
-function rig(manifestUrl: string | null, opts: { readyTimeoutMs?: number } = {}) {
+function rig(manifestUrl: string | null, opts: { readyTimeoutMs?: number; channel?: UiChannelChoice; remoteFetch?: typeof fetch } = {}) {
   const dir = tempDir("kiwinotes-ui-engine-test-");
   const shown: HostUi[] = [];
   const events: AppEngineEvent[] = [];
@@ -179,7 +194,8 @@ function rig(manifestUrl: string | null, opts: { readyTimeoutMs?: number } = {})
     builtIn: { uiVersion: "0.1.0", seq: BUILT_IN_SEQ, files: () => new Map([["index.html", encode("<p>fábrica</p>")]]) },
     trustedKeys,
     capabilities: uiCapabilities(deps),
-    manifestUrl,
+    channel: opts.channel ?? (manifestUrl ? { kind: "local", manifestUrl } : { kind: "off", reason: "test" }),
+    remoteFetch: opts.remoteFetch,
     show: (ui) => void shown.push(ui),
     readyTimeoutMs: opts.readyTimeoutMs ?? 2_000,
     probationMs: 50,
@@ -493,6 +509,113 @@ describe("troca e rollback pelo canal local (T1192)", () => {
     await waitFor(() => r.last() === "<p>muda</p>");
     await r.until((e) => e.type === "failed");
     await waitFor(() => r.last() === "<p>fábrica</p>");
+  });
+});
+
+// ---------------------------------------------------------------- canal remoto (spec #25011)
+
+/**
+ * O release `ui-channel` de mentira: o fetch do canal remoto, que serve as URLs do release a partir do canal local e
+ * anota cada pedido. Qualquer outra URL é recusada, e o `fetch` global nunca é chamado (o teste quebra se for).
+ */
+function fakeRelease(local: { base: string }) {
+  const calls: { url: string; init: RequestInit | undefined }[] = [];
+  const remoteFetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (!url.startsWith(UI_CHANNEL_REMOTE)) throw new Error(`refused: ${url}`);
+    const file = url.slice(UI_CHANNEL_REMOTE.length);
+    const manifest = /^([a-z-]+)\.manifest\.json$/.exec(file);
+    return fetch(manifest ? `${local.base}/${manifest[1]}/manifest.json` : `${local.base}/settings/${file}`);
+  }) as unknown as typeof fetch;
+  return { calls, remoteFetch };
+}
+
+describe("canal remoto: o release ui-channel (spec #25011)", () => {
+  const warn = () => {};
+
+  test("o remoto é só o release ui-channel, um manifesto por janela", () => {
+    expect(UI_CHANNEL_REMOTE).toBe("https://github.com/kiwi-init/kiwinotes/releases/download/ui-channel/");
+    expect(remoteManifestUrl("settings")).toBe(`${UI_CHANNEL_REMOTE}settings.manifest.json`);
+    expect(remoteManifestUrl("hub")).toBe(`${UI_CHANNEL_REMOTE}hub.manifest.json`);
+  });
+
+  test("desliga junto com as atualizações; o canal local de dev vem primeiro", () => {
+    expect(uiChannelFor("hub", { env: undefined, updatesOff: null, warn })).toEqual({ kind: "remote", manifestUrl: remoteManifestUrl("hub") });
+    for (const off of ["KIWI_DEBUG=1", "channel dev", "no release.baseUrl in this build"]) {
+      expect(uiChannelFor("hub", { env: undefined, updatesOff: off, warn })).toEqual({ kind: "off", reason: `updates off (${off})` });
+    }
+    // O local de dev liga mesmo com as atualizações desligadas (o build de dev não tem Updater).
+    expect(uiChannelFor("settings", { env: "http://127.0.0.1:5179", updatesOff: "channel dev", warn })).toEqual({
+      kind: "local",
+      manifestUrl: "http://127.0.0.1:5179/settings/manifest.json",
+    });
+    // Um KIWI_UI_CHANNEL errado desliga o canal, e não cai no remoto.
+    const warnings: string[] = [];
+    expect(uiChannelFor("settings", { env: "https://example.com", updatesOff: null, warn: (m) => warnings.push(m) })).toMatchObject({ kind: "off" });
+    expect(warnings).toHaveLength(1);
+  });
+
+  test("o remoto busca a cada 6 h e só pelo fetch guardado; sem ele, fica desligado", async () => {
+    const remote: UiChannelChoice = { kind: "remote", manifestUrl: remoteManifestUrl("settings") };
+    const guarded = (async () => new Response("x")) as unknown as typeof fetch;
+    expect(UI_CHANNEL_POLL_MS).toBe(6 * 60 * 60_000);
+    expect(channelSource(remote, guarded)).toEqual({ manifestUrl: remoteManifestUrl("settings"), fetch: guarded, pollIntervalMs: UI_CHANNEL_POLL_MS });
+
+    for (const off of [channelSource(remote, undefined), channelSource({ kind: "off", reason: "x" }, guarded)]) {
+      expect(off.manifestUrl.startsWith("http://127.0.0.1/")).toBe(true);
+      expect(off.fetch).not.toBe(guarded);
+      await expect(off.fetch!("http://127.0.0.1/")).rejects.toThrow("the UI channel is off");
+    }
+  });
+
+  test("uma UI nova chega pelo release: só o GET do manifesto e o do pack, nas URLs fixas", async () => {
+    const fetchSpy = spyOn(globalThis, "fetch");
+    const local = startChannel();
+    cleanups.push(local.stop);
+    const release = fakeRelease(local);
+    try {
+      const r = rig(null, { channel: { kind: "remote", manifestUrl: remoteManifestUrl("settings") }, remoteFetch: release.remoteFetch });
+      await r.engine.start();
+      await r.until((e) => e.type === "built-in");
+      // O start já fez o GET do manifesto (abrir a janela); sem nada publicado, 404 e "offline".
+      await waitFor(() => release.calls.length === 1);
+
+      const manifest = local.publish("settings", BUILT_IN_SEQ + 1, "<p>do release</p>", { bundleBase: UI_CHANNEL_REMOTE });
+      expect(await r.engine.channel.check()).toMatchObject({ result: "available" });
+      await waitFor(() => r.last() === "<p>do release</p>");
+
+      const manifestUrl = `${UI_CHANNEL_REMOTE}settings.manifest.json`;
+      // O engine pode checar de novo depois da troca: só o manifesto se repete, e o pack é baixado uma vez.
+      const urls = release.calls.map((c) => c.url);
+      expect(urls.filter((u) => u !== manifestUrl)).toEqual([manifest.bundleUrl]);
+      expect(urls.filter((u) => u === manifestUrl).length).toBeGreaterThanOrEqual(2);
+      expect(manifest.bundleUrl.startsWith(UI_CHANNEL_REMOTE)).toBe(true);
+      for (const { url, init } of release.calls) {
+        expect(new URL(url).search).toBe("");
+        expect(init?.method ?? "GET").toBe("GET");
+        expect(init?.body).toBeUndefined();
+        expect(init?.headers).toBeUndefined();
+      }
+      // Só o canal falso local foi chamado pelo fetch global, nunca a internet.
+      for (const [input] of fetchSpy.mock.calls) expect(String(input).startsWith(`${local.base}/`)).toBe(true);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test("com as atualizações desligadas, o canal remoto não faz pedido nenhum", async () => {
+    const local = startChannel();
+    cleanups.push(local.stop);
+    const release = fakeRelease(local);
+    local.publish("settings", BUILT_IN_SEQ + 1, "<p>do release</p>", { bundleBase: UI_CHANNEL_REMOTE });
+    const channel = uiChannelFor("settings", { env: undefined, updatesOff: "KIWI_DEBUG=1", warn });
+    const r = rig(null, { channel, remoteFetch: release.remoteFetch });
+    await r.engine.start();
+    await r.until((e) => e.type === "built-in");
+    expect(await r.engine.channel.check()).toMatchObject({ result: "offline" });
+    expect(release.calls).toEqual([]);
+    expect(r.last()).toBe("<p>fábrica</p>");
   });
 });
 
