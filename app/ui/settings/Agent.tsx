@@ -1,18 +1,26 @@
-// A seção Agente dos Ajustes (spec #8373, T8762): ligar o agente, ver se o Claude Code está pronto e mandar o primeiro
-// pedido. Tudo começa num clique da pessoa: abrir a seção só confere o Claude Code instalado (`agent.status` com
-// `refresh`), sem baixar nem abrir nada. O texto da tela de aviso é o do ADR 0011.
+// A seção Agente dos Ajustes (spec #8373, T8762): escolher o agente (o Claude Code ou o Gemini, spec #24666), ligar,
+// ver se ele está pronto e mandar o primeiro pedido. Tudo começa num clique da pessoa: abrir a seção só confere os
+// programas instalados (`agent.status` com `refresh`), sem baixar nem abrir nada. O texto da tela de aviso é o do
+// ADR 0011, com a empresa do agente escolhido.
 
 import { useEffect, useRef, useState } from "react";
 
-import type { AgentStatus } from "../../src/shared/ui-contract.ts";
+import type { AgentKind, AgentStatus } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
-import { Button, Row, Section, Switch } from "../src/kit/index.tsx";
+import { Button, Row, Section, Segmented, Switch } from "../src/kit/index.tsx";
 import {
   adapterLine,
+  agentLine,
+  AGENTS,
   applyTurn,
   canTest,
-  claudeLine,
   consentText,
+  KIND_LABEL,
+  KIND_OPTIONS,
+  kindHint,
+  kindOf,
+  programOf,
+  switchText,
   IDLE_TEST,
   economyHint,
   ECONOMY_LABEL,
@@ -37,6 +45,8 @@ const TEST_MAX = 500;
 export function AgentSection() {
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [consenting, setConsenting] = useState(false);
+  /** A troca de agente esperando a pessoa confirmar a tela "o que vai" do novo. */
+  const [switching, setSwitching] = useState<AgentKind | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [prompt, setPrompt] = useState("Diga oi em uma frase.");
@@ -134,18 +144,44 @@ export function AgentSection() {
     }
   };
 
-  const claude = claudeLine(name, status.claude);
+  const kind = kindOf(status);
   const a = status.adapter;
+  const needsAdapter = AGENTS[kind].adapter;
+
+  /** Trocar de agente: a tela do novo antes, e só o "Trocar" muda (o serviço fecha o aberto). */
+  const choose = (to: AgentKind) => {
+    setConsenting(false);
+    setSwitching(to === kind ? null : to);
+  };
+  const confirmSwitch = async (to: AgentKind) => {
+    setSwitching(null);
+    setTest(IDLE_TEST);
+    await run(() => api.agent.configure({ kind: to }));
+  };
   const ready = canTest(status);
   const running = test.phase === "running";
 
   return (
     <Section title="Agente">
-      <Row label={name} hint={claude.text}>
-        <Button onClick={() => void refresh()} disabled={checking}>
-          {checking ? "Conferindo…" : claude.ok ? "Conferir de novo" : "Tentar de novo"}
-        </Button>
+      <Row label={KIND_LABEL} hint={kindHint(kind, status.enabled)}>
+        <Segmented label={KIND_LABEL} value={switching ?? kind} options={KIND_OPTIONS} onChange={choose} />
       </Row>
+
+      {switching ? (
+        <Consent kind={switching} switching onYes={() => void confirmSwitch(switching)} onNo={() => setSwitching(null)} />
+      ) : null}
+
+      {/* O estado de cada agente (spec #24666): o escolhido primeiro, e o outro embaixo, para comparar antes de trocar. */}
+      {[kind, ...KIND_OPTIONS.map((o) => o.value).filter((k) => k !== kind)].map((k) => {
+        const line = agentLine(k, AGENTS[k].name, programOf({ ...status, kind: k }));
+        return (
+          <Row key={k} label={k === kind ? AGENTS[k].name : `${AGENTS[k].name} (não escolhido)`} hint={line.text}>
+            <Button onClick={() => void refresh()} disabled={checking}>
+              {checking ? "Conferindo…" : line.ok ? "Conferir de novo" : "Tentar de novo"}
+            </Button>
+          </Row>
+        );
+      })}
 
       <Row label="Ligar o agente" hint={switchHint(status, consenting)}>
         <Switch label="Ligar o agente" checked={status.enabled} onChange={toggle} />
@@ -156,9 +192,10 @@ export function AgentSection() {
       <OverlayCatRow />
       <CatPlaceRow />
 
-      {consenting ? <Consent name={name} onYes={() => void turnOn(true)} onNo={() => setConsenting(false)} /> : null}
+      {consenting ? <Consent kind={kind} onYes={() => void turnOn(true)} onNo={() => setConsenting(false)} /> : null}
 
-      {status.enabled ? (
+      {/* O adaptador é só do Claude Code: o Gemini fala ACP sozinho (spec #24666). */}
+      {!needsAdapter ? null : status.enabled ? (
         <Row label="Adaptador" hint={adapterLine(status)}>
           {a.phase === "downloading" ? (
             <Button onClick={() => void run(() => api.agent.cancel())}>Cancelar</Button>
@@ -177,17 +214,17 @@ export function AgentSection() {
       ) : null}
 
       {/* O Modelo e o esforço salvo para ele (spec #16793), as mesmas linhas do passo "claude" do onboarding. */}
-      {status.enabled && a.phase === "ready" ? <ModelRows status={status} run={(fn) => void run(fn)} /> : null}
+      {status.enabled && (!needsAdapter || a.phase === "ready") ? <ModelRows status={status} run={(fn) => void run(fn)} /> : null}
 
       {/* O modo econômico (spec #11084): só aqui, em Ajustes › Agente. */}
-      {status.enabled && a.phase === "ready" ? (
+      {status.enabled && (!needsAdapter || a.phase === "ready") ? (
         <Row label={ECONOMY_LABEL} hint={economyHint(status)}>
           <Switch label={ECONOMY_LABEL} checked={status.economy === true} onChange={(economy) => void run(() => api.agent.configure({ economy }))} />
         </Row>
       ) : null}
 
       {/* "Pesquisar na web" (spec #11908): ligado por padrão (spec #19273); vale já no próximo pedido. */}
-      {status.enabled && a.phase === "ready" ? (
+      {status.enabled && (!needsAdapter || a.phase === "ready") ? (
         <Row label={WEB_LABEL} hint={webHint(status)}>
           <Switch label={WEB_LABEL} checked={status.webSearch === true} onChange={(webSearch) => void run(() => api.agent.configure({ webSearch }))} />
         </Row>
@@ -270,12 +307,17 @@ export function AgentSection() {
   );
 }
 
-/** A tela "Antes de ligar o …" (ADR 0011), dentro da seção, na primeira vez que a pessoa liga. */
-export function Consent({ name, onYes, onNo }: { name: string; onYes: () => void; onNo: () => void }) {
-  const t = consentText(name);
+/**
+ * A tela "Antes de ligar o …" (ADR 0011), dentro da seção, na primeira vez que a pessoa liga, e na troca de agente
+ * (`switching`, spec #24666), com a empresa e o adaptador do agente que vai ser usado.
+ */
+export function Consent({ kind, switching = false, onYes, onNo }: { kind: AgentKind; switching?: boolean; onYes: () => void; onNo: () => void }) {
+  const { name, company, adapter } = AGENTS[kind];
+  const t = consentText(name, company, adapter);
+  const sw = switching ? switchText(kind) : null;
   return (
-    <div className="kn-agent-consent" role="group" aria-label={t.title}>
-      <h3>{t.title}</h3>
+    <div className="kn-agent-consent" role="group" aria-label={sw?.title ?? t.title}>
+      <h3>{sw?.title ?? t.title}</h3>
       <h4>O que vai para o {name}</h4>
       <ul>
         {t.goes.map((l) => (
@@ -294,7 +336,7 @@ export function Consent({ name, onYes, onNo }: { name: string; onYes: () => void
       ))}
       <div className="kn-agent-consent-buttons">
         <Button variant="primary" onClick={onYes}>
-          Ligar o {name}
+          {sw?.yes ?? `Ligar o ${name}`}
         </Button>
         <Button onClick={onNo}>Agora não</Button>
       </div>

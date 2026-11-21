@@ -9,7 +9,7 @@ import type { AgentTurnEvent, AgentVoiceUi, ProjectCandidate, ProjectSearchView 
 import { AGENTS, kindOf, loginUnknown, programOf, type AgentKind, type ProgramState } from "../../settings/agentText.ts";
 
 export const STEP_TEXT: Record<OnboardingStep, { title: string; hint: string }> = {
-  claude: { title: "Oi! Vamos acordar o Kiwi Cat", hint: "O Kiwi confere se o seu agente (o Claude Code ou o Gemini) está instalado e logado e manda um oi para testar." },
+  claude: { title: "Oi! Vamos acordar o Kiwi Cat", hint: "O Kiwi confere se o seu agente (o Claude Code ou o Gemini) está instalado e logado, baixa a ponte quando é o Claude Code e manda um oi para testar." },
   // Sem subtítulo (revisão do T13145): o cartão (que leva o aviso do microfone) e a frase embaixo já dizem como.
   control: { title: "Aperta o Control e fala oi", hint: "" },
   tone: { title: "O seu jeito", hint: "Como o agente fala com você: curto ou detalhado, formal ou informal." },

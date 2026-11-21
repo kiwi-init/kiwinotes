@@ -1,15 +1,14 @@
 // Os textos da seção Agente dos Ajustes (spec #8373, T8762), separados da tela para os testes lerem cada estado sem
 // navegador. O nome do agente ("Claude Code") aparece só como texto, sem logo (ADR 0011).
 
-import type { AgentClaudeStatus, AgentModelChoice, AgentNoticeState, AgentStatus, AgentTurnEvent } from "../../src/shared/ui-contract.ts";
+import type { AgentClaudeStatus, AgentKind, AgentModelChoice, AgentNoticeState, AgentStatus, AgentTurnEvent } from "../../src/shared/ui-contract.ts";
 
 /** O tamanho do adaptador, para o texto antes do download (a lista fixa do #8368 soma uns 4,4 MB). */
 export const ADAPTER_SIZE_LABEL = "4,4 MB";
 
 const MB = (bytes: number) => (bytes / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 
-/** Os agentes que o Kiwi sabe abrir (spec #24666): um por vez, escolhido em Ajustes › Agente. */
-export type AgentKind = "claude" | "gemini";
+export type { AgentKind };
 
 /**
  * O que muda de um agente para o outro na tela: o nome, a empresa (para onde o texto vai), como instalar, atualizar e
@@ -35,7 +34,7 @@ export const AGENTS: Record<AgentKind, { name: string; company: string; install:
 };
 
 /** O agente escolhido; um engine anterior ao Gemini não manda o `kind`, e é o Claude. */
-export const kindOf = (s: object | null | undefined): AgentKind => ((s as { kind?: string } | null | undefined)?.kind === "gemini" ? "gemini" : "claude");
+export const kindOf = (s: { kind?: AgentKind } | null | undefined): AgentKind => (s?.kind === "gemini" ? "gemini" : "claude");
 
 /** O comando que a pessoa roda no Terminal para entrar na conta: o login é do próprio Claude Code, nunca do Kiwi. */
 export const LOGIN_HOW = AGENTS.claude.login;
