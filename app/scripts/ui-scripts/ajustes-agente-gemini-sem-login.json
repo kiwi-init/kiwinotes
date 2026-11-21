@@ -92,6 +92,11 @@
       "name": "o authRequired vira \"não logado\": a linha diz como entrar, pelo próprio Gemini"
     },
     {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Gemini (Antigravity)')) .kn-row-hint",
+      "text": "(digite “agy”)",
+      "name": "e o comando que a pessoa digita no Terminal"
+    },
+    {
       "expectCount": ".kn-agent-test",
       "count": 0,
       "name": "sem login, o Testar sai"

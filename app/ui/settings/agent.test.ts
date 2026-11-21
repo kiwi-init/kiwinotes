@@ -123,6 +123,8 @@ describe("os dois agentes (spec #24666)", () => {
     const out = agentLine("gemini", "Gemini", { installed: true, version: "0.70.0", loggedIn: false, versionOk: true });
     expect(out.ok).toBe(false);
     expect(out.text).toContain("Abra o Antigravity no Terminal e entre com a sua conta");
+    // O comando que a pessoa digita no Terminal: sem login, é o que diz o que fazer.
+    expect(out.text).toContain("(digite “agy”)");
     expect(out.text).not.toContain("Gemini CLI");
     expect(out.text).toContain("nunca pede a sua senha nem a sua chave");
     expect(out.text).not.toContain("claude");
