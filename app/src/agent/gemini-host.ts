@@ -44,3 +44,14 @@ export async function geminiHost(o: GeminiHostOptions): Promise<{ host: AgentHos
   });
   return { host, status };
 }
+
+/**
+ * A marca que vai antes de um pedido que começaria por `/`. O Gemini roda os comandos da pessoa
+ * (`~/.gemini/commands`) quando o pedido começa por `/` (ADR 0012), e o que a pessoa escreve ao Kiwi nunca vira um.
+ */
+export const GEMINI_NOT_A_COMMAND = "[Pedido da pessoa ao Kiwi, não um comando:]";
+
+/** O pedido como vai ao Gemini: nunca começando por `/`. */
+export function geminiPrompt(prompt: string): string {
+  return /^\s*\//.test(prompt) ? `${GEMINI_NOT_A_COMMAND}\n${prompt}` : prompt;
+}

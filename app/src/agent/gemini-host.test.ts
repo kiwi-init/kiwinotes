@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { AgentError } from "./errors.ts";
 import { writeFakeGeminiExecutable } from "./fake/index.ts";
-import { geminiHost } from "./gemini-host.ts";
+import { GEMINI_NOT_A_COMMAND, geminiHost, geminiPrompt } from "./gemini-host.ts";
 import type { AgentHost } from "./host.ts";
 import { tempDir } from "../../test/tmp.ts";
 
@@ -69,5 +69,13 @@ describe("a abertura", () => {
     expect(argv.at(-1)).toBe(path.join(data, "agent", "gemini-policy"));
     expect(existsSync(path.join(data, "agent", "gemini-policy", "kiwi.toml"))).toBe(true);
     expect(existsSync(path.join(data, "agent", "session-gemini.json"))).toBe(true);
+  });
+});
+
+describe("o pedido ao Gemini (ADR 0012)", () => {
+  test("um pedido que começa por / ganha a marca; o resto vai como veio", () => {
+    expect(geminiPrompt("/resumo da semana")).toBe(`${GEMINI_NOT_A_COMMAND}\n/resumo da semana`);
+    expect(geminiPrompt("  /x")).toStartWith(GEMINI_NOT_A_COMMAND);
+    expect(geminiPrompt("Resuma a nota /Projetos/exemplo.md")).toBe("Resuma a nota /Projetos/exemplo.md");
   });
 });

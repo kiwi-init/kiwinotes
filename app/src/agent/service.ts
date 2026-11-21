@@ -40,6 +40,7 @@ import { viewChange } from "./change-view.ts";
 import { claudeStatus, type ProgramArgv } from "./claude.ts";
 import { AGENT_NAMES, type AgentKind, isAgentKind } from "./kinds.ts";
 import { geminiStatus } from "./gemini.ts";
+import { geminiPrompt } from "./gemini-host.ts";
 import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/download.ts";
 import { ADAPTER_PACKAGES, ADAPTER_VERSION, type PinnedPackage } from "./adapter/pinned.ts";
 import { checkClaudeVersion } from "./adapter/version.ts";
@@ -2117,7 +2118,8 @@ export class AgentService {
         faroDoPlacar(this.turnFaro),
       );
       asked = { host, prompt };
-      const answer = await host.ask(prompt, (e) => {
+      // Com o Gemini, um pedido que começa por `/` não vira um comando da pessoa (ADR 0012, T24672).
+      const answer = await host.ask(host.kind === "gemini" ? geminiPrompt(prompt) : prompt, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
         // O uso da janela (spec #11084) não é um evento do pedido: vai para o medidor, e o aviso, uma vez, para o balão.
         if (e.type === "limit") {

@@ -540,6 +540,8 @@ const app = agent({ name: "kiwi-fake-agent" })
       for (const m of pkg.matchAll(/^[^\n:]+: (.+?) \("[^\n]*\n<<<\n([\s\S]*?)\n>>>/gm)) seen.set(m[1]!, m[2]!);
     }
     const text = raw
+      // A marca do Kiwi antes de um pedido com `/` ao Gemini (T24672).
+      .replace(/^\[Pedido da pessoa ao Kiwi, não um comando:\]\n/, "")
       .replace(/^\[Modelo de nota do Kiwi:[^\]]*\]\s*/, "")
       // A memória (spec #11469): o bloco termina numa linha só com "]" (um fato pode ter colchete).
       .replace(/^\[O que você sabe sobre a pessoa[\s\S]*?\n\]\s*/, "")

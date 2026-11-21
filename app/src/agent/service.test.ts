@@ -2964,6 +2964,18 @@ describe("dois agentes (spec #24666)", () => {
     });
   }
 
+  test("um pedido que começa por / não chega ao Gemini como comando (ADR 0012)", async () => {
+    const m = make();
+    await m.svc.enable(true);
+    await m.svc.configure({ kind: "gemini" });
+    const events = await askAndWait(m, "/resumo Projeto X");
+    expect(events.at(-1)?.type).toBe("done");
+    const sent = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
+    expect(sent.length).toBeGreaterThan(0);
+    for (const t of sent) expect(t.trimStart().startsWith("/")).toBe(false);
+    expect(sent.at(-1)).toContain("/resumo Projeto X");
+  });
+
   test("trocar no meio de um pedido: E_AGENT_BUSY, e nada muda", async () => {
     const m = make();
     await readyNow(m);
