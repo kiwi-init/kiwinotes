@@ -36,6 +36,8 @@
 //                            o `initialize` dele (os quatro jeitos de logar, o `loadSession` e sem `session/resume`), o
 //                            `-32000` na abertura sem login (KIWI_FAKE_GEMINI_LOGGED_IN=0), o 429 do limite, as ferramentas
 //                            no `_meta["gemini-cli"].mcp` e as opções de permissão dele (`proceed_once`, `cancel`)
+//   KIWI_FAKE_AGENT_LOGGED_OUT  com o "gemini": um caminho; enquanto o arquivo existe, é como o LOGGED_IN=0. Um teste
+//                            desloga e loga de novo sem reabrir o falso (T24672)
 //   KIWI_FAKE_AGENT_MODEL    o modelo com que a sessão abre (o padrão é "fable", como se viesse do terminal da pessoa,
 //                            que foi o que a prova de verdade mostrou, #8666); o esforço abre em "high"
 //
@@ -43,7 +45,7 @@
 // troca o valor e é anotado no log (T8678). Como no adaptador de verdade, o esforço depende do modelo (spec #16793): o
 // sonnet tem só até "high", o haiku até "medium", o opus-legacy não tem a opção, e trocar para um modelo sem o esforço atual volta ao "default".
 
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
@@ -435,7 +437,8 @@ function geminiInitialize(): InitializeResponse {
  * (acpSessionManager.ts), e não abre nada. `KIWI_FAKE_GEMINI_LOGGED_IN=0` faz o falso fazer o mesmo.
  */
 function geminiLogin(): void {
-  if (GEMINI && process.env.KIWI_FAKE_GEMINI_LOGGED_IN === "0") {
+  const out = process.env.KIWI_FAKE_AGENT_LOGGED_OUT;
+  if (GEMINI && (process.env.KIWI_FAKE_GEMINI_LOGGED_IN === "0" || (out && existsSync(out)))) {
     throw new RequestError(-32000, "Gemini API key is missing or not configured.");
   }
 }

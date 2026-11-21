@@ -4,7 +4,8 @@
 //
 // O que ele garante:
 // - **um pedido por vez,** com cancelar;
-// - **a sessão retomada** entre um pedido e outro, e entre uma abertura e outra (o id fica em `session.json`);
+// - **a sessão retomada** entre um pedido e outro, e entre uma abertura e outra (o id fica em `session-<agente>.json`,
+//   uma por agente, spec #24666);
 // - **o agente isolado:** uma pasta de trabalho só dele, sem as configurações pessoais do Claude Code (hooks, regras,
 //   servidores MCP) e sem as ferramentas que mexem no Mac. Ele só conversa e, com `kiwiTools`, lê o cofre pelas
 //   ferramentas do Kiwi (spec #7496);
@@ -30,6 +31,15 @@ import type {
 } from "@agentclientprotocol/sdk";
 
 import { AgentError, classifyAgentError } from "./errors.ts";
+import type { AgentKind } from "./kinds.ts";
+
+/** O arquivo da sessão de antes do spec #24666, só do Claude. */
+const LEGACY_SESSION = "session.json";
+
+/** Onde fica a sessão guardada de cada agente (spec #24666): `session-claude.json`, `session-gemini.json`. */
+export function sessionFileOf(dir: string, kind: AgentKind): string {
+  return path.join(dir, `session-${kind}.json`);
+}
 
 /**
  * O isolamento que o host pede ao abrir a sessão, no `_meta.claudeCode.options` que o adaptador do Claude Code passa
@@ -96,8 +106,16 @@ export interface AgentHostOptions {
   name: string;
   /** O programa do agente que fala ACP pelo stdin e stdout, com os argumentos. */
   command: readonly string[];
-  /** A pasta do agente, dentro dos dados do app: `work/` é a pasta de trabalho dele, e `session.json` guarda a sessão. */
+  /**
+   * A pasta do agente, dentro dos dados do app: `work/` é a pasta de trabalho dele, e `session-<agente>.json` guarda a
+   * sessão de cada agente (spec #24666), para trocar de agente não misturar as conversas.
+   */
   dir: string;
+  /**
+   * Qual agente é (spec #24666): o Claude Code (o padrão) recebe o isolamento no `_meta.claudeCode`; o Gemini se isola
+   * pelos argumentos e pelo ambiente com que abre (`gemini.ts`), e a sessão dele vai sem `_meta`.
+   */
+  kind?: AgentKind;
   /** O ambiente do processo do agente (o padrão é o do Kiwi). */
   env?: Record<string, string | undefined>;
   /** A versão do Kiwi, que vai na apresentação do protocolo (`clientInfo`). */
@@ -196,7 +214,7 @@ export class AgentHost {
   }
 
   private get sessionFile(): string {
-    return path.join(this.o.dir, "session.json");
+    return sessionFileOf(this.o.dir, this.o.kind ?? "claude");
   }
 
   get busy(): boolean {
@@ -356,6 +374,8 @@ export class AgentHost {
       ...(this.openedWeb ? { tools: [...WEB_TOOLS] as string[] } : {}),
       ...(mcpServers.length && kiwi ? { allowedTools: [`${kiwi.prefix}*`] } : {}),
     };
+    // O `_meta` é do adaptador do Claude Code. O Gemini não o lê, e o isolamento dele vem de como ele abre.
+    if ((this.o.kind ?? "claude") !== "claude") return { cwd: this.workDir, mcpServers };
     return { cwd: this.workDir, mcpServers, _meta: { claudeCode: { options } } };
   }
 
@@ -390,12 +410,18 @@ export class AgentHost {
   }
 
   private savedSessionId(): string | null {
-    try {
-      const saved = JSON.parse(readFileSync(this.sessionFile, "utf8")) as { sessionId?: unknown };
-      return typeof saved.sessionId === "string" && saved.sessionId ? saved.sessionId : null;
-    } catch {
-      return null;
+    // A sessão do Claude de antes do spec #24666 ficava em `session.json`: ela vale até a primeira gravar a nova.
+    const files = (this.o.kind ?? "claude") === "claude" ? [this.sessionFile, path.join(this.o.dir, LEGACY_SESSION)] : [this.sessionFile];
+    for (const file of files) {
+      try {
+        const saved = JSON.parse(readFileSync(file, "utf8")) as { sessionId?: unknown };
+        if (typeof saved.sessionId === "string" && saved.sessionId) return saved.sessionId;
+        return null;
+      } catch {
+        /* sem o arquivo: o próximo */
+      }
     }
+    return null;
   }
 
   /** Esquece a sessão guardada: o próximo `start()` começa do zero. */

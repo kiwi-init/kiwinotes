@@ -62,9 +62,11 @@ export class AgentError extends Error {
 /** O código JSON-RPC que o ACP dá ao `authRequired` (`RequestError.authRequired()`). */
 export const ACP_AUTH_REQUIRED = -32000;
 
-const LIMIT = /rate.?limit|usage limit|limit reached|quota|too many requests|\b429\b|limite/i;
+// O Gemini CLI (spec #24666) diz o limite com o status do Google (`RESOURCE_EXHAUSTED`) e o login com "auth method" ou a
+// falta da chave (`GEMINI_API_KEY`); o Kiwi só procura as palavras, nunca lê a chave.
+const LIMIT = /rate.?limit|usage limit|limit reached|quota|too many requests|\b429\b|RESOURCE_EXHAUSTED|limite/i;
 const OFFLINE = /ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|network|offline|fetch failed|sem conex|internet/i;
-const NOT_LOGGED_IN = /not logged in|log ?in|sign ?in|authenticat|unauthori[sz]ed|\b401\b|invalid api key|credential/i;
+const NOT_LOGGED_IN = /not logged in|log ?in|sign ?in|authenticat|unauthori[sz]ed|\b401\b|invalid api key|credential|auth method|GEMINI_API_KEY|UNAUTHENTICATED/i;
 
 /** O texto de um erro qualquer: a mensagem, o `data` do JSON-RPC e a causa, para procurar as palavras. */
 function textOf(err: unknown): string {
