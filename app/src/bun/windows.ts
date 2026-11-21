@@ -385,6 +385,8 @@ async function openWindow(name: WindowName, hidden = false): Promise<void> {
       channel,
       // O remoto só fala com a rede pelo fetch guardado: só o release ui-channel e o armazenamento do GitHub (T25029).
       remoteFetch: uiChannelFetch(),
+      // "Buscar atualizações" (T25110): desligado, nenhum GET do canal, a partir do próximo e sem reiniciar.
+      checkUpdates: async () => (await stores.globalSettings.load()).checkUpdates,
       show: (ui) => {
         log(name, `showing UI ${ui.uiVersion}${ui.manifest ? "" : " (built-in)"}`);
         const html = decoder.decode(ui.index);

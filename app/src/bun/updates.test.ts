@@ -9,6 +9,7 @@ import {
   channelOf,
   checkErrorMessage,
   compareVersions,
+  OFF_BY_SETTING,
   preparedTar,
   requirement,
   updateMenuLabel,
@@ -19,6 +20,7 @@ import {
   type UpdateCheck,
   type UpdaterApi,
 } from "./updates.ts";
+import { UPDATES_OFF_BY_SETTING } from "../shared/ui-contract.ts";
 import { tempDir } from "../../test/tmp.ts";
 
 const INFO: LocalInfo = {
@@ -508,5 +510,57 @@ describe("o progresso do download, para a faixa do Sobre (T17097, spec #16837)",
       expect(seen).toEqual([plain, plain, plain, plain, { ...plain, done: 10 }, { ...plain, done: 150, total: 150 }]);
       status({ status: "download-progress", details: { bytesDownloaded: 5, totalBytes: 10 } }); // depois de pronta
       expect(u.status()).toMatchObject({ kind: "ready", version: "0.2.0" });
+    }));
+});
+
+describe("Buscar atualizações desligado em Ajustes (T25110)", () => {
+  test("desligado, nenhuma checagem vai à rede, nem a do relógio; ligar vale na próxima, sem reiniciar", () =>
+    withDir(async (appData) => {
+      const { updater, calls } = fakeUpdater({ appData });
+      let on = false;
+      const u = new AppUpdates({ updater, env: {}, log: () => {}, enabled: async () => on });
+      await u.start(0, 5);
+      await Bun.sleep(60);
+      expect(calls).toEqual([]);
+      expect(u.status()).toEqual({ kind: "off", reason: OFF_BY_SETTING });
+      // O "Verificar atualizações" também não sai.
+      expect(await u.check()).toEqual({ kind: "off", reason: OFF_BY_SETTING });
+      expect(calls).toEqual([]);
+      on = true;
+      await Bun.sleep(60);
+      u.stop();
+      expect(calls.length).toBeGreaterThan(0);
+      expect(new Set(calls)).toEqual(new Set(["check"]));
+      expect(u.status()).toEqual({ kind: "idle" });
+    }));
+
+  test("o interruptor muda a faixa na hora, sem checar; o desligado do build não volta por ele", () =>
+    withDir(async (appData) => {
+      const { updater, calls } = fakeUpdater({ appData });
+      const u = new AppUpdates({ updater, env: {}, log: () => {} });
+      u.settingChanged(false);
+      expect(u.status()).toEqual({ kind: "off", reason: OFF_BY_SETTING });
+      expect(updatesView(u.status(), null)).toEqual({ state: "off", reason: UPDATES_OFF_BY_SETTING, lastCheck: null });
+      u.settingChanged(true);
+      expect(u.status()).toEqual({ kind: "idle" });
+      expect(calls).toEqual([]);
+
+      const debug = new AppUpdates({ updater, env: { KIWI_DEBUG: "1" }, log: () => {} });
+      await debug.start(0, 0);
+      debug.settingChanged(true);
+      expect(debug.status()).toEqual({ kind: "off", reason: "KIWI_DEBUG=1" });
+      expect(calls).toEqual([]);
+    }));
+
+  test("uma versão já baixada e conferida segue no menu com ele desligado (o clique não busca nada)", () =>
+    withDir(async (appData) => {
+      const { updater, calls } = fakeUpdater({ appData, found: { version: "0.1.1", hash: "bbbb", updateAvailable: true } });
+      let on = true;
+      const u = new AppUpdates({ updater, env: {}, log: () => {}, verify: () => null, enabled: () => on });
+      await u.check();
+      on = false;
+      u.settingChanged(false);
+      expect(await u.check()).toEqual({ kind: "ready", version: "0.1.1", hash: "bbbb" });
+      expect(calls).toEqual(["check", "download"]);
     }));
 });
