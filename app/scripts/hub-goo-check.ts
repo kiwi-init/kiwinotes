@@ -487,6 +487,8 @@ async function realtime(p: Page, section: string) {
 
 /** Fora da corrida, o relógio não anda mais que isto entre dois desenhos (dois quadros de 60 Hz na ida são 6,7%). */
 const SLOW_STEP = 0.08;
+/** A folga do ponto flutuante: um passo de exatamente 8% sai como 0.08000000000000007 da subtração (T25197). */
+const STEP_EPSILON = 1e-9;
 /** O quadro preso de propósito na seção lenta. */
 const SLOW_BLOCK_MS = 80;
 
@@ -714,7 +716,7 @@ try {
     console.log(`seção lenta: ${JSON.stringify(res)}`);
     for (const [dir, r] of Object.entries(res)) {
       assert.ok(r.gap >= SLOW_BLOCK_MS * 0.9, `a ${dir} não pegou o quadro preso de ${SLOW_BLOCK_MS} ms (maior intervalo ${r.gap.toFixed(0)} ms)`);
-      assert.ok(r.step <= SLOW_STEP, `a gota pulou na ${dir}: o relógio andou ${(r.step * 100).toFixed(1)}% num desenho (máximo ${SLOW_STEP * 100}%) com um quadro de ${SLOW_BLOCK_MS} ms`);
+      assert.ok(r.step <= SLOW_STEP + STEP_EPSILON, `a gota pulou na ${dir}: o relógio andou ${(r.step * 100).toFixed(1)}% num desenho (máximo ${SLOW_STEP * 100}%) com um quadro de ${SLOW_BLOCK_MS} ms`);
     }
   } finally {
     await sl.close();
