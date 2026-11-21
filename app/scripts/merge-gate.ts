@@ -5,6 +5,10 @@
 // portão aceita o pulado com motivo, e barra o vermelho, o que falta, o que ainda roda e o pulado sem motivo (o
 // `skipped` do GitHub, ou o passo "pulado:" sem texto).
 //
+// Só os checks do nosso CI contam (T24794): os jobs do GitHub Actions deste repo, pelo link
+// `github.com/<dono>/<repo>/actions/runs/…`. Um app de fora (o "Proof" do Blacksmith, que sai `skipped`) aparece como
+// "ignorado (app de fora)": nunca barra e nunca conta como um dos obrigatórios.
+//
 //   bun scripts/merge-gate.ts 135                  # só confere: sai 0 se pode, 1 se não
 //   bun scripts/merge-gate.ts 135 --merge          # confere e faz o squash, preso ao sha conferido
 //   bun scripts/merge-gate.ts 135 --merge -- --delete-branch
@@ -34,7 +38,7 @@ export interface Step {
   conclusion: string | null;
 }
 
-export type State = "passou" | "pulado" | "vermelho" | "falta" | "rodando" | "pulado sem motivo";
+export type State = "passou" | "pulado" | "vermelho" | "falta" | "rodando" | "pulado sem motivo" | "ignorado (app de fora)";
 
 export interface Verdict {
   name: string;
@@ -44,6 +48,15 @@ export interface Verdict {
 }
 
 const nameOf = (c: Check) => c.name ?? c.context ?? "";
+
+/**
+ * Se o check é do nosso CI: um job do GitHub Actions do próprio repo (`dono/repo`), pelo link dele. Um status de commit
+ * ou um check de outro app (outro link) é de fora.
+ */
+export function isOwnCi(c: Check, repo: string): boolean {
+  if (c.__typename === "StatusContext") return false;
+  return (c.detailsUrl ?? "").toLowerCase().startsWith(`https://github.com/${repo.toLowerCase()}/actions/runs/`);
+}
 
 /** O motivo do pulo, pelos passos do job: `undefined` se o job não pulou, "" se pulou sem dizer o motivo. */
 export function skipReason(steps: Step[] | null): string | undefined {
@@ -55,15 +68,20 @@ export function skipReason(steps: Step[] | null): string | undefined {
  * O veredito de cada check: os obrigatórios (mesmo os que faltam) e os outros que o PR tiver. `stepsOf` dá os passos
  * do job de um check verde, para achar o "pulado:".
  */
-export function judge(checks: Check[], stepsOf: (c: Check) => Step[] | null, required = REQUIRED): Verdict[] {
+export function judge(checks: Check[], stepsOf: (c: Check) => Step[] | null, repo: string, required = REQUIRED): Verdict[] {
+  const own = checks.filter((c) => isOwnCi(c, repo));
+  // Os de fora só aparecem na saída, um por nome.
+  const foreign = [...new Set(checks.filter((c) => !isOwnCi(c, repo)).map(nameOf))]
+    .sort()
+    .map((name): Verdict => ({ name, state: "ignorado (app de fora)", ok: true, detail: "" }));
   // Um check rodado de novo aparece mais de uma vez: vale o último.
   const latest = new Map<string, Check>();
-  for (const c of checks) {
+  for (const c of own) {
     const prev = latest.get(nameOf(c));
     if (!prev || (c.startedAt ?? "") >= (prev.startedAt ?? "")) latest.set(nameOf(c), c);
   }
   const names = [...required, ...[...latest.keys()].filter((n) => !required.includes(n)).sort()];
-  return names.map((name): Verdict => {
+  const verdicts = names.map((name): Verdict => {
     const c = latest.get(name);
     if (!c) return { name, state: "falta", ok: false, detail: "o check não está no PR" };
     if (c.__typename === "StatusContext") {
@@ -81,6 +99,7 @@ export function judge(checks: Check[], stepsOf: (c: Check) => Step[] | null, req
     if (!reason) return { name, state: "pulado sem motivo", ok: false, detail: `o passo "${SKIP_STEP}" sem o motivo` };
     return { name, state: "pulado", ok: true, detail: reason };
   });
+  return [...verdicts, ...foreign];
 }
 
 function gh(args: string[]): string {
@@ -106,9 +125,12 @@ if (import.meta.main) {
     console.error("uso: bun scripts/merge-gate.ts <PR> [--merge] [-- <args do gh pr merge>]");
     process.exit(2);
   }
-  const view = JSON.parse(gh(["pr", "view", pr, "--json", "headRefOid,statusCheckRollup,isDraft"])) as { headRefOid: string; statusCheckRollup: Check[]; isDraft: boolean };
-  const verdicts = judge(view.statusCheckRollup, jobSteps);
-  for (const v of verdicts) console.log(`${v.ok ? "ok  " : "BARRA"}  ${v.name}: ${v.state}${v.detail ? ` (${v.detail})` : ""}`);
+  const view = JSON.parse(gh(["pr", "view", pr, "--json", "headRefOid,statusCheckRollup,isDraft,url"])) as { headRefOid: string; statusCheckRollup: Check[]; isDraft: boolean; url: string };
+  // O repo do PR (`https://github.com/<dono>/<repo>/pull/N`): os checks do nosso CI apontam para as Actions dele.
+  const repo = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(view.url)?.[1];
+  if (!repo) throw new Error(`não achei o repo no link do PR: ${view.url}`);
+  const verdicts = judge(view.statusCheckRollup, jobSteps, repo);
+  for (const v of verdicts) console.log(`${v.state === "ignorado (app de fora)" ? "--  " : v.ok ? "ok  " : "BARRA"}  ${v.name}: ${v.state}${v.detail ? ` (${v.detail})` : ""}`);
   const sha = view.headRefOid;
   if (view.isDraft) {
     console.log(`#${pr} @ ${sha.slice(0, 8)}: é draft, não entra`);
