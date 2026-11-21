@@ -113,7 +113,13 @@ export function agyEnv(env: Record<string, string | undefined>): Record<string, 
   return Object.fromEntries(Object.entries(env).filter(([k]) => !AGY_SCRUBBED_ENV.test(k)));
 }
 
-/** Se o `agy` tem o ACP: o `acp` aparece como comando no `agy --help`. */
+/**
+ * Se o `agy` tem o ACP: o `acp` aparece como comando no `agy --help`, no começo de uma linha, sozinho ou depois do
+ * `agy` (`  acp  Start…`, `agy acp …`, `acp, a …`). Nunca no meio de outra palavra (`--no-acpx`) nem na descrição de
+ * outro comando. O formato da ajuda não está na doc, e o Kiwi não roda o `agy` de verdade: por isso as variações.
+ * Decidir pelo `initialize` do `agy acp` exigiria abri-lo, e num `agy` sem o comando o `acp` poderia virar um pedido ao
+ * modelo (#25489).
+ */
 export function agyHelpHasAcp(help: string): boolean {
-  return /^\s*acp\b/m.test(help);
+  return /^[ \t]*(?:agy[ \t]+)?acp(?=[ \t,:]|$)/m.test(help);
 }
