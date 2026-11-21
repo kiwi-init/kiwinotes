@@ -253,4 +253,11 @@ describe("o gemini falso pelo host", () => {
     const e = await rejection(h.ask("/limite"));
     expect(e.code).toBe("E_AGENT_LIMIT");
   });
+
+  test("sem rede, o 500 com o \"fetch failed\" do Gemini é o E_AGENT_OFFLINE", async () => {
+    const { h } = geminiHost(tmp());
+    await h.start();
+    const e = await rejection(h.ask("/sem-rede"));
+    expect(e.code).toBe("E_AGENT_OFFLINE");
+  });
 });
