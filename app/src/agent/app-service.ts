@@ -15,7 +15,7 @@ import { claudeAdapterHost, agentDir, CLAUDE_CODE } from "./adapter/open.ts";
 import type { PinnedPackage } from "./adapter/pinned.ts";
 import { findClaude, type ProgramArgv } from "./claude.ts";
 import { findGemini } from "./gemini.ts";
-import { geminiHost } from "./gemini-host.ts";
+import { FAKE_GEMINI, geminiHost } from "./gemini-host.ts";
 import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { AgentHost } from "./host.ts";
 import { AgentService } from "./service.ts";
@@ -32,7 +32,6 @@ export interface AppAgentOptions {
 }
 
 /** O `gemini` falso (T24671): o mesmo arquivo responde ao `--version` e fala ACP no `--acp`. */
-const FAKE_GEMINI: ProgramArgv = [process.execPath, path.join(import.meta.dir, "fake", "gemini.ts")];
 
 export function appAgentService(o: AppAgentOptions): AgentService {
   const env = o.env ?? process.env;

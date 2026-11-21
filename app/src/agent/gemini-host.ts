@@ -6,6 +6,8 @@
 //   parte: o Gemini só diz na abertura da sessão (o `authRequired` do ACP), e o Kiwi nunca lê o `~/.gemini`.
 // - A sessão fica em `session-gemini.json`, separada da do Claude (`host.ts`).
 
+import path from "node:path";
+
 import { agentDir } from "./adapter/open.ts";
 import { AgentError } from "./errors.ts";
 import { geminiArgs, geminiEnv, geminiStatus, GEMINI_MIN_VERSION, type GeminiStatus } from "./gemini.ts";
@@ -14,6 +16,9 @@ import { AGENT_NAMES } from "./kinds.ts";
 import type { ProgramArgv } from "./claude.ts";
 
 export const GEMINI = AGENT_NAMES.gemini;
+
+/** O `gemini` falso (T24671): responde ao `--version` e fala ACP no `--acp`. Só nos testes e no headless falso. */
+export const FAKE_GEMINI: ProgramArgv = [process.execPath, path.join(import.meta.dir, "fake", "gemini.ts")];
 
 export interface GeminiHostOptions {
   /** A pasta de dados do app (ou a de teste). */

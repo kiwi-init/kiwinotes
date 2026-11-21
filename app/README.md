@@ -82,6 +82,13 @@ bun run cli agent ask "de novo" --data /tmp/kn-test     # retoma a sessão (turn
 bun run cli agent ask "/limite" --data /tmp/kn-test     # o agente falso falha: /sem-login, /limite, /sem-rede, /cai
 ```
 
+**O Gemini (spec #24666)** vai pelas mesmas duas, com `--agent gemini` e o `gemini` falso (`src/agent/fake/gemini.ts`); `--gemini PATH` aponta outro programa no lugar dele. Não há adaptador: o Gemini fala ACP sozinho. O login só se sabe ao abrir a sessão (`loginKnown: false` no `status`), e o Kiwi nunca lê o `~/.gemini`. A sessão dele fica em `<data>/agent/session-gemini.json`, separada da do Claude (`session-claude.json`). `KIWI_FAKE_AGENT_LOGGED_OUT=<arquivo>` faz o falso responder `authRequired` enquanto o arquivo existir.
+
+```sh
+bun run cli agent status --agent gemini --data /tmp/kn-test
+bun run cli agent ask "oi" --agent gemini --data /tmp/kn-test
+```
+
 O agente falso também tem `/lento` (20 pedaços, um a cada 100 ms; Ctrl-C cancela) e `/permissao` (o host recusa). `KIWI_FAKE_CLAUDE_LOGGED_IN=0` faz o `claude` falso dizer que não está logado, e `--claude PATH` aponta outro programa no lugar dele. A sessão fica em `<data>/agent/`.
 
 **O adaptador do Claude Code (T8540, spec #8368).** O Kiwi liga o Claude Code pelo adaptador ACP, baixado a pedido numa versão fixa, com cada pacote conferido e sem a cópia do Claude Code que viria junto ([ADR 0012](../docs/adr/0012-host-do-agente.md)):
