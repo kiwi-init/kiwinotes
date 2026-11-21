@@ -30,10 +30,9 @@ export function builtInFrom(dir: string): BuiltIn {
 }
 
 /**
- * O canal de UI. Desligado por padrão: o app não consulta a rede para buscar UI (AGENTS.md, privacidade), e ligar um
- * canal remoto é decisão do harry. Em dev, `KIWI_UI_CHANNEL` aponta um canal **local** (só 127.0.0.1 ou localhost):
+ * O canal local de dev: `KIWI_UI_CHANNEL` aponta um canal **local** (só 127.0.0.1 ou localhost), e
  * `http://127.0.0.1:5179` serve `<janela>/manifest.json`. O bundle do AppEngine tem que vir por http(s), por isso não
- * é `file://`.
+ * é `file://`. O canal da internet é o `UI_CHANNEL_REMOTE` (spec #25011).
  */
 export function channelUrl(base: string | undefined, name: UiWindow): string | null {
   if (!base) return null;
@@ -67,6 +66,52 @@ const channelOff = (async () => {
   throw new Error("the UI channel is off");
 }) as unknown as typeof fetch;
 
+/**
+ * O canal remoto (spec #25011): o release fixo `ui-channel` do GitHub, e mais nada. Cada janela tem um
+ * `<janela>.manifest.json` lá, e o pack fica no mesmo release (formato do T25030, #25039).
+ */
+export const UI_CHANNEL_REMOTE = "https://github.com/kiwi-init/kiwinotes/releases/download/ui-channel/";
+
+/** O GET do manifesto: ao abrir a janela (o `start` do engine) e, com ela aberta, a cada 6 h. */
+export const UI_CHANNEL_POLL_MS = 6 * 60 * 60_000;
+
+export const remoteManifestUrl = (name: UiWindow) => `${UI_CHANNEL_REMOTE}${name}.manifest.json`;
+
+/** De onde a janela busca UI: de nenhum lugar, do canal local de dev, ou do release `ui-channel`. */
+export type UiChannelChoice =
+  | { kind: "off"; reason: string }
+  | { kind: "local"; manifestUrl: string }
+  | { kind: "remote"; manifestUrl: string };
+
+/**
+ * O canal de uma janela. O `KIWI_UI_CHANNEL` (dev) vem primeiro: um local válido liga o local, e um errado deixa o
+ * canal desligado, com um aviso no log, sem deixar o app sem janela (T1378). Sem ele, o canal remoto segue o Updater
+ * (ADR 0008): desligado ali (`updatesOff`, com o motivo), desligado aqui, e nada vai à rede.
+ */
+export function uiChannelFor(
+  name: UiWindow,
+  o: { env: string | undefined; updatesOff: string | null; warn: (message: string) => void },
+): UiChannelChoice {
+  if (o.env) {
+    const local = channelUrlOrOff(o.env, name, o.warn);
+    return local ? { kind: "local", manifestUrl: local } : { kind: "off", reason: "KIWI_UI_CHANNEL isn't a local URL" };
+  }
+  if (o.updatesOff) return { kind: "off", reason: `updates off (${o.updatesOff})` };
+  return { kind: "remote", manifestUrl: remoteManifestUrl(name) };
+}
+
+/**
+ * O `channel` do AppEngine para a escolha. Desligado, o fetch recusa tudo. O remoto só vai à rede pelo `remoteFetch`,
+ * o fetch guardado do canal (T25029: só o release, redirect só para o storage do GitHub, GET limpo); sem ele, fica
+ * desligado.
+ */
+export function channelSource(choice: UiChannelChoice, remoteFetch: typeof fetch | undefined): { manifestUrl: string; fetch?: typeof fetch; pollIntervalMs?: number } {
+  // O local de dev fica no intervalo do AppEngine (5 min), como antes.
+  if (choice.kind === "local") return { manifestUrl: choice.manifestUrl };
+  if (choice.kind === "remote" && remoteFetch) return { manifestUrl: choice.manifestUrl, fetch: remoteFetch, pollIntervalMs: UI_CHANNEL_POLL_MS };
+  return { manifestUrl: "http://127.0.0.1/kiwinotes-ui-channel-off/manifest.json", fetch: channelOff, pollIntervalMs: 24 * 60 * 60_000 };
+}
+
 export interface UiEngineOptions {
   name: UiWindow;
   /** <dados>/appengine/<janela>: o estado do engine e do canal, os packs e a pasta servida. */
@@ -76,8 +121,10 @@ export interface UiEngineOptions {
   capabilities: Record<string, (args: unknown) => unknown>;
   /** Mostra a UI na janela (loadHTML do index). */
   show(ui: HostUi): void;
-  /** O manifest do canal local, ou null com o canal desligado. */
-  manifestUrl: string | null;
+  /** De onde a janela busca UI (`uiChannelFor`). */
+  channel: UiChannelChoice;
+  /** O fetch guardado do canal remoto. Sem ele, o canal remoto fica desligado. */
+  remoteFetch?: typeof fetch;
   readyTimeoutMs?: number;
   probationMs?: number;
 }
@@ -93,8 +140,7 @@ export function createUiEngine(o: UiEngineOptions): AppEngine {
     readyTimeoutMs: o.readyTimeoutMs,
     probationMs: o.probationMs,
     channel: {
-      manifestUrl: o.manifestUrl ?? "http://127.0.0.1/kiwinotes-ui-channel-off/manifest.json",
-      ...(o.manifestUrl ? {} : { fetch: channelOff, pollIntervalMs: 24 * 60 * 60_000 }),
+      ...channelSource(o.channel, o.remoteFetch),
       trustedKeys: o.trustedKeys,
       root: path.join(o.dir, "packs"),
       stateFile: path.join(o.dir, "channel.json"),
