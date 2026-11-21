@@ -258,7 +258,7 @@ O Gemini CLI fala ACP sozinho (`gemini --acp`), sem adaptador: o `AgentHost` abr
 | YOLO e `auto_edit` desligados | `--approval-mode default`: a opção vence o `defaultApprovalMode` das configurações da pessoa |
 | nenhuma extensão da pessoa (com os servidores MCP, os comandos e o `GEMINI.md` delas) | `--extensions none` |
 | nenhum servidor MCP da `settings.json` da pessoa | `--allowed-mcp-server-names kiwi`. O Gemini junta os servidores da pessoa com os do ACP, e a opção deixa só o `kiwi` |
-| nenhuma ferramenta embutida (shell, arquivos, web, memória, skills, subagentes) nem de outro servidor | `--admin-policy <dados>/agent/gemini-policy`: uma regra na camada mais alta do motor de regras, que nega `toolName = "*"` (prioridade 900) e libera `mcpName = "kiwi"` (999). Uma ferramenta negada sem condição some da lista que o modelo vê. As regras da pessoa ficam numa camada abaixo |
+| nenhuma ferramenta embutida (shell, arquivos, web, memória, skills, subagentes) nem de outro servidor | `--admin-policy <dados>/agent/gemini-policy`: uma regra na camada mais alta do motor de regras, que nega `toolName = "*"` (prioridade 900) e libera `toolName = "*"` com `mcpName = "kiwi"`, o `mcp_kiwi_*` (999). Toda regra precisa de `toolName`, `decision` e `priority`: uma que sai do schema faz o Gemini pular o arquivo inteiro, e o isolamento cai sem aviso. Um teste confere isso. Uma ferramenta negada sem condição some da lista que o modelo vê. As regras da pessoa ficam numa camada abaixo |
 | um processo só, que o host fecha | `GEMINI_CLI_NO_RELAUNCH=1`: ele não se reabre num 2º Node para ter mais memória |
 | nunca abrir o navegador | `NO_BROWSER=true` |
 
