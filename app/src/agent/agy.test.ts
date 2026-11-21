@@ -264,7 +264,7 @@ describe("o agy: permissões, sessão e login no host (T25060)", () => {
     const { host } = await agy(data, { KIWI_FAKE_GEMINI_LOGGED_IN: "0" }, FAKE_GEMINI);
     const e = await rejection(host.start());
     expect(e.code).toBe("E_AGENT_NOT_LOGGED_IN");
-    expect(e.message).not.toContain("Antigravity");
+    expect(e.message).not.toContain(AGY_LOGIN_HELP);
     expect(e.message).toContain(`Entre na sua conta pelo próprio ${GEMINI}`);
   });
 
