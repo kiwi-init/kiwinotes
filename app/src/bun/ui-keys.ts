@@ -5,6 +5,9 @@
 // (0600), no Mac de quem publica; quem tem hoje: o Mac do harry, onde os agentes rodam. Para trocar a chave: gere
 // outra (`bun .hutch/devkit/api/sdks/main/appengine/cli.ts keygen --out ~/.config/kiwinotes/ui-signing`), ponha a
 // pública aqui ao lado da antiga, publique com a nova e só depois tire a antiga.
+//
+// No CI, a mesma privada é o segredo da org `UI_SIGNING_KEY`, que o `ui-publish.yml` usa para o canal remoto (T25030).
+// Quem o põe é o harry; o `ui-channel-publish.ts` recusa uma chave que não está aqui.
 
 import type { TrustedKeys } from "electrobun/bun/appengine";
 

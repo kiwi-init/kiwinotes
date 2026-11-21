@@ -2,7 +2,7 @@
 // para trocar a tela sem release ("Nova aparência pronta"). Quem roda é o workflow `ui-publish.yml`; o canal local de
 // dev continua no `ui-publish.ts`.
 //
-//   UI_SIGNING_KEY=<pem> bun scripts/ui-channel-publish.ts --out DIR --app-contract 1.95.0 --source-time 1795000000 \
+//   UI_SIGNING_KEY=<pem> bun scripts/ui-channel-publish.ts [--rehearsal] --out DIR --app-contract 1.95.0 --source-time 1795000000 \
 //     [--previous-base https://github.com/<repo>/releases/download/ui-channel] [--base-url <mesmo>]
 //
 // Para cada janela de `UI_WINDOWS`, a partir do `dist/<janela>` do `ui-build.ts`, deixa em DIR, num nível só (asset de
@@ -23,7 +23,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { publish, readPreviousManifest } from "../.hutch/devkit/api/sdks/main/appengine/cli.ts";
-import { keyIdFor, publicKeyFromPrivate } from "../.hutch/devkit/api/sdks/main/appengine/format.ts";
+import {
+  generateSigningKey,
+  keyIdFor,
+  publicKeyFromPrivate,
+  readUipack,
+  verifyManifest,
+} from "../.hutch/devkit/api/sdks/main/appengine/format.ts";
 import pkg from "../package.json" with { type: "json" };
 import { UI_TRUSTED_KEYS } from "../src/bun/ui-keys.ts";
 import { UI_CONTRACT_VERSION, UI_WINDOWS, type UiWindow } from "../src/shared/ui-contract.ts";
@@ -110,7 +116,8 @@ export type ChannelOptions = {
 };
 
 export async function publishChannel(o: ChannelOptions) {
-  const keyProblem = keyError(o.privateKeyPem, o.trusted ?? UI_TRUSTED_KEYS);
+  const trusted = o.trusted ?? UI_TRUSTED_KEYS;
+  const keyProblem = keyError(o.privateKeyPem, trusted);
   if (keyProblem) throw new Error(keyProblem);
   const uiContract = o.uiContract ?? UI_CONTRACT_VERSION;
   const contractProblem = contractError(uiContract, o.appContract);
@@ -147,6 +154,11 @@ export async function publishChannel(o: ChannelOptions) {
       }
       const r = await publish({ srcDir: pack, privateKeyPem: o.privateKeyPem, siteDir: site, baseUrl: o.baseUrl, flat: true, now: o.now });
       const bundle = path.basename(r.bundlePath);
+      // O que sai é o que o app vai conferir: a assinatura pela chave confiável e o pack pelo sha256 do manifesto.
+      const check = verifyManifest(r.manifest, trusted);
+      if (!check.ok) throw new Error(`${w}: the signed manifest doesn't verify (${check.reason})`);
+      const read = readUipack(new Uint8Array(readFileSync(r.bundlePath)), { sha256: r.manifest.sha256, uiVersion });
+      if (!read.ok) throw new Error(`${w}: the pack doesn't match its manifest (${read.reason})`);
       renameSync(r.bundlePath, path.join(o.outDir, bundle));
       renameSync(r.manifestPath, path.join(o.outDir, manifestAssetName(w)));
       out.push({ window: w, uiVersion: r.manifest.uiVersion, seq: r.manifest.seq, bundle, requiresContract: r.manifest.requiresContract });
@@ -168,7 +180,11 @@ if (import.meta.main) {
     return i >= 0 ? args[i + 1] : undefined;
   };
   const need = (name: string) => flag(name) ?? (console.error(`ui-channel-publish: ${name} is required`), process.exit(2));
-  const key = process.env.UI_SIGNING_KEY;
+  // O ensaio (`--rehearsal`): uma chave descartável, criada aqui e confiável só neste run, sem o segredo. Os packs
+  // saem iguais aos de verdade, mas nenhum app os aceita.
+  const rehearsal = args.includes("--rehearsal");
+  const throwaway = rehearsal ? generateSigningKey() : null;
+  const key = throwaway ? throwaway.privateKeyPem : process.env.UI_SIGNING_KEY;
   if (!key) {
     console.error("ui-channel-publish: UI_SIGNING_KEY is empty (the org secret)");
     process.exit(2);
@@ -183,7 +199,9 @@ if (import.meta.main) {
       sourceTimeSec: Number(need("--source-time")),
       baseUrl: need("--base-url"),
       previousBase: flag("--previous-base"),
+      ...(throwaway ? { trusted: { [throwaway.keyId]: throwaway.publicKey } } : {}),
     });
+    if (throwaway) console.log(`ui-channel-publish: rehearsal, signed with a throwaway key ${throwaway.keyId}`);
     for (const p of published) console.log(`ui-channel-publish: ${p.window} ${p.uiVersion} seq ${p.seq} ${p.requiresContract} → ${p.bundle}`);
   } catch (e) {
     console.error(`ui-channel-publish: ${e instanceof Error ? e.message : String(e)}`);

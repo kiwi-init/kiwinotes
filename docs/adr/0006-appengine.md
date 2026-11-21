@@ -78,3 +78,15 @@ E o evento `history.added`, que o engine manda ao Histórico aberto a cada ditad
 
 ## TCC
 Uma UI nova não muda o engine (o binário e a assinatura). **Então trocar de UI não zera as permissões.** Só um build novo do engine faz isso enquanto a assinatura for ad hoc (T1074).
+
+## Publicação no canal remoto (spec #25011, T25030)
+- **Onde:** o release `ui-channel` do repo, num nível só (asset de release não tem pasta): `<janela>.manifest.json`, assinado, e os `<uiVersion>-<sha12>.uipack`, com o `bundleUrl` absoluto no mesmo release.
+- **Quem publica:** o workflow `ui-publish.yml`, por um tag `ui-ANO.MÊS.N`, com o `app/scripts/ui-channel-publish.ts`. Quem solta é o releaser, com a mesma regra de ok do release.
+- **A chave:** o segredo da org `UI_SIGNING_KEY`, só no passo que assina. O script recusa uma chave fora do `ui-keys.ts` e nunca imprime a chave.
+- **O `uiVersion`:** é a versão do app mais a hora do commit da UI (`2026.11.9-ui.20261121120000`). O `seq` é a hora da publicação, então fica acima do da UI de fábrica do app publicado.
+- **O que barra, antes de publicar:**
+  - um commit que não contém o último release `v*`, porque a tela voltaria para trás;
+  - um contrato mais novo que o do app publicado: essa UI só chega com release. O pack leva `requiresContract: ^<contrato do commit>`, e um app mais velho recusa antes do download;
+  - um commit que não é mais novo que o da UI no canal.
+- **A ordem:** os packs sobem antes dos manifestos. Depois saem os packs que nem o manifesto novo nem o anterior apontam.
+- **O ensaio:** "Run workflow" com o ensaio ligado assina com uma chave descartável e publica no `ui-channel-rehearsal`, que nenhum app lê.
