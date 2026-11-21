@@ -1,7 +1,9 @@
 // O agente dentro do app (spec #8339, T8678): o serviço que as capacidades `agent.*` chamam, com o agente falso, um
 // registro do npm falso e local e os ajustes de verdade numa pasta tmp. Nada aqui abre o Claude Code nem vai à internet.
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -2982,6 +2984,46 @@ describe("dois agentes (spec #24666)", () => {
     expect(s.gemini).not.toHaveProperty("loginKnown");
   });
 
+  test("o Kiwi nunca lê o ~/.gemini: o estado, o pedido e a troca, com as leituras do processo vigiadas", async () => {
+    const home = tmp();
+    mkdirSync(path.join(home, ".gemini"));
+    writeFileSync(path.join(home, ".gemini", "oauth_creds.json"), JSON.stringify({ token: "exemplo" }));
+    const before = process.env.HOME;
+    process.env.HOME = home;
+    // Passam adiante: só anotam o caminho. O agente (o processo filho) pode ler o que é dele; o Kiwi, não.
+    const watched = [
+      spyOn(fs, "readFileSync"),
+      spyOn(fs, "existsSync"),
+      spyOn(fs, "statSync"),
+      spyOn(fs, "readdirSync"),
+      spyOn(fs, "openSync"),
+      spyOn(fsp, "readFile"),
+      spyOn(fsp, "readdir"),
+      spyOn(fsp, "stat"),
+      spyOn(fsp, "open"),
+      spyOn(Bun, "file"),
+    ];
+    try {
+      const m = make({ env: { HOME: home } });
+      await m.svc.enable(true);
+      await m.svc.configure({ kind: "gemini" });
+      await m.svc.status(true);
+      expect((await askAndWait(m, "oi")).at(-1)?.type).toBe("done");
+      await m.svc.status(true);
+      await m.svc.configure({ kind: "claude" });
+      await m.svc.configure({ kind: "gemini" });
+      await m.svc.status(true);
+      const touched = watched.flatMap((s) => s.mock.calls.map((c) => String(c[0]))).filter((p) => p.includes(".gemini"));
+      expect(touched).toEqual([]);
+      // A vigia pega mesmo: uma leitura do ~/.gemini aparece nela.
+      fs.existsSync(path.join(home, ".gemini"));
+      expect(watched[1]!.mock.calls.some((c) => String(c[0]).includes(".gemini"))).toBe(true);
+    } finally {
+      for (const s of watched) s.mockRestore();
+      process.env.HOME = before;
+    }
+  });
+
   test("o medidor com o Gemini: nenhum /usage, nem o do Atualizar nem o de depois do pedido", async () => {
     const m = make({ limitProbe: { delayMs: 10, everyMs: 0 } });
     await m.svc.enable(true);
@@ -2989,6 +3031,7 @@ describe("dois agentes (spec #24666)", () => {
     await askAndWait(m, "oi");
     await m.svc.usageRefresh();
     await Bun.sleep(200);
+    expect(m.log().filter((l) => l.method === "session/usage")).toEqual([]);
     const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => JSON.stringify(l.params.prompt));
     expect(prompts.some((p) => p.includes("/usage"))).toBe(false);
     expect((await m.svc.status()).busy).toBe(false);
