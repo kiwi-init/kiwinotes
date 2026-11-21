@@ -1,11 +1,11 @@
 // O host do agente (spec #4576) contra o agente falso, que fala ACP de verdade. Nenhum teste abre o Claude Code.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { FAKE_AGENT_COMMAND } from "./fake/index.ts";
-import { AgentHost, ISOLATION_META, LEAN_SESSION_OPTIONS, WEB_TOOLS, type AgentEvent } from "./host.ts";
+import { AgentHost, ISOLATION_META, LEAN_SESSION_OPTIONS, sessionFileOf, WEB_TOOLS, type AgentEvent } from "./host.ts";
 
 /** O `_meta` que toda sessão leva: o enxuto por baixo, o isolamento por cima. */
 const SESSION_META = { claudeCode: { options: { ...LEAN_SESSION_OPTIONS, ...ISOLATION_META.claudeCode.options } } };
@@ -518,6 +518,52 @@ describe("as ferramentas do Kiwi no host (spec #7496)", () => {
     const events: AgentEvent[] = [];
     expect((await h.ask("/permissao", (e) => events.push(e))).text).toBe("permissão: reject");
     expect(events).toContainEqual({ type: "permission", tool: "Bash", decision: "denied" });
+  });
+});
+
+describe("o Gemini no host (spec #24666)", () => {
+  const server = { type: "http" as const, name: "kiwi", url: "http://127.0.0.1:1/mcp", headers: [{ name: "X-Kiwi-Token", value: "t" }] };
+
+  function geminiFake(dir: string) {
+    const log = path.join(dir, "fake-log.jsonl");
+    const h = new AgentHost({
+      name: "Gemini",
+      kind: "gemini",
+      command: FAKE_AGENT_COMMAND,
+      dir: path.join(dir, "agent"),
+      env: { ...process.env, KIWI_FAKE_AGENT_LOG: log, KIWI_FAKE_AGENT_FLAVOR: "gemini" },
+      kiwiTools: { servers: () => [server], prefix: "mcp__kiwi__" },
+    });
+    hosts.push(h);
+    const lines = () => readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { method: string; params: Record<string, any> });
+    return { h, lines };
+  }
+
+  test("a sessão sem o _meta do Claude Code, e o servidor do Kiwi no session/new", async () => {
+    const { h, lines } = geminiFake(tmp());
+    await h.start();
+    const p = lines().find((l) => l.method === "session/new")!.params;
+    expect(p._meta).toBeUndefined();
+    expect(p.mcpServers).toEqual([server]);
+  });
+
+  test("a ferramenta do Kiwi pelo nome do Gemini (_meta[\"gemini-cli\"].mcp): aceita, com o proceed_once dele", async () => {
+    const { h } = geminiFake(tmp());
+    await h.start();
+    const events: AgentEvent[] = [];
+    expect((await h.ask("/permissao-kiwi", (e) => events.push(e))).text).toBe("permissão: proceed_once");
+    expect(events.filter((e) => e.type === "permission")).toEqual([]);
+  });
+
+  test("a sessão do Gemini fica em session-gemini.json, e a session.json antiga não vale para ele", async () => {
+    const dir = tmp();
+    mkdirSync(path.join(dir, "agent"), { recursive: true });
+    writeFileSync(path.join(dir, "agent", "session.json"), JSON.stringify({ sessionId: "sessao-antiga-exemplo" }));
+    const { h, lines } = geminiFake(dir);
+    const s = await h.start();
+    expect(s.resumed).toBe(false);
+    expect(lines().map((l) => l.method)).not.toContain("session/load");
+    expect(JSON.parse(readFileSync(sessionFileOf(path.join(dir, "agent"), "gemini"), "utf8")).sessionId).toBe(s.sessionId);
   });
 });
 

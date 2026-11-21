@@ -672,11 +672,19 @@ export class AgentHost {
 export const WEB_TOOLS = ["WebSearch", "WebFetch"] as const;
 export const isWebTool = (tool: string) => (WEB_TOOLS as readonly string[]).includes(tool);
 
-/** O nome da ferramenta de um `tool_call`: o do Claude Code (`_meta.claudeCode.toolName`), o título ou o tipo. */
+/**
+ * O nome da ferramenta de um `tool_call`: o do Claude Code (`_meta.claudeCode.toolName`), o do Gemini (spec #24666:
+ * `_meta["gemini-cli"].mcp`, o servidor e a ferramenta, que viram o mesmo `mcp__<servidor>__<ferramenta>` do Claude
+ * Code), o título ou o tipo.
+ */
 function toolName(call: Record<string, unknown>): string {
-  const meta = call._meta as { claudeCode?: { toolName?: unknown } } | undefined;
+  const meta = call._meta as { claudeCode?: { toolName?: unknown }; "gemini-cli"?: { mcp?: { server_name?: unknown; tool_name?: unknown } } } | undefined;
   const fromMeta = meta?.claudeCode?.toolName;
   if (typeof fromMeta === "string" && fromMeta) return fromMeta;
+  const mcp = meta?.["gemini-cli"]?.mcp;
+  if (typeof mcp?.server_name === "string" && mcp.server_name && typeof mcp.tool_name === "string" && mcp.tool_name) {
+    return `mcp__${mcp.server_name}__${mcp.tool_name}`;
+  }
   if (typeof call.title === "string" && call.title) return call.title;
   if (typeof call.kind === "string" && call.kind) return call.kind;
   return "ferramenta";

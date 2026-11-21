@@ -6,19 +6,15 @@
 //   parte: o Gemini só diz na abertura da sessão (o `authRequired` do ACP), e o Kiwi nunca lê o `~/.gemini`.
 // - A sessão fica em `session-gemini.json`, separada da do Claude (`host.ts`).
 
-import path from "node:path";
-
 import { agentDir } from "./adapter/open.ts";
 import { AgentError } from "./errors.ts";
-import { geminiArgs, geminiEnv, geminiStatus, GEMINI_MIN_VERSION, type GeminiStatus } from "./gemini.ts";
+import { geminiArgs, geminiEnv, geminiStatus, GEMINI_MIN_VERSION, writeGeminiPolicy, type GeminiStatus } from "./gemini.ts";
 import { AgentHost, type AgentHostOptions } from "./host.ts";
 import { AGENT_NAMES } from "./kinds.ts";
 import type { ProgramArgv } from "./claude.ts";
 
 export const GEMINI = AGENT_NAMES.gemini;
 
-/** O `gemini` falso (T24671): responde ao `--version` e fala ACP no `--acp`. Só nos testes e no headless falso. */
-export const FAKE_GEMINI: ProgramArgv = [process.execPath, path.join(import.meta.dir, "fake", "gemini.ts")];
 
 export interface GeminiHostOptions {
   /** A pasta de dados do app (ou a de teste). */
@@ -35,12 +31,15 @@ export async function geminiHost(o: GeminiHostOptions): Promise<{ host: AgentHos
   const status = await geminiStatus(o.program);
   if (!status.installed || !o.program) throw new AgentError("E_AGENT_NOT_INSTALLED", GEMINI);
   if (status.tooOld) throw new AgentError("E_AGENT_TOO_OLD", GEMINI, undefined, { instalada: status.version ?? "?", esperada: GEMINI_MIN_VERSION });
+  const dir = agentDir(o.data);
+  const env = o.env ?? process.env;
   const host = new AgentHost({
     name: GEMINI,
     kind: "gemini",
-    command: [...o.program, ...geminiArgs()],
-    dir: agentDir(o.data),
-    env: { ...(o.env ?? process.env), ...geminiEnv(o.data) },
+    // A regra do Kiwi (só as ferramentas dele) é refeita a cada abertura, na pasta do agente (T24671).
+    command: [...o.program, ...geminiArgs(writeGeminiPolicy(dir))],
+    dir,
+    env: { ...env, ...geminiEnv(o.program, env) },
     ...o.host,
   });
   return { host, status };
