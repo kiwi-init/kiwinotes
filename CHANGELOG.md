@@ -4,6 +4,13 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+## [2026.11.9](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.9) (2026-11-21)
+
+- **Gemini 3: Ajustes › Agente e os nomes (T24673)** ([#269](https://github.com/kiwi-init/kiwinotes/pull/269))
+- **Gemini 2: o host e o serviço com dois agentes (T24672)** ([#264](https://github.com/kiwi-init/kiwinotes/pull/264))
+- **Gemini 1: achar, o isolamento e o Gemini falso (T24671)** ([#265](https://github.com/kiwi-init/kiwinotes/pull/265))
+- **Portão do merge: só os checks do nosso CI; o de um app de fora é ignorado (T24794)** ([#267](https://github.com/kiwi-init/kiwinotes/pull/267))
+
 ## [2026.11.8](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.8) (2026-11-19)
 
 - **Teste da RAM: a alocação grande num processo novo (T24621)** ([#260](https://github.com/kiwi-init/kiwinotes/pull/260))
