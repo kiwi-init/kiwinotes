@@ -103,7 +103,8 @@ function roots(body: string, agentNet: Set<string>): string[] {
   check("updater", /deps\.about\??\.(check|apply)\b/);
   check("imagem de fora", /deps\.remoteImage\b/);
   check("modelo da busca", /semanticEngine\??\.start\b|\bsemantic\??\.sync\b/);
-  check("modelo do ditado", /\bpreciseDictation\s*=/);
+  // Ligar o ditado preciso é salvar o ajuste: o main ouve o `settingsChanged` e baixa o Whisper (session.ts).
+  if (/\bpreciseDictation\b/.test(body) && /settings\??\.save\b|settingsChanged\b/.test(body)) found.push("modelo do ditado");
   check("agente", new RegExp(`\\bagent\\??\\.(${agent})\\s*\\(|deps\\.agent\\??\\.(${agent})\\b`));
   return found;
 }
