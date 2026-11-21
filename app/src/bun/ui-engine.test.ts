@@ -790,7 +790,9 @@ describe("Nova aparência pronta e Voltar (spec #25011)", () => {
     expect(revertWindow(dir, builtIn, onScreen)).toBe(true);
     const back = rig(null, { dir, canSwap: () => false });
     await back.engine.start();
-    await waitFor(() => back.last() === "<p>um</p>");
+    // A primeira que sobe já é a "um": não a "dois" (que, sem ready(), cairia na "um" pelo prazo e enganaria o teste).
+    await waitFor(() => back.shown.length > 0);
+    expect(back.shown.map((u) => decode(u.index))).toEqual(["<p>um</p>"]);
     back.engine.ready();
     await Bun.sleep(50);
     expect(back.last()).toBe("<p>um</p>");
@@ -815,7 +817,8 @@ describe("Nova aparência pronta e Voltar (spec #25011)", () => {
     expect(revertWindow(dir, builtIn)).toBe(true);
     const back = rig(channelUrl(channel.base, "settings"), { dir });
     await back.engine.start();
-    await waitFor(() => back.last() === "<p>um</p>");
+    await waitFor(() => back.shown.length > 0);
+    expect(back.shown.map((u) => decode(u.index))).toEqual(["<p>um</p>"]);
     // O canal ainda oferece a "dois": o engine recusa, ela está no bad.
     expect(await back.engine.channel.check()).not.toMatchObject({ result: "available" });
     expect(back.last()).toBe("<p>um</p>");
