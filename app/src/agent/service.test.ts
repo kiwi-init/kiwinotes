@@ -2935,6 +2935,35 @@ describe("dois agentes (spec #24666)", () => {
     expect(resumed).not.toContain(geminiSession);
   });
 
+  // A troca e um pedido juntos, nas duas ordens: o pedido que corre com a troca não pode abrir nem reusar o Claude, e o
+  // seguinte vai ao Gemini, na sessão dele (revisão do T24672).
+  for (const order of ["a troca antes", "o pedido antes"] as const) {
+    test(`trocar e pedir juntos (${order}): o aberto é o escolhido, nunca o de antes`, async () => {
+      const m = make();
+      await readyNow(m);
+      const claudePid = m.pid();
+      const asked = () => m.svc.ask("oi");
+      const switched = () => m.svc.configure({ kind: "gemini" });
+      const [first, second] = await Promise.allSettled(order === "a troca antes" ? [switched(), asked()] : [asked(), switched()]);
+      const sw = order === "a troca antes" ? first! : second!;
+      await untilIdle(m);
+      await askAndWait(m, "de novo");
+      const opened = m.log().filter((l) => l.method === "session/new" || l.method === "session/load" || l.method === "session/resume");
+      if (sw.status === "rejected") {
+        // O pedido pegou a vez: a troca é recusada, e tudo fica no Claude.
+        expect((sw.reason as AgentServiceError).code).toBe("E_AGENT_BUSY");
+        expect(await m.svc.status()).toMatchObject({ kind: "claude", program: "open" });
+        expect(opened.at(-1)!.params._meta).toBeDefined();
+        return;
+      }
+      // A troca valeu: o aberto é o Gemini, na sessão dele, e o Claude fechou.
+      expect(await m.svc.status()).toMatchObject({ kind: "gemini", name: "Gemini", program: "open" });
+      if (claudePid) await until(() => !alive(claudePid));
+      expect(opened.at(-1)!.params._meta).toBeUndefined();
+      expect(existsSync(sessionFileOf(agentDir(m.data), "gemini"))).toBe(true);
+    });
+  }
+
   test("trocar no meio de um pedido: E_AGENT_BUSY, e nada muda", async () => {
     const m = make();
     await readyNow(m);

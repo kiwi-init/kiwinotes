@@ -221,6 +221,11 @@ export class AgentHost {
     return this.turn !== null;
   }
 
+  /** De que agente é este host (spec #24666). */
+  get kind(): AgentKind {
+    return this.o.kind ?? "claude";
+  }
+
   get running(): boolean {
     return this.proc !== null;
   }

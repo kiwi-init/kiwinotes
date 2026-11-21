@@ -871,7 +871,7 @@ export class AgentService {
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
   private snapshot(): Omit<AgentStatus, "name" | "kind" | "enabled" | "consented" | "model" | "effort" | "effortByModel" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
-    const values = this.host?.running ? this.host.configValues : null;
+    const values = this.currentHost?.configValues ?? null;
     return {
       claude: this.claude,
       gemini: this.gemini,
@@ -881,7 +881,7 @@ export class AgentService {
         ...(this.download ? { done: this.download.done, total: this.download.total } : {}),
         ...(this.downloadError && !this.download ? { error: this.downloadError } : {}),
       },
-      program: this.host?.running ? "open" : this.opening ? "opening" : "closed",
+      program: this.currentHost ? "open" : this.opening ? "opening" : "closed",
       busy: !!this.turn || !!this.usageRun,
       session: values ? { model: values.model, effort: values.effort } : null,
       models: this.knownModels(),
@@ -999,6 +999,14 @@ export class AgentService {
     }
     this.kind = kind;
     return s;
+  }
+
+  /**
+   * O programa aberto, se ele é do agente escolhido. Um host de outro agente (uma troca que correu com um pedido) nunca é
+   * reusado: o próximo pedido abre o escolhido (revisão do T24672).
+   */
+  private get currentHost(): AgentHost | null {
+    return this.host?.running && this.host.kind === this.kind ? this.host : null;
   }
 
   /** O agente escolhido precisa do adaptador e ele não está baixado. Só o Claude Code usa adaptador (spec #24666). */
@@ -1162,7 +1170,7 @@ export class AgentService {
     // A sessão aberta aqui já sai com a web do interruptor: o 1º pedido não precisa reabrir.
     this.webNow = s.webSearch === true;
     try {
-      if (!this.host?.running) await this.openProgram();
+      if (!this.currentHost) await this.openProgram();
       else {
         const wanted = this.wantedConfig(s);
         if (!busy() && this.host && (wanted.model !== this.applied.model || wanted.effort !== this.applied.effort)) {
@@ -1212,7 +1220,7 @@ export class AgentService {
         if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
         if (this.adapterMissing()) throw new AgentError("E_ADAPTER_MISSING", this.name);
         if (run.yielded) return;
-        const host = this.host?.running ? this.host : await this.openProgram();
+        const host = this.currentHost ?? (await this.openProgram());
         if (run.yielded) return;
         run.asking = true;
         const answer = await host.ask(USAGE_COMMAND);
@@ -2017,7 +2025,7 @@ export class AgentService {
     let asked: { host: AgentHost; prompt: string } | null = null;
     let answered = "";
     try {
-      let host = this.host?.running ? this.host : null;
+      let host = this.currentHost;
       if (!host) {
         this.emitTurn({ id: turn.id, type: "status", status: "opening" });
         host = await this.openProgram();
@@ -2430,6 +2438,12 @@ export class AgentService {
           }
         : undefined;
       const kind = this.kind;
+      // Um host de outro agente que ficou aberto fecha antes: nunca dois programas, nem o de antes reusado.
+      const stale = this.host;
+      if (stale && stale.kind !== kind) {
+        this.host = null;
+        if (stale.running) await stale.stop();
+      }
       const host = await this.d.openHost({
         kind,
         configOptions: wanted,
@@ -2454,6 +2468,12 @@ export class AgentService {
         throw e;
       } finally {
         if (this.pending === host) this.pending = null;
+      }
+      // A pessoa trocou de agente enquanto este abria: ele fecha, e nada vai a ele.
+      if (kind !== this.kind) {
+        await host.stop();
+        this.stopTools(tools);
+        throw new AgentError("E_AGENT_FAILED", this.name, "trocou de agente enquanto o programa abria");
       }
       if (kind === "gemini") this.noteGeminiLogin(true);
       this.applied = wanted();
@@ -2546,12 +2566,13 @@ export class AgentService {
       const from = isAgentKind(now.kind) ? now.kind : "claude";
       if (o.kind !== from) {
         if (this.turn || this.usageRun) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
-        await this.stopProgram(`trocou de agente: ${from} → ${o.kind}`);
+        // O agente novo é gravado antes de fechar o de agora: um pedido que chega durante o fechamento já abre o
+        // escolhido, e um que abria o de antes é parado (revisão do T24672).
         const byKind = { ...now.modelByKind, [from]: patch.model ?? now.model };
-        patch.kind = o.kind;
-        patch.modelByKind = byKind;
-        patch.model = byKind[o.kind] ?? DEFAULT_AGENT_SETTINGS.model;
+        delete patch.model;
+        await this.settings.save({ kind: o.kind, modelByKind: byKind, model: byKind[o.kind] ?? DEFAULT_AGENT_SETTINGS.model });
         this.subscription = null;
+        await this.stopProgram(`trocou de agente: ${from} → ${o.kind}`);
       }
     }
     if (Object.keys(patch).length) await this.settings.save(patch);
