@@ -57,6 +57,17 @@ export function newWindowUrl(detail: unknown): unknown {
 /** Decide e abre (ou não) cada `window.open`. Uma por vez: dois cliques seguidos não abrem duas perguntas juntas. */
 export function createLinkOpener(o: LinkOpenerOptions) {
   const allowed = new Set<string>();
+  // A busca no disco varre a pasta inteira (uns 0,8 s com 10 mil notas, #25817), e a resposta não muda na sessão: só
+  // contam arquivos de antes do início, um arquivo novo nunca entra e um que muda sai da conta. Fica guardada por URL,
+  // o "sim" e o "não". Um erro na busca não fica: o próximo clique tenta de novo.
+  const onDisk = new Map<string, boolean>();
+  const onDiskBefore = async (url: string): Promise<boolean> => {
+    const known = onDisk.get(url);
+    if (known !== undefined) return known;
+    const found = await o.onDiskBefore(url);
+    onDisk.set(url, found);
+    return found;
+  };
   let queue: Promise<unknown> = Promise.resolve();
 
   const decide = async (raw: unknown): Promise<LinkDecision> => {
@@ -64,7 +75,7 @@ export function createLinkOpener(o: LinkOpenerOptions) {
     if (!url) return "refused";
     if (o.fixed().includes(url)) return "fixed";
     if (allowed.has(url)) return "allowed";
-    if (await o.onDiskBefore(url).catch(() => false)) return "on-disk";
+    if (await onDiskBefore(url).catch(() => false)) return "on-disk";
     if (!(await o.confirm(url).catch(() => false))) return "declined";
     allowed.add(url);
     return "confirmed";

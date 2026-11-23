@@ -32,6 +32,8 @@ beforeAll(() => {
   before("planilha.xlsx", "https://exemplo.com/binario\n");
   // As do "salvar e depois abrir", fora das que os outros testes leem.
   before("Projeto Y/diario.md", "# Diário\n\nhttps://exemplo.com/diario-antigo\n");
+  // Acima do limite de 5 MB: a URL está lá, mas o arquivo não é lido.
+  before("Projeto X/enorme.md", `${"a ".repeat(3 * 1024 * 1024)}\nhttps://exemplo.com/no-enorme\n`);
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -116,6 +118,38 @@ describe("o opener", () => {
     expect(await h.opener.request("https://exemplo.com/escondido")).toBe("declined");
     expect(await h.opener.request("https://exemplo.com/binario")).toBe("declined");
     expect(h.opened).toEqual([]);
+  });
+
+  test("um arquivo acima de 5 MB não conta, mesmo com a URL", async () => {
+    const h = harness();
+    expect(await h.opener.request("https://exemplo.com/no-enorme")).toBe("declined");
+    expect(h.opened).toEqual([]);
+  });
+
+  test("a busca no disco vai uma vez por URL: o segundo clique não lê a pasta de novo (#25817)", async () => {
+    let reads = 0;
+    let fail = true;
+    const h = harness({
+      onDiskBefore: async (url) => {
+        reads++;
+        if (url.endsWith("/erro") && fail) throw new Error("disco");
+        return urlOnDiskBefore(url, [root], since);
+      },
+    });
+    // O "sim" fica guardado.
+    expect(await h.opener.request(OLD)).toBe("on-disk");
+    expect(await h.opener.request(OLD)).toBe("on-disk");
+    expect(reads).toBe(1);
+    // O "não" também: a pergunta volta, a busca não.
+    expect(await h.opener.request("https://exemplo.com/fora")).toBe("declined");
+    expect(await h.opener.request("https://exemplo.com/fora")).toBe("declined");
+    expect(reads).toBe(2);
+    expect(h.asked).toEqual(["https://exemplo.com/fora", "https://exemplo.com/fora"]);
+    // O erro não fica: o clique seguinte busca de novo.
+    expect(await h.opener.request("https://exemplo.com/erro")).toBe("declined");
+    fail = false;
+    expect(await h.opener.request("https://exemplo.com/erro")).toBe("declined");
+    expect(reads).toBe(4);
   });
 
   test("a URL fora de tudo não é recusada em silêncio: a pergunta mostra a URL", async () => {
