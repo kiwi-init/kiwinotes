@@ -32,3 +32,4 @@ app/src/guardrail/detector.test.ts	fed14bbfb8753679884953aa1514bd114154fe6868a66
 app/src/guardrail/detector.ts	8fe80ab393fd1420017675f48f12d8b02790535704bc99159d78fd9826fb3feb	valor falso de teste ou comentário de formato, não é segredo
 app/src/notes/remote-image.test.ts	560a3643d928d308983860e53a41967d0e45a145a57a16eeaa5f1d0010813bac	valor falso de teste ou comentário de formato, não é segredo
 app/src/notes/remote-image.test.ts	42f1ecbbf199adb86d6ed754862dce265ab30c99dbddd533594fcabc034bf113	valor falso de teste ou comentário de formato, não é segredo
+app/src/bun/ui-channel-fetch.test.ts	a2e3859a705539e1c3d27d5dce289ad43fef2d31e10a40f7875b5fe2406ea985	cookie falso de teste (o fetch do canal tem de recusar o cabeçalho), não é segredo
