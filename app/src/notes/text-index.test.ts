@@ -417,14 +417,26 @@ describe("o ritmo e o portão (spec #24228, T24286)", () => {
       "c/3.txt": "caju pequeno\n",
     });
     const work: number[] = [];
-    const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), batchText: 30 * 1024, pause: async (ms) => void work.push(ms) });
+    // O relógio de mentira (T25945): o tempo é o texto do maior lote já gravado, e não o da máquina. Assim o lote do
+    // arquivo grande é o que mais "demora", em qualquer VM; com o relógio de verdade, o 1º lote (que lê o grande antes
+    // de passá-lo adiante) às vezes levava mais.
+    const t: TextIndex = new TextIndex({
+      root: f.root,
+      dir: path.join(f.base, "dados", "text-index"),
+      batchText: 30 * 1024,
+      pause: async (ms) => void work.push(ms),
+      now: () => t.stats.maxBatchText,
+    });
     open.push(t);
     await t.sync(f.all());
     expect(t.stats.alone).toBe(1);
     expect(t.stats.batches).toBe(3);
-    // Cada lote, o grande também, passa pela pausa; a dele é a maior, e o teto a multiplica (3× com 25%).
+    // Cada lote, o grande também, passa pela pausa, com o tempo do próprio lote; a dele é a maior, e o teto a
+    // multiplica (3× com 25%).
     expect(work.length).toBe(2);
-    expect(Math.max(...work)).toBe(work[1]!);
+    expect(work[0]!).toBe("caju pequeno\n".length);
+    expect(work[1]!).toBe(t.stats.maxBatchText - work[0]!);
+    expect(work[1]!).toBeGreaterThan(30 * 1024);
     expect(pauseAfter(work[1]!)).toBeGreaterThanOrEqual(3 * work[1]!);
   });
 

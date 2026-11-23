@@ -133,6 +133,8 @@ export interface TextIndexOptions {
   maxDocBytes?: number;
   /** A pausa depois de um lote que levou `workMs` (o padrão segue o `DUTY`; nos testes, nenhuma). */
   pause?(workMs: number): Promise<void>;
+  /** O relógio que mede o lote para a pausa (o padrão é o `performance.now`; os testes passam um que não depende da máquina, T25945). */
+  now?(): number;
   /**
    * Espera antes de cada lote, enquanto a pessoa usa o Mac (o portão do #248, `BackgroundGate.wait`). No worker, é a
    * pergunta ao main (`text-index-client.ts`).
@@ -415,7 +417,8 @@ export class TextIndex {
     while (i < files.length || carry) {
       if (gated) await this.waitGate();
       if (this.closed) return;
-      const started = performance.now();
+      const now = this.o.now ?? (() => performance.now());
+      const started = now();
       const batch: Item[] = [];
       // O lote fecha em `BATCH` arquivos ou antes de passar de `cap` de texto (P0 #23988: é o que a transação tokeniza
       // de uma vez no main; T22218: e o que ele segura na memória). O arquivo que passaria vai para o próximo lote.
@@ -484,7 +487,7 @@ export class TextIndex {
       this.stats.maxBatchText = Math.max(this.stats.maxBatchText, held);
       // Acima do teto, só um arquivo sozinho (`alone`); um lote de vários acima dele (`overCap`) é o que travava o laço.
       if (held > cap) this.stats[batch.length > 1 ? "overCap" : "alone"]++;
-      if (i < files.length || carry) await this.pause(performance.now() - started);
+      if (i < files.length || carry) await this.pause(now() - started);
     }
   }
 
