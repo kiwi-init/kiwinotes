@@ -581,22 +581,37 @@ function worstPair(pairs: DrawPair[]) {
 /** "Reduzir movimento": sem gota, os botões só fazem o fade; três quadros dele. */
 async function reduced(p: Page, dir: string) {
   mkdirSync(dir, { recursive: true });
-  await p.locator('.kn-tab[data-section="notes"]').click();
-  await p.waitForFunction(() => document.querySelector(".kn-hub-start")!.childElementCount > 0, null, { timeout: 3000 });
-  const seen = await p.evaluate(() => {
-    const goo = getComputedStyle(document.querySelector(".kn-goo")!).display;
-    const anims = document.getAnimations().map((a) => (a as CSSAnimation).animationName ?? "");
-    const buttons = document.getAnimations().filter((a) => {
-      const t = (a.effect as KeyframeEffect | null)?.target;
-      return t instanceof Element && !!t.parentElement?.classList.contains("kn-hub-slot");
+  // As animações se leem no mesmo instante em que os botões entram (T25952): com "reduzir movimento", o base.css corta
+  // o fade para 0,01 ms, e numa VM lenta ele já acabou (e saiu do `getAnimations()`) quando um `evaluate` seguinte
+  // chega. O observador roda no microtask da inserção, antes de qualquer quadro; o `getAnimations()` cria as animações
+  // do CSS, e elas param ali, no começo.
+  type Seen = { goo: string; drops: string[]; buttons: string[]; fadeMs: number[] };
+  await p.evaluate(() => {
+    const w = window as unknown as { __goo: Animation[]; __reduced?: Seen };
+    delete w.__reduced;
+    const start = document.querySelector(".kn-hub-start")!;
+    const obs = new MutationObserver(() => {
+      if (w.__reduced || start.childElementCount === 0) return;
+      const all = document.getAnimations();
+      const buttons = all.filter((a) => {
+        const t = (a.effect as KeyframeEffect | null)?.target;
+        return t instanceof Element && !!t.parentElement?.classList.contains("kn-hub-slot");
+      });
+      for (const a of buttons) a.pause();
+      w.__goo = buttons;
+      w.__reduced = {
+        goo: getComputedStyle(document.querySelector(".kn-goo")!).display,
+        drops: all.map((a) => (a as CSSAnimation).animationName ?? "").filter((n) => n.startsWith("kn-goo")),
+        buttons: buttons.map((a) => (a as CSSAnimation).animationName),
+        fadeMs: buttons.map((a) => Number(a.effect!.getComputedTiming().duration)),
+      };
+      obs.disconnect();
     });
-    for (const a of buttons) a.pause();
-    (window as unknown as { __goo: Animation[] }).__goo = buttons;
-    return {
-      goo, drops: anims.filter((n) => n.startsWith("kn-goo")), buttons: buttons.map((a) => (a as CSSAnimation).animationName),
-      fadeMs: buttons.map((a) => Number(a.effect!.getComputedTiming().duration)),
-    };
+    obs.observe(start, { childList: true });
   });
+  await p.locator('.kn-tab[data-section="notes"]').click();
+  await p.waitForFunction(() => !!(window as unknown as { __reduced?: Seen }).__reduced, null, { timeout: 3000 });
+  const seen = await p.evaluate(() => (window as unknown as { __reduced: Seen }).__reduced);
   assert.equal(seen.goo, "none", "a gota aparece com reduzir movimento");
   assert.deepEqual(seen.drops, [], `animação da gota com reduzir movimento: ${seen.drops}`);
   assert.ok(seen.buttons.length > 0 && seen.buttons.every((n) => n === "fade"), `os botões não fazem só o fade: ${seen.buttons}`);
