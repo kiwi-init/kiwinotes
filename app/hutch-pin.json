@@ -1,17 +1,17 @@
 {
-  "electrobun": "2026.10.2",
+  "electrobun": "2026.11.5",
   "releasesBaseUrl": "https://github.com/kiwi-init/electrobun-livewire/releases/download",
   "hutch": {
-    "version": "0.28.2-canary.8",
+    "version": "0.29.0",
     "platforms": {
       "macos-arm64": {
-        "url": "https://hutch.blackboard.sh/hutch/builds/c2ede316742ecc6734e8f86c92d87abcae609b69/macos-arm64/hutch.tar.gz",
-        "sha256": "4b3b99c30155ebfd263791931573763cf5353514cddbac35c960c3bfa1642118"
+        "url": "https://hutch.blackboard.sh/hutch/builds/a2c9255ed54f93225814d7d7cf04ad5a613e44eb/macos-arm64/hutch.tar.gz",
+        "sha256": "f081abca6d08d9d862577e77365f3cb5437e65858ca45a27173505e4e2345994"
       }
     }
   },
   "devkitCore": {
     "asset": "electrobun-core-darwin-arm64.tar.gz",
-    "sha256": "6b52b1e24bf6ff395149657273d2751f7188804ef9b2e723ae3f6e9593637290"
+    "sha256": "8bb3a8bb97a85dfadcf968e05287b3fafab6259e6b9320f2bcbf2ff24d160723"
   }
 }
