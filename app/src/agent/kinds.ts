@@ -15,3 +15,9 @@ export const AGENT_NAMES: Record<AgentKind, string> = { claude: "Claude Code", g
 export function isAgentKind(v: unknown): v is AgentKind {
   return v === "claude" || v === "gemini";
 }
+
+/**
+ * Os esforços do Claude Code, do mais baixo ao mais alto: sem escolha da pessoa, vai o mais baixo oferecido (#19294).
+ * Um agente sem nenhum deles (o agy, T25729) fica no esforço com que abriu, e a tela não promete o mais baixo.
+ */
+export const EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max"] as const;

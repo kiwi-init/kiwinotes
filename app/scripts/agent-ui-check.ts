@@ -9,6 +9,8 @@
 //   erros do agente, trocar o modelo, desligar e remover;
 // - `ajustes-agente-estado.json`, com o `claude` falso não instalado, não logado e numa versão antiga;
 // - `ajustes-agente-sem-rede.json`, com o registro fora do ar;
+// - `ajustes-agente-gemini-esforco*.json` (T25729): o Esforço do Gemini aparece na hora, sem pedido, ao escolher o
+//   Gemini, ao trocar de modelo e com o app reaberto num modelo que nunca abriu numa sessão;
 // - `ajustes-agente-notas.json` (spec #7496): o Testar pergunta sobre uma nota, e o agente falso lê pelas ferramentas
 //   do Kiwi ("Lendo Projetos/Kiwi.md…");
 // - a escrita (spec #8356), na janela Notas: com a nota aberta, o agente falso acrescenta numa seção, troca outra com a
@@ -120,6 +122,33 @@ async function agentReady(data: string, env: Record<string, string>): Promise<vo
     if (Date.now() > end) throw new Error("o adaptador não baixou");
     await Bun.sleep(200);
   }
+}
+
+/**
+ * O Gemini escolhido e ligado, sem pedido e sem o `agent.prepare` (T25729): o Kiwi ainda não viu o esforço de modelo
+ * nenhum dele. `reopen`: e no Hydrogen, com a lista só do modelo de antes, e o app reaberto (o caso da 2026.11.12).
+ */
+function geminiEffortReady(reopen: boolean) {
+  return async (data: string, env: Record<string, string>): Promise<void> => {
+    const invoke = async (cap: string, args: unknown) => {
+      const r = await cli(["invoke", cap, JSON.stringify(args), "--data", data], env);
+      if (r.code !== 0) throw new Error(`${cap}: ${r.out}`);
+      return JSON.parse(r.out) as { value: any };
+    };
+    await invoke("agent.configure", { kind: "gemini" });
+    await invoke("agent.enable", { consent: true });
+    await invoke("agent.configure", { onboarding: { state: "done" } });
+    const efforts = (await invoke("agent.status", {})).value.efforts;
+    if (Object.keys(efforts ?? {}).length) throw new Error(`o Gemini já tem esforços antes da tela: ${JSON.stringify(efforts)}`);
+    if (!reopen) return;
+    await invoke("agent.prepare", {});
+    await invoke("agent.configure", { model: "gemini-hydrogen" });
+    await cli(["stop", "--data", data]);
+    const up = await cli(["start", "--no-helper", "--data", data], env);
+    if (up.code !== 0) throw new Error(`o headless não voltou: ${up.out}`);
+    const s = (await invoke("agent.status", {})).value;
+    if (s.model !== "gemini-hydrogen" || s.efforts?.["gemini-hydrogen"] || s.session) throw new Error(`o reaberto não é o caso: ${JSON.stringify({ model: s.model, efforts: s.efforts, session: s.session })}`);
+  };
 }
 
 /** O roteiro da escrita na janela Notas (spec #8356), com a versão que o notes_write pede. */
@@ -541,6 +570,9 @@ try {
   const loggedOut = path.join(work, "gemini-logged-out.flag");
   writeFileSync(loggedOut, "");
   ok = (await scenario("gemini-sem-login", "ajustes-agente-gemini-sem-login.json", { KIWI_FAKE_AGENT_LOGGED_OUT: loggedOut }, { prefix: "gemini-" })) && ok;
+  // O Esforço na hora (T25729): a tela abre o Gemini sem pedido, ao escolher, ao trocar de modelo e ao reabrir o app.
+  ok = (await scenario("gemini-esforco", "ajustes-agente-gemini-esforco.json", {}, { before: geminiEffortReady(false), prefix: "gemini-" })) && ok;
+  ok = (await scenario("gemini-esforco-reabrir", "ajustes-agente-gemini-esforco-reabrir.json", {}, { before: geminiEffortReady(true), prefix: "gemini-" })) && ok;
   ok = (await scenario("sem-rede", "ajustes-agente-sem-rede.json", { KIWI_ADAPTER_REGISTRY: "http://127.0.0.1:9" })) && ok;
   ok = (await scenario("notas", "ajustes-agente-notas.json", { KIWI_FAKE_AGENT_TOOL_DELAY_MS: "1500" })) && ok;
   ok = (await scenario("escrita", writeScript(), {}, { window: "notes", before: agentReady, prefix: "escrita-" })) && ok;

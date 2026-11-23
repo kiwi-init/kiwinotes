@@ -1,0 +1,66 @@
+{
+  "window": "hub",
+  "size": "900x1600",
+  "steps": [
+    {
+      "waitFor": ".kn-tab",
+      "name": "o hub abre"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')"
+    },
+    {
+      "click": ".kn-prefs-item[data-topic=agent]",
+      "name": "o assunto agent"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Esforço')) select option[value=fake_high]",
+      "timeout": 20000,
+      "name": "o Gemini escolhido e ligado, sem pedido nenhum: o Esforço aparece na hora (T25729)",
+      "state": "attached"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Esforço')) .kn-row-hint",
+      "text": "No Padrão, vale o esforço que o Gemini (Antigravity) escolhe.",
+      "name": "o Padrão não promete o mais baixo: o agy não tem os níveis que o Kiwi conhece (lead #25744)"
+    },
+    {
+      "click": ".kn-row:has(.kn-row-label:text-is('Esforço')) .kn-row-label",
+      "name": "rola até o Modelo e o Esforço, para o print"
+    },
+    {
+      "screenshot": "1-esforco-na-hora.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "select": ".kn-row:has(.kn-row-label:text-is('Modelo')) select",
+      "value": "gemini-hydrogen",
+      "name": "troca para o Hydrogen"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Esforço')) select option[value=fake_mid]",
+      "timeout": 20000,
+      "name": "o Esforço do Hydrogen, com o nível que só ele tem: veio de uma sessão nele, aberta pela tela",
+      "state": "attached"
+    },
+    {
+      "expectCount": ".kn-row:has(.kn-row-label:text-is('Esforço')) select option",
+      "count": 4,
+      "name": "o Padrão e os três do Hydrogen"
+    },
+    {
+      "select": ".kn-row:has(.kn-row-label:text-is('Esforço')) select",
+      "value": "fake_mid",
+      "name": "escolhe o Meio"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Esforço')) .kn-row-hint",
+      "text": "Fica salvo para este modelo",
+      "name": "com um nível escolhido, sem a frase do Padrão"
+    },
+    {
+      "screenshot": "2-esforco-modelo-novo.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    }
+  ]
+}

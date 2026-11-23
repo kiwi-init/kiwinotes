@@ -272,14 +272,10 @@
       "name": "a linha do Modelo em português (spec #16793)"
     },
     {
-      "expectText": ".kn-row:has(.kn-row-label:text-is('Esforço')) .kn-row-hint",
-      "text": "aparecem depois do primeiro pedido com ele",
-      "name": "o Esforço de um modelo ainda não usado diz quando as opções aparecem"
-    },
-    {
-      "expectCount": ".kn-row:has(.kn-row-label:text-is('Esforço')) select",
-      "count": 0,
-      "name": "e ainda não tem seletor"
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Esforço')) select option[value=max]",
+      "state": "attached",
+      "timeout": 20000,
+      "name": "o Esforço do modelo novo aparece na hora, sem pedido: a tela abre o programa (T25729)"
     },
     {
       "fill": ".kn-agent-test-input",
