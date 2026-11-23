@@ -497,13 +497,15 @@ async function realtime(p: Page, section: string) {
 const STEP_SLACK_MS = 8;
 /** O quadro preso de propósito na seção lenta. */
 const SLOW_BLOCK_MS = 80;
+/** O trabalho preso de propósito no clique, antes do 1º quadro da gota (T25900): acima do `GOO_HOLD_MS`. */
+const CLICK_BLOCK_MS = 50;
 
 /**
- * A troca com um quadro de `SLOW_BLOCK_MS` no 2º quadro da gota. Devolve, a cada desenho da cabeça (um
+ * A troca com `CLICK_BLOCK_MS` presos no clique (antes do 1º quadro da gota) e um quadro de `SLOW_BLOCK_MS` no 2º. Devolve, a cada desenho da cabeça (um
  * MutationObserver no `d` dela, que roda logo depois do quadro da gota), o tempo do quadro e o progresso do relógio.
  */
 async function slowSection(p: Page, section: string) {
-  await p.evaluate((block) => {
+  await p.evaluate(([block, clickBlock]) => {
     const w = window as unknown as { __slow: { at: number; p: number; ms: number; phase: string }[]; __slowStop: () => void };
     const goo = document.querySelector<HTMLElement>(".kn-goo")!;
     const head = document.querySelector('.kn-goo-path[data-side="end"][data-part="head"]')!;
@@ -518,6 +520,13 @@ async function slowSection(p: Page, section: string) {
     const start = new MutationObserver(() => {
       if (!armed || (goo.dataset.end !== "entering" && goo.dataset.end !== "leaving")) return;
       armed = false;
+      // O 1º quadro depois do clique também lento (o run 45258901241: 51 ms sem segurar, T25900): o trabalho do clique
+      // atrasa o 1º quadro do laço, que não tem um quadro anterior para medir. O WebKit às vezes começa o relógio já no
+      // clique e às vezes só no 1º quadro (aí não há o que segurar); aqui ele começa no clique, como no run do CI.
+      const c = clock();
+      if (c && c.startTime === null) c.startTime = document.timeline.currentTime;
+      const first = performance.now() + clickBlock;
+      while (performance.now() < first);
       requestAnimationFrame(() => requestAnimationFrame(() => {
         const until = performance.now() + block;
         while (performance.now() < until);
@@ -525,7 +534,7 @@ async function slowSection(p: Page, section: string) {
     });
     start.observe(goo, { attributes: true, attributeFilter: ["data-end"] });
     w.__slowStop = () => (draws.disconnect(), start.disconnect());
-  }, SLOW_BLOCK_MS);
+  }, [SLOW_BLOCK_MS, CLICK_BLOCK_MS] as const);
   await p.locator(`.kn-tab[data-section="${section}"]`).click();
   await waitPhase(p, section === "notes" ? "shown" : "hidden");
   return p.evaluate(() => {
@@ -774,7 +783,7 @@ try {
     const t = metrics[`${theme}.tempoReal`] as { worst: number };
     console.log(`ok ${theme}: ida e volta quadro a quadro, com pescoço, gota solta e sem rastro; pior quadro em tempo real ${t.worst.toFixed(1)} ms (meta ${SLOW_FRAME_MS})`);
   }
-  console.log(`ok seção lenta: a gota segura o quadro preso de ${SLOW_BLOCK_MS} ms, sem pular`);
+  console.log(`ok seção lenta: a gota segura o 1º quadro depois do clique e o quadro preso de ${SLOW_BLOCK_MS} ms, sem pular`);
   console.log("ok reduzir movimento (Mac e Kiwi): sem gota; os botões entram com o fade, que o base.css corta para 0,01 ms");
   console.log(`quadros, vídeos e metrics.json em ${out}`);
 } finally {
