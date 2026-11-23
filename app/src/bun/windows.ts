@@ -25,6 +25,7 @@ import { stores } from "./stores.ts";
 import { type CapabilityDeps, uiCapabilities } from "./ui-capabilities.ts";
 import { builtInFrom, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir, uiChannelFor } from "./ui-engine.ts";
 import { updatesOff } from "./updates.ts";
+import { uiChannelFetch } from "./ui-channel-fetch.ts";
 import { UI_TRUSTED_KEYS } from "./ui-keys.ts";
 import { windowSecurity } from "./window-security.ts";
 import { fetchRemoteImage } from "../notes/remote-image.ts";
@@ -382,6 +383,8 @@ async function openWindow(name: WindowName, hidden = false): Promise<void> {
       trustedKeys: UI_TRUSTED_KEYS,
       capabilities: timedUi,
       channel,
+      // O remoto só fala com a rede pelo fetch guardado: só o release ui-channel e o armazenamento do GitHub (T25029).
+      remoteFetch: uiChannelFetch(),
       show: (ui) => {
         log(name, `showing UI ${ui.uiVersion}${ui.manifest ? "" : " (built-in)"}`);
         const html = decoder.decode(ui.index);

@@ -3,7 +3,7 @@
 
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { DEFAULT_APPEARANCE } from "../shared/appearance.ts";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_MEETING_SETTINGS } from "../shared/meetings.ts";
 import { DEFAULT_SHORTCUTS } from "../shared/shortcuts.ts";
@@ -23,6 +23,7 @@ import {
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION, type AppSettings } from "../shared/ui-contract.ts";
 import { DEFAULT_AGENT_SETTINGS, type SettingsPatch } from "../store/settings.ts";
 import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
+import { uiChannelFetch } from "./ui-channel-fetch.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
 import {
   builtInFrom,
@@ -606,6 +607,44 @@ describe("canal remoto: o release ui-channel (spec #25011)", () => {
     } finally {
       fetchSpy.mockRestore();
     }
+  });
+
+  test("pelo fetch guardado que o windows.ts passa (uiChannelFetch, T25029): a UI do release chega, e o pack de outro host não sai", async () => {
+    const local = startChannel();
+    cleanups.push(local.stop);
+    const realFetch = globalThis.fetch;
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: string | URL | Request, init?: RequestInit) => {
+      if (!String(input).startsWith(`${local.base}/`)) throw new Error(`no internet in tests: ${String(input)}`);
+      return realFetch(input, init);
+    }) as typeof fetch);
+    const release = fakeRelease(local);
+    try {
+      const r = rig(null, { channel: { kind: "remote", manifestUrl: remoteManifestUrl("settings") }, remoteFetch: uiChannelFetch(release.remoteFetch) });
+      await r.engine.start();
+      await r.until((e) => e.type === "built-in");
+
+      // Um manifesto assinado com o pack em outro host: o guardado recusa antes de sair, e a fábrica continua.
+      local.publish("settings", BUILT_IN_SEQ + 1, "<p>de fora</p>", { bundleBase: "https://example.com/ui/" });
+      await r.engine.channel.check();
+      await Bun.sleep(50);
+      expect(r.last()).toBe("<p>fábrica</p>");
+      expect(release.calls.some((c) => c.url.startsWith("https://example.com/"))).toBe(false);
+
+      local.publish("settings", BUILT_IN_SEQ + 2, "<p>do release</p>", { bundleBase: UI_CHANNEL_REMOTE });
+      expect(await r.engine.channel.check()).toMatchObject({ result: "available" });
+      await waitFor(() => r.last() === "<p>do release</p>");
+      for (const { url, init } of release.calls) {
+        expect(url.startsWith(UI_CHANNEL_REMOTE)).toBe(true);
+        expect(init).toMatchObject({ method: "GET", redirect: "manual", credentials: "omit", referrerPolicy: "no-referrer" });
+      }
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test("windows.ts dá ao canal remoto o fetch guardado (T25028 com o T25029)", () => {
+    const src = readFileSync(path.join(import.meta.dirname, "windows.ts"), "utf8");
+    expect(src).toContain("remoteFetch: uiChannelFetch()");
   });
 
   test("com as atualizações desligadas, o canal remoto não faz pedido nenhum", async () => {
