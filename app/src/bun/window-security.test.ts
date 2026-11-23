@@ -41,9 +41,9 @@ describe("trava das janelas (T1378)", () => {
     expect(allowed(navigationRules, "https://example.com/")).toBe(false);
   });
 
-  test("window.open e target=_blank vão para o navegador padrão", () => {
-    expect(windowSecurity(null).newWindow).toBe("external");
-    expect(windowSecurity("http://localhost:5178").newWindow).toBe("external");
+  test("window.open e target=_blank não abrem nada sozinhos: o main decide (T25095)", () => {
+    expect(windowSecurity(null).newWindow).toBe("deny");
+    expect(windowSecurity("http://localhost:5178").newWindow).toBe("deny");
   });
 
   test("a CSP vai no stable e no dev, sem script inline nem eval, e sem rede", () => {

@@ -42,8 +42,11 @@ export const VIEWS_CSP = [
 export interface WindowSecurity {
   /** JSON das regras de navegação: bloqueia tudo (`^*`) e libera só a UI. A última regra que casa vale. */
   navigationRules: string;
-  /** O `newWindow` do Electrobun: `window.open` e `target=_blank`. */
-  newWindow: "external";
+  /**
+   * O `newWindow` do Electrobun: `window.open` e `target=_blank`. O `deny` não abre nada e só avisa o main
+   * (`new-window-open`), que decide pela lista fixa, pelo disco ou pela pergunta (`link-open.ts`, T25095).
+   */
+  newWindow: "deny";
   contentSecurityPolicy: string;
 }
 
@@ -56,8 +59,8 @@ export function windowSecurity(dev: string | null): WindowSecurity {
   if (dev) rules.push(`${new URL(dev).origin}/*`);
   return {
     navigationRules: JSON.stringify(rules),
-    // http(s) e mailto abrem no navegador padrão; qualquer outro esquema não faz nada.
-    newWindow: "external",
+    // Nada abre sozinho: o main decide cada URL (`link-open.ts`, T25095).
+    newWindow: "deny",
     contentSecurityPolicy: VIEWS_CSP,
   };
 }
