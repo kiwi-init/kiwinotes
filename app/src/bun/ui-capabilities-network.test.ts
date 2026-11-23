@@ -9,6 +9,12 @@
 //   e o agente. Uma porta nova (um `fetch` num handler, um método do agente que abre o programa) já cai aqui.
 // - Os métodos do agente que vão à rede saem do próprio `src/agent/service.ts`: os que chegam, por qualquer caminho
 //   dentro da classe, a abrir o programa do agente (`this.d.openHost`) ou a baixar o adaptador (`downloadAdapter`).
+// - Os caminhos POR EVENTO do main: a capacidade pede algo ao main, e um ouvinte dele (fora deste arquivo) vai à rede ou
+//   ao agente. A varredura só os vê pela porta que a capacidade toca, então cada um tem uma raiz própria aqui:
+//   - salvar o ajuste do ditado preciso: o `settingsChanged` baixa o Whisper (`session.ts`);
+//   - parar a reunião: com a transcrição pronta, o `session.ts` chama `stores.agent.meetingReady`, e com o agente ligado
+//     e "propor sozinho" ele abre a sessão e lê a transcrição pelas ferramentas (spec #8360; revisão #25294).
+//   Quem acrescentar outro ouvinte do main que vá à rede ou ao agente põe a porta dele aqui.
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -27,6 +33,7 @@ const NETWORK_CAPABILITIES: Record<string, { roots: string[]; why: string; carri
   "images.remote": { roots: ["imagem de fora"], why: "a imagem de fora que a nota mostra (`![](https://…)`), no clique da pessoa", carries: "a URL da imagem, que está na nota" },
   "notes.semanticStatus": { roots: ["modelo da busca"], why: "com a busca pelo sentido ligada, começa o download do modelo (E5 small)", carries: "um GET da URL fixa do modelo; nada da pessoa" },
   "settings.set": { roots: ["modelo da busca", "modelo do ditado"], why: "ligar a busca pelo sentido ou o ditado preciso baixa o modelo (E5 small, Whisper small)", carries: "um GET da URL fixa do modelo; nada da pessoa" },
+  "meetings.stop": { roots: ["reunião ao agente"], why: "ao fim da reunião, com o agente ligado e \"propor sozinho\", o agente monta a proposta (spec #8360)", carries: "o caminho da nota da reunião; o agente lê a transcrição pelas ferramentas, e o áudio nunca vai" },
   "agent.download": { roots: ["agente"], why: "baixa o adaptador ACP do agente, na versão fixa e conferida (#8368)", carries: "um GET do pacote fixo; nada da pessoa" },
   "agent.ask": { roots: ["agente"], why: "o pedido vai ao agente que a pessoa ligou (ADR 0011)", carries: "o texto do pedido e os trechos que o agente lê pelas ferramentas do Kiwi" },
   "agent.prepare": { roots: ["agente"], why: "abre o programa do agente antes do pedido, para responder mais rápido (ADR 0011)", carries: "a abertura da sessão no agente; nenhum texto da pessoa" },
@@ -106,7 +113,9 @@ function roots(body: string, agentNet: Set<string>): string[] {
   check("modelo da busca", /semanticEngine\??\.start\b|\bsemantic\??\.sync\b/);
   // Ligar o ditado preciso é salvar o ajuste: o main ouve o `settingsChanged` e baixa o Whisper (session.ts).
   if (/\bpreciseDictation\b/.test(body) && /settings\??\.save\b|settingsChanged\b/.test(body)) found.push("modelo do ditado");
-  check("agente", new RegExp(`\\bagent\\??\\.(${agent})\\s*\\(|deps\\.agent\\??\\.(${agent})\\b`));
+  // Parar a gravação: o fim da reunião pode ir ao agente (o `meetingReady` no `session.ts`, veja o topo).
+  check("reunião ao agente", /\bmeetingCall\([^;]*\.stop\s*\(|deps\.meetings\??\.stop\b/);
+    check("agente", new RegExp(`\\bagent\\??\\.(${agent})\\s*\\(|deps\\.agent\\??\\.(${agent})\\b`));
   return found;
 }
 
