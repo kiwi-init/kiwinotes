@@ -235,14 +235,24 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       const fade = Math.min(1, Math.max(0, (t - GOO_BEATS.arrive) / (1 - GOO_BEATS.arrive)));
       g.style.opacity = String(fade);
     };
+    /** Quanto o relógio do lado já andou desde o início dele, em ms do quadro; 0 se ainda não começou. */
+    const ranSinceStart = (side: GooSide, now: number) => {
+      const c = clockOf(side);
+      return c && c.playState === "running" && c.startTime !== null ? now - Number(c.startTime) : 0;
+    };
     let frame = 0;
     let lastTick = 0;
     const tick = (now: number) => {
       frame = 0;
-      const gap = lastTick ? now - lastTick : 0;
+      const first = !lastTick;
+      const gap = first ? 0 : now - lastTick;
       lastTick = now;
-      if (gap > GOO_HOLD_MS) {
-        for (const side of SIDES) if (runs[side]) hold(side, gap - FRAME_MS);
+      for (const side of SIDES) {
+        if (!runs[side]) continue;
+        // O 1º quadro do laço não tem o anterior: o relógio começou no clique (o desenho do `show`), e um quadro longo
+        // logo depois dele também se segura, medido pelo tempo que o relógio já andou (T25900).
+        const lost = first ? ranSinceStart(side, now) : gap;
+        if (lost > GOO_HOLD_MS) hold(side, lost - FRAME_MS);
       }
       for (const side of SIDES) draw(side);
       if (SIDES.some((s) => phases.current[s] === "entering" || phases.current[s] === "leaving")) frame = requestAnimationFrame(tick);
