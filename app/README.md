@@ -38,7 +38,7 @@ exatamente o que entraria no campo (null no `clipboardOnly`, quando nada entra).
 
 As janelas são UIs do AppEngine (ADR 0006). Para testar uma troca de UI sem rebuild, num canal **local**: `bun run ui:publish settings --ui-version 0.1.1-local`, `bun run ui:serve` e o app com `KIWI_UI_CHANNEL=http://127.0.0.1:5179`. Nunca abra janela do app na tela de outra pessoa sem combinar (AGENTS.md).
 
-Na primeira vez, `scripts/hutch.ts` baixa o Hutch fixado em `hutch-pin.json` (confere o sha256) para `~/.hutch/kiwinotes/`, e o Hutch baixa o Livewire 2026.10.2 de `kiwi-init/electrobun-livewire`.
+Na primeira vez, `scripts/hutch.ts` baixa o Hutch fixado em `hutch-pin.json` (confere o sha256) para `~/.hutch/kiwinotes/`, e o Hutch baixa o Livewire 2026.11.5 de `kiwi-init/electrobun-livewire`.
 
 **Pastas temporárias nos testes (spec #10077):** use `tempDir("kiwi-algo-")` de `test/tmp.ts`, e não `mkdtemp` solto. Ela apaga a pasta no fim do teste, mesmo quando ele falha ou estoura o tempo; criada num `beforeAll`, sai no fim da suíte. O preload (`test/preload.ts`, ligado no `bunfig.toml`) põe cada rodada do `bun test` numa pasta própria (o `TMPDIR` dos testes e dos processos que eles abrem). No fim, se sobrar alguma pasta `kiwi-*` ou `kn-*`, a suíte falha e diz o prefixo. `KIWI_TMP_STRICT=0` só mostra, e `KIWI_TMP_KEEP=1` mantém a pasta da rodada para olhar.
 
