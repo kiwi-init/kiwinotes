@@ -521,7 +521,10 @@ async function slowSection(p: Page, section: string) {
       if (!armed || (goo.dataset.end !== "entering" && goo.dataset.end !== "leaving")) return;
       armed = false;
       // O 1º quadro depois do clique também lento (o run 45258901241: 51 ms sem segurar, T25900): o trabalho do clique
-      // atrasa o 1º quadro do laço, que não tem um quadro anterior para medir.
+      // atrasa o 1º quadro do laço, que não tem um quadro anterior para medir. O WebKit às vezes começa o relógio já no
+      // clique e às vezes só no 1º quadro (aí não há o que segurar); aqui ele começa no clique, como no run do CI.
+      const c = clock();
+      if (c && c.startTime === null) c.startTime = document.timeline.currentTime;
       const first = performance.now() + clickBlock;
       while (performance.now() < first);
       requestAnimationFrame(() => requestAnimationFrame(() => {
