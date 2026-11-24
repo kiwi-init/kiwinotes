@@ -14,7 +14,7 @@ on:
     # Só o job `helper-cache`: guarda na `main` o helper compilado, porque um run de tag só restaura cache do próprio
     # tag ou da `main` (T1686). O GitHub não avalia `paths` num push de tag.
     branches: [main]
-    paths: ["native/**", "app/scripts/build-helper.ts", ".github/workflows/release.yml"]
+    paths: ["native/**", "native-voice/**", "app/scripts/build-helper.ts", "app/scripts/build-voice.ts", ".github/workflows/release.yml"]
   workflow_dispatch:
     inputs:
       rehearsal:
@@ -83,6 +83,15 @@ jobs:
           path: app/.helper
           key: helper-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.swift', 'native/Package.resolved', 'native/Sources/**', 'app/scripts/build-helper.ts') }}
 
+      # A voz do gato (ADR 0014, T26732): o `kiwi-voice` e o metallib do MLX, que só o xcodebuild compila (~5 min do zero).
+      # O mesmo caminho do helper: o job `voice-cache` guarda na `main`, o tag restaura, e o que vai ao cache não é assinado.
+      - name: Voice cache
+        id: voice
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/.voice
+          key: voice-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native-voice/Package.swift', 'native-voice/Package.resolved', 'native-voice/Sources/**', 'app/scripts/build-voice.ts') }}
+
       - name: Electrobun toolchain
         timeout-minutes: 5
         run: for i in 1 2 3; do bun run prepare:eb && exit 0; echo "electrobun prepare failed ($i of 3)"; [ "$i" -lt 3 ] && sleep 20; done; exit 1
@@ -110,6 +119,7 @@ jobs:
       - name: Build
         env:
           KIWI_HELPER_CACHED: ${{ steps.helper.outputs.cache-hit == 'true' && '1' || '' }}
+          KIWI_VOICE_CACHED: ${{ steps.voice.outputs.cache-hit == 'true' && '1' || '' }}
           KIWI_UPDATE_URL: ${{ steps.feed.outputs.url }}
           # A versão do tag (`2026.11.1`): o app compara por ela antes de oferecer uma atualização (T1969).
           KIWI_VERSION: ${{ steps.feed.outputs.version }}
@@ -173,13 +183,14 @@ jobs:
             app/out/*-update.json
           if-no-files-found: error
 
-  # Compila só o helper num push na `main` e guarda o app/.helper no cache da `main`, de onde o run do tag restaura
-  # (#1805). Assim o cache que o release assina só nasce de código que já está na main: sem secret, sem `bun install`
+  # Compila só o helper e a voz num push na `main` e guarda o app/.helper e o app/.voice no cache da `main`, de onde o
+  # run do tag restaura (#1805). Assim o cache que o release assina só nasce de código que já está na main: sem secret, sem `bun install`
   # (nenhum script de dependência roda aqui), sem `pull_request`.
   helper-cache:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
-    timeout-minutes: 30
+    # O helper (~8 min do zero) e o MLX da voz (~5 a 10 min do zero).
+    timeout-minutes: 45
     permissions:
       contents: read
     defaults:
@@ -209,6 +220,17 @@ jobs:
       - name: Build the helper
         if: steps.helper.outputs.cache-hit != 'true'
         run: bun scripts/build-helper.ts
+
+      - name: Voice cache
+        id: voice
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/.voice
+          key: voice-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native-voice/Package.swift', 'native-voice/Package.resolved', 'native-voice/Sources/**', 'app/scripts/build-voice.ts') }}
+
+      - name: Build the voice
+        if: steps.voice.outputs.cache-hit != 'true'
+        run: bun scripts/build-voice.ts
 
   publish:
     needs: mac

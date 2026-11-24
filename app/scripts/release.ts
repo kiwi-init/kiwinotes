@@ -16,6 +16,7 @@ import path from "node:path";
 
 import pkg from "../package.json" with { type: "json" };
 import { NOTIFY_LIBRARY } from "../src/bun/notices.ts";
+import { metallibIn, MLX_BUNDLE, VOICE_EXE } from "./build-voice.ts";
 import { pack, unpack } from "./signing.ts";
 import { updateManifest } from "./update-feed.ts";
 
@@ -134,7 +135,12 @@ try {
   const helper = path.join(app, "Contents", "Resources", "app", "bin", "kiwi-helper");
   // A notificação do app (spec #9839): a dylib que o processo do app carrega. Assinada no laço abaixo, como todo Mach-O.
   const notify = path.join(app, "Contents", "Resources", "app", "bin", NOTIFY_LIBRARY);
-  for (const need of [mainExe, bun, helper, notify]) if (!fs.existsSync(need)) throw new Error(`release: ${path.relative(app, need)} is missing`);
+  // A voz do gato (ADR 0014, T26732): o processo e o metallib do MLX, sem o qual ele cai na 1ª frase. Assinado no laço
+  // abaixo, sem entitlement nenhum: não usa o mic nem JIT.
+  const voice = path.join(app, "Contents", "Resources", "app", "voice", VOICE_EXE);
+  const voiceDir = path.dirname(voice);
+  if (fs.existsSync(voiceDir) && !metallibIn(voiceDir)) throw new Error(`release: voice/ has no ${MLX_BUNDLE} with default.metallib`);
+  for (const need of [mainExe, bun, helper, notify, voice]) if (!fs.existsSync(need)) throw new Error(`release: ${path.relative(app, need)} is missing`);
 
   // De dentro para fora: cada Mach-O, depois o app (que assina o executável principal, o launcher, com o mic).
   for (const f of machOs(app).filter((f) => f !== mainExe)) {

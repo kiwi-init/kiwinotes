@@ -1,0 +1,115 @@
+// O processo da voz do gato (ADR 0014, T26732): o Qwen3-TTS do `mlx-audio-swift` atrás do protocolo do KiwiVoiceCore.
+// Quem sobe e derruba é o app (src/voice/qwen-voice.ts): ele abre na 1ª fala e sai depois de um tempo parado, para
+// soltar os ~4 GB do modelo. Nada aqui toca áudio: o PCM vai ao app pelo stdout.
+
+import Foundation
+import KiwiVoiceCore
+import MLX
+import MLXAudioCore
+import MLXAudioTTS
+
+/// O stdout é só do protocolo; uma linha por vez, mesmo com a geração e a leitura em tarefas diferentes.
+final class Out: @unchecked Sendable {
+    private let lock = NSLock()
+    func send(_ e: VoiceEvent) {
+        let line = encodeEvent(e) + "\n"
+        lock.lock(); defer { lock.unlock() }
+        FileHandle.standardOutput.write(Data(line.utf8))
+    }
+    func log(_ s: String) { FileHandle.standardError.write(Data("[kiwi-voice] \(s)\n".utf8)) }
+}
+
+actor Engine {
+    let out: Out
+    var model: SpeechGenerationModel?
+    var refAudio: MaterializedArray?
+    var refText = ""
+    var language = "portuguese"
+    var queue = SpeakQueue()
+    var current: (id: String, task: Task<Void, Never>)?
+
+    init(out: Out) { self.out = out }
+
+    func handle(_ cmd: VoiceCommand) async {
+        switch cmd {
+        case let .load(modelDir, ref, text, lang, cacheMB):
+            await load(modelDir: modelDir, ref: ref, text: text, language: lang, cacheMB: cacheMB)
+        case let .speak(id, text):
+            queue.push(id: id, text: text)
+            pump()
+        case let .cancel(id):
+            if current?.id == id { current?.task.cancel() } // o `cancelled` sai quando a geração para
+            else if queue.remove(id: id) { out.send(.cancelled(id: id)) }
+        case .warmup:
+            queue.push(id: "", text: "Oi.")
+            pump()
+        case .quit:
+            current?.task.cancel()
+            exit(0)
+        }
+    }
+
+    private func load(modelDir: String, ref: String, text: String, language: String, cacheMB: Int) async {
+        let t0 = Date()
+        // O teto do ADR 0014: sem ele, o cache do MLX leva o pico de ~4,2 GB a 7 GB.
+        Memory.cacheLimit = cacheMB * 1024 * 1024
+        do {
+            let m = try await TTS.loadModel(modelRepo: modelDir)
+            let (_, audio) = try loadAudioArray(from: URL(fileURLWithPath: ref), sampleRate: m.sampleRate)
+            model = m; refAudio = audio; refText = text; self.language = language
+            out.send(.ready(sampleRate: m.sampleRate, loadMs: Int(Date().timeIntervalSince(t0) * 1000)))
+        } catch {
+            out.send(.error(id: nil, message: "load: \(error)"))
+        }
+    }
+
+    private func pump() {
+        guard current == nil, let next = queue.next() else { return }
+        guard let model, let refAudio else {
+            if !next.id.isEmpty { out.send(.error(id: next.id, message: "not loaded")) }
+            return pump()
+        }
+        let (id, text, refText, language, out) = (next.id, next.text, self.refText, self.language, self.out)
+        let task = Task {
+            let t0 = Date()
+            var seq = 0
+            do {
+                for try await ev in model.generateStream(text: text, voice: nil, refAudio: refAudio, refText: refText,
+                                                         language: language, generationParameters: model.defaultGenerationParameters,
+                                                         streamingInterval: 0.5) {
+                    try Task.checkCancellation()
+                    if case let .audio(chunk) = ev, !id.isEmpty {
+                        out.send(.pcm(id: id, seq: seq, samples: toInt16(chunk.asArray(Float.self))))
+                        seq += 1
+                    }
+                }
+                if id.isEmpty { out.send(.warm(ms: Int(Date().timeIntervalSince(t0) * 1000))) } else { out.send(.done(id: id)) }
+            } catch is CancellationError {
+                if !id.isEmpty { out.send(.cancelled(id: id)) }
+            } catch {
+                if Task.isCancelled { if !id.isEmpty { out.send(.cancelled(id: id)) } }
+                else { out.send(.error(id: id.isEmpty ? nil : id, message: "\(error)")) }
+            }
+            await self.finished()
+        }
+        current = (id, task)
+    }
+
+    private func finished() {
+        current = nil
+        pump()
+    }
+}
+
+let out = Out()
+let engine = Engine(out: out)
+// O stdin fechado (o app saiu ou caiu) encerra o processo: a memória nunca fica presa sem dono.
+Task.detached {
+    while let line = readLine(strippingNewline: true) {
+        if line.isEmpty { continue }
+        do { await engine.handle(try decodeCommand(line)) }
+        catch { out.send(.error(id: nil, message: "bad command: \(error)")) }
+    }
+    exit(0)
+}
+dispatchMain()

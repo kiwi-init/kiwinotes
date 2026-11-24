@@ -6,6 +6,7 @@ artifacts/
 livewire-screenshot.png
 .cottontail-tmp/
 .helper/
+.voice/
 .onnxruntime/
 .workers/
 .ui-channel/

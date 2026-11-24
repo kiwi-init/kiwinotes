@@ -354,3 +354,15 @@ jobs:
       - name: swift test
         if: needs.changes.outputs.swift == 'run'
         run: swift test --skip-build
+
+      # O protocolo do processo da voz do gato (native-voice/, T26732). Do mesmo jeito: só o alvo dos testes, que não
+      # depende do MLX. O `kiwi-voice` em si só o xcodebuild compila, e quem o compila é o release (build-voice.ts).
+      - name: Build the voice tests
+        if: needs.changes.outputs.swift == 'run'
+        working-directory: native-voice
+        run: swift build --product KiwiVoicePackageTests
+
+      - name: swift test (voz)
+        if: needs.changes.outputs.swift == 'run'
+        working-directory: native-voice
+        run: swift test --skip-build
