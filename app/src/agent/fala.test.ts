@@ -42,7 +42,7 @@ describe("textoParaFala (T26709)", () => {
   const casos: [string, string][] = [
     // Números, decimais, negativos e intervalos.
     ["Faltam 2 dias.", "Faltam dois dias."],
-    ["São 1.234 notas.", "São mil duzentos e trinta e quatro notas."],
+    ["São 1.234 notas.", "São mil duzentas e trinta e quatro notas."],
     ["Subiu 3,5 pontos.", "Subiu três vírgula cinco pontos."],
     ["Ficou em -4.", "Ficou em menos quatro."],
     ["De 10-20 pessoas.", "De dez a vinte pessoas."],
@@ -75,7 +75,21 @@ describe("textoParaFala (T26709)", () => {
     // Siglas e símbolos.
     ["O PDF e o CSV.", "O pê dê efe e o cê esse vê."],
     ["A ONU e o PIX.", "A ONU e o pix."],
-    ["ATENÇÃO aqui.", "ATENÇÃO aqui."],
+    ["ATENÇÃO aqui.", "atenção aqui."],
+    ["Faça HOJE, é a META.", "Faça hoje, é a meta."],
+    ["O HTML e a IA.", "O agá tê eme ele e a i a."],
+    // O gênero do número (rodada 1 do T26709).
+    ["Você tem 2 reuniões amanhã.", "Você tem duas reuniões amanhã."],
+    ["Achei 1 nota e 21 tarefas.", "Achei uma nota e vinte e uma tarefas."],
+    ["A reunião dura 1 hora.", "A reunião dura uma hora."],
+    ["São 2 pessoas em 2 semanas e 2 páginas.", "São duas pessoas em duas semanas e duas páginas."],
+    ["Faltam 2 dias e 2 problemas.", "Faltam dois dias e dois problemas."],
+    ["Li 200 mensagens.", "Li duzentas mensagens."],
+    ["De 1 a 2 dias.", "De um a dois dias."],
+    ["Dura 2,5 horas.", "Dura dois vírgula cinco horas."],
+    // O ponto entre números que não é milhar.
+    ["A versão 3.5 saiu.", "A versão três ponto cinco saiu."],
+    ["O IP 192.168.0.1 caiu.", "O i pê cento e noventa e dois ponto cento e sessenta e oito ponto zero ponto um caiu."],
     ["Ana & Beto.", "Ana e Beto."],
     ["2 + 2 = 4.", "dois mais dois igual a quatro."],
     ["Escreva para ana@exemplo.com.", "Escreva para ana arroba exemplo ponto com."],
@@ -134,7 +148,7 @@ describe("cortarFrases (T26709)", () => {
   });
 
   test("o ponto de um número ou de uma abreviação não corta", () => {
-    expect(frasesParaFala("São 1.234 notas, Sr. Silva. Pronto.")).toEqual(["São mil duzentos e trinta e quatro notas, senhor Silva.", "Pronto."]);
+    expect(frasesParaFala("São 1.234 notas, Sr. Silva. Pronto.")).toEqual(["São mil duzentas e trinta e quatro notas, senhor Silva.", "Pronto."]);
   });
 
   test("uma frase longa demais se corta numa pausa, sem passar do máximo", () => {
@@ -143,6 +157,11 @@ describe("cortarFrases (T26709)", () => {
     expect(frases.length).toBeGreaterThan(1);
     for (const f of frases) expect(f.length).toBeLessThanOrEqual(FRASE_MAX);
     expect(frases.join(" ")).toBe(textoParaFala(longa));
+  });
+
+  test("o ponto entre números não corta a frase", () => {
+    expect(frasesParaFala("A versão 3.5 saiu. Pronto.")).toEqual(["A versão três ponto cinco saiu.", "Pronto."]);
+    expect(frasesParaFala("Saiu a v2026.11.13 hoje.")).toHaveLength(1);
   });
 
   test("um pedaço sem letra nem número não vira frase", () => {

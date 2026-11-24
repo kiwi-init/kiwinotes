@@ -121,6 +121,27 @@ const LETRAS: Record<string, string> = {
 const SIGLAS_PALAVRA = new Set(["ONU", "OTAN", "UNESCO", "FIFA", "NASA", "PIX", "CEP", "INSS", "OK"]);
 const SIGLA_LIDA: Record<string, string> = { OK: "ok", PIX: "pix", CEP: "cep", INSS: "inss" };
 
+/** Os substantivos femininos que o gato mais conta ("duas notas", "uma hora"). */
+const FEMININOS = new Set([
+  "nota", "reunião", "reuniões", "tarefa", "hora", "pessoa", "pasta", "semana", "página", "linha", "vez", "vezes", "frase",
+  "mensagem", "mensagens", "lista", "ideia", "pergunta", "resposta", "mudança", "versão", "versões", "palavra", "coisa",
+]);
+/** Os que terminam em -a e são masculinos, e as palavras curtas que não são o substantivo contado. */
+const NAO_FEMININOS = new Set([
+  "dia", "problema", "tema", "sistema", "mapa", "programa", "idioma", "esquema", "clima", "planeta", "para", "cada", "nada",
+  "toda", "agora", "contra", "fora", "era", "ela", "essa", "esta", "nessa", "nesta", "sobra", "mesma", "outra",
+]);
+
+/** Se a palavra depois de um número pede o número no feminino ("2 reuniões" é "duas reuniões"). */
+export function pedeFeminino(palavra: string | undefined): boolean {
+  if (!palavra) return false;
+  const p = palavra.toLowerCase();
+  const sing = p.endsWith("s") ? p.slice(0, -1) : p;
+  if (FEMININOS.has(p) || FEMININOS.has(sing)) return true;
+  if (NAO_FEMININOS.has(p) || NAO_FEMININOS.has(sing) || sing.length < 3) return false;
+  return /(?:a|ção|dade|agem)$/.test(sing) || /(?:ções|dades|agens)$/.test(p);
+}
+
 /** As abreviações comuns, por extenso. */
 const ABREVIACOES: [RegExp, string][] = [
   [/\bSr\.(?=\s)/g, "senhor"],
@@ -189,6 +210,8 @@ export function textoParaFala(texto: string): string {
     .map((l) => (/[.!?…:;,]$/.test(l) ? l : `${l}.`))
     .join(" ");
   for (const [re, por] of ABREVIACOES) t = t.replace(re, por);
+  // O ponto entre números que não é o do milhar ("3.5", "2026.11.13", "192.168.0.1") se fala "ponto", antes do corte.
+  t = t.replace(/(?<![\d.,])\d+(?:\.\d+)+(?![\d,])/g, (m) => (/^\d{1,3}(?:\.\d{3})+$/.test(m) ? m : m.split(".").join(" ponto ")));
 
   const N = String.raw`\d{1,3}(?:\.\d{3})+|\d+`;
   // Dinheiro: "R$ 1.234,50", "R$12", "US$ 30".
@@ -236,15 +259,23 @@ export function textoParaFala(texto: string): string {
     .replace(/(^|\s)#(\d+)\b/g, "$1número $2")
     .replace(/\s[x×]\s(?=\d)/g, " vezes ");
   // Os números que sobraram: "-3", "1.234", "3,5".
-  t = t.replace(new RegExp(String.raw`(^|[^\p{L}\d])(-(?=\d))?(${N})(,\d+)?(?![\p{L}\d])`, "gu"), (_, antes: string, menos: string | undefined, i: string, d?: string) => `${antes}${menos ? "menos " : ""}${numero(i + (d ?? ""))}`);
+  // O número concorda com a palavra seguinte: "duas reuniões", "uma hora", "vinte e uma tarefas".
+  t = t.replace(
+    new RegExp(String.raw`(^|[^\p{L}\d])(-(?=\d))?(${N})(,\d+)?(?![\p{L}\d])(?=(?:\s+(\p{L}+))?)`, "gu"),
+    (_, antes: string, menos: string | undefined, i: string, d: string | undefined, depois: string | undefined) =>
+      `${antes}${menos ? "menos " : ""}${numero(i + (d ?? ""), !d && pedeFeminino(depois))}`,
+  );
   // Um número colado a letras ("3D", "mp3") fica dígito por dígito, separado.
   t = t.replace(/\d+/g, (d) => ` ${d.length > 3 ? digitos(d) : porExtenso(Number(d))} `);
-  // Siglas: duas a cinco maiúsculas soltas viram letras ("PDF"); as que se leem como palavra ficam.
-  t = t.replace(/(?<![\p{L}\d])[A-Z]{2,5}s?(?![\p{L}\d])/gu, (s) => {
-    const plural = s.length > 2 && s.endsWith("s") && /^[A-Z]+s$/.test(s);
+  // Maiúsculas soltas: a sigla que não se lê como palavra (sem vogal ou de até 3 letras: "PDF", "HTML", "IA") vira
+  // letras; o resto é palavra em ênfase ("HOJE", "META") e se lê em minúsculas.
+  t = t.replace(/(?<![\p{L}\d])\p{Lu}{2,}s?(?![\p{L}\d])/gu, (s) => {
+    const plural = s.length > 2 && /^\p{Lu}+s$/u.test(s);
     const base = plural ? s.slice(0, -1) : s;
-    if (SIGLAS_PALAVRA.has(base)) return (SIGLA_LIDA[base] ?? base) + (plural ? "s" : "");
-    return [...base].map((l) => LETRAS[l] ?? l).join(" ") + (plural ? "s" : "");
+    const fim = plural ? "s" : "";
+    if (SIGLAS_PALAVRA.has(base)) return (SIGLA_LIDA[base] ?? base) + fim;
+    if (/^[A-Z]+$/.test(base) && (base.length <= 3 || !/[AEIOU]/.test(base))) return [...base].map((l) => LETRAS[l] ?? l).join(" ") + fim;
+    return base.toLowerCase() + fim;
   });
   // O que sobrou de símbolo solto sai; os espaços se ajeitam.
   return t
