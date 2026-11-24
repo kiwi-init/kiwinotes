@@ -7,8 +7,8 @@
 // - Encolher (o print do harry): com uma nota de `Projeto X/Rascunhos/Longo` aberta, as Notas entram (Ajustes → Notas,
 //   a gota nasce no tamanho longo); o ⌘K troca para uma nota de `Ideias`. A faixa à direita do caminho, da borda nova
 //   até a antiga (antes das abas), com e sem a camada da gota (`.kn-goo`): sem rastro, as duas são iguais.
-// - Crescer: a gota nasce no tamanho curto e o caminho cresce. A linha de cima, por dentro do botão, tem um tom só:
-//   a gota velha, mais curta, aparecia como um degrau no meio do botão.
+// - Crescer: a gota nasce no tamanho curto e o caminho cresce. A borda logo acima e logo abaixo do botão (a da gota) tem
+//   um tom só: a gota velha, mais curta, aparecia como um degrau no meio dessa borda.
 // Os prints ficam em OUT.
 // Sem um headless de pé, sobe o seu (`cli start --no-helper`) e o derruba no fim, passe ou falhe.
 import assert from "node:assert/strict";
@@ -109,32 +109,46 @@ async function trail(p: Page, lab: Page, strip: Box, file: string): Promise<numb
   }, { a: withGoo.toString("base64"), b: without.toString("base64"), limit: TRAIL_DIFF });
 }
 
-/** O maior degrau na linha de cima do botão (3 px abaixo da borda, sem o texto e sem os cantos): um tom só, perto de 0. */
+/**
+ * O maior degrau na borda do botão: a linha de 1 px logo acima dele e a logo abaixo, sem os cantos. Essa borda clara é
+ * a da gota; com a gota velha mais curta, ela mudava de tom no meio do botão (~38 no escuro, ~30 no claro). Por dentro
+ * do botão o fundo é opaco, e o degrau não aparece. Cada linha do print é medida sozinha: as duas linhas de pixels de
+ * um px CSS (escala 2) diferem em 1 pelo anti-aliasing.
+ */
 async function seam(p: Page, lab: Page, c: Box, file: string): Promise<number> {
-  const clip = { x: Math.round(c.x + 14), y: Math.round(c.y + 3), width: Math.round(c.w - 28), height: 1 };
-  const png = await p.screenshot({ clip });
-  writeFileSync(file, png);
-  return lab.evaluate(async (src) => {
-    const img = new Image();
-    img.src = `data:image/png;base64,${src}`;
-    await img.decode();
-    const cv = document.createElement("canvas");
-    cv.width = img.width;
-    cv.height = img.height;
-    const g = cv.getContext("2d")!;
-    g.drawImage(img, 0, 0);
-    const d = g.getImageData(0, 0, cv.width, cv.height).data;
-    let lo = 255;
-    let hi = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      const v = (d[i]! + d[i + 1]! + d[i + 2]!) / 3;
-      lo = Math.min(lo, v);
-      hi = Math.max(hi, v);
+  const x = Math.round(c.x + 14);
+  const width = Math.round(c.w - 28);
+  const top = await p.screenshot({ clip: { x, y: Math.round(c.y) - 1, width, height: 1 } });
+  const bottom = await p.screenshot({ clip: { x, y: Math.round(c.y + c.h), width, height: 1 } });
+  writeFileSync(file, top);
+  return lab.evaluate(async (srcs) => {
+    let worst = 0;
+    for (const src of srcs) {
+      const img = new Image();
+      img.src = `data:image/png;base64,${src}`;
+      await img.decode();
+      const cv = document.createElement("canvas");
+      cv.width = img.width;
+      cv.height = img.height;
+      const g = cv.getContext("2d")!;
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, cv.width, cv.height).data;
+      for (let row = 0; row < cv.height; row++) {
+        let lo = 255;
+        let hi = 0;
+        for (let col = 0; col < cv.width; col++) {
+          const i = (row * cv.width + col) * 4;
+          const v = (d[i]! + d[i + 1]! + d[i + 2]!) / 3;
+          lo = Math.min(lo, v);
+          hi = Math.max(hi, v);
+        }
+        worst = Math.max(worst, hi - lo);
+      }
     }
-    return Math.round(hi - lo);
-  }, png.toString("base64"));
+    return Math.round(worst);
+  }, [top.toString("base64"), bottom.toString("base64")]);
 }
-/** O degrau que passa: o anti-aliasing da linha, longe do degrau da gota velha (~10 no escuro). */
+/** O degrau que passa: o anti-aliasing, longe do degrau da gota velha (~38 no escuro, ~30 no claro). */
 const SEAM_MAX = 4;
 
 const cli = resolve(import.meta.dir, "cli.ts");
@@ -187,7 +201,7 @@ try {
       await open(p, "Plano", LONG);
       const grown = await crumb(p);
       await p.screenshot({ path: join(out, `${theme}-3-cresceu.png`), clip: { x: 0, y: 0, width: 520, height: 56 } });
-      const grow = await seam(p, lab, grown, join(out, `${theme}-linha-cresceu.png`));
+      const grow = await seam(p, lab, grown, join(out, `${theme}-borda-cresceu.png`));
       report.push({ theme, long, short, shrink, grow });
       if (shrink > 0 || grow > SEAM_MAX) failed = true;
     } finally {

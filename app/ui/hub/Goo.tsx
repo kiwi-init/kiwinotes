@@ -92,7 +92,7 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
         // A barra mudou no meio da corrida: a animação refeita para os lugares novos, no mesmo tempo do relógio.
         if (runs[side]) startRun(side);
         // Parada atrás dos botões, a gota não tem quadro que a redesenhe: sem isto, o caminho das Notas que encolhia
-        // deixava a gota velha à direita, e o que crescia mostrava o degrau dela no meio do botão (T26097, #26087).
+        // deixava a gota velha à direita, e o que crescia mostrava o degrau dela no meio da borda do botão (T26097, #26087).
         else draw(side);
       }
     };
