@@ -224,7 +224,8 @@ try {
   });
   await check("no hub abre abaixo do botão na barra, preserva a barra e fecha ao trocar de aba", async () => {
     const hub = await context.newPage();
-    await load(hub, `http://127.0.0.1:${port}/hub/index.html`);
+    // O Hub abre na Início desde o spec #15728: as Notas pelo `?section=`, como a CLI e os prints (T26379).
+    await load(hub, `http://127.0.0.1:${port}/hub/index.html?section=notes`);
     const bar = await hub.locator(".kn-hub-top").boundingBox();
     const editor = await hub.locator(".kn-page").boundingBox();
     const crumb = hub.locator(".kn-hub-start .kn-crumb-bt");
