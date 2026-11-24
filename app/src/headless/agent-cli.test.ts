@@ -146,6 +146,14 @@ describe("o agente pela CLI headless (T8678)", () => {
     // Cinco chamadas à CLI: num runner lento do CI passam dos 5 s padrão (#394).
   }, 30_000);
 
+  test("\"Mostrar o que eu falei\" pela capacidade: o botão dos Ajustes grava e o status traz (T26063)", async () => {
+    expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(false);
+    expect((await invoke("agent.configure", { showSpokenText: true })).json).toMatchObject({ ok: true, value: { showSpokenText: true } });
+    expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(true);
+    expect((await invoke("agent.configure", { showSpokenText: false })).json).toMatchObject({ ok: true, value: { showSpokenText: false } });
+    expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(false);
+  }, 30_000);
+
   test("o agente lê o cofre pelas ferramentas do Kiwi (spec #7496): responde a uma pergunta sobre uma nota", async () => {
     await invoke("agent.enable");
     await invoke("agent.download");
