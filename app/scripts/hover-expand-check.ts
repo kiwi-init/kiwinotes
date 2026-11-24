@@ -71,9 +71,13 @@ const startSampler = (p: Page, selector: string) =>
     const button = document.querySelector<HTMLElement>(sel);
     if (!button) throw new Error(`sem ${sel}`);
     const label = button.querySelector<HTMLElement>(":scope > .kn-expand-label")!;
+    // Medidas na linha do botão: a linha inteira pode andar de propósito (as listas dos Ajustes dão um passo de 2 px no
+    // hover, T3826); o que não pode é o botão e os vizinhos andarem dentro dela. Quem corta rolar é o `scroll`.
+    const row = button.parentElement!;
     const box = (e: Element) => {
       const r = e.getBoundingClientRect();
-      return { x: r.x, y: r.y, w: r.width, h: r.height };
+      const o = row.getBoundingClientRect();
+      return { x: r.x - o.x, y: r.y - o.y, w: r.width, h: r.height };
     };
     // Os valores do inset em px: uma margem em % de um bloco da largura da camada dá o mesmo número que o recorte.
     const probe = document.createElement("div");
