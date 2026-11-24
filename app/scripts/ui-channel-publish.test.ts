@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { UI_CONTRACT_VERSION } from "../src/shared/ui-contract.ts";
 import { generateSigningKey, readUipack, verifyManifest } from "../.hutch/devkit/api/sdks/main/appengine/format.ts";
 import {
   channelUiVersion,
@@ -182,7 +183,8 @@ describe("o ensaio pela CLI", () => {
     const out = tmp();
     const run = Bun.spawn(
       ["bun", path.join(import.meta.dirname, "ui-channel-publish.ts"), "--rehearsal", "--dist", fakeDist(["settings", "history", "notes", "hub", "intro"]),
-        "--out", out, "--app-contract", "1.95.0", "--source-time", String(T1), "--base-url", BASE],
+        // O app publicado no contrato atual: um número fixo quebrava a cada versão nova do contrato (T25110).
+        "--out", out, "--app-contract", UI_CONTRACT_VERSION, "--source-time", String(T1), "--base-url", BASE],
       { env: { ...process.env, UI_SIGNING_KEY: secret.privateKeyPem }, stdout: "pipe", stderr: "pipe" },
     );
     const [code, stdout, stderr] = await Promise.all([run.exited, new Response(run.stdout).text(), new Response(run.stderr).text()]);
