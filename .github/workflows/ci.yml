@@ -176,6 +176,13 @@ jobs:
         timeout-minutes: 5
         run: bun scripts/hover-expand-check.ts
 
+      # A árvore pelo hover do caminho (T4363), nas Notas e no Hub, no Vite com o cofre inventado. Ficou fora do CI e o
+      # caso do Hub quebrou sem ninguém ver quando o Hub passou a abrir na Início (T26379).
+      - name: tree-hover-ui-check
+        if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: bun scripts/tree-hover-ui-check.ts "$RUNNER_TEMP/tree-hover"
+
       # O histórico das notas pela tela (T22780): gravar vira versão, o diff, Restaurar e o Restaurar que vira versão,
       # no hub de um headless --no-helper num tmp. Ficou quebrando fora do CI desde a árvore de hover (T4363). E o dos
       # outros arquivos editáveis (T23443), que também só rodava à mão.
