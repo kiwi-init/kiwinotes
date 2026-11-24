@@ -80,6 +80,13 @@ describe("as reuniões com outra pasta aberta (T26083)", () => {
       expect(JSON.stringify(await tool("meetings_get", { path: p }))).toContain("jabuticaba");
       expect(JSON.stringify(await tool("notes_read", { path: p }))).toContain("jabuticaba");
       expect(JSON.stringify(await tool("notes_read", { path: NAME }))).toContain("jabuticaba");
+      // O disco está em NFD e a lista em NFC (o cofre normaliza); o agente pode devolver o caminho em qualquer das duas
+      // formas (revisão #26134).
+      expect(p).toBe(p.normalize("NFC"));
+      for (const form of ["NFC", "NFD"] as const) {
+        expect(JSON.stringify(await tool("meetings_get", { path: p.normalize(form) }))).toContain("jabuticaba");
+        expect(JSON.stringify(await tool("notes_read", { path: p.normalize(form) }))).toContain("jabuticaba");
+      }
       // A pasta Reuniões no achar, com a reunião dentro.
       expect(JSON.stringify(await tool("notes_list", { folder: "Reuniões" }))).toContain(NAME);
       // E a busca de texto.
@@ -91,7 +98,8 @@ describe("as reuniões com outra pasta aberta (T26083)", () => {
 
   test("um arquivo da pasta aberta com o mesmo caminho da reunião não toma o lugar dela (revisão #26093)", async () => {
     const { tool, path: p } = await rig(true, { [`Reuniões/${NAME}.md`]: "# Outra coisa\n\npitanga\n" });
-    for (const read of [await tool("meetings_get", { path: p }), await tool("notes_read", { path: p })]) {
+    const nfd = p.normalize("NFD");
+    for (const read of [await tool("meetings_get", { path: p }), await tool("notes_read", { path: p }), await tool("meetings_get", { path: nfd }), await tool("notes_read", { path: nfd })]) {
       expect(JSON.stringify(read)).toContain("jabuticaba");
       expect(JSON.stringify(read)).not.toContain("pitanga");
     }
