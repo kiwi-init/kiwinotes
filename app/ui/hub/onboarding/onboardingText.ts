@@ -75,7 +75,7 @@ export function shortcutSummary(controlShortcut: boolean, hold = "o Control"): s
 
 
 /** Onde a pessoa está no "aperta o Control e fala oi". */
-export type ControlPhase = { phase: "waiting" } | { phase: "listening" } | { phase: "processing" } | { phase: "asked"; text: string; id: string } | { phase: "answered"; text: string };
+export type ControlPhase = { phase: "waiting" } | { phase: "listening" } | { phase: "processing" } | { phase: "asked"; text?: string; id: string } | { phase: "answered"; text?: string };
 
 /** O próximo estado do passo 2, pelo evento da fala (`agent.voice`) ou do pedido (`agent.turn`). */
 export function controlStep(s: ControlPhase, e: { voice: AgentVoiceUi } | { turn: AgentTurnEvent }): ControlPhase {
@@ -83,11 +83,11 @@ export function controlStep(s: ControlPhase, e: { voice: AgentVoiceUi } | { turn
     const v = e.voice;
     if (v.phase === "listening") return s.phase === "answered" ? s : { phase: "listening" };
     if (v.phase === "processing") return { phase: "processing" };
-    if (v.phase === "asked") return { phase: "asked", text: v.text, id: v.id };
+    if (v.phase === "asked") return v.text ? { phase: "asked", text: v.text, id: v.id } : { phase: "asked", id: v.id };
     return s.phase === "listening" || s.phase === "processing" ? { phase: "waiting" } : s;
   }
   const t = e.turn;
-  if (s.phase === "asked" && t.id === s.id && t.type === "done") return { phase: "answered", text: s.text };
+  if (s.phase === "asked" && t.id === s.id && t.type === "done") return s.text ? { phase: "answered", text: s.text } : { phase: "answered" };
   return s;
 }
 
@@ -101,9 +101,10 @@ export function controlLine(s: ControlPhase, hold = "o Control"): string {
     case "processing":
       return "Entendendo o que você disse…";
     case "asked":
-      return `Você disse: "${s.text}". O gato está pensando…`;
+      // Sem o texto ("Mostrar o que eu falei" desligado, spec #26055), a frase não repete a fala.
+      return s.text ? `Você disse: "${s.text}". O gato está pensando…` : "O gato está pensando…";
     case "answered":
-      return `Deu certo! Você disse "${s.text}". Agora é só segurar ${hold} quando quiser.`;
+      return s.text ? `Deu certo! Você disse "${s.text}". Agora é só segurar ${hold} quando quiser.` : `Deu certo! Agora é só segurar ${hold} quando quiser.`;
   }
 }
 

@@ -476,6 +476,17 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     expect((await m.svc.status()).session).toEqual({ model: "opus", effort: "high" });
   });
 
+  test("\"Mostrar o que eu falei\" (spec #26055): desligado por padrão, o configure grava e o status avisa", async () => {
+    const m = make();
+    expect((await m.svc.status()).showSpokenText).toBe(false);
+    expect((await m.svc.configure({ showSpokenText: true })).showSpokenText).toBe(true);
+    expect((await new SettingsStore(m.data).load()).agent.showSpokenText).toBe(true);
+    // O status sai na hora: o agent-voice lê dele, e a troca vale sem reiniciar.
+    expect(m.statuses.at(-1)?.showSpokenText).toBe(true);
+    expect((await m.svc.configure({ showSpokenText: false })).showSpokenText).toBe(false);
+    expect(m.statuses.at(-1)?.showSpokenText).toBe(false);
+  });
+
   test("um ajuste antigo, só com o effort, vale para todos os modelos até cada um ter o seu", async () => {
     const data = tmp();
     await new SettingsStore(data).save({ agent: { ...DEFAULT_AGENT_SETTINGS, model: "opus", effort: "medium" } as never });

@@ -271,7 +271,9 @@ export type { NoteModel };
 //   e o `kind` no `agent.configure`: trocar fecha o agente aberto, e cada um tem a sua sessão. Só acréscimo.
 // 1.97.0 (T25110, spec #25011): "Buscar atualizações", o `checkUpdates` nas settings (ligado por padrão). Desligado, o
 //   Updater e o canal da UI não vão à rede, e o `updates` do Sobre fica `off` com o `UPDATES_OFF_BY_SETTING`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.97.0";
+// 1.98.0 (T26063, spec #26055): "Mostrar o que eu falei". O `showSpokenText` no `AgentStatus` e no `agent.configure`
+//   (desligado por padrão); desligado, o `agent.voice` `asked` vai sem o `text`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.98.0";
 /** O `reason` do `updates` desligado quando foi a pessoa, em Ajustes (1.97.0, T25110), e não o build. */
 export const UPDATES_OFF_BY_SETTING = "desligado em Buscar atualizações";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
@@ -677,7 +679,7 @@ export interface UiCapabilities {
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
   /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". `meetings` (1.57.0, spec #8360): "Suas
    * reuniões", inteiro; o que não vale volta ao padrão. */
-  "agent.configure": { args: { kind?: AgentKind; model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string; webSearch?: boolean; onboarding?: Partial<AgentOnboarding>; routines?: Partial<Record<RoutineKind, Partial<Pick<AgentRoutine, "on" | "time" | "weekday" | "folder">>>> }; result: AgentStatus };
+  "agent.configure": { args: { kind?: AgentKind; model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; showSpokenText?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string; webSearch?: boolean; onboarding?: Partial<AgentOnboarding>; routines?: Partial<Record<RoutineKind, Partial<Pick<AgentRoutine, "on" | "time" | "weekday" | "folder">>>> }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -1143,6 +1145,8 @@ export interface AgentStatus {
   busy: boolean;
   /** "Falar com o agente pelo Control" (1.55.0, spec #9876), desligado por padrão. */
   controlShortcut: boolean;
+  /** "Mostrar o que eu falei" (1.98.0, spec #26055): o balão mostra a transcrição da fala. Desligado por padrão. */
+  showSpokenText: boolean;
   /** O que o Kiwi pede ao abrir a sessão. */
   model: string;
   /** O esforço do modelo escolhido (spec #16793): o salvo para ele, ou o de antes, que vale para todos. */
@@ -1450,7 +1454,8 @@ export type RoutineEventWho = { kind: RoutineKind; id?: undefined; name?: undefi
 export type AgentVoiceUi =
   | { phase: "listening"; voz: number }
   | { phase: "processing" }
-  | { phase: "asked"; text: string; id: string }
+  /** `text`: o que a pessoa falou, só com "Mostrar o que eu falei" ligado (1.98.0, spec #26055). */
+  | { phase: "asked"; text?: string; id: string }
   /** `error`: o pedido não saiu (spec #12938); o gato do overlay diz o motivo no balão. */
   | { phase: "idle"; cancelled: boolean; error?: string };
 

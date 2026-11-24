@@ -9,7 +9,9 @@
 // - **Fala vazia ou curta demais** (menos de meio segundo) não manda nada. Uma transcrição que chega depois do
 //   cancelamento é jogada fora (o helper já não a manda depois do Esc; aqui, nenhuma fora de hora passa).
 // - **O que o gato mostra** sai como `AgentVoiceUi`: `listening` com a voz (as ondas), `processing` sem ondas (a escuta
-//   encerrou, o texto ainda não ficou pronto), `asked` com o texto entendido (o balão) e `idle` (cancelado ou vazio).
+//   encerrou, o texto ainda não ficou pronto), `asked` (o pedido saiu) e `idle` (cancelado ou vazio). O texto entendido
+//   só vai no `asked` com "Mostrar o que eu falei" ligado (spec #26055): desligado, o gato fica pensando e o 1º balão é
+//   a resposta ou o erro. O texto ao agente é o mesmo nos dois.
 
 import { cleanupWithRules } from "../cleanup/index.ts";
 import type { DictionaryEntry } from "../cleanup/types.ts";
@@ -117,7 +119,8 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
     phase = "idle";
     try {
       const { id } = await w.agent.ask(cleaned);
-      w.ui({ phase: "asked", text: cleaned, id });
+      // Lido do status na hora (spec #26055): a troca nos Ajustes vale sem reiniciar.
+      w.ui(status?.showSpokenText ? { phase: "asked", text: cleaned, id } : { phase: "asked", id });
     } catch (err) {
       const message = String((err as Error)?.message ?? err);
       log(`agent.ask: ${message}`);

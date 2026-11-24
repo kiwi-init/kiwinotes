@@ -400,6 +400,10 @@ export function webHint(s: Pick<AgentStatus, "webSearch"> & { name?: string }): 
 /** Falar com o Kiwi Cat (spec #9876; o atalho escolhido, #12946), em Ajustes › Agente. */
 export const CONTROL_LABEL = "Falar com o Kiwi Cat";
 
+/** "Mostrar o que eu falei" (spec #26055): desligado por padrão, o balão só abre com a resposta. */
+export const SPOKEN_TEXT_LABEL = "Mostrar o que eu falei";
+export const SPOKEN_TEXT_HINT = "Quando você fala com o Kiwi Cat, o balão mostra o que ele entendeu antes da resposta. Desligado, ele só abre com a resposta.";
+
 /**
  * A dica da linha. `hold`: como a frase chama o atalho ("o Control", "⌃⌥Espaço"). `blocked`: o ditado está nas mesmas
  * teclas, e o do Kiwi Cat fica desligado. Com um Control, o aviso do Ditado da Apple, que em alguns Macs usa "pressionar

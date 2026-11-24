@@ -877,7 +877,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "kind" | "enabled" | "consented" | "model" | "effort" | "effortByModel" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
+  private snapshot(): Omit<AgentStatus, "name" | "kind" | "enabled" | "consented" | "model" | "effort" | "effortByModel" | "economy" | "controlShortcut" | "showSpokenText" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.currentHost?.configValues ?? null;
     return {
@@ -984,6 +984,7 @@ export class AgentService {
       effortByModel: s.effortByModel ?? {},
       economy: s.economy === true,
       controlShortcut: s.controlShortcut === true,
+      showSpokenText: s.showSpokenText === true,
       meetings: s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS,
       summary: s.summary ?? DEFAULT_SUMMARY_SETTINGS,
       instructions: s.instructions ?? "",
@@ -2539,7 +2540,7 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { kind?: AgentKind; model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean; onboarding?: unknown; routines?: unknown }): Promise<AgentStatus> {
+  async configure(o: { kind?: AgentKind; model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; showSpokenText?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean; onboarding?: unknown; routines?: unknown }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
     // O onboarding (spec #11955): o passo em que a pessoa está, fechar (`done`) e o "Refazer" (`open` no passo 1).
     // As rotinas (spec #12150): ligar ou mudar a hora arma a rotina agora (um horário de antes não dispara).
@@ -2583,6 +2584,8 @@ export class AgentService {
     }
     // Spec #9876: "Falar com o agente pelo Control".
     if (o.controlShortcut !== undefined) patch.controlShortcut = o.controlShortcut;
+    // Spec #26055: "Mostrar o que eu falei".
+    if (o.showSpokenText !== undefined) patch.showSpokenText = o.showSpokenText;
     // Trocar de agente (spec #24666): o aberto fecha antes de gravar, e o próximo pedido abre o escolhido, na sessão dele.
     // O modelo é de cada agente: o de agora fica guardado, e volta o que o outro tinha.
     if (o.kind !== undefined) {

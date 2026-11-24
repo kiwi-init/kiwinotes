@@ -1600,7 +1600,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "agent.configure": (args) => {
       const a = object(args, "agent.configure");
-      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary" && k !== "instructions" && k !== "webSearch" && k !== "onboarding" && k !== "routines" && k !== "kind");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "showSpokenText" && k !== "meetings" && k !== "summary" && k !== "instructions" && k !== "webSearch" && k !== "onboarding" && k !== "routines" && k !== "kind");
       if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
       // Qual agente (spec #24666): o Claude Code ou o Gemini.
       if (a.kind !== undefined && !isAgentKind(a.kind)) throw bad(`agent.configure: kind must be one of ${AGENT_KINDS.join(", ")}`);
@@ -1609,6 +1609,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       }
       if (a.economy !== undefined && typeof a.economy !== "boolean") throw bad("agent.configure: economy must be true or false");
       if (a.controlShortcut !== undefined && typeof a.controlShortcut !== "boolean") throw bad("agent.configure: controlShortcut must be a boolean");
+      if (a.showSpokenText !== undefined && typeof a.showSpokenText !== "boolean") throw bad("agent.configure: showSpokenText must be a boolean");
       if (a.meetings !== undefined && (!a.meetings || typeof a.meetings !== "object" || Array.isArray(a.meetings))) throw bad("agent.configure: meetings must be an object");
       if (a.summary !== undefined && (!a.summary || typeof a.summary !== "object" || Array.isArray(a.summary))) throw bad("agent.configure: summary must be an object");
       if (a.instructions !== undefined && (typeof a.instructions !== "string" || a.instructions.length > 2000))
@@ -1645,6 +1646,7 @@ export function uiCapabilities(deps: CapabilityDeps,
           effort: a.effort as string | undefined,
           economy: a.economy as boolean | undefined,
           ...(a.controlShortcut !== undefined ? { controlShortcut: a.controlShortcut as boolean } : {}),
+          ...(a.showSpokenText !== undefined ? { showSpokenText: a.showSpokenText as boolean } : {}),
           ...(a.meetings !== undefined ? { meetings: a.meetings } : {}),
           ...(a.summary !== undefined ? { summary: a.summary } : {}),
           ...(a.instructions !== undefined ? { instructions: a.instructions as string } : {}),

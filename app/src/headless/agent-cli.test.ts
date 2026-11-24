@@ -139,6 +139,7 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect((await invoke("agent.status", { x: 1 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.configure", { kind: "codex" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.configure", { model: "../x" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect((await invoke("agent.configure", { showSpokenText: "sim" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.ask", { text: 3 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.ask", { text: "  " })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("settings.set", { agent: { enabled: true } })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });

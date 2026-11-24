@@ -119,6 +119,8 @@ export interface AgentSettings {
   economy: boolean;
   /** "Falar com o agente pelo Control" (spec #9876): segurar o Control ouve e soltar manda. Desligado por padrão. */
   controlShortcut: boolean;
+  /** "Mostrar o que eu falei" (spec #26055): o balão do gato mostra a transcrição da fala antes da resposta. Desligado. */
+  showSpokenText: boolean;
   /** "Suas reuniões" (spec #8360): quando o agente propõe a nota da reunião, onde ela vai, o nome e os blocos. */
   meetings: AgentMeetingSettings;
   /** As instruções da pessoa para o agente (spec #11469): até 2.000 caracteres, em todo pedido. */
@@ -193,6 +195,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   notifyWaiting: true,
   economy: false,
   controlShortcut: false,
+  showSpokenText: false,
   meetings: DEFAULT_AGENT_MEETING_SETTINGS,
   summary: DEFAULT_SUMMARY_SETTINGS,
   instructions: "",
@@ -247,6 +250,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     notifyWaiting: o.notifyWaiting !== false,
     economy: o.economy === true,
     controlShortcut: o.controlShortcut === true,
+    showSpokenText: o.showSpokenText === true,
     meetings: sanitizeAgentMeetingSettings(o.meetings),
     instructions: typeof o.instructions === "string" ? o.instructions.replace(/\r\n?/g, "\n").slice(0, 2000) : "",
     webSearch: o.webSearchChosen === true ? o.webSearch === true : DEFAULT_AGENT_SETTINGS.webSearch,

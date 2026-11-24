@@ -8,7 +8,7 @@ import { api } from "../src/api.ts";
 import { Row, Switch } from "../src/kit/index.tsx";
 import { useShortcuts } from "../src/useShortcuts.ts";
 import { holdName } from "../hub/onboarding/onboardingText.ts";
-import { CONTROL_LABEL, controlHint } from "./agentText.ts";
+import { CONTROL_LABEL, controlHint, SPOKEN_TEXT_HINT, SPOKEN_TEXT_LABEL } from "./agentText.ts";
 import { ShortcutRow } from "./Shortcuts.tsx";
 import { useState } from "react";
 
@@ -40,5 +40,23 @@ export function ControlRow({ status, onStatus }: { status: AgentStatus; onStatus
       {/* Desligado, o atalho não faz nada: o campo fica, mas só troca com o interruptor ligado (ou para sair do conflito). */}
       <ShortcutRow id="agent" shortcuts={shortcuts} disabled={!status.controlShortcut && !blocked} />
     </>
+  );
+}
+
+/** "Mostrar o que eu falei" (spec #26055), em Ajustes › Agente: a transcrição da fala no balão, antes da resposta. */
+export function SpokenTextRow({ status, onStatus }: { status: AgentStatus; onStatus(s: AgentStatus): void }) {
+  const [failed, setFailed] = useState(false);
+  const change = (on: boolean) => {
+    setFailed(false);
+    onStatus({ ...status, showSpokenText: on });
+    void api.agent.configure({ showSpokenText: on }).then(onStatus, () => {
+      onStatus({ ...status, showSpokenText: !on });
+      setFailed(true);
+    });
+  };
+  return (
+    <Row label={SPOKEN_TEXT_LABEL} hint={failed ? "Não deu para salvar. Tente de novo." : SPOKEN_TEXT_HINT}>
+      <Switch label={SPOKEN_TEXT_LABEL} checked={status.showSpokenText} onChange={change} />
+    </Row>
   );
 }

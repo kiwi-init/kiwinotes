@@ -8,14 +8,14 @@ import { AGENT_VOICE_MIN_MS, attachAgentVoice, controlArmed, dictationUsesContro
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
-function rig(o: { busy?: boolean; enabled?: boolean; control?: boolean; dictation?: string } = {}) {
+function rig(o: { busy?: boolean; enabled?: boolean; control?: boolean; dictation?: string; spoken?: boolean } = {}) {
   const sent: Command[] = [];
   const ui: AgentVoiceUi[] = [];
   const asked: string[] = [];
   const listeners = new Map<string, Set<(e: never) => void>>();
   const readies = new Set<() => void>();
   let statusFn: ((s: AgentStatus) => void) | undefined;
-  const status = { enabled: o.enabled ?? true, busy: o.busy ?? false } as AgentStatus;
+  const status = { enabled: o.enabled ?? true, busy: o.busy ?? false, showSpokenText: o.spoken ?? false } as AgentStatus;
   const settings: AppSettings = {
     ...DEFAULT_SETTINGS,
     shortcuts: { ...DEFAULT_SETTINGS.shortcuts, ...(o.dictation ? { dictation: o.dictation } : {}) },
@@ -100,7 +100,7 @@ describe("o atalho Control (spec #9876)", () => {
   });
 
   test("a fala vira o pedido, pela limpeza literal: o gato ouve com as ondas, elas somem ao soltar, e o texto vai ao balão", async () => {
-    const r = rig();
+    const r = rig({ spoken: true });
     await flush();
     await r.talk("resuma a nota de ontem");
     expect(r.asked).toEqual(["Resuma a nota de ontem."]);
@@ -110,6 +110,27 @@ describe("o atalho Control (spec #9876)", () => {
       { phase: "processing" },
       { phase: "asked", text: "Resuma a nota de ontem.", id: "r1" },
     ]);
+  });
+
+  test("\"Mostrar o que eu falei\" desligado (o padrão, spec #26055): o pedido é o mesmo, e o balão não recebe a fala", async () => {
+    const r = rig();
+    await flush();
+    await r.talk("resuma a nota de ontem");
+    expect(r.asked).toEqual(["Resuma a nota de ontem."]);
+    expect(r.ui.at(-1)).toEqual({ phase: "asked", id: "r1" });
+    expect(JSON.stringify(r.ui)).not.toContain("nota de ontem");
+  });
+
+  test("a troca de \"Mostrar o que eu falei\" vale na próxima fala, sem reiniciar (spec #26055)", async () => {
+    const r = rig();
+    await flush();
+    r.setStatus({ showSpokenText: true });
+    await r.talk("abra o projeto x");
+    expect(r.ui.at(-1)).toEqual({ phase: "asked", text: "Abra o projeto x.", id: "r1" });
+    r.setStatus({ showSpokenText: false });
+    await r.talk("feche o projeto x");
+    expect(r.ui.at(-1)).toEqual({ phase: "asked", id: "r2" });
+    expect(r.asked).toEqual(["Abra o projeto x.", "Feche o projeto x."]);
   });
 
   test("as ondas só com a escuta confirmada: o nível do mic antes ou depois não mexe no gato", async () => {
