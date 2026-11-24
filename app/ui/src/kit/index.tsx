@@ -1,6 +1,8 @@
 import "../styles/base.css";
 import "./kit.css";
 
+import { placeHoverLabel } from "./hover-label.ts";
+
 import {
   type ButtonHTMLAttributes,
   type CSSProperties,
@@ -196,12 +198,30 @@ export function Select<T extends string>({
 }
 
 /**
- * O nome que aparece ao lado do ícone no hover e no foco do teclado (T3821, spec #3816). O botão leva a classe
+ * O nome que aparece junto do ícone no hover e no foco do teclado (T3821, spec #3816), por cima dos vizinhos (T26124). O botão leva a classe
  * `kn-expand` e um `aria-label` com o mesmo nome: este texto é só visual.
  */
 export function HoverLabel({ children }: { children: ReactNode }) {
+  // O nome cresce por cima dos vizinhos, para o lado com espaço (T26124): a medida sai antes de abrir.
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const label = ref.current;
+    const button = label?.parentElement;
+    if (!label || !button) return;
+    const place = () => placeHoverLabel(button, label);
+    // Já no lado certo em repouso: fechada do lado errado, a camada passa da borda de quem corta e o deixa rolar (o
+    // cartão do Dicionário corria uns 50 px ao focar ou rolar até o ×, revisão #26404). Escondido (a árvore fechada),
+    // espera o primeiro hover.
+    if (button.getClientRects().length > 0) place();
+    button.addEventListener("pointerenter", place);
+    button.addEventListener("focus", place);
+    return () => {
+      button.removeEventListener("pointerenter", place);
+      button.removeEventListener("focus", place);
+    };
+  }, []);
   return (
-    <span className="kn-expand-label" aria-hidden="true">
+    <span ref={ref} className="kn-expand-label" aria-hidden="true">
       <span>{children}</span>
     </span>
   );

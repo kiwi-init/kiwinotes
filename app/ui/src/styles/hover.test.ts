@@ -29,14 +29,46 @@ describe("o hover fluido", () => {
     expect(value("--hover-out-delay")).toMatch(/^\d+ms$/);
   });
 
-  test("o botão que expande anima a coluna do grid com os tokens, e o foco do teclado tem o mesmo visual", () => {
+  test("o nome cresce por cima, sem mexer na largura do botão, e o foco do teclado abre igual (T26124)", () => {
     const kit = css("src/kit/kit.css");
-    const base = rule(kit, ".kn-expand");
-    expect(base).toContain("grid-template-columns: auto minmax(0, 0fr)");
-    expect(base).toContain("var(--hover-dur) var(--hover-ease) var(--hover-out-delay)");
-    expect(kit).toContain(".kn-expand:hover,\n.kn-expand:focus-visible {\n  grid-template-columns: auto minmax(0, 1fr);");
-    // O nome é cortado pela coluna enquanto ela encolhe (sem isto, vazava por cima do botão vizinho).
-    expect(rule(kit, ".kn-expand-label")).toContain("justify-self: stretch");
+    // Nada de grid nem de largura que anda: era o que empurrava os vizinhos (spec #26101).
+    expect(kit).not.toContain("grid-template-columns: auto minmax(0, 1fr)");
+    expect(kit).not.toMatch(/\.kn-expand[^{]*\{[^}]*width: auto/);
+    // A camada anima só o recorte e a opacidade, com os tokens da abertura e do fechamento.
+    const label = rule(kit, ".kn-expand-label");
+    expect(label).toContain("position: absolute");
+    expect(label).toContain("clip-path var(--expand-close) var(--expand-close-ease)");
+    expect(kit).toContain(".kn-expand:not([data-placing]):hover > .kn-expand-label,\n.kn-expand:not([data-placing]):focus-visible > .kn-expand-label {");
+    expect(kit).toContain("clip-path var(--expand-open) var(--expand-open-ease) var(--expand-in-delay)");
+    // O texto entra depois da largura.
+    expect(kit).toContain("calc(var(--expand-in-delay) + var(--expand-text-after))");
+    const tokens = css("src/styles/tokens.css");
+    const ms = (name: string) => {
+      const v = new RegExp(`${name}:\\s*([^;]+);`).exec(tokens)![1]!.trim();
+      return v.endsWith("ms") ? parseFloat(v) : parseFloat(v) * 1000;
+    };
+    expect(ms("--expand-in-delay")).toBeGreaterThanOrEqual(120);
+    expect(ms("--expand-in-delay")).toBeLessThanOrEqual(180);
+    expect(ms("--expand-open")).toBeGreaterThanOrEqual(350);
+    expect(ms("--expand-open")).toBeLessThanOrEqual(450);
+    expect(ms("--expand-close")).toBeLessThan(ms("--expand-open"));
+    // Sem passar do ponto e sem o salto do 1º quadro: a curva começa no máximo 3x mais rápida que a média.
+    const [x1, y1, , y2] = /cubic-bezier\(([^)]+)\)/.exec(/--expand-open-ease:\s*([^;]+);/.exec(tokens)![1]!)![1]!.split(",").map(Number);
+    expect(y1! / x1!).toBeLessThanOrEqual(3);
+    expect(Math.max(y1!, y2!)).toBeLessThanOrEqual(1);
+  });
+
+  test("reduzir movimento (o do Mac e o do Kiwi) deixa só o fade da camada", () => {
+    const kit = css("src/kit/kit.css");
+    expect(kit).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\n  \.kn-expand\.kn-expand[\s\S]*?transition: opacity 0\.15s linear !important;/);
+    expect(kit).toMatch(/:root\[data-motion="reduced"\] \.kn-expand\.kn-expand > \.kn-expand-label \{[^}]*transition: opacity 0\.15s linear !important;/);
+  });
+
+  test("o × dos Ajustes guarda o atraso do z-index e o vermelho chega ao nome (T26124, revisão #26404)", () => {
+    const kit = css("src/kit/kit.css");
+    // O lists.css vem depois no bundle: só uma regra mais forte junta a transição do .kn-icon-button com a do z-index.
+    expect(kit).toMatch(/\.kn-icon-button\.kn-expand \{[^}]*transition:[^}]*background[^}]*z-index 0s linear var\(--expand-close\)/);
+    expect(kit).toMatch(/\.kn-expand\[data-tone="danger"\] > \.kn-expand-label > span \{[^}]*color: var\(--danger\)/);
   });
 
   // T4535 substituiu o hover das abas; seu contrato é medido no WebKit por scripts/hub-tabs-ui-check.ts.
