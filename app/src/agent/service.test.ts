@@ -481,10 +481,11 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     expect((await m.svc.status()).showSpokenText).toBe(false);
     expect((await m.svc.configure({ showSpokenText: true })).showSpokenText).toBe(true);
     expect((await new SettingsStore(m.data).load()).agent.showSpokenText).toBe(true);
-    // O status sai na hora: o agent-voice lê dele, e a troca vale sem reiniciar.
-    expect(m.statuses.at(-1)?.showSpokenText).toBe(true);
+    // O status avisa a troca: o agent-voice lê dele, e ela vale sem reiniciar. O emitStatus lê os ajustes antes de
+    // avisar, então o status chega depois do configure: esperar, não ler na hora (no CI lento, a leitura vinha antes).
+    await until(() => m.statuses.at(-1)?.showSpokenText === true);
     expect((await m.svc.configure({ showSpokenText: false })).showSpokenText).toBe(false);
-    expect(m.statuses.at(-1)?.showSpokenText).toBe(false);
+    await until(() => m.statuses.at(-1)?.showSpokenText === false);
   });
 
   test("um ajuste antigo, só com o effort, vale para todos os modelos até cada um ter o seu", async () => {
