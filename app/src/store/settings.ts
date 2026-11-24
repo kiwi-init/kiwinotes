@@ -48,6 +48,11 @@ export interface AppSettings {
   ocr: boolean;
   /** A busca pelo sentido (T6013, #4766): o modelo local, baixado uma vez. Ligada por padrão; desligar apaga o modelo. */
   semanticSearch: boolean;
+  /**
+   * "Buscar atualizações" (T25110, spec #25011): o Updater e o canal da UI só vão à rede com ele ligado. Ligado por
+   * padrão; desligado, nenhum GET a partir da próxima checagem, sem reiniciar.
+   */
+  checkUpdates: boolean;
   /** Por qual microfone o ditado grava (spec #3202, T3230). O helper recebe no `config.set`. Padrão: "auto". */
   microphone: MicrophoneChoice;
   /** A árvore das Notas mostra a extensão (`.md`, `.pdf`…) depois do nome (T3370). Desligado por padrão. */
@@ -255,7 +260,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR, posicao: DEFAULT_CAT_POSITION, tamanho: CAT_SIZE.default }, firstRun: "done" };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR, posicao: DEFAULT_CAT_POSITION, tamanho: CAT_SIZE.default }, firstRun: "done" };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -313,6 +318,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     savedSearches: sanitizeSavedSearches(o.savedSearches),
     ocr: typeof o.ocr === "boolean" ? o.ocr : true,
     semanticSearch: o.semanticSearch !== false,
+    checkUpdates: o.checkUpdates !== false,
     microphone: isMicrophoneChoice(o.microphone) ? o.microphone : DEFAULT_MICROPHONE,
     showExtensions: o.showExtensions === true,
     cues: o.cues !== false,

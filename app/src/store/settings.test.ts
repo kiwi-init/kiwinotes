@@ -18,14 +18,14 @@ const notesOff = { shortcuts: { ...DEFAULT_SHORTCUTS, notes: null }, notesShortc
 
 test("sem arquivo, o padrão: ⌃⌥N abre a janela Notas (T1499)", async () => {
   fresh();
-  expect(await new SettingsStore(dir).load()).toEqual({ shortcuts: DEFAULT_SHORTCUTS, notesShortcut: "control+option+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "prisma-original" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS, firstRun: "done" as const });
+  expect(await new SettingsStore(dir).load()).toEqual({ shortcuts: DEFAULT_SHORTCUTS, notesShortcut: "control+option+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "prisma-original" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS, firstRun: "done" as const });
   expect(DEFAULT_SETTINGS.notesShortcut).toBe(DEFAULT_NOTES_SHORTCUT);
 });
 
 test("grava só o que mudou, só para o usuário, e lê de volta; null (desligado) fica", async () => {
   fresh();
   const store = new SettingsStore(dir);
-  const off = { ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto" as const, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "prisma-original" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS, firstRun: "done" as const };
+  const off = { ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: "auto" as const, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "prisma-original" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS, firstRun: "done" as const };
   expect(await store.save({ notesShortcut: null })).toEqual(off);
   expect(await new SettingsStore(dir).load()).toEqual(off);
   expect(JSON.parse(readFileSync(store.file, "utf8"))).toEqual({ version: 1, ...off });
@@ -38,13 +38,13 @@ test("editado à mão com um valor que não existe: volta ao padrão, sem quebra
   writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: "q" }));
   expect(await new SettingsStore(dir).load()).toEqual(DEFAULT_SETTINGS);
   expect(sanitizeSettings(null)).toEqual(DEFAULT_SETTINGS);
-  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ shortcuts: { ...DEFAULT_SHORTCUTS, notes: "option+command+n" }, notesShortcut: "option+command+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "prisma-original" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS, firstRun: "done" as const });
+  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ shortcuts: { ...DEFAULT_SHORTCUTS, notes: "option+command+n" }, notesShortcut: "option+command+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "prisma-original" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS, firstRun: "done" as const });
 });
 
 test("a Aparência (T2503): um settings.json de antes dela abre no padrão, e um campo ruim volta sozinho", async () => {
   fresh();
   writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: null }));
-  expect(await new SettingsStore(dir).load()).toEqual({ ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "prisma-original" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS, firstRun: "done" as const });
+  expect(await new SettingsStore(dir).load()).toEqual({ ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "prisma-original" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS, firstRun: "done" as const });
   const mixed = { mode: "light", lightTheme: "glacier-mint", darkTheme: 42, textSize: "huge", font: "lato", motion: "reduced" };
   expect(sanitizeSettings({ appearance: mixed }).appearance).toEqual({
     ...DEFAULT_APPEARANCE,
@@ -94,6 +94,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
     savedSearches: [],
     ocr: true,
     semanticSearch: true,
+    checkUpdates: true,
     microphone: "auto",
     showExtensions: false,
     cues: true,
@@ -342,4 +343,11 @@ test("sem settings.json, mas com o permissions.json de um app já usado: não é
   const trace = path.join(dir, "permissions.json");
   writeFileSync(trace, "{}");
   expect(await new SettingsStore(dir).beginFirstRun([trace])).toBe("done");
+});
+
+test("Buscar atualizações (T25110): ligado por padrão; só um false guardado desliga", () => {
+  expect(sanitizeSettings({}).checkUpdates).toBe(true);
+  expect(sanitizeSettings({ checkUpdates: false }).checkUpdates).toBe(false);
+  expect(sanitizeSettings({ checkUpdates: "false" }).checkUpdates).toBe(true);
+  expect(DEFAULT_SETTINGS.checkUpdates).toBe(true);
 });

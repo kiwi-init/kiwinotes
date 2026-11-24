@@ -143,6 +143,8 @@ export interface CapabilityDeps {
     view(): UpdatesView;
     check(): Promise<UpdatesView>;
     apply(): Promise<UpdatesView>;
+    /** "Buscar atualizações" mudou (T25110): a faixa do Sobre passa a desligada, ou volta, sem nenhum GET. */
+    checkUpdatesChanged?(on: boolean): void;
   };
   /** O vault das notas (T1316). Aberto na 1ª chamada: o ~/KiwiNotes só nasce quando alguém usa as notas. */
   notes: Pick<
@@ -711,6 +713,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       const a = object(args, "settings.set");
       const patch: SettingsPatch = {};
       let turnSemantic: boolean | null = null;
+      let turnUpdates: boolean | null = null;
       // Os atalhos (1.24.0, T5349), também os que vêm nos campos de antes: conferidos juntos no fim, sem conflito.
       const shortcutPatch: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(a)) {
@@ -788,6 +791,11 @@ export function uiCapabilities(deps: CapabilityDeps,
           if (typeof value !== "boolean") throw bad("semanticSearch must be true or false");
           patch.semanticSearch = value;
           turnSemantic = value;
+        } else if (key === "checkUpdates") {
+          // "Buscar atualizações" (1.97.0, T25110): o Updater e o canal da UI leem a cada checagem; nada reinicia.
+          if (typeof value !== "boolean") throw bad("checkUpdates must be true or false");
+          patch.checkUpdates = value;
+          turnUpdates = value;
         } else if (key === "attachmentsFolder") {
           // A pasta dos anexos (1.11.0, T2594): relativa ao vault, sem sair dele.
           try {
@@ -835,6 +843,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       }
       const saved = await deps.settings.save(patch);
       deps.settingsChanged?.(saved);
+      if (turnUpdates !== null) deps.about?.checkUpdatesChanged?.(turnUpdates);
       if (turnSemantic === false) {
         await deps.semanticEngine?.disable();
         await deps.semantic?.clear();

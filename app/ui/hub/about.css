@@ -284,3 +284,12 @@
   font-size: var(--t-meta);
   color: var(--text-3);
 }
+
+/* "Buscar atualizações" (T25110): logo abaixo da faixa, com o mesmo canto arredondado. */
+.kn-about-check {
+  margin-top: 8px;
+}
+
+.kn-about-check .kn-row {
+  border-radius: 12px;
+}
