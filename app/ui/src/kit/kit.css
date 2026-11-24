@@ -508,80 +508,118 @@
 }
 
 
-/* ---------------------------------------------------------- o botão que expande (T3821, spec #3816) */
+/* ---------------------------------------------------------- o botão que expande (T3821, spec #3816; T26124) */
 
 /*
- * Em repouso, só o ícone; no hover (e no foco do teclado), o botão alarga e mostra o nome ao lado. A largura vem do
- * grid: a coluna do nome vai de 0fr a 1fr, que o WebKit anima sem medir em JS. Os vizinhos deslizam junto.
+ * Em repouso, só o ícone. No hover (e no foco do teclado), o nome cresce numa camada por cima dos vizinhos, com o
+ * fundo e a borda do botão (T26124, spec #26101): o botão guarda a largura de só ícone, então nada ao lado se mexe.
+ * A camada vai para o lado com espaço (`data-grow`, medido no HoverLabel antes de abrir) e anima só o recorte
+ * (`clip-path`) e a opacidade. Espera um pouco antes de abrir (passar o mouse pela barra não abre nada), abre devagar
+ * com uma ease-out longa, o texto entra depois da largura, e fecha mais rápido. Reduzir movimento: só o fade.
  * Uso: <button className="… kn-expand" aria-label="Nova nota"><Icone /><HoverLabel>Nova nota</HoverLabel></button>.
  */
 .kn-expand {
-  display: inline-grid;
-  grid-template-columns: auto minmax(0, 0fr);
-  place-items: center start;
-  justify-content: start;
-  transition: grid-template-columns var(--hover-dur) var(--hover-ease) var(--hover-out-delay);
+  /* O botão vira um contexto de empilhamento: a camada (z-index -1) fica por cima do fundo dele e por baixo do ícone. */
+  position: relative;
+  z-index: 0;
+  /* Por cima dos vizinhos enquanto abre e até terminar de fechar. */
+  transition: z-index 0s linear var(--expand-close);
 }
 
 .kn-expand:hover,
 .kn-expand:focus-visible {
-  grid-template-columns: auto minmax(0, 1fr);
-  transition-delay: var(--hover-in-delay);
-}
-
-.kn-expand > svg,
-.kn-expand > .kn-side-icon {
-  justify-self: center;
-}
-
-/* Os botões só de ícone que viram kn-expand: a largura sai do grid (o ícone fica no quadrado de antes). */
-.kn-float-group > button.kn-expand {
-  width: auto;
-  min-width: calc(var(--ctl) - 4px);
-  padding: 0 calc((var(--ctl) - 4px - 15px) / 2);
-  display: inline-grid;
-  place-items: center start;
-}
-
-.kn-float-group > button.kn-expand > .kn-expand-label > span {
-  padding-right: 2px;
+  z-index: 3;
+  transition-delay: 0s;
 }
 
 .kn-expand-label {
-  /* Do tamanho da coluna, e não do texto: é o que faz o overflow cortar o nome enquanto a coluna encolhe. Com o
-     place-items do botão (start), o nome ficava do tamanho dele e vazava por cima do botão vizinho. */
-  justify-self: stretch;
-  min-width: 0;
-  overflow: hidden;
+  --kn-expand-glass: linear-gradient(var(--surface-hover), var(--surface-hover)), var(--float);
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  /* O ícone fica na parte de só ícone; o nome, na que cresce. */
+  padding: 0 10px 0 var(--kn-expand-base, 28px);
+  border-radius: var(--kn-expand-r, var(--r-row));
+  background: var(--kn-expand-glass);
+  box-shadow: var(--shadow-float);
+  pointer-events: none;
+  /* Fechada: recortada no tamanho do botão, e invisível (em repouso o botão é o de sempre). */
+  clip-path: inset(-6px calc(100% - var(--kn-expand-base, 28px)) -6px 0 round var(--kn-expand-r, var(--r-row)));
+  opacity: 0;
+  transition:
+    clip-path var(--expand-close) var(--expand-close-ease),
+    opacity 0.1s linear calc(var(--expand-close) - 0.1s);
+}
+
+.kn-expand[data-grow="left"] > .kn-expand-label {
+  left: auto;
+  right: 0;
+  padding: 0 var(--kn-expand-base, 28px) 0 10px;
+  clip-path: inset(-6px 0 -6px calc(100% - var(--kn-expand-base, 28px)) round var(--kn-expand-r, var(--r-row)));
+}
+
+.kn-expand:not([data-placing]):hover > .kn-expand-label,
+.kn-expand:not([data-placing]):focus-visible > .kn-expand-label {
+  /* O -6px de cima e de baixo deixa a sombra aparecer. */
+  clip-path: inset(-6px -6px -6px -6px round var(--kn-expand-r, var(--r-row)));
+  opacity: 1;
+  transition:
+    clip-path var(--expand-open) var(--expand-open-ease) var(--expand-in-delay),
+    opacity 0.12s linear var(--expand-in-delay);
+}
+
+/* Medindo o lado (o HoverLabel): fechada e parada, para a abertura sair do lado certo. */
+.kn-expand[data-placing] > .kn-expand-label,
+.kn-expand[data-placing] > .kn-expand-label > span {
+  transition: none !important;
 }
 
 .kn-expand-label > span {
   display: block;
-  padding-left: 6px;
   white-space: nowrap;
   font: 500 var(--t-ui) / 1 var(--ui);
+  color: var(--ink, var(--text));
   opacity: 0;
-  transform: translateX(-4px);
+  transform: translateX(-3px);
   transition:
-    opacity var(--hover-dur) var(--ease) var(--hover-out-delay),
-    transform var(--hover-dur) var(--hover-ease) var(--hover-out-delay);
+    opacity 0.1s linear,
+    transform 0.1s linear;
 }
 
-.kn-expand:hover .kn-expand-label > span,
-.kn-expand:focus-visible .kn-expand-label > span {
+.kn-expand[data-grow="left"] > .kn-expand-label > span {
+  transform: translateX(3px);
+}
+
+/* O texto entra depois da largura: espera a camada abrir um tanto. */
+.kn-expand:not([data-placing]):hover > .kn-expand-label > span,
+.kn-expand:not([data-placing]):focus-visible > .kn-expand-label > span {
   opacity: 1;
   transform: none;
-  transition-delay: var(--hover-in-delay);
+  transition:
+    opacity 0.24s var(--ease) calc(var(--expand-in-delay) + var(--expand-text-after)),
+    transform 0.3s var(--expand-open-ease) calc(var(--expand-in-delay) + var(--expand-text-after));
+}
+
+/* Reduzir movimento (o do Mac e o do Kiwi): a camada já aberta, só o fade. O base.css corta toda transição; aqui a
+   opacidade volta, curta, o recorte e o deslize não andam, e a camada fica por cima até sumir. */
+@media (prefers-reduced-motion: reduce) {
+  .kn-expand.kn-expand { transition: z-index 0s linear 0.15s !important; }
+  .kn-expand.kn-expand > .kn-expand-label { clip-path: inset(-6px round var(--kn-expand-r, var(--r-row))) !important; transition: opacity 0.15s linear !important; }
+  .kn-expand.kn-expand > .kn-expand-label > span { transform: none !important; transition: opacity 0.15s linear !important; }
+}
+:root[data-motion="reduced"] .kn-expand.kn-expand { transition: z-index 0s linear 0.15s !important; }
+:root[data-motion="reduced"] .kn-expand.kn-expand > .kn-expand-label { clip-path: inset(-6px round var(--kn-expand-r, var(--r-row))) !important; transition: opacity 0.15s linear !important; }
+:root[data-motion="reduced"] .kn-expand.kn-expand > .kn-expand-label > span { transform: none !important; transition: opacity 0.15s linear !important; }
+
+.kn-float-group > button.kn-expand > .kn-expand-label {
+  --kn-expand-glass: linear-gradient(var(--wash-2, var(--surface-hover)), var(--wash-2, var(--surface-hover))), var(--float);
 }
 
 /* O × de remover das listas dos Ajustes (Dicionário, Snippets): o "Remover" aparece ao lado, no hover e no foco. */
-.kn-icon-button.kn-expand {
-  width: auto;
-  min-width: 26px;
-  padding: 0 6px;
-  display: inline-grid;
-}
-
 .kn-icon-button.kn-expand:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);

@@ -120,6 +120,17 @@
   --hover-in-delay: 0s;
   --hover-out-delay: 80ms;
   /*
+   * O nome que cresce por cima (T26124, spec #26101): espera ~150 ms parado antes de abrir (passar o mouse pela barra
+   * não abre nada), abre em 0,4 s numa ease-out longa que começa macia (sem o salto do 1º quadro), sem passar do ponto, e fecha na metade do tempo. O texto entra
+   * depois de a largura andar um tanto.
+   */
+  --expand-in-delay: 150ms;
+  --expand-open: 0.4s;
+  --expand-open-ease: cubic-bezier(0.3, 0.7, 0.1, 1);
+  --expand-close: 0.2s;
+  --expand-close-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --expand-text-after: 0.12s;
+  /*
    * barra de rolagem (T4505, spec #4497): fina, sem trilho, na cor fraca do tema. Aparece só enquanto rola e some
    * logo depois (ui/src/scrollbar.ts). Engrossa um pouco com o mouse em cima.
    */

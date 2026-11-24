@@ -170,6 +170,12 @@ jobs:
         timeout-minutes: 10
         run: bun scripts/hub-goo-check.ts
 
+      # O nome do hover cresce por cima, sem empurrar os vizinhos, e suave (T26124, spec #26101): medido quadro a quadro.
+      - name: hover-expand-check
+        if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: bun scripts/hover-expand-check.ts
+
       # O histórico das notas pela tela (T22780): gravar vira versão, o diff, Restaurar e o Restaurar que vira versão,
       # no hub de um headless --no-helper num tmp. Ficou quebrando fora do CI desde a árvore de hover (T4363). E o dos
       # outros arquivos editáveis (T23443), que também só rodava à mão.
