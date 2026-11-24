@@ -13,8 +13,11 @@
 // - **O nível** para a animação sai do que a saída diz que tocou (`aoTocar`, com o volume dela), não do que a síntese
 //   gerou; no fim e no cancelamento, volta a 0.
 
-/** PCM mono, 16 bits. */
+/** PCM mono, 16 bits, na taxa `FALA_TAXA`. */
 export type Pcm = Int16Array;
+
+/** A taxa da voz do gato (o Qwen3-TTS, T26732): 24 kHz, mono. A síntese entrega pedaços de 80 ms (1920 amostras). */
+export const FALA_TAXA = 24_000;
 
 export interface SinteseFala {
   /** Os pedaços de uma frase, na ordem. Para com o `signal` abortado. */
