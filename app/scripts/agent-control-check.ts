@@ -72,7 +72,15 @@ try {
   assert.equal((await invoke("agent.configure", { controlShortcut: true })).controlShortcut, true);
   report.checks.push("the Control switch is off by default and turns on in Settings › Agente");
 
-  // 2. A fala vira o pedido: o gato ouve, as ondas somem ao soltar, o texto entendido vai ao balão e ao agente.
+  // 2. A fala vira o pedido: o gato ouve, as ondas somem ao soltar, e o texto entendido vai ao agente. Com "Mostrar o que
+  // eu falei" desligado (o padrão, spec #26055), não vai ao balão: o 1º balão é a resposta.
+  assert.equal((await invoke("agent.status")).showSpokenText, false);
+  /** Os textos do balão do gato, na ordem, sem repetir o seguido. */
+  const bubbleNow = () => p.evaluate(() => document.querySelector(".kn-bubble")?.textContent?.trim() ?? "");
+  /** `stale`: o balão do pedido de antes, que ainda pode estar na tela, não conta. */
+  const bubbleTexts = (into: string[], stale = "") => setInterval(() => void bubbleNow().then((t) => { if (t && t !== stale && into.at(-1) !== t) into.push(t); }, () => {}), 30);
+  const heardOff: string[] = [];
+  const watchOff = bubbleTexts(heardOff);
   const said = say("pedido", "Resuma a nota de ontem.");
   const before = events.length;
   let frame = 0;
@@ -87,7 +95,8 @@ try {
   await waitFor("the request", () => events.slice(before).some((e) => e.type === "agent.voice" && e.payload?.payload?.phase === "asked"));
   const voice = events.slice(before).filter((e) => e.type === "agent.voice").map((e) => e.payload.payload);
   const asked = voice.find((v) => v.phase === "asked");
-  assert.match(asked.text, /resuma a nota de ontem/i);
+  assert.equal(asked.text, undefined, "a fala não vai ao balão com o ajuste desligado");
+  await p.screenshot({ path: join(out, "1-sem-a-fala-pensando.png"), clip: { x: 520, y: 430, width: 480, height: 310 } });
   const phases = voice.map((v) => v.phase).filter((v, i, a) => a[i - 1] !== v);
   assert.deepEqual(phases.slice(0, 3), ["listening", "processing", "asked"], JSON.stringify(phases));
   // As ondas seguem a voz (o nível muda durante a fala) e somem no instante em que a escuta encerra.
@@ -95,8 +104,13 @@ try {
   assert.ok(levels.length > 10 && Math.max(...levels) > 0.3 && new Set(levels).size > 5, JSON.stringify(levels.slice(0, 20)));
   assert.ok(voice.findIndex((v) => v.phase === "processing") > voice.findLastIndex((v) => v.phase === "listening"), "no wave after the listening ended");
   await p.waitForSelector(".kn-bubble", { timeout: 5000 });
-  report.checks.push(`the speech becomes the request: listening (${levels.length} levels, the waves follow the voice) → processing (waves off at once) → asked "${asked.text}"`);
+  await p.screenshot({ path: join(out, "2-sem-a-fala-resposta.png"), clip: { x: 520, y: 430, width: 480, height: 310 } });
+  report.checks.push(`the speech becomes the request: listening (${levels.length} levels, the waves follow the voice) → processing (waves off at once) → asked, without the text`);
   await waitFor("the agent's turn", async () => (await invoke("agent.activity", {})).requests.some((r: any) => /ontem/i.test(r.request)));
+  clearInterval(watchOff);
+  // O texto ouvido entra no balão entre aspas curvas (`BubbleFeed.heard`): desligado, nenhum balão é ele.
+  assert.ok(heardOff.length > 0 && !heardOff.some((t) => t.startsWith("“")), JSON.stringify(heardOff));
+  report.checks.push(`"Mostrar o que eu falei" off (the default): the first bubble is the answer, never the speech (${JSON.stringify(heardOff[0])})`);
   report.checks.push("the text reaches the fake agent through agent.ask (the guardrail filter's path)");
   await shooting;
   clearInterval(watch);
@@ -110,6 +124,28 @@ try {
   const talk = events.slice(before);
   assert.ok(!talk.some((e) => /^(dictation\.|history\.added|transcript\.final)/.test(e.type)), JSON.stringify(talk.map((e) => e.type)));
   report.checks.push("nothing goes to the dictation: no dictation.done, no history entry, no paste");
+
+  // 3b. Ligado em Ajustes › Agente, sem reiniciar: a próxima fala aparece no balão antes da resposta.
+  await waitFor("the agent free", async () => !(await invoke("agent.status")).busy, 20_000);
+  assert.equal((await invoke("agent.configure", { showSpokenText: true })).showSpokenText, true);
+  const heardOn: string[] = [];
+  const watchOn = bubbleTexts(heardOn, await bubbleNow());
+  const onStart = events.length;
+  // Uma pergunta: o agente falso procura nas notas antes de responder (a pausa do KIWI_FAKE_AGENT_TOOL_DELAY_MS). Sem
+  // ela, a resposta dele pode chegar ao hub antes do `asked`, e a resposta toma o lugar da fala (o BubbleFeed).
+  assert.equal((await ctx.send({ cmd: "agentTalk", wav: say("com-a-fala", "Qual é o prazo do projeto X?") })).ok, true);
+  await waitFor("the request with the text", () => events.slice(onStart).some((e) => e.type === "agent.voice" && e.payload?.payload?.phase === "asked"));
+  const askedOn = events.slice(onStart).find((e) => e.type === "agent.voice" && e.payload?.payload?.phase === "asked")!.payload.payload;
+  assert.match(askedOn.text, /prazo/i);
+  await waitFor("the speech in the bubble", () => heardOn.some((t) => t.startsWith("“")), 5000).catch((e: Error) => {
+    throw new Error(`${e.message}: ${JSON.stringify({ heardOn, asked: askedOn })}`);
+  });
+  await p.screenshot({ path: join(out, "3-com-a-fala.png"), clip: { x: 520, y: 430, width: 480, height: 310 } });
+  await waitFor("the answer after the speech", () => heardOn.some((t) => !t.startsWith("“")), 20_000);
+  clearInterval(watchOn);
+  assert.ok(heardOn[0]!.startsWith("“"), JSON.stringify(heardOn));
+  report.checks.push(`"Mostrar o que eu falei" on, without a restart: the speech shows first (${JSON.stringify(heardOn[0])}), then the answer`);
+  await invoke("agent.configure", { showSpokenText: false });
 
   // 4. Fala curta demais: nada vai ao agente.
   await waitFor("the agent free", async () => !(await invoke("agent.status")).busy, 20_000);
