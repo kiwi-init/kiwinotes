@@ -289,6 +289,27 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     );
   });
 
+  test("o Padrão só promete o mais baixo quando o modelo tem um nível que o Kiwi conhece; senão, vale o que o agente escolhe (T25729)", () => {
+    const what = "Mais esforço pensa mais antes de responder e gasta mais do seu plano. Fica salvo para este modelo e vale a partir do próximo pedido.";
+    // Com nível conhecido (low…max), o host leva o Padrão ao mais baixo: a frase continua.
+    expect(effortHint({ ...base, model: "sonnet", efforts })).toBe(`${what} No Padrão, vale o nível mais baixo do modelo, o que gasta menos.`);
+    // O agy, com níveis que o Kiwi não conhece: o host deixa o esforço com que ele abriu, e a frase não promete o mais baixo.
+    const gemini = { ...base, kind: "gemini" as const, name: "Gemini (Antigravity)", model: "default" };
+    const agy = { default: [{ value: "fake_low", name: "Pouco" }, { value: "fake_high", name: "Muito" }] };
+    expect(effortHint({ ...gemini, efforts: agy })).toBe(`${what} No Padrão, vale o esforço que o Gemini (Antigravity) escolhe.`);
+    // Um nível escolhido: sem a frase do Padrão, nos dois casos.
+    expect(effortHint({ ...gemini, efforts: agy, effort: "fake_low" })).toBe(what);
+  });
+
+  test("a frase de antes da lista em Ajustes: abrindo com o nome do agente, e a falha sem mandar a pessoa a Ajustes (T25729)", () => {
+    expect(prepareHint("opening", "Gemini (Antigravity)", true)).toBe("Abrindo o Gemini (Antigravity) para ver os níveis de esforço deste modelo…");
+    expect(prepareHint("failed", "Gemini (Antigravity)", true)).toBe(
+      "Não deu para abrir o Gemini (Antigravity) agora, então fica no Padrão. Os níveis deste modelo aparecem depois do primeiro pedido com ele.",
+    );
+    // O do onboarding continua mandando a Ajustes.
+    expect(prepareHint("failed", "Gemini (Antigravity)")).toContain("Dá para trocar em Ajustes › Agente");
+  });
+
   test("a linha do Esforço, e a do modo econômico, dizem que no econômico vale o esforço do modelo barato", () => {
     const what = "Mais esforço pensa mais antes de responder e gasta mais do seu plano. Fica salvo para este modelo e vale a partir do próximo pedido.";
     // No Padrão (spec #19273), a linha diz que vale o mais baixo; com um nível escolhido, não.

@@ -1,7 +1,7 @@
 // Os textos da seção Agente dos Ajustes (spec #8373, T8762), separados da tela para os testes lerem cada estado sem
 // navegador. O nome do agente ("Claude Code") aparece só como texto, sem logo (ADR 0011).
 
-import { AGENT_NAMES } from "../../src/agent/kinds.ts";
+import { AGENT_NAMES, EFFORT_ORDER } from "../../src/agent/kinds.ts";
 import type { AgentClaudeStatus, AgentKind, AgentModelChoice, AgentNoticeState, AgentStatus, AgentTurnEvent } from "../../src/shared/ui-contract.ts";
 
 /** O tamanho do adaptador, para o texto antes do download (a lista fixa do #8368 soma uns 4,4 MB). */
@@ -162,10 +162,14 @@ export const EFFORT_NAMES: Record<string, string> = {
 /** O que o onboarding sabe da sessão aberta sem pedido: abrindo, aberta ou não deu. */
 export type Prepare = "opening" | "ready" | "failed";
 
-/** A frase do Esforço no onboarding, antes de o agente dizer as opções do modelo. */
-export function prepareHint(prepare: Prepare, name = "Claude Code"): string {
-  return prepare === "opening"
-    ? `Abrindo o ${name} para ver os níveis de esforço deste modelo…`
+/**
+ * A frase do Esforço antes de o agente dizer as opções do modelo: no onboarding, e em Ajustes (`settings`, T25729), onde
+ * a pessoa já está no lugar de trocar.
+ */
+export function prepareHint(prepare: Prepare, name = "Claude Code", settings = false): string {
+  if (prepare === "opening") return `Abrindo o ${name} para ver os níveis de esforço deste modelo…`;
+  return settings
+    ? `Não deu para abrir o ${name} agora, então fica no Padrão. Os níveis deste modelo aparecem depois do primeiro pedido com ele.`
     : `Não deu para abrir o ${name} agora, então fica no Padrão. Dá para trocar em Ajustes › Agente depois do primeiro pedido.`;
 }
 
@@ -210,8 +214,11 @@ export function effortHint(s: Pick<AgentStatus, "name" | "model" | "effort" | "e
   const what = "Mais esforço pensa mais antes de responder e gasta mais do seu plano. Fica salvo para este modelo e vale a partir do próximo pedido.";
   const shown = effortValue(s);
   const missing = shown !== s.effort ? ` O nível salvo, ${effortName(s.effort)}, não existe neste modelo: vale o ${effortName(shown)}.` : "";
-  // O Padrão pede o nível mais baixo do modelo (spec #19273, harry #19294).
-  const lowest = shown === "default" ? " No Padrão, vale o nível mais baixo do modelo, o que gasta menos." : "";
+  // O Padrão pede o nível mais baixo do modelo (spec #19273, harry #19294), quando o modelo tem um dos níveis que o host
+  // conhece (o `EFFORT_ORDER`). Sem nenhum, o host deixa o esforço com que o agente abriu: a frase não promete o mais
+  // baixo (T25729, lead #25744).
+  const known = options.some((o) => (EFFORT_ORDER as readonly string[]).includes(o.value));
+  const lowest = shown !== "default" ? "" : known ? " No Padrão, vale o nível mais baixo do modelo, o que gasta menos." : ` No Padrão, vale o esforço que o ${s.name} escolhe.`;
   const economy = s.economy ? " Com o modo econômico ligado, vale o esforço salvo do modelo mais barato." : "";
   return `${what}${lowest}${missing}${economy}`;
 }

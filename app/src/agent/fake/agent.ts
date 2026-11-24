@@ -362,8 +362,11 @@ const EFFORTS = ["default", "low", "medium", "high", "xhigh", "max"];
 const MODEL_EFFORTS: Record<string, string[]> = { sonnet: ["default", "low", "medium", "high"], haiku: ["low", "medium"], "opus-legacy": [] };
 const MODEL_START: Record<string, string> = { haiku: "medium" };
 // O `agy` falso: níveis inventados, fora dos do Claude e sem `default` (T25553, revisão #25572); ele entra no mais alto.
-const AGY_EFFORTS: Record<string, string> = { fake_low: "Pouco", fake_high: "Muito" };
-const effortsOf = (model: string) => (AGY ? Object.keys(AGY_EFFORTS) : (MODEL_EFFORTS[model] ?? EFFORTS));
+const AGY_EFFORTS: Record<string, string> = { fake_low: "Pouco", fake_mid: "Meio", fake_high: "Muito" };
+// O `gemini-hydrogen` do agy falso tem um nível a mais (T25729): a lista que a tela mostra depois de trocar para ele só
+// pode ter vindo de uma sessão nele, e não da lista do modelo de antes.
+const AGY_MODEL_EFFORTS: Record<string, string[]> = { "gemini-hydrogen": ["fake_low", "fake_mid", "fake_high"] };
+const effortsOf = (model: string) => (AGY ? (AGY_MODEL_EFFORTS[model] ?? ["fake_low", "fake_high"]) : (MODEL_EFFORTS[model] ?? EFFORTS));
 const config = new Map<string, { model: string; effort: string }>();
 function configOf(sessionId: string) {
   let c = config.get(sessionId);

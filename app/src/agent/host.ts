@@ -82,8 +82,9 @@ export const LEAN_SESSION_OPTIONS = {
   settings: { autoCompactWindow: 200_000 },
 } as const;
 
-/** Os esforços do Claude Code, do mais baixo ao mais alto: sem escolha da pessoa, vai o mais baixo oferecido (#19294). */
-export const EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max"] as const;
+// Os esforços do Claude Code, do mais baixo ao mais alto, moram no kinds.ts: a tela também os usa (T25729).
+import { EFFORT_ORDER } from "./kinds.ts";
+export { EFFORT_ORDER };
 
 /**
  * A categoria do ACP de cada papel que o Kiwi escolhe (T25553): uma opção com outro id, mas desta categoria, faz o
