@@ -105,6 +105,8 @@ interface Live {
 export class VoiceProcess implements SinteseFala {
   private live: Live | null = null;
   private turns = new Map<string, Turn>();
+  /** Os `warmup` esperando o `warm` do processo deles. */
+  private warms = new Set<{ live: Live; resolve: (ms: number) => void; reject: (e: Error) => void }>();
   private nextId = 1;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly idleMs: number;
@@ -159,6 +161,29 @@ export class VoiceProcess implements SinteseFala {
       // Abortada (ou o player largou o iterador) antes do fim: o processo para de gerar essa frase.
       if (!turn.end && turn.live && !turn.live.dead) turn.live.child.write(JSON.stringify({ type: "cancel", id }));
       this.turns.delete(id);
+      this.armIdle();
+    }
+  }
+
+  /**
+   * Aquece o processo sem falar nada (T26729): ele carrega o modelo e gera uma frase curta, que não vira PCM. Na 1ª vez
+   * de um binário, o macOS compila os kernels Metal (~20 s no M1 Pro, T26732): o app manda isto quando o download
+   * termina, para a 1ª fala não pagar esse tempo. Devolve os ms da geração; depois, o relógio do ocioso vale de novo.
+   */
+  async warmup(): Promise<number> {
+    this.clearIdle();
+    const live = this.start();
+    let entry: { live: Live; resolve: (ms: number) => void; reject: (e: Error) => void } | undefined;
+    try {
+      await live.ready;
+      return await new Promise<number>((resolve, reject) => {
+        if (live.dead) return reject(new VoiceError("kiwi-voice: parado"));
+        entry = { live, resolve, reject };
+        this.warms.add(entry);
+        live.child.write(JSON.stringify({ type: "warmup" }));
+      });
+    } finally {
+      if (entry) this.warms.delete(entry);
       this.armIdle();
     }
   }
@@ -220,6 +245,8 @@ export class VoiceProcess implements SinteseFala {
             clearTimeout(loadTimeout);
             this.log(`kiwi-voice: pronto em ${Math.round(performance.now() - t0)} ms (load ${m.loadMs} ms)`);
             resolveReady();
+          } else if (m.type === "warm") {
+            for (const w of this.warms) if (w.live === live) w.resolve(m.ms);
           } else if (m.type === "pcm") this.turns.get(m.id)?.push(decodePcm(m.pcm));
           else if (m.type === "done" || m.type === "cancelled") this.turns.get(m.id)?.finish();
           else if (m.type === "error") {
@@ -267,6 +294,7 @@ export class VoiceProcess implements SinteseFala {
 
   private failAll(live: Live, e: Error) {
     for (const t of this.turns.values()) if (t.live === live) t.finish(e);
+    for (const w of this.warms) if (w.live === live) w.reject(e);
   }
 
   private clearIdle() {
@@ -276,10 +304,10 @@ export class VoiceProcess implements SinteseFala {
 
   private armIdle() {
     this.clearIdle();
-    if (this.turns.size > 0 || !this.running) return;
+    if (this.turns.size > 0 || this.warms.size > 0 || !this.running) return;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
-      if (this.turns.size === 0) {
+      if (this.turns.size === 0 && this.warms.size === 0) {
         this.log("kiwi-voice: parado, sai e solta a memória");
         void this.stop();
       }

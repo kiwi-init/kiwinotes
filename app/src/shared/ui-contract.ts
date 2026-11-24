@@ -70,6 +70,22 @@ export interface PreciseStatus {
   /** O tamanho do modelo, em bytes. */
   size: number;
 }
+/**
+ * A voz do gato (T26729, ADR 0014): o Qwen3-TTS e a voz de referência, baixados no clique da pessoa. `noVoice`: o modelo
+ * está no disco, mas a voz ainda não foi escolhida (#26939). `warming`: o processo da voz compila os kernels Metal.
+ */
+export interface CatVoiceStatus {
+  phase: "off" | "downloading" | "warming" | "ready" | "noVoice" | "error";
+  /** Bytes baixados e o total, enquanto baixa. */
+  done?: number;
+  total?: number;
+  /** O que falhou: o download, um arquivo com o SHA-256 diferente ou o aquecimento do processo. */
+  error?: "download" | "hash" | "warmup";
+  /** O que o clique baixa, em bytes: o modelo e a voz. */
+  size: number;
+  /** A voz de referência já está no manifesto. */
+  voice: boolean;
+}
 /** O embed de uma nota (T6594): o pedaço que aparece, ou o fragmento que falta. */
 export type NoteEmbed =
   | { path: string; title: string; kind: "note" | "heading" | "block"; content: string }
@@ -276,7 +292,10 @@ export type { NoteModel };
 // 1.99.0 (T25031, spec #25011): a "Nova aparência pronta". O `ui.status` (a UI desta janela e a nova que espera), o
 //   `ui.reload` (troca para ela sem fechar o app), o `ui.revert` (volta à aparência anterior), o evento `ui.updateReady` e
 //   o `ui` no `app.about`, a versão da UI de cada janela. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.99.0";
+// 1.100.0 (T26729, spec #26687): a voz do gato baixada no clique. O `catVoice.status` (lê o disco), o
+//   `catVoice.download` (o clique: baixa, confere o SHA-256 e aquece o processo), o `catVoice.cancel` e o
+//   `catVoice.remove`, todos com o `CatVoiceStatus`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.100.0";
 /** O `reason` do `updates` desligado quando foi a pessoa, em Ajustes (1.97.0, T25110), e não o build. */
 export const UPDATES_OFF_BY_SETTING = "desligado em Buscar atualizações";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
@@ -610,6 +629,14 @@ export interface UiCapabilities {
   "notes.semanticStatus": { args: Record<string, never>; result: SemanticStatus };
   /** O modo preciso do ditado (1.38.0, T6602): o Whisper small (desligado, baixando, pronto…). */
   "dictation.preciseStatus": { args: Record<string, never>; result: PreciseStatus };
+  /** A voz do gato (T26729): o estado, lido do disco. Não baixa nada. */
+  "catVoice.status": { args: Record<string, never>; result: CatVoiceStatus };
+  /** O clique da pessoa: baixa o modelo e a voz, confere e aquece. Volta na hora; o andamento sai no `catVoice.status`. */
+  "catVoice.download": { args: Record<string, never>; result: CatVoiceStatus };
+  /** Para o download no meio. */
+  "catVoice.cancel": { args: Record<string, never>; result: CatVoiceStatus };
+  /** Apaga o modelo e a voz. */
+  "catVoice.remove": { args: Record<string, never>; result: CatVoiceStatus };
   /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */
   "notes.resolve": { args: { link: string }; result: string | null };
   /** O que um embed de nota mostra (1.36.0, T6594): o pedaço já cortado, `missing` sem o título ou o bloco, null sem a nota. */
@@ -1261,6 +1288,10 @@ export const UI_CAPABILITIES = [
   "notes.search",
   "notes.semanticStatus",
   "dictation.preciseStatus",
+  "catVoice.status",
+  "catVoice.download",
+  "catVoice.cancel",
+  "catVoice.remove",
   "notes.backlinks",
   "notes.resolve",
   "notes.embed",
