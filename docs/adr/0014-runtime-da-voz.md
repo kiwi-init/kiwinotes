@@ -33,7 +33,7 @@ As três rodadas em par, uma logo depois da outra. O load é o do macOS no come�
 | Falta de áudio num player simulado | 0 nas três | 0 em b e c, 4,3 s numa frase de e |
 | Pico do MLX | 4,2 GB | 3,6 GB |
 | Carga do modelo, com o disco quente | 0,8 a 1,7 s | 3,1 a 3,8 s |
-| Peso que entra no app | **~32 MB** (binário de 27 MB e `default.metallib` de 4,5 MB) | **~555 MB** (Python de 73 MB, `mlx` 239, `scipy` 83, `transformers` 59…) |
+| Peso que entra no app | **~63 MB** (o `kiwi-voice` de 61 MB e os bundles, com o `default.metallib` de 4,5 MB; o banco de teste dava 32 MB, e o T26732 mediu o do app) | **~555 MB** (Python de 73 MB, `mlx` 239, `scipy` 83, `transformers` 59…) |
 
 - **Velocidade: empate dentro do ruído.** Nenhum dos dois ganha em todas as rodadas: o p95 do Swift foi pior em b e c, e o do Python foi pior em e. Os dois passam de 1× na mediana, e a voz não falta num player simulado, a não ser no pior momento de e. Com esta máquina compartilhada, não dá para separar mais do que isso.
 - **Memória: empate com o teto.** Com 512 MB de cache nos dois (rodada e), ficam em 4,2 GB e 3,9 GB. Sem o teto, o Swift chega a 7,0 GB: o teto é obrigatório no processo.
@@ -43,12 +43,12 @@ As três rodadas em par, uma logo depois da outra. O load é o do macOS no come�
 - A referência do #26661 (Python, outra voz de referência): 0,50 s e 1,86×. O Python em b e c deu o mesmo.
 
 ## Por que não o Python
-- **Peso:** ~555 MB a mais no download, contra 32 MB.
+- **Peso:** ~555 MB a mais no download, contra 63 MB.
 - **Assinatura:** centenas de `.so` e `.dylib` para assinar e notarizar a cada release.
 - **Ganho:** nenhum. Na velocidade e na memória (com o teto nos dois) eles empatam, então o peso e a assinatura decidem.
 
 ## O que muda no build
-O SwiftPM pela linha de comando não compila os shaders Metal do MLX (README do `mlx-swift`). O processo da voz se constrói com o `xcodebuild` (Release, 6 min a frio neste Mac), num produto separado do `kiwi-helper`, que continua no `swift build`. O `release.yml` e o CI ganham esse passo no T26732.
+O SwiftPM pela linha de comando não compila os shaders Metal do MLX (README do `mlx-swift`). O processo da voz se constrói com o `xcodebuild` (Release, 6 min a frio neste Mac), num produto separado do `kiwi-helper`, que continua no `swift build`. O `release.yml` e o CI ganham esse passo no T26732 (`app/scripts/build-voice.ts`), com um esquema próprio em `native-voice/.swiftpm`: o que o Xcode gera liga a cobertura, e o executável escreveria `default.profraw` onde roda.
 
 ## Licenças
 O app é GPL-3.0, e tudo o que entra é compatível:
