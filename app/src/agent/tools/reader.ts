@@ -2,9 +2,9 @@
 // agente vê a pasta de notas aberta agora, com a busca pelo sentido e o texto dos anexos quando estão ligados, e passa
 // pela mesma fronteira do cofre (sem `..`, sem link simbólico para fora: `E_OUTSIDE_VAULT`).
 //
-// Nada aqui escreve: o leitor só conhece oito capacidades de leitura (`notes.search`, `notes.list`, `notes.get`,
-// `meetings.list`, `projects.list`, `projects.status`, `files.read`, spec #11549, e `notes.canvasGet`, o quadro do
-// T22217), e nenhuma outra passa por ele. Marcar ou desmarcar um projeto
+// Nada aqui escreve: o leitor só conhece nove capacidades de leitura (`notes.search`, `notes.list`, `notes.get`,
+// `meetings.list`, `projects.list`, `projects.status`, `files.read`, spec #11549, `notes.canvasGet`, o quadro do
+// T22217, e `notes.folder`, onde moram as reuniões, T26083), e nenhuma outra passa por ele. Marcar ou desmarcar um projeto
 // é da pessoa (spec #9874): o leitor não tem como.
 
 import type { MeetingNote } from "../../shared/meetings.ts";
@@ -123,10 +123,16 @@ export function textNote(f: FileContent): { path: string; title: string; mtime: 
 }
 
 /** As únicas capacidades que o leitor chama. */
-export const READER_CAPABILITIES = ["notes.search", "notes.list", "notes.get", "meetings.list", "projects.list", "projects.status", "files.read", "notes.canvasGet"] as const;
+export const READER_CAPABILITIES = ["notes.search", "notes.list", "notes.get", "meetings.list", "projects.list", "projects.status", "files.read", "notes.canvasGet", "notes.folder"] as const;
 type ReaderCapability = (typeof READER_CAPABILITIES)[number];
-/** A do quadro (T22217) é opcional: um app sem quadros responde que não há. */
-type OptionalReaderCapability = "notes.canvasGet";
+/**
+ * A do quadro (T22217) é opcional: um app sem quadros responde que não há. A `notes.folder` (T26083) também: um app de
+ * uma pasta só tem as reuniões na pasta aberta.
+ */
+type OptionalReaderCapability = "notes.canvasGet" | "notes.folder";
+
+/** O mesmo caminho escrito em NFC ou NFD (o Finder grava nomes em NFD): a comparação é sempre em NFC. */
+const same = (p: string) => p.normalize("NFC");
 
 /** O leitor sobre as capacidades do app (as de `uiCapabilities`): só as de leitura acima. */
 export function readerFromCapabilities(
@@ -137,23 +143,67 @@ export function readerFromCapabilities(
     if (!fn) throw Object.assign(new Error(`o Kiwi não abre ${cap === "notes.canvasGet" ? "quadros" : cap} aqui`), { code: "E_BAD_ARGS" });
     return (await fn(args)) as T;
   };
-  const listed = () => call<{ folders: string[]; notes: ReaderNoteMeta[]; files?: VaultFile[] }>("notes.list", undefined);
+  type Listed = { folders: string[]; notes: ReaderNoteMeta[]; files?: VaultFile[] };
+  const listed = () => call<Listed>("notes.list", undefined);
+  const meetings = async () => (await call<{ meetings: MeetingNote[] }>("meetings.list", undefined)).meetings;
+  /**
+   * As reuniões moram na pasta interna do app, e o `meetings.list` lê de lá; o resto do leitor lê a pasta aberta
+   * (T26083). Com outra pasta aberta, a interna e os caminhos das reuniões (em NFC, para o do agente bater), para ler,
+   * listar e buscar a reunião que a lista deu. Um caminho da lista leva sempre à reunião, mesmo que a pasta aberta tenha
+   * um arquivo com o mesmo caminho (revisão #26093). null: a aberta é a interna, ou o app não troca de pasta.
+   */
+  const meetingsHome = async (): Promise<{ folderId: string; paths: Map<string, string> } | null> => {
+    if (!caps["notes.folder"]) return null;
+    let view: { current?: { id?: string }; internal?: { id?: string } };
+    try {
+      view = (await caps["notes.folder"](undefined)) as typeof view;
+    } catch {
+      return null; // o engine de uma pasta só (E_NO_FOLDERS)
+    }
+    const folderId = view?.internal?.id;
+    if (!folderId || folderId === view.current?.id) return null;
+    return { folderId, paths: new Map((await meetings()).map((m) => [same(m.path), m.path])) };
+  };
   return {
     // Uma busca só (T21240): as notas e o texto de todo arquivo de texto vêm do mesmo índice que as Notas e o ⌘K usam.
     // O arquivo de segredos nunca entra nele; o filtro aqui é a segunda trava.
-    search: async (query, limit) => (await call<ReaderHit[]>("notes.search", { query, limit })).filter((h) => !isSecretFile(h.path)),
-    list: async () => {
-      const r = await listed();
-      const files = (r.files ?? []).filter((f) => !isSecretFile(f.path));
-      return { folders: r.folders, notes: [...r.notes, ...files.filter((f) => isTextFile(f.path)).map(textMeta)], files: files.filter((f) => !isTextFile(f.path)) };
+    search: async (query, limit) => {
+      const home = await meetingsHome();
+      const open = await call<ReaderHit[]>("notes.search", { query, limit });
+      if (!home) return open.filter((h) => !isSecretFile(h.path));
+      // As reuniões da interna entram na busca, alternadas com as da pasta aberta (os dois índices não comparam notas).
+      const theirs = (await call<ReaderHit[]>("notes.search", { query, limit, folderId: home.folderId })).filter((h) => home.paths.has(same(h.path)));
+      const mine = open.filter((h) => !home.paths.has(same(h.path)));
+      const both: ReaderHit[] = [];
+      for (let i = 0; both.length < limit && (i < mine.length || i < theirs.length); i++) {
+        if (i < theirs.length) both.push(theirs[i]!);
+        if (i < mine.length && both.length < limit) both.push(mine[i]!);
+      }
+      return both.filter((h) => !isSecretFile(h.path));
     },
-    get: async (path) =>
-      isCanvasFile(path)
-        ? canvasNote(await call<CanvasFile>("notes.canvasGet", { path }))
-        : isTextFile(path)
-          ? textNote(await call<FileContent>("files.read", { path, as: "text" }))
-          : call("notes.get", { path }),
-    meetings: async () => (await call<{ meetings: MeetingNote[] }>("meetings.list", undefined)).meetings,
+    list: async () => {
+      const [r, home] = await Promise.all([listed(), meetingsHome()]);
+      const files = (r.files ?? []).filter((f) => !isSecretFile(f.path));
+      const notes = [...r.notes, ...files.filter((f) => isTextFile(f.path)).map(textMeta)];
+      if (!home || !home.paths.size) return { folders: r.folders, notes, files: files.filter((f) => !isTextFile(f.path)) };
+      // As notas das reuniões, da interna, no lugar de um arquivo da aberta com o mesmo caminho; e as pastas delas.
+      const theirs = (await call<Listed>("notes.list", { folderId: home.folderId })).notes.filter((n) => home.paths.has(same(n.path)));
+      const folders = new Set(r.folders);
+      for (const n of theirs) for (let at = n.path.indexOf("/"); at > 0; at = n.path.indexOf("/", at + 1)) folders.add(n.path.slice(0, at));
+      return {
+        folders: [...folders],
+        notes: [...notes.filter((n) => !home.paths.has(same(n.path))), ...theirs],
+        files: files.filter((f) => !isTextFile(f.path) && !home.paths.has(same(f.path))),
+      };
+    },
+    get: async (path) => {
+      if (isCanvasFile(path)) return canvasNote(await call<CanvasFile>("notes.canvasGet", { path }));
+      if (isTextFile(path)) return textNote(await call<FileContent>("files.read", { path, as: "text" }));
+      const home = await meetingsHome();
+      const meeting = home?.paths.get(same(path));
+      return meeting ? call("notes.get", { path: meeting, folderId: home!.folderId }) : call("notes.get", { path });
+    },
+    meetings,
     projects: async () => (await call<{ projects: ProjectInfo[] }>("projects.list", undefined)).projects,
     projectStatus: (folder) => call("projects.status", { folder }),
     file: (path) => call("files.read", { path, as: "binary" }),
