@@ -27,6 +27,7 @@ import type { VaultWriter, WriterNote } from "./writer.ts";
 import { SHEETS_EDIT_CHANGES, SHEETS_READ_ROWS, SheetToolError, type SheetChange, sheetsEdit, sheetsRead } from "./sheets.ts";
 import { DOCX_EDIT_CHANGES, DOCX_READ_PARAGRAPHS, DocxToolError, type DocxChange, docxEdit, docxRead } from "./docx.ts";
 import { FACT_MAX_CHARS, MEMORY_MAX, MemoryError } from "../memory.ts";
+import { frasesParaFala } from "../fala.ts";
 import {
   PROPOSAL_CANDIDATES_MAX,
   PROPOSAL_ITEM_CHARS,
@@ -116,7 +117,13 @@ export const ORGANIZE_MAX = 200;
 export const KIWI_PROPOSE_TOOL_NAMES = ["meeting_propose", "project_summary_propose", "notes_add_references", "routine_propose"] as const;
 /** A memória do agente (spec #11469): o que ele sabe sobre a pessoa, em `.kiwi/agente/sobre-mim.md`. */
 export const KIWI_MEMORY_TOOL_NAMES = ["memory_remember", "memory_forget"] as const;
-export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES, ...KIWI_PROPOSE_TOOL_NAMES, ...KIWI_MEMORY_TOOL_NAMES] as const;
+/** A fala do gato (spec #26687, T26709): 1 ou 2 frases para ouvir, só num pedido feito por voz com "O gato fala" ligado. */
+export const KIWI_SPEECH_TOOL_NAMES = ["cat_speak"] as const;
+/** O maior texto do `cat_speak`, em caracteres: uma ou duas frases, não a resposta. */
+export const SPEAK_MAX_CHARS = 300;
+/** Quantas frases o `cat_speak` aceita, depois do texto para a fala. */
+export const SPEAK_MAX_FRASES = 2;
+export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES, ...KIWI_PROPOSE_TOOL_NAMES, ...KIWI_MEMORY_TOOL_NAMES, ...KIWI_SPEECH_TOOL_NAMES] as const;
 export type KiwiToolName = (typeof KIWI_TOOL_NAMES)[number];
 
 export interface KiwiToolDef {
@@ -132,6 +139,8 @@ export interface KiwiToolDef {
   proposes?: true;
   /** Muda a memória do agente (spec #11469): só aparece com quem guarda a memória. */
   memory?: true;
+  /** Fala pelo gato (T26709): só vale com quem toca a fala, num pedido por voz. */
+  speech?: true;
 }
 
 const offsetProp = {
@@ -784,11 +793,23 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     },
     memory: true,
   },
+  {
+    name: "cat_speak",
+    title: "Falar pelo gato",
+    description: `Num pedido feito por voz, o que o gato fala em voz alta: 1 ou 2 frases curtas, escritas para ouvir, com o essencial da resposta. Sem Markdown, sem links, sem código e sem listas: o Kiwi lê números, datas e horas por extenso. Uma vez por pedido, antes da resposta. A resposta completa vai no texto, como sempre: a fala não a substitui.`,
+    inputSchema: {
+      type: "object",
+      properties: { texto: { type: "string", minLength: 1, maxLength: SPEAK_MAX_CHARS, description: "A fala, 1 ou 2 frases (ex.: Anotei na nota Ideias. A reunião é amanhã às dez)." } },
+      required: ["texto"],
+      additionalProperties: false,
+    },
+    speech: true,
+  },
 ];
 
 /** As ferramentas que o servidor oferece: as de escrita só com um `writer`, e a proposta só com quem a guarda. */
-export function kiwiTools(writes: boolean, proposes = false, memory = false): readonly KiwiToolDef[] {
-  return KIWI_TOOLS.filter((t) => (writes || !t.writes) && (proposes || !t.proposes) && (memory || !t.memory));
+export function kiwiTools(writes: boolean, proposes = false, memory = false, speech = false): readonly KiwiToolDef[] {
+  return KIWI_TOOLS.filter((t) => (writes || !t.writes) && (proposes || !t.proposes) && (memory || !t.memory) && (speech || !t.speech));
 }
 
 /** Um erro que o agente lê: o código do Kiwi e o motivo. A ferramenta responde com `isError`. */
@@ -857,6 +878,8 @@ export interface KiwiToolContext {
   proposals?: ProposalSink;
   /** Quem guarda a memória do agente (spec #11469). Sem ele, as ferramentas da memória não existem. */
   memory?: MemorySink;
+  /** Quem toca a fala do gato (T26709): só num pedido por voz com "O gato fala" ligado. Sem ele, o `cat_speak` não existe. */
+  speech?: SpeechSink;
   /** O relógio do diário do projeto (T11670), para os testes. Sem ele, a hora do Mac. */
   now?: () => Date;
   /** O registro de entrega da janela (ADR 0013 peça 4, T14682): a nota que o agente já tem não vai de novo. */
@@ -864,6 +887,11 @@ export interface KiwiToolContext {
 }
 
 /** A memória do agente: anotar e esquecer, com o total de fatos depois. */
+/** A fala do gato (T26709): recebe as frases já por extenso, na ordem. Um erro dela (a fala já saiu) vai ao agente. */
+export interface SpeechSink {
+  falar(frases: string[]): void;
+}
+
 export interface MemorySink {
   remember(fact: string): Promise<{ added: boolean; total: number }>;
   forget(fact: string): Promise<{ removed: string; total: number }>;
@@ -1190,6 +1218,10 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
     if ((KIWI_MEMORY_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.memory) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta \`${name}\``);
       return await memoryTool(ctx.memory, name, raw, ctx.guard, ctx.decider);
+    }
+    if ((KIWI_SPEECH_TOOL_NAMES as readonly string[]).includes(name)) {
+      if (!ctx.speech) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta \`${name}\``);
+      return speak(ctx.speech, raw);
     }
     if ((KIWI_PROPOSE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.proposals) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta \`${name}\``);
@@ -2333,6 +2365,22 @@ async function proposeSummary(reader: VaultReader, sink: ProposalSink, raw: unkn
     },
     target,
   };
+}
+
+/**
+ * A fala do gato (T26709): o texto vira palavras (`frasesParaFala`) e vai, já cortado por frase, para quem toca. Uma
+ * fala sem nada para ler (só código ou link) ou longa demais volta como erro, e nada é falado.
+ */
+function speak(sink: SpeechSink, raw: unknown): ToolResult {
+  const a = args(raw, ["texto"]);
+  const texto = str(a, "texto", true, SPEAK_MAX_CHARS)!;
+  // Um segredo que o agente leu (o marcador do filtro) não é dito em voz alta.
+  if (/‹segredo [^›\n]{0,40}›/.test(texto)) throw new ToolError("E_SECRET", "a fala tem um segredo: nada foi falado. Fale sem ele.");
+  const frases = frasesParaFala(texto);
+  if (!frases.length) throw new ToolError("E_BAD_ARGS", "nada para falar: mande frases, sem código nem links");
+  if (frases.length > SPEAK_MAX_FRASES) throw new ToolError("E_BAD_ARGS", `a fala tem ${frases.length} frases: mande 1 ou 2 frases curtas; o resto vai na resposta`);
+  sink.falar(frases);
+  return { value: { falado: frases.join(" "), aviso: "A pessoa ouve isto. Escreva a resposta completa no texto, como sempre." } };
 }
 
 /**

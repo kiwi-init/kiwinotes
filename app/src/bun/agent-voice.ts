@@ -30,7 +30,8 @@ export interface AgentVoiceWiring {
   agent: {
     status(): Promise<AgentStatus>;
     onStatus(fn: (s: AgentStatus) => void): () => void;
-    ask(text: string): Promise<{ id: string }>;
+    /** `voz`: o pedido veio pela fala, e o gato pode falar a resposta (T26709). */
+    ask(text: string, opts?: { voz?: boolean }): Promise<{ id: string }>;
   };
   settings: { load(): Promise<AppSettings> };
   /** O helper; sem ele (`--no-helper`), nada é armado. */
@@ -118,7 +119,7 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
     }
     phase = "idle";
     try {
-      const { id } = await w.agent.ask(cleaned);
+      const { id } = await w.agent.ask(cleaned, { voz: true });
       // Lido do status na hora (spec #26055): a troca nos Ajustes vale sem reiniciar.
       w.ui(status?.showSpokenText ? { phase: "asked", text: cleaned, id } : { phase: "asked", id });
     } catch (err) {

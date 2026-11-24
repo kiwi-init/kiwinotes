@@ -190,8 +190,9 @@ describe("o servidor MCP do Kiwi", () => {
     // Sem o escritor, as ações de leitura (com o files_read, #11549) rodam; as de escrita, as propostas e a memória
     // existem, mas voltam com erro.
     expect(kiwiTools(false)).toHaveLength(12);
-    // As 22 de antes, as 4 da escrita pela diferença (T14650), as 2 da planilha (T21114) e as 2 do docx (T21231).
-    expect(KIWI_TOOLS).toHaveLength(30);
+    // As 22 de antes, as 4 da escrita pela diferença (T14650), as 2 da planilha (T21114), as 2 do docx (T21231) e a
+    // fala do gato (T26709).
+    expect(KIWI_TOOLS).toHaveLength(31);
   });
 
   test("uma ferramenta que não existe é recusada, e um método desconhecido também", async () => {
