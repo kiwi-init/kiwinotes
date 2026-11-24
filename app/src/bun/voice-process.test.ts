@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { tempDir } from "../../test/tmp.ts";
-import { spawnVoice, VOICE_SLICE_SAMPLES, VoiceError, VoiceProcess, type VoiceAssets } from "./voice-process.ts";
+import { spawnVoice, VOICE_SLICE_SAMPLES, VoiceError, VoiceProcess, voicePath, type VoiceAssets } from "./voice-process.ts";
 
 const FAKE = path.join(import.meta.dir, "..", "..", "test", "helpers", "fake-kiwi-voice.ts");
 const ASSETS: VoiceAssets = { modelDir: "/tmp/exemplo/modelo", refAudio: "/tmp/exemplo/voz.wav", refText: "Oi, eu sou a Ana." };
@@ -44,6 +44,14 @@ async function collect(it: AsyncIterable<Int16Array>): Promise<Int16Array[]> {
   for await (const c of it) out.push(c);
   return out;
 }
+
+test("o voicePath aponta para a pasta que o copy do electrobun.config.ts cria no .app", async () => {
+  const { default: config } = await import("../../electrobun.config.ts");
+  const views = "/Aplicativos/Exemplo.app/Contents/Resources/app/views";
+  expect(config.build.copy[".voice"]).toBe("voice");
+  expect(voicePath(views, {})).toBe("/Aplicativos/Exemplo.app/Contents/Resources/app/voice/kiwi-voice");
+  expect(voicePath(views, { KIWI_VOICE: "/tmp/exemplo/kiwi-voice" })).toBe("/tmp/exemplo/kiwi-voice");
+});
 
 describe("VoiceProcess", () => {
   test("sobe só na 1ª frase, manda o load com o teto de 512 MB e fatia em 80 ms", async () => {

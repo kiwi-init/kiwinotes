@@ -39,7 +39,7 @@ export interface VoiceChild {
 }
 
 export interface VoiceProcessOptions {
-  /** O executável; padrão `bin/kiwi-voice` ao lado do helper, ou `KIWI_VOICE`. */
+  /** O executável: o `voicePath`. */
   bin: string;
   assets: () => VoiceAssets | Promise<VoiceAssets>;
   idleMs?: number;
@@ -50,9 +50,9 @@ export interface VoiceProcessOptions {
   log?: (msg: string) => void;
 }
 
-/** O `kiwi-voice` dentro do .app (o `copy` do electrobun.config.ts), ou `KIWI_VOICE`. */
-export function voicePath(viewsFolder: string): string {
-  return process.env.KIWI_VOICE || path.join(viewsFolder, "..", "bin", "kiwi-voice");
+/** O `kiwi-voice` dentro do .app: o `copy` do electrobun.config.ts leva o app/.voice para `voice/`. Ou `KIWI_VOICE`. */
+export function voicePath(viewsFolder: string, env = process.env): string {
+  return env.KIWI_VOICE || path.join(viewsFolder, "..", "voice", "kiwi-voice");
 }
 
 export class VoiceError extends Error {
