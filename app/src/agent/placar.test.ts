@@ -40,6 +40,29 @@ describe("o placar de um pedido", () => {
     expect(p.faro).toEqual({ kind: "nada", searched: true });
   });
 
+  test("o resultado que chega antes do seu \"começou\" (T26483): abre a leva dele, e conta como na ordem certa", () => {
+    const certa = new PlacarTurno(100, 0, null);
+    const trocada = new PlacarTurno(100, 0, null);
+    certa.ferramentaComecou();
+    certa.resultado("notes_search", true, 300);
+    certa.pensando();
+    certa.ferramentaComecou();
+    certa.resultado("notes_read", true, 90);
+    certa.pensando();
+    // O resultado de cada leva chega antes do "rodando": o servidor do Kiwi foi mais rápido que o stdout do agente.
+    trocada.resultado("notes_search", true, 300);
+    trocada.ferramentaComecou();
+    trocada.pensando();
+    trocada.resultado("notes_read", true, 90);
+    trocada.ferramentaComecou();
+    trocada.pensando();
+    const a = certa.fim(usage(1000, 80, 20_000));
+    const b = trocada.fim(usage(1000, 80, 20_000));
+    expect(b.idas).toBe(3);
+    expect(b.partes).toEqual(a.partes);
+    expect(b.partes.ler).toBe(90);
+  });
+
   test("um erro é parte de achar, mesmo numa leitura; escrever e propor são do pedido", () => {
     expect(parteDaFerramenta("notes_read", false)).toBe("achar");
     expect(parteDaFerramenta("notes_read", true)).toBe("ler");
