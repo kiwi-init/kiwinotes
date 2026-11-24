@@ -83,8 +83,11 @@ export class PlacarTurno {
   resultado(tool: string, ok: boolean, tokens: number): void {
     const parte = parteDaFerramenta(tool, ok);
     if (parte === "achar") this.buscou = true;
-    // Um resultado sem leva aberta (o "começou" não chegou) conta na leva de agora, ou na primeira.
-    this.resultados.push({ tokens, parte, leva: Math.max(1, this.levas) });
+    // Um resultado sem leva aberta é de uma leva cujo "começou" ainda não chegou (T26483): o "rodando" vem do agente
+    // pelo stdout, e o resultado, pelo servidor do Kiwi, sem ordem entre os dois. Ele abre a leva dele, e o "rodando"
+    // atrasado cai nela. O inverso não acontece: o "pensando" que fecha a leva só sai depois do resultado.
+    if (!this.aberta) this.ferramentaComecou();
+    this.resultados.push({ tokens, parte, leva: this.levas });
   }
 
   get idas(): number {
