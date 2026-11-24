@@ -55,6 +55,7 @@ const base: AgentStatus = {
   program: "closed",
   busy: false,
   controlShortcut: false,
+  showSpokenText: false,
   model: "default",
   effort: "default",
   effortByModel: {},

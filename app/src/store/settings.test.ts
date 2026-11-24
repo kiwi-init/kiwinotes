@@ -106,7 +106,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ kind: "claude", enabled: false, consented: false, model: "default", modelByKind: {}, effort: "default", effortByModel: {}, notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: true, webSearchChosen: false, onboarding: { state: "pending", step: 1 }, routines: DEFAULT_AGENT_ROUTINES });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ kind: "claude", enabled: false, consented: false, model: "default", modelByKind: {}, effort: "default", effortByModel: {}, notifyWaiting: true, economy: false, controlShortcut: false, showSpokenText: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: true, webSearchChosen: false, onboarding: { state: "pending", step: 1 }, routines: DEFAULT_AGENT_ROUTINES });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     kind: "claude",
     enabled: true,
@@ -118,6 +118,7 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
     notifyWaiting: true,
     economy: false,
     controlShortcut: false,
+    showSpokenText: false,
     meetings: DEFAULT_AGENT_MEETING_SETTINGS,
     summary: DEFAULT_SUMMARY_SETTINGS,
     instructions: "",
@@ -171,6 +172,10 @@ test("o aviso quando o agente espera (spec #9839): ligado por padrão, e só um 
   expect(sanitizeSettings({}).agent.controlShortcut).toBe(false);
   expect(sanitizeSettings({ agent: { controlShortcut: true } }).agent.controlShortcut).toBe(true);
   expect(sanitizeSettings({ agent: { controlShortcut: "sim" } }).agent.controlShortcut).toBe(false);
+  // "Mostrar o que eu falei" (spec #26055): desligado por padrão; só o `true` liga.
+  expect(sanitizeSettings({}).agent.showSpokenText).toBe(false);
+  expect(sanitizeSettings({ agent: { showSpokenText: true } }).agent.showSpokenText).toBe(true);
+  expect(sanitizeSettings({ agent: { showSpokenText: "sim" } }).agent.showSpokenText).toBe(false);
 });
 
 test("a largura da nota (T5299): arredonda, fica nos limites e um valor ruim volta ao padrão", () => {

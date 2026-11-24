@@ -139,10 +139,19 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect((await invoke("agent.status", { x: 1 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.configure", { kind: "codex" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.configure", { model: "../x" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect((await invoke("agent.configure", { showSpokenText: "sim" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.ask", { text: 3 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.ask", { text: "  " })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("settings.set", { agent: { enabled: true } })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     // Cinco chamadas à CLI: num runner lento do CI passam dos 5 s padrão (#394).
+  }, 30_000);
+
+  test("\"Mostrar o que eu falei\" pela capacidade: o botão dos Ajustes grava e o status traz (T26063)", async () => {
+    expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(false);
+    expect((await invoke("agent.configure", { showSpokenText: true })).json).toMatchObject({ ok: true, value: { showSpokenText: true } });
+    expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(true);
+    expect((await invoke("agent.configure", { showSpokenText: false })).json).toMatchObject({ ok: true, value: { showSpokenText: false } });
+    expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(false);
   }, 30_000);
 
   test("o agente lê o cofre pelas ferramentas do Kiwi (spec #7496): responde a uma pergunta sobre uma nota", async () => {

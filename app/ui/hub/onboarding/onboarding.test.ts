@@ -73,6 +73,15 @@ test("o passo 2: a fala pelo Control vai de esperando a ouvindo, pedido e respos
   expect(controlLine({ phase: "waiting" })).toBe('Segure o Control, diga "oi" e solte.');
 });
 
+test("o passo 2 sem a fala (\"Mostrar o que eu falei\" desligado, spec #26055): nenhuma frase repete o que a pessoa disse", () => {
+  let s: ControlPhase = controlStep({ phase: "processing" }, { voice: { phase: "asked", id: "p1" } });
+  expect(s).toEqual({ phase: "asked", id: "p1" });
+  expect(controlLine(s)).toBe("O gato está pensando…");
+  s = controlStep(s, { turn: { id: "p1", type: "done", text: "Oi!", stopReason: "end_turn" } as never });
+  expect(s).toEqual({ phase: "answered" });
+  expect(controlLine(s)).toBe("Deu certo! Agora é só segurar o Control quando quiser.");
+});
+
 test("o passo 3: o jeito de falar troca só a linha dele nas instruções, e o exemplo muda com a escolha", () => {
   expect(withTone("", DEFAULT_TONE)).toBe("Jeito de falar: respostas curtas, direto ao ponto; tom informal, de colega.");
   const mine = "Sempre em português.\nNão mexa na pasta Arquivo.";

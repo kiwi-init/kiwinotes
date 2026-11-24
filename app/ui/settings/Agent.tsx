@@ -31,7 +31,7 @@ import {
   type TestState,
 } from "./agentText.ts";
 import { NoticeRow } from "./NoticeRow.tsx";
-import { ControlRow } from "./ControlRow.tsx";
+import { ControlRow, SpokenTextRow } from "./ControlRow.tsx";
 import { NoteModelRow } from "./NoteModel.tsx";
 import { MemoryRows } from "./MemoryRows.tsx";
 import { ModelRows } from "./ModelRows.tsx";
@@ -248,6 +248,9 @@ export function AgentSection() {
 
       {/* O atalho Control (spec #9876): só com o agente ligado. */}
       {status.enabled ? <ControlRow status={status} onStatus={setStatus} /> : null}
+
+      {/* "Mostrar o que eu falei" (spec #26055): só com o agente ligado. */}
+      {status.enabled ? <SpokenTextRow status={status} onStatus={setStatus} /> : null}
 
       {/* O onboarding (spec #11955): abre de novo, do passo 1, por cima do hub. */}
       {status.enabled ? (
