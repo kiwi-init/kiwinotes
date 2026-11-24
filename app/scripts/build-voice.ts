@@ -25,10 +25,19 @@ export function metallibIn(dir: string): string | null {
   return null;
 }
 
-/** O que precisa estar em app/.voice para o .app falar: o executável e o metallib. */
+/** O executável tem as seções da cobertura do LLVM (`__llvm_prf_*`): ele escreveria `default.profraw` onde roda. */
+export function hasCoverage(exe: string): boolean {
+  const r = spawnSync("otool", ["-l", exe], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error(`build-voice: otool -l ${exe} failed`);
+  return r.stdout.includes("__llvm_prf");
+}
+
+/** O que precisa estar em app/.voice para o .app falar: o executável, sem cobertura, e o metallib. */
 export function checkVoiceDir(dir: string): void {
-  if (!existsSync(path.join(dir, VOICE_EXE))) throw new Error(`build-voice: no ${VOICE_EXE} in ${dir}`);
+  const exe = path.join(dir, VOICE_EXE);
+  if (!existsSync(exe)) throw new Error(`build-voice: no ${VOICE_EXE} in ${dir}`);
   if (!metallibIn(dir)) throw new Error(`build-voice: no ${MLX_BUNDLE}/…/default.metallib in ${dir}: was it built with xcodebuild?`);
+  if (hasCoverage(exe)) throw new Error(`build-voice: ${VOICE_EXE} is built with code coverage (it would write default.profraw)`);
 }
 
 export function buildVoice(appDir: string, env = process.env): "built" | "cached" | "skipped" {
@@ -63,6 +72,9 @@ export function buildVoice(appDir: string, env = process.env): "built" | "cached
     // O mlx-swift e o swift-transformers trazem plugins e macros do SwiftPM: sem estas, o xcodebuild pede um clique.
     "-skipPackagePluginValidation",
     "-skipMacroValidation",
+    // O esquema que o Xcode gera para o pacote liga a cobertura: o executável sairia instrumentado e escreveria um
+    // `default.profraw` na pasta em que roda. (O `-enableCodeCoverage NO` só vale no `test`.)
+    "CLANG_ENABLE_CODE_COVERAGE=NO",
     "build",
   ];
   console.log(`build-voice: xcodebuild ${args.join(" ")}`);
