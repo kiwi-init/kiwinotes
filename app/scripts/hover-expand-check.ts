@@ -163,6 +163,9 @@ const same = (a: Box, b: Box) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y
 /** Mouse longe, o amostrador, o hover, 0,9 s parado, o mouse sai, 0,5 s fechando. */
 async function hoverRun(p: Page, selector: string): Promise<Run> {
   await p.locator(selector).scrollIntoViewIfNeeded();
+  // A camada fechada à vista, como um foco ou um roteiro a traria: se ela passa da borda de um `overflow: hidden`, ele
+  // rola, e o cartão corre para o lado (o Dicionário, revisão #26404). O `scroll` do primeiro quadro acusa.
+  await p.locator(`${selector} > .kn-expand-label`).evaluate((l) => l.scrollIntoView({ block: "nearest", inline: "nearest" }));
   await p.mouse.move(500, 600);
   await p.waitForTimeout(500);
   await startSampler(p, selector);
