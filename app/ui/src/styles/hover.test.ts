@@ -64,6 +64,13 @@ describe("o hover fluido", () => {
     expect(kit).toMatch(/:root\[data-motion="reduced"\] \.kn-expand\.kn-expand > \.kn-expand-label \{[^}]*transition: opacity 0\.15s linear !important;/);
   });
 
+  test("o × dos Ajustes guarda o atraso do z-index e o vermelho chega ao nome (T26124, revisão #26404)", () => {
+    const kit = css("src/kit/kit.css");
+    // O lists.css vem depois no bundle: só uma regra mais forte junta a transição do .kn-icon-button com a do z-index.
+    expect(kit).toMatch(/\.kn-icon-button\.kn-expand \{[^}]*transition:[^}]*background[^}]*z-index 0s linear var\(--expand-close\)/);
+    expect(kit).toMatch(/\.kn-expand\[data-tone="danger"\] > \.kn-expand-label > span \{[^}]*color: var\(--danger\)/);
+  });
+
   // T4535 substituiu o hover das abas; seu contrato é medido no WebKit por scripts/hub-tabs-ui-check.ts.
 
   test('o "Reduzir movimento" (o do sistema e o dos Ajustes) zera toda transição', () => {
