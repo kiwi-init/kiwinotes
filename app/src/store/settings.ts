@@ -121,6 +121,11 @@ export interface AgentSettings {
   controlShortcut: boolean;
   /** "Mostrar o que eu falei" (spec #26055): o balão do gato mostra a transcrição da fala antes da resposta. Desligado. */
   showSpokenText: boolean;
+  /**
+   * "O gato fala" (spec #26687): num pedido feito por voz, o gato fala 1 ou 2 frases da resposta (o `kiwi falar`, T26709).
+   * Desligado por padrão; o interruptor em Ajustes é outra parte do spec.
+   */
+  catSpeaks: boolean;
   /** "Suas reuniões" (spec #8360): quando o agente propõe a nota da reunião, onde ela vai, o nome e os blocos. */
   meetings: AgentMeetingSettings;
   /** As instruções da pessoa para o agente (spec #11469): até 2.000 caracteres, em todo pedido. */
@@ -196,6 +201,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   economy: false,
   controlShortcut: false,
   showSpokenText: false,
+  catSpeaks: false,
   meetings: DEFAULT_AGENT_MEETING_SETTINGS,
   summary: DEFAULT_SUMMARY_SETTINGS,
   instructions: "",
@@ -251,6 +257,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     economy: o.economy === true,
     controlShortcut: o.controlShortcut === true,
     showSpokenText: o.showSpokenText === true,
+    catSpeaks: o.catSpeaks === true,
     meetings: sanitizeAgentMeetingSettings(o.meetings),
     instructions: typeof o.instructions === "string" ? o.instructions.replace(/\r\n?/g, "\n").slice(0, 2000) : "",
     webSearch: o.webSearchChosen === true ? o.webSearch === true : DEFAULT_AGENT_SETTINGS.webSearch,

@@ -69,7 +69,7 @@ describe("a ferramenta única (T14563)", () => {
   });
 
   test("o erro ensina: diz o que vale", () => {
-    expect(errOf(() => resolveKiwiCall({ alvo: "A.md" }))).toBe("E_BAD_ARGS: falta o fazer: um de achar, ler, escrever, propor, lembrar");
+    expect(errOf(() => resolveKiwiCall({ alvo: "A.md" }))).toBe("E_BAD_ARGS: falta o fazer: um de achar, ler, escrever, propor, lembrar, falar");
     expect(errOf(() => resolveKiwiCall({ fazer: "apagar", alvo: "A.md" }))).toContain("use achar, ler, escrever, propor, lembrar");
     expect(errOf(() => resolveKiwiCall({ fazer: "escrever", opcoes: { como: "apagar" } }))).toContain("acrescentar (padrão), trocar, trecho, mover, renomear, juntar, criar");
     expect(errOf(() => resolveKiwiCall({ fazer: "achar", texto: "x", opcoes: { como: "texto", extra: 1 } }))).toBe("E_BAD_ARGS: kiwi achar/texto não tem a opção extra; as opções dela: limite");
@@ -158,5 +158,52 @@ describe("a ferramenta única (T14563)", () => {
     const e = await runKiwiCall({} as KiwiToolContext, { fazer: "ler", alvo: "Notas/How to find notes_read.md", opcoes: { como: "arquivo" } }, { writes: false, proposes: false, memory: false }).catch((x) => x);
     expect(e).toBeInstanceOf(ToolError);
     expect((e as ToolError).message).toBe("Notas/How to find notes_read.md é uma nota: leia com `kiwi ler/nota`");
+  });
+
+  describe("o kiwi falar (T26709)", () => {
+    const sink = () => {
+      const falas: string[][] = [];
+      return { falas, speech: { falar: (f: string[]) => void falas.push(f) } };
+    };
+    const tudo = { writes: true, proposes: true, memory: true };
+
+    test("o verbo e os sinônimos levam ao cat_speak, com o texto", () => {
+      expect(resolveKiwiCall({ fazer: "falar", texto: "Oi." })).toMatchObject({ tool: "cat_speak", args: { texto: "Oi." } });
+      expect(resolveKiwiCall({ fazer: "dizer", texto: "Oi." }).tool).toBe("cat_speak");
+      expect(resolveKiwiCall({ fazer: "speak", texto: "Oi." }).tool).toBe("cat_speak");
+      expect(resolveKiwiCall(kiwiCallFor("cat_speak", { texto: "Oi." }))).toMatchObject({ tool: "cat_speak", args: { texto: "Oi." } });
+    });
+
+    test("fora do pedido por voz com \"O gato fala\", volta E_NOT_ALLOWED e nada é falado", async () => {
+      const s = sink();
+      const e = await runKiwiCall({ speech: s.speech } as unknown as KiwiToolContext, { fazer: "falar", texto: "Oi." }, tudo).catch((x) => x);
+      expect(e).toMatchObject({ code: "E_NOT_ALLOWED", tool: "cat_speak" });
+      expect((e as Error).message).toContain("pedido feito por voz");
+      expect(s.falas).toEqual([]);
+    });
+
+    test("no pedido por voz, as frases vão por extenso, sem Markdown, para quem toca", async () => {
+      const s = sink();
+      const r = await runKiwiCall({ speech: s.speech } as unknown as KiwiToolContext, { fazer: "falar", texto: "Anotei na **nota** [Ideias](Ideias.md). A reunião é às 14h30." }, { ...tudo, speech: true });
+      expect(s.falas).toEqual([["Anotei na nota Ideias.", "A reunião é às catorze e trinta."]]);
+      expect(r).toMatchObject({ tool: "cat_speak", value: { falado: "Anotei na nota Ideias. A reunião é às catorze e trinta." } });
+      expect(r.target).toBeUndefined();
+    });
+
+    test("mais de 2 frases, nada para ler ou um segredo: erro, e nada é falado", async () => {
+      const s = sink();
+      const call = (texto: string) => runKiwiCall({ speech: s.speech } as unknown as KiwiToolContext, { fazer: "falar", texto }, { ...tudo, speech: true }).catch((x) => x);
+      expect(await call("Um. Dois. Três.")).toMatchObject({ code: "E_BAD_ARGS" });
+      expect(await call("`codigo()` https://exemplo.com")).toMatchObject({ code: "E_BAD_ARGS" });
+      expect(await call("A senha é ‹segredo 1›.")).toMatchObject({ code: "E_SECRET" });
+      expect(await call("x".repeat(301))).toMatchObject({ code: "E_BAD_ARGS" });
+      expect(s.falas).toEqual([]);
+    });
+
+    test("a definição da ferramenta é a mesma com e sem a fala (o cache)", () => {
+      expect(KIWI_TOOL_DEF.inputSchema.properties.fazer.enum).toContain("falar");
+      expect(kiwiTools(true, true, true).some((t) => t.name === "cat_speak")).toBe(false);
+      expect(kiwiTools(true, true, true, true).some((t) => t.name === "cat_speak")).toBe(true);
+    });
   });
 });

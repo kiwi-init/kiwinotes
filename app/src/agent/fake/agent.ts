@@ -616,9 +616,18 @@ const app = agent({ name: "kiwi-fake-agent" })
       .replace(/^\[O Kiwi achou[\s\S]*?\n\[\/O Kiwi achou\]\s*/, "")
       // Os cartões de instrução (T14563): depois do pacote, terminam com a marca deles.
       .replace(/^\[Instruções do Kiwi:[\s\S]*?\n\[\/Instruções do Kiwi\]\s*/, "")
+      // O pedido feito por voz com "O gato fala" (T26709): a linha que pede o `kiwi falar`.
+      .replace(/^\[Pedido feito por voz:[^\]]*\]\s*/, "")
       // No modo econômico, o glossário vem depois das instruções do econômico (o cache).
       .replace(/^\[O glossário da pessoa:[^\]]*\]\s*/, "")
       .trim();
+
+    // O pedido por voz (T26709): como o agente de verdade, fala 1 frase antes da resposta, com um número que o Kiwi
+    // passa por extenso. O resto do pedido segue igual (o balão tem a resposta inteira).
+    if (raw.includes("[Pedido feito por voz:") && kiwiServers.has(sessionId)) {
+      const words = text.split(/\s+/).filter(Boolean).length;
+      await useTool(client, sessionId, "cat_speak", { texto: `Pronto: o **pedido** tinha ${words} palavras.` });
+    }
 
     // O Modelo de nota (spec #11102): uma nota nova na ordem e com os blocos do modelo que chegou nas instruções.
     if (text.startsWith("/nota-modelo ")) {

@@ -22,7 +22,7 @@ import { servedSchemaOf } from "./served-schema.ts";
 /** O nome da ferramenta para o agente: no Claude Code, `mcp__kiwi__kiwi`. */
 export const KIWI_TOOL = "kiwi";
 
-export const FAZER = ["achar", "ler", "escrever", "propor", "lembrar"] as const;
+export const FAZER = ["achar", "ler", "escrever", "propor", "lembrar", "falar"] as const;
 export type Fazer = (typeof FAZER)[number];
 
 /** Uma ação: o `fazer` e o `como` que levam a uma das ações de dentro, e onde o alvo e o texto entram nela. */
@@ -76,6 +76,8 @@ export const ACOES: readonly Acao[] = [
   { fazer: "propor", como: "rotina", tool: "routine_propose", alvo: "nome", texto: "pedido", cartao: true },
   { fazer: "lembrar", como: "anotar", tool: "memory_remember", texto: "fato", padrao: true },
   { fazer: "lembrar", como: "esquecer", tool: "memory_forget", texto: "fato" },
+  // A fala do gato (T26709): só num pedido por voz, com "O gato fala" ligado.
+  { fazer: "falar", como: "frase", tool: "cat_speak", texto: "texto", padrao: true },
 ];
 
 /** Uma ação escrita como nos textos do Kiwi: `kiwi ler/sumario`. */
@@ -126,6 +128,7 @@ const FAZER_SINONIMOS: Record<string, Fazer> = {
   mover: "escrever", move: "escrever", renomear: "escrever", rename: "escrever", juntar: "escrever", merge: "escrever",
   propor: "propor", propose: "propor",
   lembrar: "lembrar", remember: "lembrar", esquecer: "lembrar", forget: "lembrar", memoria: "lembrar",
+  falar: "falar", speak: "falar", say: "falar", dizer: "falar",
 };
 
 /**
@@ -320,6 +323,8 @@ export interface KiwiAllowed {
   writes: boolean;
   proposes: boolean;
   memory: boolean;
+  /** A fala do gato (T26709): só num pedido por voz, com "O gato fala" ligado. */
+  speech?: boolean;
 }
 
 /** A definição da ferramenta única, como vai na lista: a mesma em toda sessão. */
@@ -364,6 +369,9 @@ export async function runKiwiCall(ctx: KiwiToolContext, raw: unknown, allowed: K
   }
   const { acao } = call;
   const def = KIWI_TOOLS.find((t) => t.name === acao.tool)!;
+  if (def.speech && !allowed.speech) {
+    throw Object.assign(new ToolError("E_NOT_ALLOWED", `${acaoLabel(acao)} só vale num pedido feito por voz, com "O gato fala" ligado: responda só no texto`), { tool: acao.tool });
+  }
   if ((def.writes && !allowed.writes) || (def.proposes && !allowed.proposes) || (def.memory && !allowed.memory)) {
     throw Object.assign(new ToolError("E_NOT_ALLOWED", `${acaoLabel(acao)} não está ligado nesta sessão: ${def.writes ? "o Kiwi só lê" : def.proposes ? "sem propostas" : "sem a memória"}`), { tool: acao.tool });
   }

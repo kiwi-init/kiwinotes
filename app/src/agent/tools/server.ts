@@ -16,7 +16,7 @@
 import type { RegistroEntrega } from "../entrega.ts";
 import { timingSafeEqual } from "node:crypto";
 
-import { ToolError, type KiwiToolName, type MemorySink, type ProposalSink, type ToolChange, type WriteJournal } from "./tools.ts";
+import { ToolError, type KiwiToolName, type MemorySink, type ProposalSink, type SpeechSink, type ToolChange, type WriteJournal } from "./tools.ts";
 import { KIWI_TOOL, KIWI_TOOL_DEF, runKiwiCall, toolOfError } from "./kiwi-tool.ts";
 import { servedSchemaOf } from "./served-schema.ts";
 import type { VaultReader } from "./reader.ts";
@@ -76,6 +76,11 @@ export interface KiwiToolServerOptions {
   proposals?: ProposalSink;
   /** Quem guarda a memória do agente (spec #11469): com ele, as ferramentas da memória aparecem. */
   memory?: MemorySink;
+  /**
+   * Quem toca a fala do gato agora (T26709): lido a cada chamada, porque vale só no pedido por voz com "O gato fala"
+   * ligado. Sem ele (ou `undefined` agora), o `kiwi falar` volta como não ligado.
+   */
+  speech?: () => SpeechSink | undefined;
   version?: string;
   /** O registro de entrega da janela (ADR 0013 peça 4, T14682). */
   registro?: RegistroEntrega;
@@ -219,10 +224,12 @@ export class KiwiToolServer {
           const proposals = this.o.proposals ? { proposals: this.o.proposals } : {};
           const memory = this.o.memory ? { memory: this.o.memory } : {};
           const registro = this.o.registro ? { registro: this.o.registro } : {};
+          const sink = this.o.speech?.();
+          const speech = sink ? { speech: sink } : {};
           const ctx = this.writes
-            ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal, ...guard, ...economy, ...proposals, ...memory, ...registro }
-            : { reader: this.o.reader, ...guard, ...economy, ...proposals, ...memory, ...registro };
-          const r = await runKiwiCall(ctx, m.params?.arguments, { writes: this.writes, proposes: !!this.o.proposals, memory: !!this.o.memory });
+            ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal, ...guard, ...economy, ...proposals, ...memory, ...registro, ...speech }
+            : { reader: this.o.reader, ...guard, ...economy, ...proposals, ...memory, ...registro, ...speech };
+          const r = await runKiwiCall(ctx, m.params?.arguments, { writes: this.writes, proposes: !!this.o.proposals, memory: !!this.o.memory, speech: !!sink });
           const text = JSON.stringify(r.value);
           const read = r.tool === "notes_read" ? (r.value as { path?: unknown } | null)?.path : undefined;
           const notePath = typeof read === "string" ? { notePath: read } : {};

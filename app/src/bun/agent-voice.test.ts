@@ -12,6 +12,7 @@ function rig(o: { busy?: boolean; enabled?: boolean; control?: boolean; dictatio
   const sent: Command[] = [];
   const ui: AgentVoiceUi[] = [];
   const asked: string[] = [];
+  const askOpts: unknown[] = [];
   const listeners = new Map<string, Set<(e: never) => void>>();
   const readies = new Set<() => void>();
   let statusFn: ((s: AgentStatus) => void) | undefined;
@@ -25,7 +26,7 @@ function rig(o: { busy?: boolean; enabled?: boolean; control?: boolean; dictatio
     agent: {
       status: async () => status,
       onStatus: (fn) => ((statusFn = fn), () => {}),
-      ask: async (text) => (asked.push(text), { id: `r${asked.length}` }),
+      ask: async (text, opts) => (asked.push(text), askOpts.push(opts), { id: `r${asked.length}` }),
     },
     settings: { load: async () => settings },
     helper: {
@@ -53,7 +54,7 @@ function rig(o: { busy?: boolean; enabled?: boolean; control?: boolean; dictatio
     emit({ type: "agent.transcript", text, raw: text, lang: "pt", durationMs, latencyMs: 200 });
     await flush();
   };
-  return { sent, ui, asked, emit, talk, voice, settings, setStatus: (s: Partial<AgentStatus>) => statusFn?.({ ...status, ...s } as AgentStatus), ready: () => readies.forEach((f) => f()) };
+  return { sent, ui, asked, askOpts, emit, talk, voice, settings, setStatus: (s: Partial<AgentStatus>) => statusFn?.({ ...status, ...s } as AgentStatus), ready: () => readies.forEach((f) => f()) };
 }
 
 describe("o atalho Control (spec #9876)", () => {
@@ -119,6 +120,13 @@ describe("o atalho Control (spec #9876)", () => {
     expect(r.asked).toEqual(["Resuma a nota de ontem."]);
     expect(r.ui.at(-1)).toEqual({ phase: "asked", id: "r1" });
     expect(JSON.stringify(r.ui)).not.toContain("nota de ontem");
+  });
+
+  test("o pedido falado vai marcado como voz (T26709): é só nele que o gato pode falar a resposta", async () => {
+    const r = rig();
+    await flush();
+    await r.talk("resuma a nota de ontem");
+    expect(r.askOpts).toEqual([{ voz: true }]);
   });
 
   test("a troca de \"Mostrar o que eu falei\" vale na próxima fala, sem reiniciar (spec #26055)", async () => {

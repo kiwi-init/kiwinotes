@@ -142,7 +142,7 @@ import {
   type ProposalMeeting,
   type ProposalProject,
 } from "./proposals.ts";
-import type { MemorySink, ProposalDraft, ProposalSink, SummaryDraft } from "./tools/tools.ts";
+import { ToolError, type MemorySink, type ProposalDraft, type ProposalSink, type SpeechSink, type SummaryDraft } from "./tools/tools.ts";
 import { DEFAULT_AGENT_MEETING_SETTINGS, DEFAULT_AGENT_SETTINGS, effortOf, isAgentChoice, sanitizeAgentMeetingSettings, sanitizeEffortByModel, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
 import type { Notices } from "../bun/notices.ts";
 import { WaitingNotice, type NoticeState } from "./notice.ts";
@@ -158,6 +158,27 @@ function testDoubtTimeout(): number | undefined {
 export const AGENT_IDLE_MS = 10 * 60_000;
 /** O pedido mais longo que o app manda. */
 export const AGENT_MAX_TEXT = 20_000;
+
+/** O pedido em andamento. `fala`: veio por voz com "O gato fala" ligado (T26709); `falou`: o `kiwi falar` já saiu. */
+interface AskTurn {
+  id: string;
+  cancelled: boolean;
+  fala?: boolean;
+  falou?: boolean;
+}
+
+/** Uma fala do gato (T26709): as frases de um `kiwi falar`, já por extenso, na ordem em que a voz lê. */
+export interface CatSpeech {
+  turnId: string;
+  frases: string[];
+}
+
+/**
+ * A linha do pedido feito por voz com "O gato fala" ligado (T26709). Vai só nesse pedido, depois dos cartões: a
+ * definição da ferramenta fica a mesma em toda sessão (o cache).
+ */
+export const FALA_PEDIDO =
+  '[Pedido feito por voz: antes da resposta, chame kiwi com fazer "falar" e o texto que a pessoa vai ouvir: 1 ou 2 frases curtas, sem Markdown, com o essencial. A resposta completa vai no texto, como sempre.]';
 /** O comando local do Claude Code que diz o uso da assinatura (spec #11084): só sob demanda. */
 export const USAGE_COMMAND = "/usage";
 /** Um timer que não segura o processo aberto (o `/usage` em segundo plano não é motivo para o app ficar de pé). */
@@ -328,7 +349,7 @@ export class AgentService {
   private pending: AgentHost | null = null;
   /** Sobe a cada `stopProgram`: um host montado antes de um Desligar não chega a abrir. */
   private epoch = 0;
-  private turn: { id: string; cancelled: boolean } | null = null;
+  private turn: AskTurn | null = null;
   private idle: ReturnType<typeof setTimeout> | null = null;
   private download: { abort: AbortController; done: number; total: number; lastEmit: number } | null = null;
   private downloadError: { code: string; message: string } | undefined;
@@ -344,6 +365,8 @@ export class AgentService {
   private applied: Record<string, string> = {};
   private readonly statusListeners = new Set<(s: AgentStatus) => void>();
   private readonly turnListeners = new Set<(e: AgentTurnEvent) => void>();
+  /** Quem toca a fala do gato (T26709): o player recebe as frases do `kiwi falar`. */
+  private readonly speechListeners = new Set<(e: CatSpeech) => void>();
   private closed = false;
   private reader: VaultReader | null;
   private writer: VaultWriter | null;
@@ -860,6 +883,34 @@ export class AgentService {
   onTurn(fn: (e: AgentTurnEvent) => void): () => void {
     this.turnListeners.add(fn);
     return () => this.turnListeners.delete(fn);
+  }
+
+  /** A fala do gato (T26709): as frases do `kiwi falar`, já por extenso, para o player tocar na ordem. */
+  onSpeech(fn: (e: CatSpeech) => void): () => void {
+    this.speechListeners.add(fn);
+    return () => this.speechListeners.delete(fn);
+  }
+
+  /**
+   * Quem recebe o `kiwi falar` agora: só o pedido em andamento, feito por voz com "O gato fala" ligado. Uma fala por
+   * pedido; a segunda volta como erro, e o resto vai no texto.
+   */
+  private speechSink(): SpeechSink | undefined {
+    const turn = this.turn;
+    if (!turn || turn.cancelled || !turn.fala) return undefined;
+    return {
+      falar: (frases) => {
+        if (turn.falou) throw new ToolError("E_ALREADY_SPOKEN", "a fala deste pedido já saiu: o resto vai no texto da resposta");
+        turn.falou = true;
+        for (const fn of this.speechListeners) {
+          try {
+            fn({ turnId: turn.id, frases });
+          } catch (err) {
+            this.d.log?.(`[agent] fala: ${String((err as Error)?.message ?? err)}`);
+          }
+        }
+      },
+    };
   }
 
   private get root(): string {
@@ -1999,17 +2050,18 @@ export class AgentService {
   }
 
   /** Manda um pedido e volta logo, com o id. A resposta chega pelo `agent.turn`. */
-  async ask(text: string): Promise<{ id: string }> {
+  /** Um pedido. `voz`: ele veio pela fala (o atalho do Control), e o gato pode falar a resposta (T26709). */
+  async ask(text: string, opts: { voz?: boolean } = {}): Promise<{ id: string }> {
     // Marcado antes do 1º `await`: o `/usage` do pedido anterior não começa até este ter o turno (ou falhar).
     this.askStarting++;
     try {
-      return await this.startAsk(text);
+      return await this.startAsk(text, opts.voz === true);
     } finally {
       this.askStarting--;
     }
   }
 
-  private async startAsk(text: string): Promise<{ id: string }> {
+  private async startAsk(text: string, voz = false): Promise<{ id: string }> {
     // O `/usage` de depois do pedido anterior ainda rodando (são milissegundos): ele é cancelado, e o pedido não espera
     // a resposta dele. O agente responde um prompt por vez.
     if (this.limitProbe) {
@@ -2024,7 +2076,8 @@ export class AgentService {
     // Sem `await` daqui até o `this.turn = turn`: um /usage do medidor que comece agora já encontra o pedido.
     await this.yieldUsage();
     if (this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
-    const turn = { id: crypto.randomUUID(), cancelled: false };
+    // A fala do gato (T26709): só no pedido por voz, com "O gato fala" ligado no começo do pedido.
+    const turn: AskTurn = { id: crypto.randomUUID(), cancelled: false, fala: voz && s.catSpeaks === true, falou: false };
     this.turn = turn;
     this.lastTurn = turn.id;
     // O pedido de uma rotina (spec #12150): o fim dele vira o evento `agent.routine`.
@@ -2041,7 +2094,7 @@ export class AgentService {
     return { id: turn.id };
   }
 
-  private async runTurn(turn: { id: string; cancelled: boolean }, text: string, s: AgentSettings): Promise<void> {
+  private async runTurn(turn: AskTurn, text: string, s: AgentSettings): Promise<void> {
     const wanted = this.wantedConfig(s);
     this.economyNow = s.economy;
     this.webNow = s.webSearch === true;
@@ -2131,13 +2184,15 @@ export class AgentService {
       // ou uma rotina saiu da lista fixa e vai aqui, só no pedido que precisa dele.
       // A rotina que roda já diz o que fazer, ação por ação: o "Rotina" dela não pede o cartão de propor uma.
       const cards = isRoutinePrompt(text) ? "" : cardsBlock(cardsFor(text));
+      // O pedido por voz com "O gato fala" (T26709) leva uma linha: a definição da ferramenta fica igual (o cache).
+      const voz = turn.fala ? `${FALA_PEDIDO}\n\n` : "";
       const prompt =
-        (resend ? parts.stable : "") + withCapsule(capsule, (pkg ? `${pkg.text}\n\n` : "") + (cards ? `${cards}\n\n` : "") + parts.perRequest + text);
+        (resend ? parts.stable : "") + withCapsule(capsule, (pkg ? `${pkg.text}\n\n` : "") + (cards ? `${cards}\n\n` : "") + voz + parts.perRequest + text);
       this.turnToolTokens = 0;
       // O placar (T14671): o que o Kiwi mandou neste pedido e a conversa de antes (a janela e a cápsula).
       const w = this.loadWindow();
       this.placar = new PlacarTurno(
-        modelTokens((pkg ? `${pkg.text}\n\n` : "") + (cards ? `${cards}\n\n` : "") + parts.perRequest + text),
+        modelTokens((pkg ? `${pkg.text}\n\n` : "") + (cards ? `${cards}\n\n` : "") + voz + parts.perRequest + text),
         (w && w.sessionId === host.session ? w.tokens : 0) + (capsule ? modelTokens(capsule) : 0),
         faroDoPlacar(this.turnFaro),
       );
@@ -2450,6 +2505,7 @@ export class AgentService {
             economy: () => this.economyNow,
             ...(writer ? { proposals: this.proposalSink } : {}),
             ...(this.vaultRoot ? { memory: this.memorySink } : {}),
+            speech: () => this.speechSink(),
             version: this.d.version,
             registro: this.registro,
             onCall: (e) => this.onToolCall(e),

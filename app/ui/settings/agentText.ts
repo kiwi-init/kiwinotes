@@ -260,6 +260,9 @@ export function toolStatus(tool: string, target?: string): string {
       return target ? `Arrumando as seções de ${target}…` : "Arrumando as seções de uma nota…";
     case "project_diary_add":
       return "Anotando no diário do projeto…";
+    // A fala do gato (T26709): o agente escreveu o que a pessoa vai ouvir.
+    case "cat_speak":
+      return "Preparando a fala…";
     // A ferramenta única (T14563): quando ela começa, o host só sabe o nome `kiwi`; a ação de dentro (ler, escrever…)
     // chega logo depois pelo próprio servidor, com o alvo.
     case "kiwi":

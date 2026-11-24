@@ -16,7 +16,7 @@ import { AGY_LOGIN_HELP, GEMINI_NOT_A_COMMAND, geminiHost } from "./gemini-host.
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost, sessionFileOf, WEB_TOOLS } from "./host.ts";
 import { AGENT_NAMES } from "./kinds.ts";
-import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS, SUMMARY_ECONOMY_QUESTION } from "./service.ts";
+import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS, FALA_PEDIDO, SUMMARY_ECONOMY_QUESTION, type CatSpeech } from "./service.ts";
 import { ROUTINE_LABELS, routineDeclined, routineEconomyQuestion } from "./routines.ts";
 import { DEFAULT_AGENT_ROUTINES } from "../shared/agent-routines.ts";
 import type { AgentRoutineEvent } from "../shared/ui-contract.ts";
@@ -2332,6 +2332,51 @@ describe("o resumo executivo de um projeto (spec #11546)", () => {
     // Outro pedido não pergunta.
     const other = await askAndWait(m, "oi");
     expect(other.at(-1)).toMatchObject({ type: "done" });
+  });
+});
+
+describe("o gato fala (spec #26687, T26709)", () => {
+  async function voiceAsk(m: Made, text: string, voz: boolean): Promise<{ id: string; turn: AgentTurnEvent[]; prompt: string }> {
+    const { id } = await m.svc.ask(text, { voz });
+    await until(() => m.turns.some((e) => e.id === id && (e.type === "done" || e.type === "error")));
+    const prompt = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text).at(-1)!;
+    return { id, turn: m.turns.filter((e) => e.id === id), prompt };
+  }
+  const catSpeaks = async (m: Made, on: boolean) => void (await m.store.save({ agent: { ...(await m.store.load()).agent, catSpeaks: on } }));
+
+  test("no pedido por voz com \"O gato fala\", o agente fala 1 frase por extenso, e o balão segue com a resposta inteira", async () => {
+    const m = make({ reader: memoryReader({ ...NOTES }) });
+    const falas: CatSpeech[] = [];
+    m.svc.onSpeech((e) => falas.push(e));
+    await catSpeaks(m, true);
+    await readyNow(m);
+    const voz = await voiceAsk(m, "resuma a nota de ontem", true);
+    expect(voz.prompt).toContain(FALA_PEDIDO);
+    expect(falas).toEqual([{ turnId: voz.id, frases: ["Pronto: o pedido tinha cinco palavras."] }]);
+    // A fala não troca a resposta: o balão recebe o texto inteiro, como sempre.
+    expect(voz.turn.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining('Você disse: "resuma a nota de ontem"') });
+    expect(voz.turn).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "cat_speak" }));
+    // Uma fala por pedido: a segunda volta como erro ao agente, e nada mais é falado.
+    const again = await voiceAsk(m, '/tool cat_speak {"texto":"De novo."}', true);
+    expect(again.turn.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining("E_ALREADY_SPOKEN") });
+    expect(falas.map((f) => f.turnId)).toEqual([voz.id, again.id]);
+    // O pedido escrito não leva a linha nem fala, mesmo que o agente tente.
+    const escrito = await voiceAsk(m, '/tool cat_speak {"texto":"Oi."}', false);
+    expect(escrito.prompt).not.toContain("[Pedido feito por voz");
+    expect(escrito.turn.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining("E_NOT_ALLOWED") });
+    expect(falas).toHaveLength(2);
+  });
+
+  test("\"O gato fala\" desligado (o padrão): o pedido por voz vai como antes, sem a linha e em silêncio", async () => {
+    const m = make({ reader: memoryReader({ ...NOTES }) });
+    const falas: CatSpeech[] = [];
+    m.svc.onSpeech((e) => falas.push(e));
+    await readyNow(m);
+    const voz = await voiceAsk(m, "resuma a nota de ontem", true);
+    expect(voz.prompt).not.toContain("[Pedido feito por voz");
+    expect(voz.turn.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining('Você disse: "resuma a nota de ontem"') });
+    expect(voz.turn.some((e) => e.type === "status" && e.status === "running" && e.tool === "cat_speak")).toBe(false);
+    expect(falas).toEqual([]);
   });
 });
 
