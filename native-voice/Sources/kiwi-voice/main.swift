@@ -1,5 +1,5 @@
 // O processo da voz do gato (ADR 0014, T26732): o Qwen3-TTS do `mlx-audio-swift` atrás do protocolo do KiwiVoiceCore.
-// Quem sobe e derruba é o app (src/voice/qwen-voice.ts): ele abre na 1ª fala e sai depois de um tempo parado, para
+// Quem sobe e derruba é o app (app/src/bun/voice-process.ts): ele abre na 1ª fala e sai depois de um tempo parado, para
 // soltar os ~4 GB do modelo. Nada aqui toca áudio: o PCM vai ao app pelo stdout.
 
 import Foundation
@@ -83,6 +83,8 @@ actor Engine {
                         seq += 1
                     }
                 }
+                // O `task.cancel()` acorda o `for try await` com `nil`, sem throw: o laço sai normal, e a frase foi cancelada.
+                try Task.checkCancellation()
                 if id.isEmpty { out.send(.warm(ms: Int(Date().timeIntervalSince(t0) * 1000))) } else { out.send(.done(id: id)) }
             } catch is CancellationError {
                 if !id.isEmpty { out.send(.cancelled(id: id)) }

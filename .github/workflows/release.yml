@@ -90,7 +90,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: app/.voice
-          key: voice-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native-voice/Package.swift', 'native-voice/Package.resolved', 'native-voice/Sources/**', 'app/scripts/build-voice.ts') }}
+          key: voice-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native-voice/Package.swift', 'native-voice/Package.resolved', 'native-voice/Sources/**', 'native-voice/.swiftpm/**', 'app/scripts/build-voice.ts') }}
 
       - name: Electrobun toolchain
         timeout-minutes: 5
@@ -226,7 +226,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: app/.voice
-          key: voice-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native-voice/Package.swift', 'native-voice/Package.resolved', 'native-voice/Sources/**', 'app/scripts/build-voice.ts') }}
+          key: voice-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native-voice/Package.swift', 'native-voice/Package.resolved', 'native-voice/Sources/**', 'native-voice/.swiftpm/**', 'app/scripts/build-voice.ts') }}
 
       - name: Build the voice
         if: steps.voice.outputs.cache-hit != 'true'

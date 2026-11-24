@@ -72,6 +72,8 @@ type Msg =
 
 /** Uma frase em andamento: a fila do que chegou e quem espera por ela. */
 class Turn {
+  /** O processo que gera esta frase: um `stop` ou uma queda só derrubam as frases dele. */
+  live: Live | null = null;
   chunks: Int16Array[] = [];
   end: { error?: Error } | null = null;
   private wake: (() => void) | null = null;
@@ -128,7 +130,7 @@ export class VoiceProcess implements SinteseFala {
     signal.addEventListener("abort", onAbort);
     let leftover = new Int16Array(0);
     try {
-      const live = await this.start();
+      const live = (turn.live = this.start());
       await Promise.race([live.ready, new Promise<void>((r) => signal.addEventListener("abort", () => r(), { once: true }))]);
       if (signal.aborted) return;
       live.child.write(JSON.stringify({ type: "speak", id, text: frase }));
@@ -155,7 +157,7 @@ export class VoiceProcess implements SinteseFala {
     } finally {
       signal.removeEventListener("abort", onAbort);
       // Abortada (ou o player largou o iterador) antes do fim: o processo para de gerar essa frase.
-      if (!turn.end && this.live && !this.live.dead) this.live.child.write(JSON.stringify({ type: "cancel", id }));
+      if (!turn.end && turn.live && !turn.live.dead) turn.live.child.write(JSON.stringify({ type: "cancel", id }));
       this.turns.delete(id);
       this.armIdle();
     }
@@ -174,7 +176,8 @@ export class VoiceProcess implements SinteseFala {
     const t = setTimeout(() => live.child.kill("SIGKILL"), 2000);
     await live.child.exited;
     clearTimeout(t);
-    this.failAll(new VoiceError("kiwi-voice: parado"));
+    // Só as frases deste processo: uma que chegou durante o `stop` já subiu outro.
+    this.failAll(live, new VoiceError("kiwi-voice: parado"));
   }
 
   private start(): Live {
@@ -200,7 +203,7 @@ export class VoiceProcess implements SinteseFala {
       if (this.live === live) this.live = null;
       if (!live.dead) {
         live.dead = true;
-        this.failAll(reason);
+        this.failAll(live, reason);
       }
     };
 
@@ -262,8 +265,8 @@ export class VoiceProcess implements SinteseFala {
     } catch {}
   }
 
-  private failAll(e: Error) {
-    for (const t of this.turns.values()) t.finish(e);
+  private failAll(live: Live, e: Error) {
+    for (const t of this.turns.values()) if (t.live === live) t.finish(e);
   }
 
   private clearIdle() {

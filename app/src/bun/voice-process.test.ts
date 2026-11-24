@@ -49,6 +49,9 @@ test("o voicePath aponta para a pasta que o copy do electrobun.config.ts cria no
   const { default: config } = await import("../../electrobun.config.ts");
   const views = "/Aplicativos/Exemplo.app/Contents/Resources/app/views";
   expect(config.build.copy[".voice"]).toBe("voice");
+  // O release.ts exige o kiwi-voice no mesmo lugar.
+  const release = readFileSync(path.join(import.meta.dir, "..", "..", "scripts", "release.ts"), "utf8");
+  expect(release).toContain(`path.join(app, "Contents", "Resources", "app", "voice", VOICE_EXE)`);
   expect(voicePath(views, {})).toBe("/Aplicativos/Exemplo.app/Contents/Resources/app/voice/kiwi-voice");
   expect(voicePath(views, { KIWI_VOICE: "/tmp/exemplo/kiwi-voice" })).toBe("/tmp/exemplo/kiwi-voice");
 });
@@ -161,6 +164,17 @@ describe("VoiceProcess", () => {
     // A frase seguinte sobe de novo.
     await collect(v.sintetizar("Voltei.", new AbortController().signal));
     expect(spawns()).toBe(2);
+  });
+
+  test("uma frase que chega durante o stop sobe outro processo e sai inteira", async () => {
+    const { v, spawns } = make();
+    await collect(v.sintetizar("Oi, Ana.", new AbortController().signal));
+    const stopping = v.stop();
+    const next = await collect(v.sintetizar("Outra frase.", new AbortController().signal));
+    await stopping;
+    expect(next.flatMap((s) => [...s]).length).toBe(24_000);
+    expect(spawns()).toBe(2);
+    expect(v.running).toBe(true);
   });
 
   test("uma frase em andamento segura o ocioso", async () => {
