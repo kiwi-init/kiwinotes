@@ -98,6 +98,14 @@ Uma UI nova não muda o engine (o binário e a assinatura). **Então trocar de U
   - Um GET sem corpo, sem cookie, sem referrer e sem cabeçalho além do `accept`: nada da pessoa vai junto.
 - **A UI baixada não vai à rede:** a `VIEWS_CSP` barra fetch, XHR, beacon, EventSource, imagem, CSS, fonte, iframe, script, prefetch e form para fora. O `scripts/ui-pack-network.test.ts` prova isso no WebKit, com o controle sem a CSP.
 - **Nenhuma capacidade vai à rede fora da lista.** O `src/bun/ui-capabilities-network.test.ts` lê o handler de cada capacidade do contrato e prende numa lista fixa as que chegam a uma porta para a rede, com o motivo, o que levam e por qual porta. As portas são o `fetch`, o Updater, a imagem de fora, os modelos baixados (busca pelo sentido e ditado preciso), os métodos do agente que abrem o programa ou baixam o adaptador, e o fim da reunião, que leva a nota ao agente quando ele está ligado e em "propor sozinho" (o `meetingReady`, por um evento do main). Hoje a lista tem `updates.*`, `images.remote`, `notes.semanticStatus`, `settings.set`, `meetings.stop` e seis do `agent.*`. Uma capacidade nova que vá à rede quebra o teste até entrar na lista.
-- **Riscos conhecidos.** Os dois ficam porque só sobe pack assinado pela nossa chave:
+- **Risco conhecido.** Fica porque só sobe pack assinado pela nossa chave:
   - **Qualquer porta do `127.0.0.1`.** O `connect-src ws://127.0.0.1:*`, que é a ponte do RPC (#1419), também deixa fetch, XHR, beacon e EventSource irem a qualquer porta local: pela CSP 3, um `ws:` casa com `http:`. Não é a rede, mas um serviço local da pessoa responderia. Fechar pede a porta da ponte exposta no main, um PR na engine, depois do #25011. O teste prende o resto: imagem, CSS, fonte, iframe, script e form não chegam nem ao 127.0.0.1.
-  - **O `window.open`.** O `newWindow: "external"` abre no navegador padrão a URL que a UI pedir. A lista fixa de URLs vem no T25095.
+- **O `window.open` não abre mais qualquer URL:** veja a seção abaixo (T25095).
+
+## O `window.open` (T25095, spec #25011)
+A janela usa `newWindow: "deny"`: o WebKit não abre nada e só avisa o main (`new-window-open`). O `app/src/bun/link-open.ts` decide cada URL (regra do lead, #25261 e #25265):
+- **Abre direto:** a lista fixa do app (as notas desta versão e da que a atualização oferece) e a URL **exata** que já estava num arquivo de texto da pasta de notas antes desta execução do app. Exata é a URL inteira, com borda dos dois lados; nada se monta a partir de pedaços.
+- **Um arquivo que mudou nesta sessão não conta**, nem os links que ele já tinha: a UI é o editor e poderia gravar a URL com os dados e depois abri-la (#25262). A busca não sabe o que havia antes do save, então é mais estrita que a regra: o link antigo de uma nota editada também pergunta.
+- **O resto pergunta**, com a URL na tela (`Utils.showMessageBox`). O "Abrir" vale até o app fechar. Uma pergunta por vez.
+- **Só `http:`, `https:` e `mailto:`**, sem usuário nem senha na URL e com até 4.096 caracteres. Outro esquema nem pergunta.
+- O log leva só a decisão, nunca a URL. Com `KIWI_DEBUG=1` (os builds dos agentes), nada vai ao navegador nem à tela.

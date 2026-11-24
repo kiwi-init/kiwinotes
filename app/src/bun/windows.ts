@@ -26,6 +26,8 @@ import { type CapabilityDeps, uiCapabilities } from "./ui-capabilities.ts";
 import { builtInFrom, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir } from "./ui-engine.ts";
 import { UI_TRUSTED_KEYS } from "./ui-keys.ts";
 import { windowSecurity } from "./window-security.ts";
+import { createLinkOpener, newWindowUrl, urlOnDiskBefore } from "./link-open.ts";
+import { releaseNotesUrl } from "../shared/ui-contract.ts";
 import { fetchRemoteImage } from "../notes/remote-image.ts";
 import { NOT_RECORDING } from "../shared/meetings.ts";
 import { MeetingHostError } from "./meetings.ts";
@@ -66,6 +68,42 @@ let about: CapabilityDeps["about"];
 export function provideAbout(a: NonNullable<CapabilityDeps["about"]>): void {
   about = a;
 }
+
+/**
+ * O `window.open` das janelas (T25095): a lista fixa (as notas desta versão e da que a atualização oferece), a URL que
+ * já estava numa nota antes desta execução, ou a pergunta com a URL. Num build dos agentes (`KIWI_DEBUG=1`), nada vai
+ * ao navegador: só o log (AGENTS.md, nada na tela do harry).
+ */
+const APP_START = performance.timeOrigin;
+const linkOpener = createLinkOpener({
+  fixed: () => {
+    const info = about?.info();
+    const view = about?.view();
+    const offered = view && "version" in view ? releaseNotesUrl(view.version) : null;
+    return [info?.releaseUrl, offered].filter((u): u is string => !!u);
+  },
+  onDiskBefore: async (url) => {
+    const roots = [...new Set([(await stores.folders.current()).ref.path, (await stores.folders.internal()).ref.path])];
+    return urlOnDiskBefore(url, roots, APP_START);
+  },
+  confirm: async (url) => {
+    if (process.env.KIWI_DEBUG === "1") return false;
+    const { response } = await Utils.showMessageBox({
+      type: "question",
+      title: "Abrir o link?",
+      message: "Abrir este link no navegador?",
+      detail: url,
+      buttons: ["Abrir", "Cancelar"],
+      defaultId: 1,
+      cancelId: 1,
+    });
+    return response === 0;
+  },
+  open: (url) => {
+    if (process.env.KIWI_DEBUG !== "1") Utils.openExternal(url);
+  },
+  log: (m) => console.log(`[links] ${m}`),
+});
 
 export function provideHubSection(fn: () => { section: HubSection; path?: string } | null): void {
   hubSection = fn;
@@ -398,6 +436,11 @@ async function openWindow(name: WindowName, hidden = false): Promise<void> {
   }
   open.set(name, win);
   rpcs.set(name, rpc);
+  // O `newWindow: "deny"` só avisa: o main decide cada URL (T25095).
+  // O tipo do `on` do Electrobun não lista o "new-window-open", mas o evento chega igual aos outros
+  // (`new-window-open-<id>`, `proc/native.ts`).
+  const onView = win.webview.on.bind(win.webview) as unknown as (name: "new-window-open", fn: (e: { data?: { detail?: unknown } }) => void) => void;
+  onView("new-window-open", (e) => void linkOpener.request(newWindowUrl(e.data?.detail)));
 
   // O Histórico aberto recebe cada ditado novo na hora.
   const off = name === "history" ? stores.history.onAdded((entry) => rpc.send.event({ name: "history.added", payload: entry })) : undefined;
