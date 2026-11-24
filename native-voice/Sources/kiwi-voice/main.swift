@@ -9,12 +9,21 @@ import MLXAudioCore
 import MLXAudioTTS
 
 /// O stdout é só do protocolo; uma linha por vez, mesmo com a geração e a leitura em tarefas diferentes.
+///
+/// O `mlx-audio-swift` escreve no stdout com `print` ("Loaded …", "Generated tokenizer.json …"). Num pipe, o stdio
+/// guarda isso num buffer e o solta em qualquer ponto, até no meio de uma linha do protocolo. Por isso o protocolo sai
+/// por uma cópia do stdout original, e o fd 1 passa a ser o stderr: os `print` da biblioteca vão para o log.
 final class Out: @unchecked Sendable {
     private let lock = NSLock()
+    private let proto: FileHandle
+    init() {
+        proto = FileHandle(fileDescriptor: dup(STDOUT_FILENO), closeOnDealloc: true)
+        dup2(STDERR_FILENO, STDOUT_FILENO)
+    }
     func send(_ e: VoiceEvent) {
         let line = encodeEvent(e) + "\n"
         lock.lock(); defer { lock.unlock() }
-        FileHandle.standardOutput.write(Data(line.utf8))
+        proto.write(Data(line.utf8))
     }
     func log(_ s: String) { FileHandle.standardError.write(Data("[kiwi-voice] \(s)\n".utf8)) }
 }
