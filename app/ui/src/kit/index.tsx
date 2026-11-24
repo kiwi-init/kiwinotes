@@ -15,7 +15,7 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 
-import { engineReady } from "../api.ts";
+import { api, engineReady, has, reportError } from "../api.ts";
 import { TopBar, useInHub } from "../topbar.tsx";
 import { startAppearance } from "../styles/appearance.ts";
 import { startScrollbars } from "../scrollbar.ts";
@@ -39,7 +39,47 @@ declare global {
 /** Avisa o AppEngine que a UI subiu, depois do primeiro commit do React (não espera pintura: rAF para em janela oculta). */
 function Booted({ children }: { children: ReactNode }) {
   useEffect(() => engineReady(), []);
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <UpdateReady />
+    </>
+  );
+}
+
+/**
+ * A faixa "Nova aparência pronta" (spec #25011): o canal baixou e conferiu uma UI nova para esta janela, que espera.
+ * Recarregar troca sem fechar o app; Depois esconde a faixa, e a janela sobe a nova na próxima abertura.
+ */
+export function UpdateReady() {
+  const [pending, setPending] = useState<string | null>(null);
+  const [later, setLater] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!has("ui.status")) return;
+    let live = true;
+    // A faixa é um extra: sem resposta do `ui.status`, ela só não aparece, e a janela segue.
+    api.ui.status().then((s) => live && setPending(s.pending), () => {});
+    const off = api.ui.onUpdateReady((s) => setPending(s.pending));
+    return () => {
+      live = false;
+      off();
+    };
+  }, []);
+  if (!pending || later === pending) return null;
+  const reload = () => {
+    setBusy(true);
+    api.ui.reload().then((s) => setPending(s.pending), reportError).finally(() => setBusy(false));
+  };
+  return (
+    <div className="kn-update-ready" role="status" data-testid="ui-update-ready">
+      <span>Nova aparência pronta</span>
+      <Button variant="primary" disabled={busy} onClick={reload}>
+        Recarregar
+      </Button>
+      <Button onClick={() => setLater(pending)}>Depois</Button>
+    </div>
+  );
 }
 
 /** Monta a janela em #root. */

@@ -11,7 +11,7 @@ import path from "node:path";
 import { BrowserView, BrowserWindow, PATHS, Screen, Updater, Utils } from "electrobun/bun";
 import type { AppEngine } from "electrobun/bun/appengine";
 
-import { type HubSection, UI_CAPABILITIES, UI_CONTRACT_VERSION, type UiEvents, type UiWindow } from "../shared/ui-contract.ts";
+import { type HubSection, UI_CAPABILITIES, UI_CONTRACT_VERSION, UI_WINDOWS, type UiAppearance, type UiEvents, type UiStatus, type UiWindow } from "../shared/ui-contract.ts";
 import { saveDiagnostics } from "./diagnostics.ts";
 import { slowLog, timedCapabilities } from "./slow-log.ts";
 import { appLog } from "./file-log.ts";
@@ -23,9 +23,10 @@ import { session } from "./session.ts";
 import type { Sidecar } from "./sidecar.ts";
 import { stores } from "./stores.ts";
 import { type CapabilityDeps, uiCapabilities } from "./ui-capabilities.ts";
-import { builtInFrom, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir, uiChannelFor } from "./ui-engine.ts";
+import { type BuiltIn, builtInFrom, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir, uiChannelFor } from "./ui-engine.ts";
 import { updatesOff } from "./updates.ts";
 import { uiChannelFetch } from "./ui-channel-fetch.ts";
+import { type BuiltInVersion, closedWindowStatus, revertWindow } from "./ui-appearance.ts";
 import { UI_TRUSTED_KEYS } from "./ui-keys.ts";
 import { windowSecurity } from "./window-security.ts";
 import { createLinkOpener, newWindowUrl, urlOnDiskBefore } from "./link-open.ts";
@@ -274,6 +275,13 @@ const capabilities = uiCapabilities({
       });
     },
   },
+  // A aparência (spec #25011): o status e o reload de fora de uma janela não têm engine; cada janela troca os dois.
+  appearance: {
+    status: () => ({ uiVersion: "dev", builtIn: true, pending: null }),
+    reload: () => ({ uiVersion: "dev", builtIn: true, pending: null }),
+    about: () => uiAppearance(),
+    revert: () => revertAppearance(),
+  },
   about: {
     info: () => about?.info() ?? { version: "dev", channel: "dev", releaseUrl: null },
     view: () => about?.view() ?? { state: "off", reason: "o atualizador ainda não subiu", lastCheck: null },
@@ -337,6 +345,63 @@ stores.agent.liveWrites.onAnnounce((wrote) => {
 const preload = enginePreload(UI_CAPABILITIES, appEnginePageScript);
 
 const open = new Map<WindowName, BrowserWindow>();
+
+/** O engine de uma janela aberta (spec #25011): a UI na tela, a nova que espera o Recarregar e o reinício do Voltar. */
+interface OpenUi {
+  dir: string;
+  builtIn: BuiltIn;
+  engine: AppEngine | null;
+  /** A versão da UI nova que o canal baixou e espera o Recarregar, ou null. */
+  waiting: string | null;
+  restart(): Promise<void>;
+}
+const uis = new Map<WindowName, OpenUi>();
+
+function uiStatusOf(ui: OpenUi): UiStatus {
+  const showing = ui.engine?.showing;
+  return { uiVersion: showing?.uiVersion ?? ui.builtIn.uiVersion, builtIn: !showing, pending: ui.waiting };
+}
+
+const uiDir = (name: WindowName) => path.join(stores.dir, "appengine", name);
+
+/** A UI de cada janela, aberta (pelo engine) ou fechada (pelo engine.json). Sem a UI de fábrica (dev), fica de fora. */
+function uiAppearance(): UiAppearance {
+  const windows: UiAppearance["windows"] = [];
+  for (const name of UI_WINDOWS) {
+    const ui = uis.get(name);
+    if (ui) windows.push({ window: name, ...uiStatusOf(ui) });
+    else {
+      const builtIn = builtInVersionOf(name);
+      if (builtIn) windows.push({ window: name, ...closedWindowStatus(uiDir(name), builtIn) });
+    }
+  }
+  return { windows, canRevert: windows.some((w) => !w.builtIn) };
+}
+
+function builtInVersionOf(name: WindowName): BuiltInVersion | null {
+  try {
+    const b = builtInFrom(path.join(PATHS.VIEWS_FOLDER, "ui", name));
+    return { uiVersion: b.uiVersion, seq: b.seq };
+  } catch {
+    return null;
+  }
+}
+
+/** "Voltar à aparência anterior": cada janela volta, a aberta com o engine parado antes e um novo depois. */
+async function revertAppearance(): Promise<UiAppearance> {
+  for (const name of UI_WINDOWS) {
+    const ui = uis.get(name);
+    const builtIn = ui?.builtIn ?? builtInVersionOf(name);
+    if (!builtIn) continue;
+    // Aberta, o alvo é a UI da tela, mesmo com uma nova esperando o Recarregar; fechada, a que sobe ao abrir.
+    const onScreen = ui ? (ui.engine?.showing ? { sha256: ui.engine.showing.sha256 } : null) : undefined;
+    ui?.engine?.stop();
+    const reverted = revertWindow(uiDir(name), builtIn, onScreen);
+    log(name, reverted ? "appearance reverted" : "no installed UI to revert");
+    if (ui) await ui.restart();
+  }
+  return uiAppearance();
+}
 
 const log = (name: WindowName, m: string) => console.log(`[ui:${name}] ${m}`);
 
@@ -414,37 +479,71 @@ async function openWindow(name: WindowName, hidden = false): Promise<void> {
       warn: (m) => log(name, m),
     });
     log(name, `UI channel: ${channel.kind === "off" ? `off, ${channel.reason}` : channel.kind}`);
-    engine = createUiEngine({
-      name,
-      dir,
-      builtIn: builtInFrom(path.join(PATHS.VIEWS_FOLDER, "ui", name)),
-      trustedKeys: UI_TRUSTED_KEYS,
-      capabilities: timedUi,
-      channel,
-      // O remoto só fala com a rede pelo fetch guardado: só o release ui-channel e o armazenamento do GitHub (T25029).
-      remoteFetch: uiChannelFetch(),
-      // "Buscar atualizações" (T25110): desligado, nenhum GET do canal, a partir do próximo e sem reiniciar.
-      checkUpdates: async () => (await stores.globalSettings.load()).checkUpdates,
-      show: (ui) => {
-        log(name, `showing UI ${ui.uiVersion}${ui.manifest ? "" : " (built-in)"}`);
-        const html = decoder.decode(ui.index);
-        // A janela nasce já com a UI: um html provisório no construtor chegava depois e cobria a UI (T1192).
-        if (!created) {
-          created = new BrowserWindow({ ...options, html, viewsRoot: servedDir(dir) });
-          created.webview.on("render-process-gone", () => engine?.rendererGone());
-        } else created.webview.loadHTML(html);
+    const ui: OpenUi = { dir, builtIn: builtInFrom(path.join(PATHS.VIEWS_FOLDER, "ui", name)), engine: null, waiting: null, restart: async () => {} };
+    // O `ui.status` e o `ui.reload` desta janela (spec #25011): os do engine dela. O handler comum confere os argumentos.
+    const windowCaps: Record<string, (args: unknown) => unknown> = {
+      ...timedUi,
+      "ui.status": (args) => (timedUi["ui.status"]!(args), uiStatusOf(ui)),
+      "ui.reload": async (args) => {
+        await timedUi["ui.reload"]!(args);
+        const to = ui.waiting;
+        ui.engine?.applyUpdate();
+        return to ? { uiVersion: to, builtIn: false, pending: null } : uiStatusOf(ui);
       },
-    });
-    engine.on((e) => log(name, "reason" in e ? `${e.type}: ${e.reason}` : e.type));
+    };
+    const startEngine = async () => {
+      const e = createUiEngine({
+        name,
+        dir,
+        builtIn: ui.builtIn,
+        trustedKeys: UI_TRUSTED_KEYS,
+        capabilities: windowCaps,
+        channel,
+        // O remoto só fala com a rede pelo fetch guardado: só o release ui-channel e o armazenamento do GitHub (T25029).
+        remoteFetch: uiChannelFetch(),
+        // "Buscar atualizações" (T25110): desligado, nenhum GET do canal, a partir do próximo e sem reiniciar.
+        checkUpdates: async () => (await stores.globalSettings.load()).checkUpdates,
+        // A UI nova não troca a da tela sozinha: a janela mostra a faixa "Nova aparência pronta", e o Recarregar troca
+        // (spec #25011). Fechada, a janela sobe a nova na próxima abertura.
+        canSwap: () => false,
+        show: (shown) => {
+          log(name, `showing UI ${shown.uiVersion}${shown.manifest ? "" : " (built-in)"}`);
+          const html = decoder.decode(shown.index);
+          // A janela nasce já com a UI: um html provisório no construtor chegava depois e cobria a UI (T1192).
+          if (!created) {
+            created = new BrowserWindow({ ...options, html, viewsRoot: servedDir(dir) });
+            created.webview.on("render-process-gone", () => engine?.rendererGone());
+          } else created.webview.loadHTML(html);
+        },
+      });
+      engine = e;
+      ui.engine = e;
+      ui.waiting = null;
+      e.on((ev) => {
+        log(name, "reason" in ev ? `${ev.type}: ${ev.reason}` : ev.type);
+        if (ev.type === "waiting") {
+          ui.waiting = ev.manifest.uiVersion;
+          rpc.send.event({ name: "ui.updateReady", payload: uiStatusOf(ui) });
+        } else if (ev.type === "booting" || ev.type === "built-in") ui.waiting = null;
+      });
+      await e.start();
+    };
+    // O "Voltar à aparência anterior": o engine para, o engine.json muda (ui-appearance.ts) e um engine novo sobe a UI
+    // anterior na mesma janela, sem fechar.
+    ui.restart = async () => {
+      ui.engine?.stop();
+      await startEngine();
+    };
     try {
-      await engine.start();
+      await startEngine();
       if (!created) throw new Error("the engine showed nothing");
     } catch (e) {
       // Sem janela pela metade nem engine de pé: o próximo clique tenta do zero.
-      engine.stop();
+      ui.engine?.stop();
       (created as BrowserWindow | null)?.close();
       throw e;
     }
+    uis.set(name, ui);
     win = created;
   }
   open.set(name, win);
@@ -468,7 +567,8 @@ async function openWindow(name: WindowName, hidden = false): Promise<void> {
     if (name === "hub") setHubFocused(false);
     rpcs.delete(name);
     off?.();
-    engine?.stop();
+    (uis.get(name)?.engine ?? engine)?.stop();
+    uis.delete(name);
     open.delete(name);
     for (const fn of closeListeners) fn(name);
   });

@@ -646,3 +646,22 @@
 
 /* Um interruptor que não pode mudar agora (o atalho Control com o ditado no Control, spec #9876). */
 .kn-switch:disabled { opacity: 0.45; cursor: default; }
+
+/* A faixa "Nova aparência pronta" (spec #25011): flutua no pé da janela, por cima do conteúdo. */
+.kn-update-ready {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  white-space: nowrap;
+}

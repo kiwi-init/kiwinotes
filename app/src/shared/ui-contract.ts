@@ -273,7 +273,10 @@ export type { NoteModel };
 //   Updater e o canal da UI não vão à rede, e o `updates` do Sobre fica `off` com o `UPDATES_OFF_BY_SETTING`. Só acréscimo.
 // 1.98.0 (T26063, spec #26055): "Mostrar o que eu falei". O `showSpokenText` no `AgentStatus` e no `agent.configure`
 //   (desligado por padrão); desligado, o `agent.voice` `asked` vai sem o `text`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.98.0";
+// 1.99.0 (T25031, spec #25011): a "Nova aparência pronta". O `ui.status` (a UI desta janela e a nova que espera), o
+//   `ui.reload` (troca para ela sem fechar o app), o `ui.revert` (volta à aparência anterior), o evento `ui.updateReady` e
+//   o `ui` no `app.about`, a versão da UI de cada janela. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.99.0";
 /** O `reason` do `updates` desligado quando foi a pessoa, em Ajustes (1.97.0, T25110), e não o build. */
 export const UPDATES_OFF_BY_SETTING = "desligado em Buscar atualizações";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
@@ -377,6 +380,15 @@ export interface UiCapabilities {
   "updates.check": { args: Record<string, never>; result: UpdatesView };
   /** "Atualizar e reiniciar": só com `ready`. O app fecha, troca e reabre; se voltar, não reiniciou. */
   "updates.apply": { args: Record<string, never>; result: UpdatesView };
+  /** A UI desta janela (1.99.0, spec #25011): a versão na tela e a nova que o canal baixou e espera o Recarregar. */
+  "ui.status": { args: Record<string, never>; result: UiStatus };
+  /** "Recarregar" da faixa "Nova aparência pronta": a janela troca para a UI que espera, sem fechar o app. */
+  "ui.reload": { args: Record<string, never>; result: UiStatus };
+  /**
+   * "Voltar à aparência anterior" (Ajustes › Sobre): a UI instalada de cada janela não sobe mais, e a janela volta para a
+   * anterior que funcionou ou para a de fábrica. As janelas abertas reabrem com ela.
+   */
+  "ui.revert": { args: Record<string, never>; result: UiAppearance };
 
   // ---------------------------------------------------------------- notas (1.1.0, T1316)
   // `path` é sempre relativo ao vault, POSIX, terminando em `.md`. Fora do vault (`..`, absoluto, link simbólico,
@@ -1232,6 +1244,9 @@ export const UI_CAPABILITIES = [
   "diagnostics.slowFrame",
   "updates.check",
   "updates.apply",
+  "ui.status",
+  "ui.reload",
+  "ui.revert",
   "notes.list",
   "notes.files",
   "files.resolve",
@@ -1384,6 +1399,8 @@ export interface UiEvents {
   "hub.navigate": { section: HubSection; path?: string };
   /** As atualizações mudaram (checando, baixando, pronta, a última checagem): a seção Sobre acompanha (1.6.0). */
   "updates.status": UpdatesView;
+  /** A UI nova desta janela chegou baixada e conferida (1.99.0): a faixa "Nova aparência pronta". */
+  "ui.updateReady": UiStatus;
   /** As Configurações mudaram (1.8.0): todas as janelas trocam a Aparência na hora, sem reiniciar. */
   "settings.changed": AppSettings;
   /** O passo da primeira abertura mudou (1.86.0, T20796): uma permissão dada, o modelo baixou mais um pouco. */
@@ -1501,6 +1518,25 @@ export interface AppAbout {
   /** As notas desta versão no GitHub Releases; null num build local. */
   releaseUrl: string | null;
   updates: UpdatesView;
+  /** A versão da UI de cada janela (1.99.0); sem ela, um engine anterior ao canal. */
+  ui?: UiAppearance;
+}
+
+/** A UI de uma janela (1.99.0, spec #25011). */
+export interface UiStatus {
+  /** A versão da UI na tela (ou a que sobe na próxima abertura, com a janela fechada). */
+  uiVersion: string;
+  /** A UI de fábrica, a que veio no app. */
+  builtIn: boolean;
+  /** A UI nova baixada e conferida que espera o Recarregar, ou null. */
+  pending: string | null;
+}
+
+/** A aparência do app no Sobre: a UI de cada janela e se dá para voltar à anterior. */
+export interface UiAppearance {
+  windows: ({ window: UiWindow } & UiStatus)[];
+  /** Alguma janela está numa UI instalada pelo canal: o "Voltar à aparência anterior" tem o que desfazer. */
+  canRevert: boolean;
 }
 
 /** As notas de uma versão no GitHub Releases (o tag é `v` + a versão). */

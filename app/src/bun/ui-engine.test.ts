@@ -25,6 +25,7 @@ import { DEFAULT_AGENT_SETTINGS, type SettingsPatch } from "../store/settings.ts
 import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
 import { uiChannelFetch } from "./ui-channel-fetch.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
+import { revertWindow } from "./ui-appearance.ts";
 import {
   builtInFrom,
   channelSource,
@@ -187,9 +188,9 @@ afterEach(() => {
 
 function rig(
   manifestUrl: string | null,
-  opts: { readyTimeoutMs?: number; channel?: UiChannelChoice; remoteFetch?: typeof fetch; checkUpdates?: () => boolean | Promise<boolean> } = {},
+  opts: { readyTimeoutMs?: number; channel?: UiChannelChoice; remoteFetch?: typeof fetch; checkUpdates?: () => boolean | Promise<boolean>; canSwap?: () => boolean; dir?: string } = {},
 ) {
-  const dir = tempDir("kiwinotes-ui-engine-test-");
+  const dir = opts.dir ?? tempDir("kiwinotes-ui-engine-test-");
   const shown: HostUi[] = [];
   const events: AppEngineEvent[] = [];
   const { deps } = fakeDeps();
@@ -205,6 +206,7 @@ function rig(
     show: (ui) => void shown.push(ui),
     readyTimeoutMs: opts.readyTimeoutMs ?? 2_000,
     probationMs: 50,
+    ...(opts.canSwap ? { canSwap: opts.canSwap } : {}),
   });
   engine.on((e) => void events.push(e));
   cleanups.push(() => {
@@ -721,6 +723,115 @@ describe("Buscar atualizações desligado: o canal da UI não faz GET nenhum (T2
     expect(n).toBe(0);
     expect(await (await gateFetch(counted, () => true)("https://example.com/x")).text()).toBe("x");
     expect(n).toBe(1);
+  });
+});
+
+describe("Nova aparência pronta e Voltar (spec #25011)", () => {
+  test("com canSwap false, a UI nova espera o Recarregar; o applyUpdate troca sem reabrir", async () => {
+    const channel = startChannel();
+    cleanups.push(channel.stop);
+    const r = rig(channelUrl(channel.base, "settings"), { canSwap: () => false });
+    await r.engine.start();
+    await r.until((e) => e.type === "built-in");
+    channel.publish("settings", BUILT_IN_SEQ + 1, "<p>nova</p>");
+    expect(await r.engine.channel.check()).toMatchObject({ result: "available" });
+    const waiting = await r.until((e) => e.type === "waiting");
+    expect(waiting).toMatchObject({ manifest: { uiVersion: `0.2.${BUILT_IN_SEQ + 1}` } });
+    // Esperando: a da tela continua a de fábrica, até o Recarregar.
+    await Bun.sleep(50);
+    expect(r.last()).toBe("<p>fábrica</p>");
+    r.engine.applyUpdate();
+    await waitFor(() => r.last() === "<p>nova</p>");
+    r.engine.ready();
+    await r.until((e) => e.type === "promoted");
+  });
+
+  test("a janela fechada sobe a nova na próxima abertura", async () => {
+    const channel = startChannel();
+    cleanups.push(channel.stop);
+    const dir = tempDir("kiwinotes-ui-engine-test-");
+    const first = rig(channelUrl(channel.base, "settings"), { canSwap: () => false, dir });
+    await first.engine.start();
+    channel.publish("settings", BUILT_IN_SEQ + 1, "<p>nova</p>");
+    await first.engine.channel.check();
+    await first.until((e) => e.type === "waiting");
+    first.engine.stop();
+    const again = rig(null, { canSwap: () => false, dir });
+    await again.engine.start();
+    await waitFor(() => again.last() === "<p>nova</p>");
+  });
+
+  test("o Voltar com uma nova esperando o Recarregar: sai da da tela num clique, e a que esperava não sobe", async () => {
+    const channel = startChannel();
+    cleanups.push(channel.stop);
+    const dir = tempDir("kiwinotes-ui-engine-test-");
+    const builtIn = { uiVersion: "0.1.0", seq: BUILT_IN_SEQ };
+    const r = rig(channelUrl(channel.base, "settings"), { dir, canSwap: () => false });
+    await r.engine.start();
+    await r.until((e) => e.type === "built-in");
+    // A "um" e depois a "dois" entram pelo Recarregar e passam da prova.
+    for (const [seq, html] of [[BUILT_IN_SEQ + 1, "<p>um</p>"], [BUILT_IN_SEQ + 2, "<p>dois</p>"]] as const) {
+      channel.publish("settings", seq, html);
+      await r.engine.channel.check();
+      await waitFor(() => r.events.filter((e) => e.type === "waiting").length === seq - BUILT_IN_SEQ);
+      r.engine.applyUpdate();
+      await waitFor(() => r.last() === html);
+      r.engine.ready();
+      await waitFor(() => r.events.filter((e) => e.type === "promoted").length === seq - BUILT_IN_SEQ);
+    }
+    // A "três" baixa e espera, com a "dois" na tela.
+    channel.publish("settings", BUILT_IN_SEQ + 3, "<p>três</p>");
+    await r.engine.channel.check();
+    await waitFor(() => r.events.filter((e) => e.type === "waiting").length === 3);
+    expect(r.last()).toBe("<p>dois</p>");
+    const onScreen = { sha256: r.engine.showing!.sha256 };
+    r.engine.stop();
+
+    expect(revertWindow(dir, builtIn, onScreen)).toBe(true);
+    const back = rig(null, { dir, canSwap: () => false });
+    await back.engine.start();
+    // A primeira que sobe já é a "um": não a "dois" (que, sem ready(), cairia na "um" pelo prazo e enganaria o teste).
+    await waitFor(() => back.shown.length > 0);
+    expect(back.shown.map((u) => decode(u.index))).toEqual(["<p>um</p>"]);
+    back.engine.ready();
+    await Bun.sleep(50);
+    expect(back.last()).toBe("<p>um</p>");
+  });
+
+  test("o Voltar com o engine parado: a anterior boa sobe, e a desfeita não volta pelo canal", async () => {
+    const channel = startChannel();
+    cleanups.push(channel.stop);
+    const dir = tempDir("kiwinotes-ui-engine-test-");
+    const builtIn = { uiVersion: "0.1.0", seq: BUILT_IN_SEQ };
+    const r = rig(channelUrl(channel.base, "settings"), { dir });
+    await r.engine.start();
+    for (const [seq, html] of [[BUILT_IN_SEQ + 1, "<p>um</p>"], [BUILT_IN_SEQ + 2, "<p>dois</p>"]] as const) {
+      channel.publish("settings", seq, html);
+      await r.engine.channel.check();
+      await waitFor(() => r.last() === html);
+      r.engine.ready();
+      await waitFor(() => r.events.filter((e) => e.type === "promoted").length === seq - BUILT_IN_SEQ);
+    }
+    r.engine.stop();
+
+    expect(revertWindow(dir, builtIn)).toBe(true);
+    const back = rig(channelUrl(channel.base, "settings"), { dir });
+    await back.engine.start();
+    await waitFor(() => back.shown.length > 0);
+    expect(back.shown.map((u) => decode(u.index))).toEqual(["<p>um</p>"]);
+    // O canal ainda oferece a "dois": o engine recusa, ela está no bad.
+    expect(await back.engine.channel.check()).not.toMatchObject({ result: "available" });
+    expect(back.last()).toBe("<p>um</p>");
+    back.engine.stop();
+
+    // De novo: a "um" sai e sobe a de fábrica; mais um Voltar não tem o que desfazer.
+    expect(revertWindow(dir, builtIn)).toBe(true);
+    const factory = rig(null, { dir });
+    await factory.engine.start();
+    await factory.until((e) => e.type === "built-in");
+    expect(factory.last()).toBe("<p>fábrica</p>");
+    factory.engine.stop();
+    expect(revertWindow(dir, builtIn)).toBe(false);
   });
 });
 

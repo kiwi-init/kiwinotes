@@ -9,11 +9,11 @@ import "./about.css";
 
 import { useEffect, useState } from "react";
 
-import { type AppAbout, releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
+import { type AppAbout, releaseNotesUrl, type UiAppearance, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button, Row, Switch } from "../src/kit/index.tsx";
 import { PRIVACY_RULE } from "../settings/agentText.ts";
-import { CHANNEL, CHECK_UPDATES_HINT, CREDITS, DIAG_HINT, updateBand } from "./aboutText.ts";
+import { appearanceLine, CHANNEL, CHECK_UPDATES_HINT, CREDITS, DIAG_HINT, REVERT_HINT, updateBand } from "./aboutText.ts";
 import appIcon from "./app-icon.webp";
 
 /** Abre um link do GitHub fora do app (no navegador padrão, pelo `newWindow: "external"` da janela). */
@@ -119,6 +119,8 @@ export function About() {
         </div>
       </div>
 
+      {about.ui && about.ui.windows.length ? <Appearance initial={about.ui} /> : null}
+
       <footer className="kn-about-foot">
         <span className="kn-about-privacy">{PRIVACY_RULE}.</span>
         <span className="kn-about-actions">
@@ -136,6 +138,46 @@ export function About() {
         {diag.state === "saved" ? `Salvo em ${diag.folder}: ${diag.name}` : diag.state === "failed" ? "Não deu para salvar o diagnóstico." : ""}
       </p>
     </div>
+  );
+}
+
+/**
+ * A aparência de cada janela (spec #25011): a versão da UI que ela mostra, a de fábrica ou uma que o canal trouxe, e o
+ * "Voltar à aparência anterior", que desfaz a última de cada janela sem fechar o app.
+ */
+function Appearance({ initial }: { initial: UiAppearance }) {
+  const [ui, setUi] = useState(initial);
+  const [state, setState] = useState<"idle" | "reverting" | "failed">("idle");
+  const revert = async () => {
+    setState("reverting");
+    try {
+      setUi(await api.ui.revert());
+      setState("idle");
+    } catch {
+      setState("failed");
+    }
+  };
+  return (
+    <section className="kn-about-appearance" aria-label="Aparência">
+      <h2 className="kn-about-subtitle">Aparência</h2>
+      <ul className="kn-about-windows">
+        {ui.windows.map((w) => {
+          const line = appearanceLine(w);
+          return (
+            <li key={w.window} data-window={w.window}>
+              <span>{line.name}</span>
+              <span className="kn-about-detail">{line.version}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {has("ui.revert") ? (
+        <button type="button" className="kn-about-quiet" title={REVERT_HINT} disabled={!ui.canRevert || state === "reverting"} onClick={() => void revert()}>
+          {state === "reverting" ? "Voltando…" : "Voltar à aparência anterior"}
+        </button>
+      ) : null}
+      {state === "failed" ? <p className="kn-about-hint">Não deu para voltar à aparência anterior.</p> : null}
+    </section>
   );
 }
 

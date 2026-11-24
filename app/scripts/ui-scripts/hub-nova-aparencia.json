@@ -1,0 +1,21 @@
+{
+  "window": "hub",
+  "steps": [
+    { "waitFor": ".kn-tab", "name": "o hub abre (com KIWI_FAKE_UI: uma UI nova pronta)" },
+    { "expectText": "[data-testid=ui-update-ready]", "text": "Nova aparência pronta", "name": "a faixa aparece na janela aberta (spec #25011)" },
+    { "expectCount": "[data-testid=ui-update-ready] button", "count": 2, "name": "com Recarregar e Depois" },
+    { "click": ".kn-tab:has-text('Configurações')" },
+    { "click": ".kn-prefs-item[data-topic=about]", "name": "o Sobre" },
+    { "expectText": ".kn-about-appearance", "text": "Aparência" },
+    { "expectCount": ".kn-about-windows li", "count": 5, "name": "a versão da UI de cada janela" },
+    { "expectText": ".kn-about-windows li[data-window=notes]", "text": "2026.11.12 · nova pronta: 2026.11.13" },
+    { "expectCount": ".kn-about-appearance button:has-text('Voltar à aparência anterior'):not([disabled])", "count": 1, "name": "e o Voltar, ativo" },
+    { "screenshot": "nova-aparencia.png" },
+    { "click": "[data-testid=ui-update-ready] button:has-text('Depois')", "name": "Depois esconde a faixa" },
+    { "expectCount": "[data-testid=ui-update-ready]", "count": 0 },
+    { "click": ".kn-about-appearance button:has-text('Voltar à aparência anterior')", "name": "Voltar põe cada janela na de fábrica" },
+    { "expectText": ".kn-about-windows li[data-window=notes]", "text": "2026.11.9 (de fábrica)" },
+    { "expectCount": ".kn-about-appearance button[disabled]", "count": 1, "name": "e não sobra o que voltar" },
+    { "screenshot": "nova-aparencia-voltou.png" }
+  ]
+}
