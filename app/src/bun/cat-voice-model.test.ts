@@ -60,7 +60,7 @@ beforeAll(() => {
           }),
         );
       }
-      return new Response(body);
+      return new Response(new Uint8Array(body));
     },
   });
 });
@@ -131,7 +131,7 @@ describe("CatVoiceModel", () => {
     expect(requests.sort()).toEqual(Object.keys(FILES).sort());
     const a = await m.assets();
     expect(a.modelDir).toBe(modelDir(modelsDir, MODEL));
-    expect(readFileSync(a.refAudio)).toEqual(FILES["/vozes/ana-exemplo.wav"]!);
+    expect(sha(readFileSync(a.refAudio))).toBe(sha(FILES["/vozes/ana-exemplo.wav"]!));
     expect(a.refText).toBe(VOICE().text);
   });
 
