@@ -619,7 +619,22 @@
   --kn-expand-glass: linear-gradient(var(--wash-2, var(--surface-hover)), var(--wash-2, var(--surface-hover))), var(--float);
 }
 
-/* O × de remover das listas dos Ajustes (Dicionário, Snippets): o "Remover" aparece ao lado, no hover e no foco. */
+/* O × de remover das listas dos Ajustes (Dicionário, Snippets): o "Remover" aparece ao lado, no hover e no foco.
+   O lists.css vem depois deste arquivo no bundle e o `transition` do `.kn-icon-button` apagaria o atraso do z-index:
+   aqui as duas juntas (T26124, revisão #26404). */
+.kn-icon-button.kn-expand {
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), transform var(--pop), z-index 0s linear var(--expand-close);
+}
+.kn-icon-button.kn-expand:hover,
+.kn-icon-button.kn-expand:focus-visible {
+  transition-delay: 0s;
+}
+
+/* O tom do botão chega ao nome: o "Remover" fica vermelho como o ×. */
+.kn-expand[data-tone="danger"] > .kn-expand-label > span {
+  color: var(--danger);
+}
+
 .kn-icon-button.kn-expand:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);

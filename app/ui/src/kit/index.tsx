@@ -209,6 +209,10 @@ export function HoverLabel({ children }: { children: ReactNode }) {
     const button = label?.parentElement;
     if (!label || !button) return;
     const place = () => placeHoverLabel(button, label);
+    // Já no lado certo em repouso: fechada do lado errado, a camada passa da borda de quem corta e o deixa rolar (o
+    // cartão do Dicionário corria uns 50 px ao focar ou rolar até o ×, revisão #26404). Escondido (a árvore fechada),
+    // espera o primeiro hover.
+    if (button.getClientRects().length > 0) place();
     button.addEventListener("pointerenter", place);
     button.addEventListener("focus", place);
     return () => {

@@ -60,6 +60,8 @@ type Sample = {
   text: number;
   self: Box;
   neighbors: Box[];
+  /** O `scrollLeft` somado dos ancestrais: a camada que passa da borda de um `overflow: hidden` o deixa rolar. */
+  scroll: number;
 };
 type Run = { enter: number; leave: number; samples: Sample[]; grow: string | null; clip: { left: number; right: number } };
 
@@ -107,6 +109,11 @@ const startSampler = (p: Page, selector: string) =>
       const [, right, , left] = [v[0], v[1] ?? v[0], v[2] ?? v[0], v[3] ?? v[1] ?? v[0]];
       return { left: r.left + px(left!, r.width), right: r.right - px(right!, r.width) };
     };
+    const scrolled = () => {
+      let sum = 0;
+      for (let at = button.parentElement; at; at = at.parentElement) sum += at.scrollLeft;
+      return sum;
+    };
     const neighbors = [...button.parentElement!.children].filter((e) => e !== button && e.getClientRects().length > 0);
     const w = window as unknown as { __kn: { samples: Sample[]; enter: number; leave: number; on: boolean } };
     w.__kn = { samples: [], enter: -1, leave: -1, on: true };
@@ -124,6 +131,7 @@ const startSampler = (p: Page, selector: string) =>
         text: Number(getComputedStyle(label.firstElementChild!).opacity),
         self: box(button),
         neighbors: neighbors.map(box),
+        scroll: scrolled(),
       });
       requestAnimationFrame(tick);
     };
@@ -150,6 +158,7 @@ const same = (a: Box, b: Box) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y
 
 /** Mouse longe, o amostrador, o hover, 0,9 s parado, o mouse sai, 0,5 s fechando. */
 async function hoverRun(p: Page, selector: string): Promise<Run> {
+  await p.locator(selector).scrollIntoViewIfNeeded();
   await p.mouse.move(500, 600);
   await p.waitForTimeout(500);
   await startSampler(p, selector);
@@ -167,6 +176,9 @@ export function motionProblems(name: string, run: Run): string[] {
   const s = run.samples;
   if (run.enter < 0 || run.leave < 0) return [`${name}: o mouse não entrou ou não saiu (${run.enter}, ${run.leave})`];
   const first = s[0]!;
+  if (first.scroll !== 0) bad.push(`${name}: em repouso, quem corta já rolou ${first.scroll} px para o lado`);
+  const rolled = s.find((f) => f.scroll !== first.scroll);
+  if (rolled) bad.push(`${name}: quem corta rolou ${rolled.scroll - first.scroll} px em ${Math.round(rolled.t - run.enter)} ms`);
   for (const f of s) {
     if (!same(f.self, first.self)) bad.push(`${name}: o botão mudou de caixa em ${Math.round(f.t - run.enter)} ms (${JSON.stringify(first.self)} → ${JSON.stringify(f.self)})`);
     f.neighbors.forEach((n, i) => {
@@ -232,6 +244,8 @@ function reducedProblems(name: string, run: Run): string[] {
 const TREE = ["data-new='note'", "data-new='folder'", "data-all='collapse'", "data-all='expand'"];
 const TOP = ["aria-label='Nova nota'", "aria-label='Buscar'"];
 const sel = (attr: string) => `.kn-expand[${attr}]`;
+/** O × de remover dos Ajustes (Dicionário e Snippets), no fim da linha de um cartão com `overflow: hidden`. */
+const SETTINGS = ["aria-label='Remover Ana'", "aria-label='Remover meu endereço'"];
 
 async function openTree(p: Page) {
   await p.click(".kn-crumb-bt");
@@ -262,6 +276,13 @@ if (import.meta.main) {
   for (const note of [{ folder: "Projeto X", title: "Ideias", content: "# Ideias\n\nUma nota de exemplo.\n" }, { folder: "Projeto X/Rascunhos", title: "Lista", content: "# Lista\n" }]) {
     const r = spawnSync(process.execPath, [cli, "invoke", "notes.create", JSON.stringify(note), "--data", data], { encoding: "utf8" });
     if (r.status !== 0) throw new Error(`notes.create: ${r.stdout}${r.stderr}`);
+  }
+  for (const [cap, args] of [
+    ["dictionary.set", { terms: [{ term: "Ana", aliases: ["ana b"] }] }],
+    ["snippets.set", { snippets: [{ trigger: "meu endereço", text: "Rua Exemplo, 1" }] }],
+  ] as const) {
+    const r = spawnSync(process.execPath, [cli, "invoke", cap, JSON.stringify(args), "--data", data], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`${cap}: ${r.stdout}${r.stderr}`);
   }
   const browser: Browser = await webkit.launch();
   const problems: string[] = [];
@@ -302,6 +323,27 @@ if (import.meta.main) {
       assert.deepEqual(w.report.problems, [], "erros na página");
     } finally {
       await w.close();
+    }
+    // 2b. Os × dos Ajustes: o cartão não rola nem corta a camada, e o "Remover" leva o vermelho do botão.
+    const st = await openWindow(browser, ctx, { ...base, query: { section: "settings", topic: "dictation" }, motion: true });
+    try {
+      await settle(st.page);
+      for (const label of SETTINGS) {
+        await st.page.waitForSelector(sel(label));
+        const run = await hoverRun(st.page, sel(label));
+        const bad = motionProblems(label, run);
+        await st.page.hover(sel(label));
+        await st.page.waitForTimeout(900);
+        const [text, button] = await st.page.locator(sel(label)).evaluate((b) => [getComputedStyle(b.querySelector(".kn-expand-label > span")!).color, getComputedStyle(b).color]);
+        if (text !== button) bad.push(`${label}: o nome (${text}) não tem a cor do botão (${button})`);
+        await st.page.mouse.move(500, 600);
+        await st.page.waitForTimeout(500);
+        problems.push(...bad);
+        console.log(`${bad.length ? "FALHOU" : "ok    "} ${label} (${run.grow}, ${run.samples.length} quadros)${bad.map((b) => `\n  ${b}`).join("")}`);
+      }
+      assert.deepEqual(st.report.problems, [], "erros na página dos Ajustes");
+    } finally {
+      await st.close();
     }
     // 3. Reduzir movimento.
     const r = await openWindow(browser, ctx, { ...base, motion: false });
