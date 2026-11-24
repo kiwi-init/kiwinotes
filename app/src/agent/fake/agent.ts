@@ -31,6 +31,8 @@
 //   KIWI_FAKE_AGENT_RESUME   "resume" (o padrão), "load" ou "none": como ele retoma uma sessão
 //   KIWI_FAKE_AGENT_TOOL_DELAY_MS  uma pausa depois de cada ferramenta do Kiwi, para um print pegar o status no meio
 //   KIWI_FAKE_AGENT_USAGE_DELAY_MS o `/usage` demora isso antes de responder, e respeita o cancelar (T16712)
+//   KIWI_FAKE_AGENT_THINK_MS  uma pausa depois do "pensando…", como o agente de verdade antes da 1ª palavra: um print
+//                            pega o que o balão mostra enquanto ele pensa (T26063)
 //   KIWI_FAKE_AGENT_NO_MCP   "1": não anuncia o HTTP do MCP (`mcpCapabilities`), e o host não manda as ferramentas
 //   KIWI_FAKE_AGENT_FLAVOR   "gemini": ele se apresenta como o Gemini CLI 0.70.0 (spec #24666), aberto pelo `fake/gemini.ts`:
 //                            o `initialize` dele (os quatro jeitos de logar, o `loadSession` e sem `session/resume`), o
@@ -443,6 +445,8 @@ async function think(client: AgentContext, sessionId: string): Promise<void> {
     sessionId,
     update: { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "pensando…" } },
   });
+  const pause = Number(process.env.KIWI_FAKE_AGENT_THINK_MS ?? 0);
+  if (pause > 0) await Bun.sleep(pause);
 }
 
 /** O `initialize` do Gemini CLI 0.70.0 (acpRpcDispatcher.ts): os quatro jeitos de logar, o `loadSession` e o MCP. */

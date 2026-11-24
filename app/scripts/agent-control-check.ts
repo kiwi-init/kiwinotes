@@ -20,7 +20,7 @@ const registry = fakeRegistry([
   { name: "zod", version: "4.6.7", files: { "index.js": "" } },
 ]);
 const packages = join(data, "packages.json"); writeFileSync(packages, JSON.stringify(registry.pinned));
-const env = { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages, KIWI_FAKE_AGENT_TOOL_DELAY_MS: "1500" };
+const env = { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages, KIWI_FAKE_AGENT_TOOL_DELAY_MS: "1500", KIWI_FAKE_AGENT_THINK_MS: "1500" };
 async function cli(args: string[]) {
   const p = Bun.spawn([process.execPath, join(app, "scripts/cli.ts"), ...args, "--data", data], { cwd: app, stdout: "pipe", stderr: "pipe", env });
   const text = await new Response(p.stdout).text(); const err = await new Response(p.stderr).text();
@@ -76,7 +76,8 @@ try {
   // eu falei" desligado (o padrão, spec #26055), não vai ao balão: o 1º balão é a resposta.
   assert.equal((await invoke("agent.status")).showSpokenText, false);
   /** Os textos do balão do gato, na ordem, sem repetir o seguido. */
-  const bubbleNow = () => p.evaluate(() => document.querySelector(".kn-bubble")?.textContent?.trim() ?? "");
+  // O balão que sai (`data-phase="exit"`) ainda fica no DOM por 180 ms: não conta.
+  const bubbleNow = () => p.evaluate(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble')?.textContent?.trim() ?? "");
   /** `stale`: o balão do pedido de antes, que ainda pode estar na tela, não conta. */
   const bubbleTexts = (into: string[], stale = "") => setInterval(() => void bubbleNow().then((t) => { if (t && t !== stale && into.at(-1) !== t) into.push(t); }, () => {}), 30);
   const heardOff: string[] = [];
@@ -96,6 +97,9 @@ try {
   const voice = events.slice(before).filter((e) => e.type === "agent.voice").map((e) => e.payload.payload);
   const asked = voice.find((v) => v.phase === "asked");
   assert.equal(asked.text, undefined, "a fala não vai ao balão com o ajuste desligado");
+  // O agente pensa 1,5 s (KIWI_FAKE_AGENT_THINK_MS): o gato em "pensando", sem balão nenhum.
+  await Bun.sleep(500);
+  assert.equal(await bubbleNow(), "", "nenhum balão enquanto o agente pensa");
   await p.screenshot({ path: join(out, "1-sem-a-fala-pensando.png"), clip: { x: 520, y: 430, width: 480, height: 310 } });
   const phases = voice.map((v) => v.phase).filter((v, i, a) => a[i - 1] !== v);
   assert.deepEqual(phases.slice(0, 3), ["listening", "processing", "asked"], JSON.stringify(phases));
@@ -131,16 +135,20 @@ try {
   const heardOn: string[] = [];
   const watchOn = bubbleTexts(heardOn, await bubbleNow());
   const onStart = events.length;
-  // Uma pergunta: o agente falso procura nas notas antes de responder (a pausa do KIWI_FAKE_AGENT_TOOL_DELAY_MS). Sem
-  // ela, a resposta dele pode chegar ao hub antes do `asked`, e a resposta toma o lugar da fala (o BubbleFeed).
-  assert.equal((await ctx.send({ cmd: "agentTalk", wav: say("com-a-fala", "Qual é o prazo do projeto X?") })).ok, true);
+  // O agente falso pensa 1,5 s antes da 1ª palavra (KIWI_FAKE_AGENT_THINK_MS), como o de verdade: sem a pausa, a
+  // resposta toma o lugar da fala no balão (o BubbleFeed) antes de ela aparecer.
+  assert.equal((await ctx.send({ cmd: "agentTalk", wav: say("com-a-fala", "Abra o projeto X.") })).ok, true);
   await waitFor("the request with the text", () => events.slice(onStart).some((e) => e.type === "agent.voice" && e.payload?.payload?.phase === "asked"));
   const askedOn = events.slice(onStart).find((e) => e.type === "agent.voice" && e.payload?.payload?.phase === "asked")!.payload.payload;
-  assert.match(askedOn.text, /prazo/i);
+  assert.match(askedOn.text, /projeto/i);
   await waitFor("the speech in the bubble", () => heardOn.some((t) => t.startsWith("“")), 5000).catch((e: Error) => {
     throw new Error(`${e.message}: ${JSON.stringify({ heardOn, asked: askedOn })}`);
   });
-  await p.screenshot({ path: join(out, "3-com-a-fala.png"), clip: { x: 520, y: 430, width: 480, height: 310 } });
+  // A entrada do balão (Web Animations, 60 + 250 ms) termina; o agente ainda pensa.
+  await Bun.sleep(500);
+  await p.screenshot({ path: join(out, "3-com-a-fala.png"), clip: { x: 520, y: 430, width: 480, height: 310 }, animations: "disabled" });
+  const atShot = await bubbleNow();
+  assert.ok(atShot.startsWith("“"), `a fala ainda no balão depois do print: ${JSON.stringify({ atShot, heardOn })}`);
   await waitFor("the answer after the speech", () => heardOn.some((t) => !t.startsWith("“")), 20_000);
   clearInterval(watchOn);
   assert.ok(heardOn[0]!.startsWith("“"), JSON.stringify(heardOn));
