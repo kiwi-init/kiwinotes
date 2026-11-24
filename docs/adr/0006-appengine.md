@@ -63,9 +63,11 @@ E o evento `history.added`, que o engine manda ao Histórico aberto a cada ditad
 - **Para trocar a chave:** gere outra, ponha a pública ao lado da antiga, publique com a nova e só então tire a antiga.
 
 ## Canal
-- **Desligado por padrão.** O fetch do canal recusa tudo, então o app não consulta a rede para buscar UI (AGENTS.md, privacidade).
-- **Em dev,** `KIWI_UI_CHANNEL=http://127.0.0.1:5179` liga um canal **local**. O app só aceita `127.0.0.1` ou `localhost`, porque o bundle do AppEngine tem que vir por http(s). Os passos: `bun run ui:build`, depois `bun run ui:publish settings [--ui-version …]`, depois `bun run ui:serve`.
-- **Um canal remoto** (`manifestUrl` na internet) faz o app consultar a rede. É decisão do @harry, e fica desligado até ele decidir (#1193).
+- **O canal remoto** é o release fixo `ui-channel` do GitHub, e mais nada (decisão do @harry, spec #25011, que muda o #1193). Cada janela tem um `<janela>.manifest.json` em `https://github.com/kiwi-init/kiwinotes/releases/download/ui-channel/`, e o pack fica no mesmo release; quem publica é o job `ui-publish` (T25030).
+- **O que vai à rede:** um GET do manifesto ao abrir uma janela e, com ela aberta, a cada 6 h (`UI_CHANNEL_POLL_MS`), e o GET do pack quando há um novo. Só baixa: sem query, sem cabeçalho além dos padrões, nada da pessoa (spec #25011, harry #25014).
+- **O fetch guardado** (`ui-channel-fetch.ts`, T25029) é o único caminho do canal remoto à rede: só URLs do release `ui-channel`, e o redirect só para o armazenamento de arquivos do GitHub. Sem ele, o canal remoto fica desligado (`channelSource`).
+- **Desliga junto com as atualizações.** O canal segue o Updater (ADR 0008): com ele desligado (`updatesOff`: `KIWI_DEBUG=1`, um build fora dos canais de release, sem o endereço das atualizações), o fetch do canal recusa tudo e nenhum pedido sai. Os testes e o headless ficam sempre assim.
+- **Em dev,** `KIWI_UI_CHANNEL=http://127.0.0.1:5179` liga um canal **local**, que vem antes do remoto. O app só aceita `127.0.0.1` ou `localhost`, porque o bundle do AppEngine tem que vir por http(s); um valor errado deixa o canal desligado. Os passos: `bun run ui:build`, depois `bun run ui:publish settings [--ui-version …]`, depois `bun run ui:serve`.
 - **O HMR do Vite** (a janela carregando do `localhost:5178`) só existe no canal `dev` do Electrobun, com o mesmo contrato, mas sem boot nem rollback. No stable, nunca (#1199, `devServerAllowed`).
 
 ## Rollback

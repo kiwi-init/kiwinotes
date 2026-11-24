@@ -23,7 +23,9 @@ import { session } from "./session.ts";
 import type { Sidecar } from "./sidecar.ts";
 import { stores } from "./stores.ts";
 import { type CapabilityDeps, uiCapabilities } from "./ui-capabilities.ts";
-import { builtInFrom, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir } from "./ui-engine.ts";
+import { builtInFrom, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir, uiChannelFor } from "./ui-engine.ts";
+import { updatesOff } from "./updates.ts";
+import { uiChannelFetch } from "./ui-channel-fetch.ts";
 import { UI_TRUSTED_KEYS } from "./ui-keys.ts";
 import { windowSecurity } from "./window-security.ts";
 import { createLinkOpener, newWindowUrl, urlOnDiskBefore } from "./link-open.ts";
@@ -405,13 +407,22 @@ async function openWindow(name: WindowName, hidden = false): Promise<void> {
     mkdirSync(servedDir(dir), { recursive: true, mode: 0o700 });
     const decoder = new TextDecoder();
     let created: BrowserWindow | null = null;
+    // O canal da UI segue o Updater (spec #25011): com as atualizações desligadas, nada vai à rede.
+    const channel = uiChannelFor(name, {
+      env: process.env.KIWI_UI_CHANNEL,
+      updatesOff: updatesOff(await Updater.getLocalInfo(), process.env),
+      warn: (m) => log(name, m),
+    });
+    log(name, `UI channel: ${channel.kind === "off" ? `off, ${channel.reason}` : channel.kind}`);
     engine = createUiEngine({
       name,
       dir,
       builtIn: builtInFrom(path.join(PATHS.VIEWS_FOLDER, "ui", name)),
       trustedKeys: UI_TRUSTED_KEYS,
       capabilities: timedUi,
-      manifestUrl: channelUrlOrOff(process.env.KIWI_UI_CHANNEL, name, (m) => log(name, m)),
+      channel,
+      // O remoto só fala com a rede pelo fetch guardado: só o release ui-channel e o armazenamento do GitHub (T25029).
+      remoteFetch: uiChannelFetch(),
       show: (ui) => {
         log(name, `showing UI ${ui.uiVersion}${ui.manifest ? "" : " (built-in)"}`);
         const html = decoder.decode(ui.index);
