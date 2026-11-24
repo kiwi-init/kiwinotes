@@ -1,7 +1,7 @@
 // O registro de instalação do Electrobun apontando para outro app (T2399, a rc3 do harry, #2395).
 //
 // O instalador do Electrobun (o wrapper que se desempacota) grava `<userData>/.electrobun-uninstall.json`, com o
-// `app_bundle_path` do app que ele instalou. Na troca de versão, o extractor do Livewire 2026.10.2 compara esse caminho
+// `app_bundle_path` do app que ele instalou. Na troca de versão, o extractor do Livewire (2026.10.2 e 2026.11.5, igual) compara esse caminho
 // com o app que está rodando, e recusa com `InvalidUpdateIdentity` se forem outros
 // (`package/src/extractor/main.zig`, `validateApplyUpdatePlan`, o ramo do macOS). Sem o arquivo, ele segue pelo
 // caminho antigo, que confere o Info.plist do próprio app que está rodando.

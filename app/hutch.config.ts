@@ -1,8 +1,8 @@
-// @hutch cli=0.28.2-canary.8
+// @hutch cli=0.29.0
 // Run through `bun run <script>` (package.json), which uses the pinned Hutch.
 export default {
   electrobun: {
-    version: "2026.10.2",
+    version: "2026.11.5",
   },
   packageManager: "bun",
   scripts: {
