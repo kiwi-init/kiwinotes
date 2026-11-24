@@ -4,6 +4,27 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+## [2026.11.13](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.13) (2026-11-24)
+
+- **Livewire 2026.11.5 e Hutch 0.29.0 (T25776)** ([#313](https://github.com/kiwi-init/kiwinotes/pull/313))
+- **Nova aparência 3: a faixa e o Sobre, rebaseado na main (T26309)** ([#326](https://github.com/kiwi-init/kiwinotes/pull/326))
+- **Placar: o resultado que chega antes do "rodando" abre a leva dele (T26483)** ([#331](https://github.com/kiwi-init/kiwinotes/pull/331))
+- **Barras: o nome do hover cresce por cima, suave (T26124)** ([#327](https://github.com/kiwi-init/kiwinotes/pull/327))
+- **Notas: o caminho que encolhe não deixa rastro (T26097)** ([#329](https://github.com/kiwi-init/kiwinotes/pull/329))
+- **Kiwi-cat: "Mostrar o que eu falei", desligado por padrão (T26063)** ([#323](https://github.com/kiwi-init/kiwinotes/pull/323))
+- **Nova aparência: o interruptor Buscar atualizações (T25110)** ([#325](https://github.com/kiwi-init/kiwinotes/pull/325))
+- **Agente: as reuniões se leem com outra pasta aberta (T26083)** ([#321](https://github.com/kiwi-init/kiwinotes/pull/321))
+- **Agente: o Esforço do Gemini na hora em Ajustes › Agente (T25729)** ([#311](https://github.com/kiwi-init/kiwinotes/pull/311))
+- **Nova aparência 1: o canal remoto da UI (T25028)** ([#281](https://github.com/kiwi-init/kiwinotes/pull/281))
+- **Nova aparência: o window.open passa pelo main (T25095)** ([#309](https://github.com/kiwi-init/kiwinotes/pull/309))
+- **ui-publish: assinar num job separado, sem bun install (T25152)** ([#307](https://github.com/kiwi-init/kiwinotes/pull/307))
+- **hub-goo-check: reduzir movimento lê as animações quando os botões entram (T25952)** ([#319](https://github.com/kiwi-init/kiwinotes/pull/319))
+- **text-index: o teste do lote grande com um relógio injetado (T25945)** ([#317](https://github.com/kiwi-init/kiwinotes/pull/317))
+- **Gota: o 1º quadro depois do clique também segura o relógio (T25900)** ([#315](https://github.com/kiwi-init/kiwinotes/pull/315))
+- **Nova aparência: a prova de privacidade (T25029)** ([#279](https://github.com/kiwi-init/kiwinotes/pull/279))
+- **hub-goo-check: o quadro lento do CI não é salto (T25620)** ([#303](https://github.com/kiwi-init/kiwinotes/pull/303))
+- **cpu-scenarios: o repouso espera o modelo de voz do helper (T25655)** ([#305](https://github.com/kiwi-init/kiwinotes/pull/305))
+
 ## [2026.11.12](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.12) (2026-11-21)
 
 - **Agente: o esforço do Antigravity pela categoria thought_level (T25553)** ([#300](https://github.com/kiwi-init/kiwinotes/pull/300))
