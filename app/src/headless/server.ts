@@ -218,12 +218,18 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     // Sem helper nem mic: uma lista fixa (a do #3202, AirPods na saída), para o seletor de microfone dos Ajustes (T3230).
     audioInputs: async () => headlessAudioInputs((await stores.settings.load()).microphone),
     precise: () => session?.precise.status() ?? null,
-    // A voz do gato (T26729): o headless nunca baixa. Só o que já estiver no KIWI_MODELS_DIR conta.
-    catVoice: (await import("../bun/cat-voice-model.ts")).createCatVoice({
-      modelsDir: stores.modelsDir,
-      bin: (await import("../bun/voice-process.ts")).voicePath(path.join(data, "views")),
-      download: false,
-    }).model,
+    // A voz do gato (T26729): o headless não vai à internet. Só o que já estiver no KIWI_MODELS_DIR conta, ou, com a
+    // chave de teste `KIWI_CAT_VOICE_MANIFEST` (T26736), o que um servidor falso e local serve.
+    catVoice: await (async () => {
+      const { createCatVoice, headlessCatVoiceSource } = await import("../bun/cat-voice-model.ts");
+      const test = headlessCatVoiceSource(process.env);
+      return createCatVoice({
+        modelsDir: stores.modelsDir,
+        bin: (await import("../bun/voice-process.ts")).voicePath(path.join(data, "views")),
+        download: test !== null,
+        ...(test ?? {}),
+      }).model;
+    })(),
     ocr: stores.ocr,
     textIndex: stores.textIndex,
     semanticEngine: stores.semantic,

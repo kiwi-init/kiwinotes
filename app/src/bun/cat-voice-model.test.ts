@@ -3,14 +3,14 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type { Fetcher, ModelManifest } from "../notes/semantic/model.ts";
 import { modelDir } from "../notes/semantic/model.ts";
 import { tempDir } from "../../test/tmp.ts";
 import type { CatVoiceStatus } from "../shared/ui-contract.ts";
-import { CAT_VOICE_REF, CatVoiceModel, type CatVoiceRef, QWEN3_TTS } from "./cat-voice-model.ts";
+import { CAT_VOICE_REF, CatVoiceModel, type CatVoiceRef, headlessCatVoiceSource, QWEN3_TTS } from "./cat-voice-model.ts";
 import { spawnVoice, VoiceProcess } from "./voice-process.ts";
 
 const bytes = (n: number, seed: number) => Buffer.from(Array.from({ length: n }, (_, i) => (i * 31 + seed) % 251));
@@ -272,6 +272,33 @@ describe("CatVoiceModel", () => {
     } finally {
       await voice.stop();
     }
+  });
+});
+
+describe("a chave de teste do headless (T26736)", () => {
+  const write = (o: unknown) => {
+    const f = path.join(tempDir("cat-voice-key"), "voz.json");
+    writeFileSync(f, JSON.stringify(o));
+    return f;
+  };
+
+  test("sem a chave, nada muda: o headless não baixa", () => {
+    expect(headlessCatVoiceSource({})).toBeNull();
+  });
+
+  test("com a chave, o modelo e a voz inventados vêm do servidor falso, e o download funciona", async () => {
+    const src = headlessCatVoiceSource({ KIWI_CAT_VOICE_MANIFEST: write({ host: base(), model: MODEL, voice: VOICE() }) })!;
+    expect(src.manifest).toEqual(MODEL);
+    const { m } = make({ ...src, fetch: src.fetch! });
+    await m.download();
+    expect(m.status().phase).toBe("ready");
+    expect(requests.sort()).toEqual(Object.keys(FILES).sort());
+  });
+
+  test("só um host local, e nenhum pedido sai para outro", async () => {
+    expect(() => headlessCatVoiceSource({ KIWI_CAT_VOICE_MANIFEST: write({ host: "https://exemplo.com", model: MODEL, voice: null }) })).toThrow(/local/);
+    const src = headlessCatVoiceSource({ KIWI_CAT_VOICE_MANIFEST: write({ host: base(), model: MODEL, voice: null }) })!;
+    await expect(src.fetch!("https://exemplo.com/x")).rejects.toThrow(/não é o host de teste/);
   });
 });
 

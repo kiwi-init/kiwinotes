@@ -31,10 +31,14 @@
 //   dúvidas e "É tudo segredo" (no escuro), uma dúvida sem resposta no prazo, que vai para a Atividade, a resposta
 //   depois e a lista "O que você já respondeu" (`duvida`); a linha do aviso quando o agente espera (`aviso` e
 //   `aviso-negado`, spec #9839), com o aviso falso.
+// - `ajustes-gato-fala.json` (spec #26687, T26736): "O gato fala" desligado por padrão; abrir os Ajustes e ligar não
+//   baixam nada; o botão com o tamanho, o andamento, cancelar, baixar de novo, "Preparando" e "Pronta", desligar e
+//   remover. A voz vem de um servidor falso e local (a chave `KIWI_CAT_VOICE_MANIFEST`), com um modelo e uma voz
+//   inventados, e o `kiwi-voice` é o falso: nada fala.
 // Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -61,6 +65,64 @@ const reg = fakeRegistry(
 );
 const packages = path.join(work, "packages.json");
 writeFileSync(packages, JSON.stringify(reg.pinned));
+
+// A voz do gato (T26736): um "modelo" e uma "voz" inventados, servidos aos poucos (64 KB a cada 60 ms, uns 3 s), para dar
+// tempo de ver o andamento e de cancelar; e o `kiwi-voice` falso, que demora 2,5 s no warmup.
+const voiceFiles: Record<string, Uint8Array> = {
+  "/exemplo/voz-modelo/resolve/rev-exemplo/config.json": new TextEncoder().encode('{"exemplo":true}'),
+  "/exemplo/voz-modelo/resolve/rev-exemplo/model.safetensors": random(3_000_000),
+  "/vozes/ana-exemplo.wav": random(200_000),
+};
+const voiceServer = Bun.serve({
+  port: 0,
+  fetch(req) {
+    const body = voiceFiles[new URL(req.url).pathname];
+    if (!body) return new Response("não há", { status: 404 });
+    let at = 0;
+    return new Response(
+      new ReadableStream({
+        async pull(c) {
+          if (at >= body.length) return c.close();
+          await Bun.sleep(60);
+          c.enqueue(body.subarray(at, at + 64 * 1024));
+          at += 64 * 1024;
+        },
+      }),
+    );
+  },
+});
+const sha = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
+const voiceFile = (p: string) => ({ size: voiceFiles[p]!.length, sha256: sha(voiceFiles[p]!) });
+const catVoiceKey = path.join(work, "cat-voice.json");
+writeFileSync(
+  catVoiceKey,
+  JSON.stringify({
+    host: `http://127.0.0.1:${voiceServer.port}`,
+    model: {
+      id: "voz-modelo-exemplo",
+      repo: "exemplo/voz-modelo",
+      revision: "rev-exemplo",
+      files: [
+        { name: "config.json", ...voiceFile("/exemplo/voz-modelo/resolve/rev-exemplo/config.json") },
+        { name: "model.safetensors", ...voiceFile("/exemplo/voz-modelo/resolve/rev-exemplo/model.safetensors") },
+      ],
+    },
+    voice: {
+      manifest: {
+        id: "voz-exemplo",
+        repo: "-",
+        revision: "v1",
+        files: [{ name: "ana-exemplo.wav", ...voiceFile("/vozes/ana-exemplo.wav"), url: `http://127.0.0.1:${voiceServer.port}/vozes/ana-exemplo.wav` }],
+      },
+      text: "Oi, eu sou a Ana, uma voz inventada.",
+    },
+  }),
+);
+const fakeVoice = path.join(work, "kiwi-voice-falso");
+writeFileSync(fakeVoice, `#!/bin/sh\nexec "${process.execPath}" "${path.join(app, "test", "helpers", "fake-kiwi-voice.ts")}"\n`);
+chmodSync(fakeVoice, 0o755);
+// Uma pasta de modelos só do cenário: o "Remover a voz" nunca apaga a pasta de modelos que os agentes dividem.
+const catVoiceEnv = { KIWI_CAT_VOICE_MANIFEST: catVoiceKey, KIWI_VOICE: fakeVoice, FAKE_WARM_MS: "2500", KIWI_MODELS_DIR: path.join(work, "models-gato") };
 
 async function cli(args: string[], env: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   const p = Bun.spawn([process.execPath, path.join(app, "scripts", "cli.ts"), ...args], {
@@ -584,8 +646,10 @@ try {
   ok = (await scenario("aviso", noticeScript(false), { KIWI_FAKE_NOTICES: "notDetermined" }, { before: agentReady, prefix: "aviso-" })) && ok;
   ok = (await scenario("aviso-negado", noticeScript(true), { KIWI_FAKE_NOTICES: "denied" }, { before: agentReady, prefix: "aviso-" })) && ok;
   ok = (await scenario("duvida", doubtFile, { KIWI_DOUBT_TIMEOUT_MS: "4000" }, { before: doubtReady, prefix: "duvida-" })) && ok;
+  ok = (await scenario("gato-fala", "ajustes-gato-fala.json", catVoiceEnv, { before: agentReady, prefix: "gato-fala-" })) && ok;
 } finally {
   reg.stop();
+  voiceServer.stop(true);
   rmSync(work, { recursive: true, force: true });
 }
 console.log(`prints em ${out}`);

@@ -140,6 +140,7 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect((await invoke("agent.configure", { kind: "codex" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.configure", { model: "../x" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.configure", { showSpokenText: "sim" })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect((await invoke("agent.configure", { catSpeaks: 1 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.ask", { text: 3 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.ask", { text: "  " })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("settings.set", { agent: { enabled: true } })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
@@ -152,6 +153,15 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(true);
     expect((await invoke("agent.configure", { showSpokenText: false })).json).toMatchObject({ ok: true, value: { showSpokenText: false } });
     expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(false);
+  }, 30_000);
+
+  test("\"O gato fala\" pela capacidade: grava sem baixar nada, e a voz só baixa no clique (T26736)", async () => {
+    expect((await invoke("agent.status")).json!.value.catSpeaks).toBe(false);
+    expect((await invoke("agent.configure", { catSpeaks: true })).json).toMatchObject({ ok: true, value: { catSpeaks: true } });
+    expect((await invoke("agent.status")).json!.value.catSpeaks).toBe(true);
+    // Ligar não baixa: a voz continua desligada, à espera do clique.
+    expect((await invoke("catVoice.status")).json).toMatchObject({ ok: true, value: { phase: "off", voice: false } });
+    expect((await invoke("agent.configure", { catSpeaks: false })).json).toMatchObject({ ok: true, value: { catSpeaks: false } });
   }, 30_000);
 
   test("o agente lê o cofre pelas ferramentas do Kiwi (spec #7496): responde a uma pergunta sobre uma nota", async () => {

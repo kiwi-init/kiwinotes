@@ -56,6 +56,7 @@ const base: AgentStatus = {
   busy: false,
   controlShortcut: false,
   showSpokenText: false,
+  catSpeaks: false,
   model: "default",
   effort: "default",
   effortByModel: {},

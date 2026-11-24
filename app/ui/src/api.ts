@@ -62,6 +62,13 @@ export const api = {
   },
   /** O modo preciso do ditado (1.38.0, T6602): o Whisper small, baixando, pronto… */
   dictation: { preciseStatus: () => invoke("dictation.preciseStatus", {}) },
+  /** A voz do gato (1.100.0, T26729): ler o estado só lê o disco; o `download` é o clique da pessoa. */
+  catVoice: {
+    status: () => invoke("catVoice.status", {}),
+    download: () => invoke("catVoice.download", {}),
+    cancel: () => invoke("catVoice.cancel", {}),
+    remove: () => invoke("catVoice.remove", {}),
+  },
   dictionary: {
     get: () => invoke("dictionary.get", {}),
     set: (terms: UiCapabilities["dictionary.set"]["args"]["terms"]) => invoke("dictionary.set", { terms }),
