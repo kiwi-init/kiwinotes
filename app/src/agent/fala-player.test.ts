@@ -171,6 +171,36 @@ describe("FalaPlayer (T26734)", () => {
     expect(eventos.at(-1)).toEqual({ tipo: "terminou", turnId: "t1", motivo: "erro", erro: "modelo caiu" });
   });
 
+  test("a saída que falha encerra com erro, para a síntese e devolve a mídia", async () => {
+    const sintese = new SinteseFalsa(3);
+    const saida = new SaidaFalsa();
+    saida.tocar = async () => {
+      throw new Error("saída caiu");
+    };
+    const midia = { log: [] as string[], abaixar() { this.log.push("abaixar"); }, devolver() { this.log.push("devolver"); } };
+    const eventos: FalaEvento[] = [];
+    const logs: string[] = [];
+    const player = new FalaPlayer({ sintese, saida, midia, evento: (e) => eventos.push(e), log: (m) => logs.push(m) });
+    await player.falar({ turnId: "t1", frases: ["Uma.", "Duas."] });
+    expect(midia.log).toEqual(["abaixar", "devolver"]);
+    expect(player.falando).toBeUndefined();
+    expect(sintese.abortadas).toBe(1);
+    expect(sintese.pedidas).toEqual(["Uma."]);
+    expect(eventos.at(-1)).toEqual({ tipo: "terminou", turnId: "t1", motivo: "erro", erro: "saída caiu" });
+    expect(logs).toEqual(["fala: a saída falhou: saída caiu"]);
+  });
+
+  test("um ouvinte que lança não derruba a fala", async () => {
+    const sintese = new SinteseFalsa(1);
+    const saida = new SaidaFalsa();
+    const logs: string[] = [];
+    const player = new FalaPlayer({ sintese, saida, evento: () => { throw new Error("ouvinte"); }, log: (m) => logs.push(m) });
+    await player.falar({ turnId: "t1", frases: ["Uma.", "Duas."] });
+    expect(saida.tocados).toEqual([0, 10]);
+    expect(player.falando).toBeUndefined();
+    expect(logs.length).toBeGreaterThan(0);
+  });
+
   test("sem frases, nada acontece", async () => {
     const { player, sintese, midia, eventos } = montar();
     await player.falar({ turnId: "t1", frases: ["  "] });
@@ -215,6 +245,17 @@ describe("ligarFalaPlayer (T26734)", () => {
     ouvintes.get("meeting.stopped")!();
     fala({ turnId: "t2", frases: ["Oi."] });
     expect(player.falando).toBe("t2");
+  });
+
+  test("uma falha do player vai ao log, sem rejeição solta", async () => {
+    const logs: string[] = [];
+    const player = new FalaPlayer({ sintese: new SinteseFalsa(1), saida: new SaidaFalsa() });
+    player.falar = () => Promise.reject(new Error("quebrou"));
+    let fala: ((e: { turnId: string; frases: string[] }) => void) | undefined;
+    ligarFalaPlayer(player, { agent: { onSpeech: (fn) => ((fala = fn), () => {}) }, log: (m) => logs.push(m) });
+    fala!({ turnId: "t1", frases: ["Oi."] });
+    await tique();
+    expect(logs).toEqual(["fala: o player falhou: quebrou"]);
   });
 
   test("desligar solta os ouvintes e cala", async () => {

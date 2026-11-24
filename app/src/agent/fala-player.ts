@@ -53,6 +53,8 @@ export interface FalaPlayerOpts {
   log?(m: string): void;
 }
 
+const mensagem = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
 /** O RMS de um pedaço, de 0 a 1. */
 export function nivelRms(pcm: Pcm): number {
   if (pcm.length === 0) return 0;
@@ -117,21 +119,35 @@ export class FalaPlayer {
     return this.atual === t && !t.abort.signal.aborted;
   }
 
+  /** Um ouvinte que lança não derruba a fala nem o encerramento: o erro vai ao log. */
+  private emitir(e: FalaEvento): void {
+    try {
+      this.o.evento?.(e);
+    } catch (err) {
+      this.o.log?.(`fala: o evento ${e.tipo} falhou: ${mensagem(err)}`);
+    }
+  }
+
   private encerrar(t: Turno, motivo: "fim" | "cancelado" | "erro", erro?: string): void {
     if (t.midiaBaixa) {
       t.midiaBaixa = false;
-      this.o.midia?.devolver();
+      try {
+        this.o.midia?.devolver();
+      } catch (err) {
+        this.o.log?.(`fala: devolver a mídia falhou: ${mensagem(err)}`);
+      }
     }
-    this.o.evento?.({ tipo: "nivel", turnId: t.id, nivel: 0 });
-    this.o.evento?.({ tipo: "terminou", turnId: t.id, motivo, ...(erro ? { erro } : {}) });
+    this.emitir({ tipo: "nivel", turnId: t.id, nivel: 0 });
+    this.emitir({ tipo: "terminou", turnId: t.id, motivo, ...(erro ? { erro } : {}) });
   }
 
   private async rodar(t: Turno, frases: string[]): Promise<void> {
-    this.o.evento?.({ tipo: "comecou", turnId: t.id });
+    this.emitir({ tipo: "comecou", turnId: t.id });
     // A síntese corre à frente da saída: os pedaços entram na fila e a saída os toca na ordem.
     const fila: Pcm[] = [];
     let sinteseAcabou = false;
     let erroSintese: unknown;
+    let erroSaida: unknown;
     let acordar: (() => void) | undefined;
     const avisar = () => {
       const a = acordar;
@@ -156,31 +172,42 @@ export class FalaPlayer {
       }
     })();
 
-    while (this.vale(t)) {
-      const pcm = fila.shift();
-      if (!pcm) {
-        if (sinteseAcabou) break;
-        await new Promise<void>((r) => {
-          acordar = r;
-          t.abort.signal.addEventListener("abort", () => r(), { once: true });
+    try {
+      while (this.vale(t)) {
+        const pcm = fila.shift();
+        if (!pcm) {
+          if (sinteseAcabou) break;
+          await new Promise<void>((r) => {
+            acordar = r;
+            t.abort.signal.addEventListener("abort", () => r(), { once: true });
+          });
+          continue;
+        }
+        if (!t.midiaBaixa) {
+          t.midiaBaixa = true;
+          this.o.midia?.abaixar();
+        }
+        await this.o.saida.tocar(pcm, (volume) => {
+          if (this.vale(t)) this.emitir({ tipo: "nivel", turnId: t.id, nivel: nivelRms(pcm) * Math.max(0, Math.min(1, volume)) });
         });
-        continue;
       }
-      if (!t.midiaBaixa) {
-        t.midiaBaixa = true;
-        this.o.midia?.abaixar();
+    } catch (e) {
+      // A saída caiu (o fone desconectou, o dispositivo sumiu): para a síntese e limpa o que ficou.
+      if (this.atual === t) {
+        erroSaida = e;
+        t.abort.abort();
+        try {
+          this.o.saida.limpar();
+        } catch {}
       }
-      await this.o.saida.tocar(pcm, (volume) => {
-        if (this.vale(t)) this.o.evento?.({ tipo: "nivel", turnId: t.id, nivel: nivelRms(pcm) * Math.max(0, Math.min(1, volume)) });
-      });
     }
     await produtor;
     if (this.atual !== t) return; // cancelado: quem cancelou já encerrou
     this.atual = undefined;
-    if (erroSintese !== undefined) {
-      const msg = erroSintese instanceof Error ? erroSintese.message : String(erroSintese);
-      this.o.log?.(`fala: a síntese falhou: ${msg}`);
-      this.encerrar(t, "erro", msg);
+    if (erroSaida !== undefined || erroSintese !== undefined) {
+      const [onde, err] = erroSaida !== undefined ? ["a saída", erroSaida] : ["a síntese", erroSintese];
+      this.o.log?.(`fala: ${onde} falhou: ${mensagem(err)}`);
+      this.encerrar(t, "erro", mensagem(err));
     } else this.encerrar(t, "fim");
   }
 }
@@ -190,12 +217,16 @@ export interface FalaPlayerWiring {
   agent: { onSpeech(fn: (e: { turnId: string; frases: string[] }) => void): () => void };
   /** Os eventos do helper; sem ele, só a fala do agente liga o player. */
   helper?: { on(type: "agent.record.started" | "catOverlay.close" | "meeting.started" | "meeting.stopped", fn: () => void): () => void };
+  log?(m: string): void;
 }
 
 /** Liga o player; devolve o desligar, que também cala o que estiver tocando. */
 export function ligarFalaPlayer(player: FalaPlayer, w: FalaPlayerWiring): () => void {
   const offs = [
-    w.agent.onSpeech((e) => void player.falar(e)),
+    // A guarda: nenhuma falha do player chega ao main como rejeição solta.
+    w.agent.onSpeech((e) => {
+      player.falar(e).catch((err) => w.log?.(`fala: o player falhou: ${mensagem(err)}`));
+    }),
     // O atalho da pessoa: ela vai falar de novo, o gato se cala.
     w.helper?.on("agent.record.started", () => player.cancelar()),
     w.helper?.on("catOverlay.close", () => player.cancelar()),
