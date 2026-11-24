@@ -792,7 +792,7 @@ export function uiCapabilities(deps: CapabilityDeps,
           patch.semanticSearch = value;
           turnSemantic = value;
         } else if (key === "checkUpdates") {
-          // "Buscar atualizações" (1.96.0, T25110): o Updater e o canal da UI leem a cada checagem; nada reinicia.
+          // "Buscar atualizações" (1.97.0, T25110): o Updater e o canal da UI leem a cada checagem; nada reinicia.
           if (typeof value !== "boolean") throw bad("checkUpdates must be true or false");
           patch.checkUpdates = value;
           turnUpdates = value;
