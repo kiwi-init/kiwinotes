@@ -21,6 +21,9 @@ export default {
       assets: "assets",
       // O helper Swift, compilado pelo preBuild (scripts/build-helper.ts). O app sobe ele de bin/kiwi-helper.
       ".helper": "bin",
+      // O processo da voz do gato (ADR 0014, T26732), com o metallib do MLX, pelo preBuild (scripts/build-voice.ts). Fora
+      // do bin/ do helper: o build-helper apaga e o CI restaura aquela pasta inteira.
+      ".voice": "voice",
       // O ONNX Runtime da busca semântica, posto em app/.onnxruntime/ pelo preBuild (scripts/onnxruntime.ts, T6318).
       ".onnxruntime": "bin/napi-v6/darwin/arm64",
       // O worker do índice do conteúdo (P0 #23988), junto pelo preBuild (scripts/build-workers.ts).

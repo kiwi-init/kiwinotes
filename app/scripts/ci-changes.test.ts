@@ -13,7 +13,7 @@ describe("ci-changes", () => {
       bun: "run",
       bunReason: "",
       swift: "skip",
-      swiftReason: "o PR não mexe em native/ nem no .github/workflows/ci.yml",
+      swiftReason: "o PR não mexe em native/, native-voice/ nem no .github/workflows/ci.yml",
       cpuIndex: "skip",
       cpuIndexReason: "o PR não mexe em app/src/notes/ nem em app/src/shared/, no app/scripts/cpu-scenarios.ts nem no .github/workflows/ci.yml",
     });
@@ -32,6 +32,9 @@ describe("ci-changes", () => {
   test("mexer em native/ ou no workflow roda o swift test", () => {
     expect(plan("pull_request", ["native/Sources/Exemplo.swift"])).toMatchObject({ bun: "run", swift: "run" });
     expect(plan("pull_request", ["docs/notas.md", ".github/workflows/ci.yml"])).toMatchObject({ bun: "run", swift: "run" });
+    // O processo da voz do gato é o outro pacote Swift (T26732), e um .md dele não é só texto.
+    expect(plan("pull_request", ["native-voice/Sources/Exemplo.swift"])).toMatchObject({ swift: "run" });
+    expect(textOnly(["native-voice/README.md"])).toBe(false);
   });
 
   test("só *.md fora de app/ e native/: os dois pulados, com o motivo", () => {

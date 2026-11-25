@@ -25,5 +25,10 @@ HyperFormula 3.5.0, sob a GPL-3.0 (licenseKey "gpl-v3"):
   Copyright (c) HANDSONCODE sp. z o. o.; o aviso está em
   licenses/HyperFormula-GPL-3.0.txt. É usado como dependência, sem mudanças.
 
+A voz do gato (native-voice/, ADR 0014) usa o mlx-audio-swift e o
+mlx-swift (MIT), sem mudanças. O modelo Qwen3-TTS, que o app baixa no
+clique da pessoa, é Apache-2.0 e não vai no app.
+
 Dependências com licença própria (Apache-2.0, MIT etc.) seguem as suas
-licenças; veja o Package.resolved de native/ e o bun.lock de app/.
+licenças; veja o Package.resolved de native/ e de native-voice/ e o
+bun.lock de app/.

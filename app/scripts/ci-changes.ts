@@ -27,12 +27,15 @@ const WORKFLOW = ".github/workflows/ci.yml";
 const CPU_INDEX = ["app/src/notes/", "app/src/shared/"];
 const CPU_SCENARIOS = "app/scripts/cpu-scenarios.ts";
 
+/** Os pacotes Swift que o `swift test` testa: o helper e o processo da voz do gato (T26732). */
+const SWIFT = ["native/", "native-voice/"];
+
 /**
- * Só texto: todos os arquivos são `*.md` fora de `app/` e de `native/`. Qualquer outro arquivo de `docs/` roda tudo,
+ * Só texto: todos os arquivos são `*.md` fora de `app/` e dos pacotes Swift. Qualquer outro arquivo de `docs/` roda tudo,
  * porque o app e os testes leem `docs/design/` (o ícone, as cores e o gato).
  */
 export function textOnly(files: string[]): boolean {
-  return files.length > 0 && files.every((f) => f.toLowerCase().endsWith(".md") && !f.startsWith("app/") && !f.startsWith("native/"));
+  return files.length > 0 && files.every((f) => f.toLowerCase().endsWith(".md") && !f.startsWith("app/") && !SWIFT.some((d) => f.startsWith(d)));
 }
 
 /**
@@ -62,8 +65,8 @@ export function plan(event: string, files: string[]): Plan {
   const index: Pick<Plan, "cpuIndex" | "cpuIndexReason"> = files.some((f) => CPU_INDEX.some((d) => f.startsWith(d)) || f === CPU_SCENARIOS || f === WORKFLOW)
     ? { cpuIndex: "run", cpuIndexReason: "" }
     : { cpuIndex: "skip", cpuIndexReason: `o PR não mexe em ${CPU_INDEX.join(" nem em ")}, no ${CPU_SCENARIOS} nem no ${WORKFLOW}` };
-  if (files.some((f) => f.startsWith("native/") || f === WORKFLOW)) return { ...all, ...index };
-  return { ...all, ...index, swift: "skip", swiftReason: `o PR não mexe em native/ nem no ${WORKFLOW}` };
+  if (files.some((f) => SWIFT.some((d) => f.startsWith(d)) || f === WORKFLOW)) return { ...all, ...index };
+  return { ...all, ...index, swift: "skip", swiftReason: `o PR não mexe em ${SWIFT.join(", ")} nem no ${WORKFLOW}` };
 }
 
 if (import.meta.main) {
