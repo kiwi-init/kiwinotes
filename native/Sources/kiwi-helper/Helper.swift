@@ -1125,8 +1125,9 @@ final class Helper {
             let error = message.fields["error"] as? Bool ?? false
             let ask = message.fields["ask"] as? Bool ?? false
             let links = message.fields["links"]
+            let summary = message.string("summary")
             let cat = catOverlay
-            MainActor.assumeIsolated { cat.bubble(text: text, error: error, ask: ask, links: links) }
+            MainActor.assumeIsolated { cat.bubble(text: text, error: error, ask: ask, links: links, summary: summary) }
             reply(id, ok: true)
         case "catOverlay.unload":
             catOverlayLoaded = false

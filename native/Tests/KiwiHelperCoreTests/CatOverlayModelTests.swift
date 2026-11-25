@@ -239,6 +239,15 @@ final class CatOverlayModelTests: XCTestCase {
         XCTAssertFalse(CatOverlayBubble.script(text: "Pronto.", error: false).contains("ask"))
     }
 
+    func testBubbleScriptCarriesTheSummary() throws {
+        // O resumo do balão fechado (spec #27881): vai quando é diferente do texto aberto; igual ou vazio, não vai.
+        let js = CatOverlayBubble.script(text: "Antes.\n\nAchei a nota.", error: false, summary: "Achei a nota.")
+        let back = try JSONSerialization.jsonObject(with: Data(js.utf8)) as? [String: Any]
+        XCTAssertEqual(back?["summary"] as? String, "Achei a nota.")
+        XCTAssertFalse(CatOverlayBubble.script(text: "Pronto.", error: false, summary: "Pronto.").contains("summary"))
+        XCTAssertFalse(CatOverlayBubble.script(text: "Pronto.", error: false, summary: "").contains("summary"))
+    }
+
     func testDefaultIsTodayAndOutOfRangeIsClamped() {
         let visible = CGRect(x: 0, y: 80, width: 1512, height: 870)
         // O gato no mesmo lugar de antes; a janela agora é mais larga do lado do balão (T16754).

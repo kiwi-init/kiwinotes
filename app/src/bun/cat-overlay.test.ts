@@ -392,15 +392,42 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(r.take()).toEqual([]);
   });
 
-  test("um pedido com ação: o balão diz o que ele fez, o texto depois da última ferramenta", () => {
+  // Spec #27881 (T28010): o balão único, como no Hub. O aberto tem a resposta inteira; o resumo do fechado sai do texto
+  // depois da última ferramenta.
+  test("um pedido com ação: o resumo é o texto depois da última ferramenta, e o aberto tem tudo", () => {
     const r = rig();
     talk(r);
     r.cat.turn(text("Vou ler a nota."));
     r.cat.turn(status("running"));
     r.cat.turn(text("Mudei o prazo para abril."));
     r.cat.turn(doneWith("Vou ler a nota.Mudei o prazo para abril."));
-    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Mudei o prazo para abril.", error: false }]);
+    expect(bubbles(r.take())).toEqual([
+      { type: "catOverlay.bubble", text: "Vou ler a nota.Mudei o prazo para abril.", error: false, summary: "Mudei o prazo para abril." },
+    ]);
     expect(r.cat.visible).toBe(true);
+  });
+
+  test("a fala do cat_speak é o resumo do fechado, e o aberto tem a resposta inteira (spec #27881)", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn({ type: "speech", id: "r1", text: " Achei a nota do roteiro. " } as AgentTurnEvent);
+    r.cat.turn(text("Vou ler a nota."));
+    r.cat.turn(status("running"));
+    r.cat.turn(text("O roteiro tem três partes."));
+    r.cat.turn(doneWith("Vou ler a nota.O roteiro tem três partes."));
+    expect(bubbles(r.take())).toEqual([
+      { type: "catOverlay.bubble", text: "Vou ler a nota.O roteiro tem três partes.", error: false, summary: "Achei a nota do roteiro." },
+    ]);
+    // A fala é deste pedido: o próximo começa sem ela.
+    talk(r, "r2");
+    r.cat.turn(doneWith("Pronto, mudei.", "r2"));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Pronto, mudei.", error: false }]);
+    // Só a fala, sem texto: ela vai inteira.
+    talk(r, "r3");
+    r.cat.turn({ type: "speech", id: "r3", text: "Feito, está na nota." } as AgentTurnEvent);
+    r.cat.turn(status("running", "r3"));
+    r.cat.turn(doneWith("", "r3"));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Feito, está na nota.", error: false }]);
   });
 
   test("um pedido com ação e sem texto no fim: o balão diz que fez", () => {
@@ -656,14 +683,14 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     talk(r);
     r.cat.turn(doneWith(`\n${md}\n\n`));
     expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: md, error: false }]);
-    // Depois de uma ferramenta, só o markdown que veio depois dela.
+    // Depois de uma ferramenta, o resumo sai só do markdown que veio depois dela; o aberto tem tudo.
     const t = rig();
     talk(t);
     t.cat.turn(text("Vou ler a nota."));
     t.cat.turn(status("running"));
     t.cat.turn(text(md));
     t.cat.turn(doneWith(`Vou ler a nota.${md}`));
-    expect(bubbles(t.take())).toEqual([{ type: "catOverlay.bubble", text: md, error: false }]);
+    expect(bubbles(t.take())).toEqual([{ type: "catOverlay.bubble", text: `Vou ler a nota.${md}`, error: false, summary: md }]);
     // Só um bloco de código vazio depois da ferramenta: o que ele fez.
     const e = rig();
     talk(e);
@@ -672,11 +699,11 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(bubbles(e.take())).toEqual([{ type: "catOverlay.bubble", text: "Feito.", error: false }]);
   });
 
-  test("os links do done vão no balão, nas posições do trecho mostrado (spec #17683)", () => {
+  test("os links do done vão no balão, nas posições da resposta inteira do aberto (spec #17683, #27881)", () => {
     const full = "Vou ler a nota.\n\nVeja [[Plano]] e Anexos/capa.png.";
     const at = (t: string) => full.indexOf(t);
     const links: BubbleLink[] = [
-      { text: "Vou", from: 0, to: 3, path: "Vou.md", kind: "note" }, // antes da ferramenta: fica de fora
+      { text: "Vou", from: 0, to: 3, path: "Vou.md", kind: "note" }, // antes da ferramenta: o aberto também mostra
       { text: "[[Plano]]", from: at("[[Plano]]"), to: at("[[Plano]]") + 9, path: "Plano.md", kind: "note" },
       { text: "Anexos/capa.png", from: at("Anexos"), to: at("Anexos") + 15, path: "Anexos/capa.png", kind: "file" },
     ];
@@ -686,18 +713,14 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     r.cat.turn(status("running"));
     r.cat.turn(text("\n\nVeja [[Plano]] e Anexos/capa.png."));
     r.cat.turn({ ...doneWith(full), links } as AgentTurnEvent);
-    const shown = "Veja [[Plano]] e Anexos/capa.png.";
     expect(bubbles(r.take())).toEqual([
-      {
-        type: "catOverlay.bubble",
-        text: shown,
-        error: false,
-        links: [
-          { text: "[[Plano]]", from: 5, to: 14, path: "Plano.md", kind: "note" },
-          { text: "Anexos/capa.png", from: 17, to: 32, path: "Anexos/capa.png", kind: "file" },
-        ],
-      },
+      { type: "catOverlay.bubble", text: full, error: false, links, summary: "Veja [[Plano]] e Anexos/capa.png." },
     ]);
+    // Com espaço no começo, as posições andam junto com o texto aparado.
+    const w = rig();
+    talk(w);
+    w.cat.turn({ ...doneWith(`\n ${full}`), links: links.map((l) => ({ ...l, from: l.from + 2, to: l.to + 2 })) } as AgentTurnEvent);
+    expect(bubbles(w.take())).toEqual([{ type: "catOverlay.bubble", text: full, error: false, links }]);
     // Sem links no done, o balão vai sem o campo.
     const p = rig();
     talk(p);
