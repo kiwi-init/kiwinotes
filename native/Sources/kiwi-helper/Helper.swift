@@ -14,6 +14,8 @@ final class Helper {
     private let mic: MicSelection
     private let audio: AudioCapture
     private var media: DictationMedia!
+    /// T26830: a mídia durante a fala do gato (−6 dB na saída, a voz ×2), com o journal próprio.
+    private var speechMedia: SpeechMedia!
     private let devicesWatcher = AudioDevicesWatcher()
     /// The app sent `microphone` in a `config.set`, so it knows `audio.inputs.changed`.
     private var appKnowsMicrophone = false
@@ -124,6 +126,9 @@ final class Helper {
         media = DictationMedia(volume: volume,
                                journal: dataDirectory.map { FileMediaVolumeJournal(file: $0.appendingPathComponent("dictation-media-volume.json")) },
                                notify: { [weak self] code in self?.emit("log", ["level": "info", "message": code]) })
+        speechMedia = SpeechMedia(volume: volume,
+                                  journal: dataDirectory.map { FileMediaVolumeJournal(file: $0.appendingPathComponent("speech-media-volume.json")) },
+                                  notify: { [weak self] code in self?.emit("log", ["level": "info", "message": "speech \(code)"]) })
         tap = HotkeyTap { [weak self] event in self?.onTap(event) }
         // The cancel is armed only while a dictation records: outside it, Esc is the other apps' (L5).
         // L12 (T5835): o que a conferência da colagem achou, sem texto, para o log em arquivo.
@@ -258,6 +263,7 @@ final class Helper {
             return source
         }
         media.restorePending()
+        speechMedia.restorePending()
         globe.start(fnIsShortcut: dictationKey == .fn)
         globeStarted = true
         if !headless { tap.start() }
@@ -307,7 +313,7 @@ final class Helper {
         // Only reads Core Audio, so it runs headless too (the Settings list the mics there).
         devicesWatcher.start { [weak self] what in
             guard let self else { return }
-            if !self.audio.isRecording { self.media.restorePending() }
+            if !self.audio.isRecording { self.media.restorePending(); self.speechMedia.restorePending() }
             if !self.headless, self.mic.isStale(after: what) { self.audio.inputChanged(what) }
             if !self.headless, self.meetings?.capture.session != nil, self.meetingMic.selection.isStale(after: what) { self.meetingMic.audio.inputChanged(what) }
             // Only to an app that knows the event: it sent `microphone` (T3230). An older app logs an unknown type.
@@ -490,6 +496,7 @@ final class Helper {
         globe.restore()
         _ = audio.stop()
         media.end()
+        speechMedia.unduck()
         // L3 (T5455): o journal do ditado em curso fecha antes de sair, para a recuperação.
         _ = finishRecovery()
         try? meetings?.capture.stop()
@@ -674,6 +681,7 @@ final class Helper {
         cues.playStart()
         let t0 = ProcessInfo.processInfo.systemUptime
         do {
+            speechMedia.release() // T26830: a mídia da fala volta antes de o ditado abaixar a dele
             try media.startCapture(meetingActive: meeting.isRecording) {
                 emit("record.started", started)
                 overlay.set(.listening)
@@ -719,6 +727,7 @@ final class Helper {
         // Spec #17697: the media (L8) goes down as the mic opens, like the dictation's, and comes back at the end,
         // the cancel or the drop. During a recorded meeting it isn't touched.
         do {
+            speechMedia.release() // T26830: a mídia da fala volta antes de o ditado abaixar a dele
             try media.startCapture(meetingActive: meeting.isRecording) {
                 emit("agent.record.started", ["reason": reason])
                 try audio.start()
@@ -1017,7 +1026,7 @@ final class Helper {
                 return reply(id, ok: false, error: "headless_no_mic")
             }
             // L8 (spec #17697): a meeting taking the mic gives the volume back first, also when "mine" resumes.
-            if ["meeting.start", "meeting.resumeMine"].contains(message.type) { media.end() }
+            if ["meeting.start", "meeting.resumeMine"].contains(message.type) { media.end(); speechMedia.release() }
             do {
                 let result = try handleMeeting(message)
                 reply(id, ok: result.ok, error: result.error, result.data)
@@ -1144,8 +1153,9 @@ final class Helper {
                 return reply(id, ok: false, error: "invalid_value")
             }
             do {
-                try speech.play(samples) { [weak self] in self?.emit("speech.played", ["seq": seq]) }
-                reply(id, ok: true, ["volume": Double(speech.volume)])
+                // T26830: com a mídia abaixada, a voz sobe o que ela desceu, e a boca segue o volume de antes.
+                try speech.play(SpeechGain.apply(samples, gain: speechMedia.gain)) { [weak self] in self?.emit("speech.played", ["seq": seq]) }
+                reply(id, ok: true, ["volume": Double(min(1, max(0, speechMedia.mouthVolume(device: speech.volume))))])
             } catch {
                 emit("log", ["level": "warn", "message": "speech: a saída falhou: \(error.localizedDescription)"])
                 reply(id, ok: false, error: "speech_output")
@@ -1158,6 +1168,13 @@ final class Helper {
             let nivel = message.double("nivel")
             let cat = catOverlay
             MainActor.assumeIsolated { cat.speech(nivel) }
+            reply(id, ok: true)
+        case "speech.duck":
+            // T26830: a fala do gato começou a tocar. Os outros apps descem 6 dB; não com o mic gravando nem numa reunião.
+            speechMedia.duck(recording: audio.isRecording, meeting: meeting.isRecording)
+            reply(id, ok: true, ["gain": Double(speechMedia.gain)])
+        case "speech.unduck":
+            speechMedia.unduck()
             reply(id, ok: true)
         case "catOverlay.unload":
             catOverlayLoaded = false
@@ -1314,7 +1331,7 @@ final class Helper {
         object["type"] = type
         guard let data = try? JSONSerialization.data(withJSONObject: object),
               let message = try? InboundMessage.decode(data) else { return }
-        if ["meeting.start", "meeting.resumeMine"].contains(type) { media.end() }
+        if ["meeting.start", "meeting.resumeMine"].contains(type) { media.end(); speechMedia.release() }
         do { _ = try handleMeeting(message) } catch { emit("meeting.error", ["error": "meeting_unavailable"]) }
     }
 

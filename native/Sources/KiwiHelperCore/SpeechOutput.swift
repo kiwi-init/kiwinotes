@@ -82,3 +82,22 @@ public final class SilentSpeech: SpeechPlaying {
         pending.flush()
     }
 }
+
+/// A voz do gato com a mídia abaixada (T26830): a saída do Mac desce 6 dB, e a voz sobe o mesmo tanto, para se ouvir
+/// igual. Os picos das vozes de referência passam de 0,5 em menos de 0,2% das amostras (en-a 0,83, en-b 0,60, pt-a
+/// 0,58): em vez de cortar em 1 (o estalo), um limitador suave arredonda só o que passa do joelho.
+public enum SpeechGain {
+    /// Abaixo do joelho, a amostra só multiplica. Acima, a curva sai com a mesma inclinação e chega a 1 sem passar.
+    public static let knee: Float = 0.8
+
+    public static func apply(_ samples: [Float], gain: Float) -> [Float] {
+        guard gain.isFinite, gain > 1 else { return samples }
+        return samples.map { limit($0 * gain) }
+    }
+
+    static func limit(_ y: Float) -> Float {
+        let a = abs(y)
+        guard a > knee else { return y }
+        return Float(signOf: y, magnitudeOf: knee + (1 - knee) * tanh((a - knee) / (1 - knee)))
+    }
+}

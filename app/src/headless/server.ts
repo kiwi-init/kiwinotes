@@ -411,12 +411,17 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   if (process.env.KIWI_FAKE_SPEECH === "1") {
     // A mesma ligação do app (`ligarVozDoGato`, T28675), sem a prévia.
     const { ligarVozDoGato } = await import("../bun/cat-voice-output.ts");
+    const { midiaHelper } = await import("../bun/speech-output.ts");
     const { saidaFalsa, sinteseFalsa } = await import("./fake-speech.ts");
     const voz = ligarVozDoGato({
       sintese: sinteseFalsa(),
       saida: saidaFalsa(),
       agent: stores.agent,
       ...(session ? { helper: { on: (type, fn) => session.sidecar.on(type, () => fn()) } } : {}),
+      // T26830: com o helper, a mídia pede ao helper de verdade; o volume dele é o falso (`LoggedVolume`), que só loga.
+      ...(session
+        ? { midia: midiaHelper({ request: (c) => session.sidecar.request(c) }, (m) => console.log(m)) }
+        : {}),
       naTela: (e) => {
         event("agent.speech", e);
         catOverlay?.overlay.speech(e);

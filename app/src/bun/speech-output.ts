@@ -10,7 +10,7 @@
 // - **O helper caiu:** os `tocar` pendentes rejeitam, e o `FalaPlayer` encerra a fala com erro.
 // - **Um `speech.played` que não chega** não prende a fala: cada pedaço acaba sozinho depois do tempo dele + `folgaMs`.
 
-import { FALA_TAXA, type Pcm, type SaidaFala } from "../agent/fala-player.ts";
+import { FALA_TAXA, type MidiaFala, type Pcm, type SaidaFala } from "../agent/fala-player.ts";
 
 /** O que a saída usa do `Sidecar` (src/bun/sidecar.ts). */
 export interface SpeechHelper {
@@ -140,4 +140,17 @@ export function saidaHelper(
       soltar();
     },
   };
+}
+
+/**
+ * T26830: a mídia dos outros apps durante a fala do gato, pelo helper. `abaixar` antes do 1º pedaço e `devolver` no fim,
+ * no corte ou no erro (o `FalaPlayer` chama). Um erro do helper só vai ao log: a voz toca do mesmo jeito.
+ */
+export function midiaHelper(
+  helper: { request(command: { type: "speech.duck" | "speech.unduck" }): Promise<unknown> },
+  log?: (msg: string) => void,
+): MidiaFala {
+  const pedir = (type: "speech.duck" | "speech.unduck") =>
+    void helper.request({ type }).catch((e) => log?.(`speech: ${type} falhou: ${e instanceof Error ? e.message : String(e)}`));
+  return { abaixar: () => pedir("speech.duck"), devolver: () => pedir("speech.unduck") };
 }

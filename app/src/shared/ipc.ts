@@ -185,6 +185,13 @@ export type Command =
   | { type: "speech.play"; seq: number; pcm: string }
   | { type: "speech.stop" }
   /**
+   * T26830: a fala do gato começou a tocar (`speech.duck`) ou acabou (`speech.unduck`). A saída do Mac desce 6 dB, e
+   * a voz do gato sobe o mesmo tanto no helper; nada desce com o mic gravando, numa reunião ou num aparelho sem a escala
+   * em dB. O helper devolve o volume sozinho se cair no meio (o journal).
+   */
+  | { type: "speech.duck" }
+  | { type: "speech.unduck" }
+  /**
    * `dryRun: true` (os testes de agente, #490): o sidecar não toca no clipboard nem no teclado e responde
    * `{pasted: false, restored: false, dryRun: true, app?}`. O app conta isso como colado.
    * `autoSpace` (padrão `true`, T733): se o cursor está logo depois de um texto (letra, número, pontuação), o sidecar
@@ -283,6 +290,9 @@ export interface CommandResults {
   "speech.play": { volume: number };
   "speech.stop": Record<string, never>;
   "catOverlay.fala": Record<string, never>;
+  /** O ganho que a voz leva agora (1: nada desceu). */
+  "speech.duck": { gain: number };
+  "speech.unduck": Record<string, never>;
   /**
    * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
    * `no_focus` (nenhum app na frente) ou `no_accessibility` (falta a permissão). Com um app na frente o ⌘V vai sempre,
@@ -582,6 +592,8 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "catOverlay.bubble",
   "speech.play",
   "speech.stop",
+  "speech.duck",
+  "speech.unduck",
   "insert.text",
   "notify",
   "permissions.request",
