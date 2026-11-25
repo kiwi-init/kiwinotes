@@ -5,14 +5,15 @@
 // 2. com um hash novo, o `downloadUpdate` baixa o .tar.zst em segundo plano;
 // 3. **antes de oferecer**, o app confere o que baixou: o Electrobun não confere assinatura nem conteúdo do download.
 //    O .app de dentro tem que ter a assinatura da Kiwi Init (Developer ID, time 57249C654W), o identificador
-//    `app.kiwinotes.desktop` e o hash do manifesto. Um tar que não passa é apagado e não vira oferta;
+//    `app.kiwinotes.desktop` e o hash do manifesto. O Electrobun 2026.11.5 já deixa o app aberto numa pasta
+//    preparada; o de antes deixava o .tar (`preparedUpdate`). O que não passa é apagado e não vira oferta;
 // 4. o menu ganha "Atualizar e reiniciar", e só esse clique chama o `applyUpdate`. Nada reinicia sozinho.
 //
 // Desligado no canal dev, sem `baseUrl` (build local ou ensaio), com KIWI_DEBUG=1 (agentes) e no headless, que nem
 // importa este arquivo: testes nunca vão à rede.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -131,12 +132,33 @@ export function requirement(identifier: string, teamId: string): string {
 }
 
 /**
- * Confere o .tar que o Updater baixou (o que ele vai pôr no lugar do app). Devolve null se pode aplicar, ou o motivo
- * de não poder. Abre numa pasta temporária, que sempre é apagada.
+ * Confere o app que o Updater preparou, já aberto (o que ele vai pôr no lugar do app). Devolve null se pode aplicar,
+ * ou o motivo de não poder. `app` é a raiz do bundle: um `.app` ou a pasta preparada do Electrobun
+ * (`<app>.prepared-<hash>`), que tem o mesmo `Contents/`.
  */
-export function verifyUpdateTar(tar: string, expected: Expected, run: Run = runTool): string | null {
+export function verifyUpdateApp(app: string, expected: Expected, run: Run = runTool): string | null {
   const identifier = expected.identifier ?? IDENTIFIER;
   const teamId = expected.teamId ?? TEAM_ID;
+  let version: { identifier?: unknown; hash?: unknown };
+  try {
+    version = JSON.parse(readFileSync(path.join(app, "Contents", "Resources", "version.json"), "utf8"));
+  } catch {
+    return "the update has no readable version.json";
+  }
+  if (version.identifier !== identifier) return `the update is ${String(version.identifier)}, not ${identifier}`;
+  if (version.hash !== expected.hash) return `the update's hash is ${String(version.hash)}, the manifest said ${expected.hash}`;
+  const id = run("/usr/bin/plutil", ["-extract", "CFBundleIdentifier", "raw", path.join(app, "Contents", "Info.plist")]);
+  if (id.code !== 0 || id.out !== identifier) return `the update's bundle id is ${id.out || "missing"}, not ${identifier}`;
+  const sig = run("/usr/bin/codesign", ["--verify", "--deep", "--strict", "-R", `=${requirement(identifier, teamId)}`, app]);
+  if (sig.code !== 0) return `the update isn't signed by the Kiwi Init Developer ID: ${sig.out}`;
+  return null;
+}
+
+/**
+ * Confere o .tar que o Updater baixou (o Electrobun até a 2026.10). Devolve null se pode aplicar, ou o motivo de não
+ * poder. Abre numa pasta temporária, que sempre é apagada.
+ */
+export function verifyUpdateTar(tar: string, expected: Expected, run: Run = runTool): string | null {
   if (!existsSync(tar)) return `no update archive at ${tar}`;
   const dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-update-"));
   try {
@@ -144,33 +166,39 @@ export function verifyUpdateTar(tar: string, expected: Expected, run: Run = runT
     if (x.code !== 0) return `the update archive doesn't open: ${x.out}`;
     const apps = readdirSync(dir).filter((n) => n.endsWith(".app"));
     if (apps.length !== 1) return `the update archive has ${apps.length} apps, not 1`;
-    const app = path.join(dir, apps[0]!);
-    let version: { identifier?: unknown; hash?: unknown };
-    try {
-      version = JSON.parse(readFileSync(path.join(app, "Contents", "Resources", "version.json"), "utf8"));
-    } catch {
-      return "the update has no readable version.json";
-    }
-    if (version.identifier !== identifier) return `the update is ${String(version.identifier)}, not ${identifier}`;
-    if (version.hash !== expected.hash) return `the update's hash is ${String(version.hash)}, the manifest said ${expected.hash}`;
-    const id = run("/usr/bin/plutil", ["-extract", "CFBundleIdentifier", "raw", path.join(app, "Contents", "Info.plist")]);
-    if (id.code !== 0 || id.out !== identifier) return `the update's bundle id is ${id.out || "missing"}, not ${identifier}`;
-    const sig = run("/usr/bin/codesign", ["--verify", "--deep", "--strict", "-R", `=${requirement(identifier, teamId)}`, app]);
-    if (sig.code !== 0) return `the update isn't signed by the Kiwi Init Developer ID: ${sig.out}`;
-    return null;
+    return verifyUpdateApp(path.join(dir, apps[0]!), expected, run);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
-/** Onde o Electrobun guardou o download pronto (o registro dele diz o caminho do .tar). */
-export function preparedTar(appData: string, hash: string): string | null {
+/** Confere o que o `preparedUpdate` achou: a pasta preparada (o Electrobun 2026.11) ou o .tar (o de antes). */
+export function verifyPrepared(prepared: string, expected: Expected, run: Run = runTool): string | null {
+  if (!existsSync(prepared)) return `the prepared update isn't at ${prepared}`;
+  return statSync(prepared).isDirectory() ? verifyUpdateApp(prepared, expected, run) : verifyUpdateTar(prepared, expected, run);
+}
+
+/**
+ * Onde o Electrobun deixou o download pronto, pelo registro dele (`.electrobun-prepared-update.json`), só se é do
+ * mesmo hash. Até a 2026.10, o registro é o `schema_version` 1, com o `.tar` em `retained_tar_path`. Desde a 2026.11.5
+ * (a nossa desde a 2026.11.13), é o 2: sem tar, com o app já aberto em `staging_path` (`<app>.prepared-<hash>`).
+ * Ler só o `retained_tar_path` fez toda atualização da 2026.11.13 em diante ser recusada como "a assinatura não
+ * confere" (#29720).
+ */
+export function preparedUpdate(appData: string, hash: string): string | null {
   try {
     const rec = JSON.parse(readFileSync(path.join(appData, "self-extraction", ".electrobun-prepared-update.json"), "utf8")) as {
+      schema_version?: unknown;
       hash?: unknown;
       retained_tar_path?: unknown;
+      staging_path?: unknown;
     };
-    return rec.hash === hash && typeof rec.retained_tar_path === "string" ? rec.retained_tar_path : null;
+    if (rec.hash !== hash) return null;
+    if (rec.schema_version === 2) {
+      const stage = rec.staging_path;
+      return typeof stage === "string" && path.isAbsolute(stage) && stage.endsWith(`.prepared-${hash}`) ? stage : null;
+    }
+    return typeof rec.retained_tar_path === "string" && rec.retained_tar_path ? rec.retained_tar_path : null;
   } catch {
     return null;
   }
@@ -218,7 +246,8 @@ type StoredCheck = Exclude<LastCheck, { result: "error" }> | { at: string; resul
 export interface UpdatesDeps {
   updater: UpdaterApi;
   env?: Record<string, string | undefined>;
-  verify?: (tar: string, expected: Expected) => string | null;
+  /** Confere o update preparado: a pasta do app aberto ou o .tar (`preparedUpdate`). */
+  verify?: (prepared: string, expected: Expected) => string | null;
   log?: (message: string) => void;
   /** Agora (os testes fixam a hora da última checagem). */
   now?: () => Date;
@@ -244,12 +273,12 @@ export class AppUpdates {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private running: Promise<UpdateState> | undefined;
   private readonly env: Record<string, string | undefined>;
-  private readonly verify: (tar: string, expected: Expected) => string | null;
+  private readonly verify: (prepared: string, expected: Expected) => string | null;
   private readonly log: (message: string) => void;
 
   constructor(private readonly deps: UpdatesDeps) {
     this.env = deps.env ?? process.env;
-    this.verify = deps.verify ?? ((tar, expected) => verifyUpdateTar(tar, expected));
+    this.verify = deps.verify ?? ((prepared, expected) => verifyPrepared(prepared, expected));
     this.log = deps.log ?? ((m) => console.log(`updates: ${m}`));
   }
 
@@ -409,12 +438,12 @@ export class AppUpdates {
         this.set({ kind: "idle" });
         return this.state;
       }
-      const tar = preparedTar(await u.appDataFolder(), after.hash);
-      const why = tar ? this.verify(tar, { hash: after.hash }) : "the downloaded update wasn't found";
+      const prepared = preparedUpdate(await u.appDataFolder(), after.hash);
+      const why = prepared ? this.verify(prepared, { hash: after.hash }) : "the downloaded update wasn't found";
       if (why) {
-        // Não oferece e apaga: um tar que não é nosso não fica esperando um clique.
+        // Não oferece e apaga: um update que não é nosso (o tar ou a pasta preparada) não fica esperando um clique.
         this.log(`refused update ${after.version} (${after.hash}): ${why}`);
-        if (tar) rmSync(tar, { force: true });
+        if (prepared) rmSync(prepared, { recursive: true, force: true });
         this.finish("error", { message: { key: "update.refused", params: { version: after.version } } });
         this.set({ kind: "idle" });
         return this.state;
