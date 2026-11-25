@@ -5,10 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { AgentDoubtAnswer } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Button, Row, Section } from "../src/kit/index.tsx";
 import { whenOf } from "./activityText.ts";
 
 export function DoubtAnswersSection() {
+  const { t } = useT();
   const [answers, setAnswers] = useState<AgentDoubtAnswer[] | null>(null);
   const load = useCallback(() => {
     void api.agent.answers().then(
@@ -28,18 +30,18 @@ export function DoubtAnswersSection() {
   }, [load]);
   if (!has("agent.answers") || answers === null) return null;
   return (
-    <Section title="O que você já respondeu">
+    <Section title={t("answers.title")}>
       {answers.length === 0 ? (
-        <Row label="Nenhuma resposta ainda" hint="Quando o Kiwi ficar em dúvida se um trecho é senha ou token, ele pergunta, e a sua resposta aparece aqui." />
+        <Row label={t("answers.none")} hint={t("answers.noneHint")} />
       ) : (
         answers.map((a) => (
           <Row
             key={a.fingerprint}
-            label={a.answer === "send" ? "Pode mandar" : "É segredo"}
-            hint={`${a.mask} · respondido ${whenOf(a.at)}`}
+            label={a.answer === "send" ? t("hub.doubt.send") : t("hub.doubt.secret")}
+            hint={t("answers.when", { mask: a.mask, when: whenOf(a.at) })}
           >
-            <Button onClick={() => void api.agent.forget(a.fingerprint).then(load, load)} aria-label={`Desfazer a resposta sobre ${a.mask}`}>
-              Desfazer
+            <Button onClick={() => void api.agent.forget(a.fingerprint).then(load, load)} aria-label={t("answers.undoAria", { mask: a.mask })}>
+              {t("common.undo")}
             </Button>
           </Row>
         ))

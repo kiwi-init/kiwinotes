@@ -8,9 +8,11 @@ import type { AgentTrailView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button, Row, Section } from "../src/kit/index.tsx";
 import { whenOf } from "./activityText.ts";
-import { APRENDENDO_HINT, trilhaHint, trilhaLabel } from "./trailsText.ts";
+import { useT } from "../src/i18n.ts";
+import { aprendendoHint, trilhaHint, trilhaLabel } from "./trailsText.ts";
 
 export function TrailsSection() {
+  const { t: tr } = useT();
   const [trails, setTrails] = useState<AgentTrailView[] | null>(null);
   const load = useCallback(() => {
     void api.agent.trails().then(
@@ -27,8 +29,8 @@ export function TrailsSection() {
   if (!has("agent.trails") || trails === null) return null;
   const row = (t: AgentTrailView) => (
     <Row key={t.id} label={trilhaLabel(t)} hint={`${trilhaHint(t)} · ${whenOf(new Date(t.em).toISOString())}`}>
-      <Button onClick={() => void api.agent.trailDelete(t.id).then((r) => setTrails(r.trilhas), load)} aria-label={`Apagar a trilha ${trilhaLabel(t)}`}>
-        Apagar
+      <Button onClick={() => void api.agent.trailDelete(t.id).then((r) => setTrails(r.trilhas), load)} aria-label={tr("trails.deleteAria", { name: trilhaLabel(t) })}>
+        {tr("common.delete")}
       </Button>
     </Row>
   );
@@ -36,19 +38,19 @@ export function TrailsSection() {
   const aprendendo = trails.filter((t) => t.aprendendo);
   return (
     <>
-      <Section title="As trilhas">
+      <Section title={tr("trails.title")}>
         {valem.length === 0 ? (
           <Row
-            label="Nenhuma trilha ainda"
-            hint="Quando a Bússola não acha a nota e o agente chega a ela por outro caminho, o Kiwi guarda as palavras do pedido que dizem o assunto. Da próxima vez, a nota sobe sozinha. Fica só neste Mac."
+            label={tr("trails.none")}
+            hint={tr("trails.noneHint")}
           />
         ) : (
           valem.map(row)
         )}
       </Section>
       {aprendendo.length > 0 && (
-        <Section title="Aprendendo">
-          <Row label="Esperando a segunda vez" hint={APRENDENDO_HINT} />
+        <Section title={tr("trails.learning")}>
+          <Row label={tr("trails.waiting")} hint={aprendendoHint()} />
           {aprendendo.map(row)}
         </Section>
       )}

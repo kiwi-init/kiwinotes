@@ -4,6 +4,7 @@
 import { ptCatOverlay } from "./catoverlay.pt.ts";
 import { ptAgent } from "./agent.pt.ts";
 import { ptCommon } from "./common.pt.ts";
+import { ptActivity } from "./activity.pt.ts";
 import { ptHistory } from "./history.pt.ts";
 import { ptHub } from "./hub.pt.ts";
 import { ptMeetingsSettings } from "./meetings-settings.pt.ts";
@@ -125,6 +126,7 @@ export const PT_PARTS = {
   meetings: ptMeetings,
   history: ptHistory,
   hub: ptHub,
+  activity: ptActivity,
 } as const;
 
 export const pt = {
@@ -138,4 +140,5 @@ export const pt = {
   ...ptMeetings,
   ...ptHistory,
   ...ptHub,
+  ...ptActivity,
 } as const;

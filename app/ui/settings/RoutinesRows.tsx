@@ -15,22 +15,24 @@ import { folderChoices } from "../src/folderChoices.ts";
 import { Button, Row, Select, Switch } from "../src/kit/index.tsx";
 import { RoutineEditor } from "./RoutineEditor.tsx";
 import { adjustTaken, onAdjust } from "./routineAdjust.ts";
+import { useT } from "../src/i18n.ts";
 import {
-  ADJUST_ROUTINE,
+  adjustRoutine,
   customHint,
   customScheduleLine,
-  EDIT_ROUTINE,
+  customScheduleMid,
+  editRoutine,
   lastRunLine,
-  NEW_ROUTINE,
-  ROUTINE_CREATED_OFF,
-  ROUTINE_TITLES,
+  newRoutine,
+  routineCreatedOff,
   routineHint,
-  ROUTINES_HINT,
-  ROUTINES_PATHS,
-  ROUTINES_TITLE,
+  routinesHint,
+  routinesPaths,
+  routinesTitle,
+  routineTitle,
   scheduleLine,
   timeOptions,
-  WEEKDAY_OPTIONS,
+  weekdayOptions,
 } from "./routinesText.ts";
 
 const KINDS: RoutineKind[] = ["daily", "weekly"];
@@ -41,6 +43,7 @@ type Editing = { mode: "new" } | { mode: "edit"; id: string } | { mode: "adjust"
 const BLANK: CustomRoutineInput = { name: "", prompt: "", time: "18:00", days: "every", folder: DEFAULT_ROUTINES_FOLDER };
 
 export function RoutinesRows({ status, run }: { status: AgentStatus; run: (call: () => Promise<unknown>) => Promise<void> }) {
+  const { t } = useT();
   const [folders, setFolders] = useState<string[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [failure, setFailure] = useState<{ kind: string; message: string } | null>(null);
@@ -87,21 +90,21 @@ export function RoutinesRows({ status, run }: { status: AgentStatus; run: (call:
   };
 
   return (
-    <div className="kn-agent-routines" role="group" aria-label={ROUTINES_TITLE}>
-      <Row label={ROUTINES_TITLE} hint={ROUTINES_HINT}>
+    <div className="kn-agent-routines" role="group" aria-label={routinesTitle()}>
+      <Row label={routinesTitle()} hint={routinesHint()}>
         <Button onClick={() => setEditing({ mode: "new" })} disabled={editing !== null}>
-          {NEW_ROUTINE}
+          {newRoutine()}
         </Button>
       </Row>
-      <p className="kn-routine-paths">{ROUTINES_PATHS}</p>
+      <p className="kn-routine-paths">{routinesPaths()}</p>
       {editing && editing.mode !== "edit" ? (
         <RoutineEditor
           key={editing.mode === "adjust" ? editing.proposal : "new"}
-          title={editing.mode === "adjust" ? ADJUST_ROUTINE : NEW_ROUTINE}
+          title={editing.mode === "adjust" ? adjustRoutine() : newRoutine()}
           initial={editing.mode === "adjust" ? editing.routine : BLANK}
           folders={folders}
-          submit="Criar"
-          note={ROUTINE_CREATED_OFF}
+          submit={t("routines.create")}
+          note={routineCreatedOff()}
           onSubmit={async (r) => {
             if (editing.mode === "adjust") await api.agent.proposalApply(editing.proposal, r);
             // Direto, sem o `run`: o erro (o campo que não vale) aparece no próprio cartão. O status volta pelo evento.
@@ -113,7 +116,7 @@ export function RoutinesRows({ status, run }: { status: AgentStatus; run: (call:
       ) : null}
       {KINDS.map((kind) => {
         const r = status.routines[kind];
-        const title = ROUTINE_TITLES[kind];
+        const title = routineTitle(kind);
         const choices = folderChoices([r.folder, DEFAULT_ROUTINES_FOLDER], folders).map((f) => ({ value: f, label: f }));
         return (
           <section key={kind} className="kn-routine-card" data-routine={kind} aria-label={title}>
@@ -122,27 +125,27 @@ export function RoutinesRows({ status, run }: { status: AgentStatus; run: (call:
             </Row>
             <div className="kn-routine-fields">
               <label className="kn-routine-field">
-                <span>Hora</span>
-                <Select label={`${title}: a hora`} value={r.time} options={timeOptions(r.time)} onChange={(time) => save(kind, { time })} />
+                <span>{t("routines.time")}</span>
+                <Select label={t("routines.timeAria", { title })} value={r.time} options={timeOptions(r.time)} onChange={(time) => save(kind, { time })} />
               </label>
               {kind === "weekly" ? (
                 <label className="kn-routine-field">
-                  <span>Dia</span>
-                  <Select label={`${title}: o dia`} value={String(r.weekday ?? 1)} options={WEEKDAY_OPTIONS} onChange={(d) => save(kind, { weekday: Number(d) })} />
+                  <span>{t("routines.day")}</span>
+                  <Select label={t("routines.dayAria", { title })} value={String(r.weekday ?? 1)} options={weekdayOptions()} onChange={(d) => save(kind, { weekday: Number(d) })} />
                 </label>
               ) : null}
               <label className="kn-routine-field">
-                <span>Pasta</span>
-                <Select label={`${title}: a pasta`} value={r.folder} options={choices} onChange={(folder) => save(kind, { folder })} />
+                <span>{t("routines.folder")}</span>
+                <Select label={t("routines.folderAria", { title })} value={r.folder} options={choices} onChange={(folder) => save(kind, { folder })} />
               </label>
             </div>
             <div className="kn-routine-foot">
               <span className="kn-routine-last" aria-live="polite">
-                {r.on ? `${scheduleLine(kind, r)}. ` : "Desligada. "}
+                {r.on ? `${scheduleLine(kind, r)}. ` : `${t("routines.off")} `}
                 {lastRunLine(r, new Date())}
               </span>
               <Button onClick={() => void runNow(kind)} disabled={running !== null || status.busy}>
-                {running === kind ? "Mandando…" : "Rodar agora"}
+                {running === kind ? t("routines.sending") : t("routines.runNow")}
               </Button>
             </div>
             {failure?.kind === kind ? (
@@ -157,10 +160,10 @@ export function RoutinesRows({ status, run }: { status: AgentStatus; run: (call:
         editing?.mode === "edit" && editing.id === r.id ? (
           <RoutineEditor
             key={r.id}
-            title={EDIT_ROUTINE}
+            title={editRoutine()}
             initial={r}
             folders={folders}
-            submit="Salvar"
+            submit={t("common.save")}
             onSubmit={async (next) => {
               await api.agent.routineUpdate(r.id, next);
               setEditing(null);
@@ -217,6 +220,7 @@ function CustomCard({
   onDelete: () => void;
   onConfirm: (yes: boolean) => void;
 }) {
+  const { t } = useT();
   return (
     <section className="kn-routine-card" data-routine={r.id} aria-label={r.name}>
       <Row label={r.name} hint={customHint(r, economy)}>
@@ -224,23 +228,21 @@ function CustomCard({
       </Row>
       <div className="kn-routine-foot">
         <span className="kn-routine-last" aria-live="polite">
-          {r.on ? `${customScheduleLine(r)}. ` : `Desligada (${customScheduleLine(r).replace(/^\w/, (c) => c.toLowerCase())}). `}
+          {r.on ? `${customScheduleLine(r)}. ` : `${t("routines.offWhen", { when: customScheduleMid(r) })} `}
           {lastRunLine(r, new Date())}
         </span>
         {confirming ? (
-          <span className="kn-routine-actions" role="group" aria-label={`Apagar ${r.name}?`}>
-            <span className="kn-routine-last">Apagar a rotina?</span>
-            <Button onClick={() => onConfirm(false)}>Manter</Button>
-            <Button onClick={() => onConfirm(true)}>
-              Apagar
-            </Button>
+          <span className="kn-routine-actions" role="group" aria-label={t("routines.deleteAria", { name: r.name })}>
+            <span className="kn-routine-last">{t("routines.deleteQuestion")}</span>
+            <Button onClick={() => onConfirm(false)}>{t("common.keep")}</Button>
+            <Button onClick={() => onConfirm(true)}>{t("common.delete")}</Button>
           </span>
         ) : (
           <span className="kn-routine-actions">
-            <Button onClick={onEdit}>Editar</Button>
-            <Button onClick={onDelete}>Apagar</Button>
+            <Button onClick={onEdit}>{t("common.edit")}</Button>
+            <Button onClick={onDelete}>{t("common.delete")}</Button>
             <Button onClick={onRun} disabled={running !== null || busy}>
-              {running === r.id ? "Mandando…" : "Rodar agora"}
+              {running === r.id ? t("routines.sending") : t("routines.runNow")}
             </Button>
           </span>
         )}

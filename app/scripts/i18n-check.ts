@@ -99,6 +99,21 @@ export const MIGRATED = [
   "ui/home/Pendencias.tsx",
   "ui/home/Semana.tsx",
   "ui/src/kit/index.tsx",
+  // A memória, as rotinas, as propostas, o placar, as trilhas, as respostas e a Atividade do agente (T29272).
+  "ui/settings/memoryText.ts",
+  "ui/settings/MemoryRows.tsx",
+  "ui/settings/trailsText.ts",
+  "ui/settings/Trails.tsx",
+  "ui/settings/placarText.ts",
+  "ui/settings/Placar.tsx",
+  "ui/settings/routinesText.ts",
+  "ui/settings/RoutinesRows.tsx",
+  "ui/settings/RoutineEditor.tsx",
+  "ui/settings/proposalText.ts",
+  "ui/settings/Proposals.tsx",
+  "ui/settings/activityText.ts",
+  "ui/settings/AgentActivity.tsx",
+  "ui/settings/DoubtAnswers.tsx",
 ];
 
 /** O main e a notificação já no catálogo (T28192): menu, bandeja, status, diálogo do link, pílula e notificação. */

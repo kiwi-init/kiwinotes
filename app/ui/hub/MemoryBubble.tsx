@@ -9,7 +9,7 @@ import { api, has } from "../src/api.ts";
 import { t, useT } from "../src/i18n.ts";
 import { useHubNav } from "../src/hubNav.ts";
 import { Button } from "../src/kit/index.tsx";
-import { MEMORY_TITLE, overLine } from "../settings/memoryText.ts";
+import { memoryTitle, overLine } from "../settings/memoryText.ts";
 import { BubblePresence } from "./BubblePresence";
 import { BubbleTail } from "./BubbleTail";
 
@@ -99,7 +99,7 @@ export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boo
                   variant="primary"
                   onClick={() => {
                     close();
-                    nav.openSettings("agent", MEMORY_TITLE);
+                    nav.openSettings("agent", memoryTitle());
                   }}
                 >
                   {t("hub.memory.open")}

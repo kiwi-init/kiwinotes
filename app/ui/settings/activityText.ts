@@ -1,33 +1,45 @@
 // Os textos da seção "Atividade do agente" (spec #9480): a hora de cada pedido, o que o agente leu, cada mudança, o que
-// o [Ver] avisa e o que o [Desfazer] respondeu, em palavras simples. Funções puras, para o `bun test`.
+// o [Ver] avisa e o que o [Desfazer] respondeu, em palavras simples, pelo catálogo (`activity.*`, T29272). Funções
+// puras, para o `bun test`.
 
+import { formatTime } from "../../src/shared/i18n/index.ts";
 import type { AgentActivityRequest, AgentChangeView, AgentUndoNote } from "../../src/shared/ui-contract.ts";
+import { appLocale, t } from "../src/i18n.ts";
 
 export type ActivityChange = AgentActivityRequest["changes"][number];
 
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const two = (n: number) => String(n).padStart(2, "0");
 
-/** "14:32", na hora local. */
+/** "14:32" (ou "2:32 PM" em inglês), na hora local. */
 export function hourOf(iso: string): string {
   const d = new Date(iso);
-  return `${two(d.getHours())}:${two(d.getMinutes())}`;
+  const { locale } = appLocale();
+  return locale === "pt" ? `${two(d.getHours())}:${two(d.getMinutes())}` : formatTime(locale, d);
 }
 
-/** "hoje, 14:32", "ontem, 09:10" ou "12 nov, 14:32", na hora local. */
+/** Quantos dias antes de hoje, pelo relógio local: 0 é hoje, 1 é ontem. */
+function daysAgo(d: Date, now: number): number {
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  return Math.round((day(new Date(now)) - day(d)) / 86_400_000);
+}
+
+/** O dia curto: "12 nov" / "Nov 12". */
+function shortDay(d: Date): string {
+  if (appLocale().locale === "pt") return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d);
+}
+
+/** "hoje, 14:32", "ontem, 09:10" ou "12 nov, 14:32" ("today, 2:32 PM" em inglês), na hora local. */
 export function whenOf(iso: string, now = Date.now()): string {
   const d = new Date(iso);
-  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const today = day(new Date(now));
-  const diff = Math.round((today - day(d)) / 86_400_000);
-  const label = diff === 0 ? "hoje" : diff === 1 ? "ontem" : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const diff = daysAgo(d, now);
+  const label = diff === 0 ? t("activity.today") : diff === 1 ? t("activity.yesterday") : shortDay(d);
   return `${label}, ${hourOf(iso)}`;
 }
 
 /** O nome da nota como a pessoa vê: sem o `.md`. */
 export const noteName = (p: string) => p.replace(/\.md$/i, "");
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** O que o agente leu, resumido: "leu 3 notas, procurou 2 vezes". */
 export function readsLine(reads: AgentActivityRequest["reads"]): string {
@@ -52,16 +64,16 @@ export function readsLine(reads: AgentActivityRequest["reads"]): string {
     // A memória (spec #11469) tem as linhas dela (`memoryLines`): não é uma leitura de nota.
   }
   const parts: string[] = [];
-  if (notes.size) parts.push(`leu ${plural(notes.size, "nota", "notas")}`);
-  if (meetings.size) parts.push(`leu ${plural(meetings.size, "reunião", "reuniões")}`);
-  if (files.size) parts.push(`leu ${plural(files.size, "arquivo", "arquivos")}`);
-  if (searches) parts.push(`procurou ${plural(searches, "vez", "vezes")}`);
-  if (listedNotes) parts.push("listou as notas");
-  if (listedMeetings) parts.push("listou as reuniões");
-  if (projects.size) parts.push(`viu ${plural(projects.size, "projeto", "projetos")}`);
-  if (listedProjects) parts.push("listou os projetos");
-  if (!parts.length) return reads.some((r) => r.tool.startsWith("memory_")) ? "" : "Não leu nenhuma nota.";
-  const text = parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")} e ${parts.at(-1)}`;
+  if (notes.size) parts.push(t("activity.read.notes", { n: notes.size }));
+  if (meetings.size) parts.push(t("activity.read.meetings", { n: meetings.size }));
+  if (files.size) parts.push(t("activity.read.files", { n: files.size }));
+  if (searches) parts.push(t("activity.read.searches", { n: searches }));
+  if (listedNotes) parts.push(t("activity.read.listedNotes"));
+  if (listedMeetings) parts.push(t("activity.read.listedMeetings"));
+  if (projects.size) parts.push(t("activity.read.projects", { n: projects.size }));
+  if (listedProjects) parts.push(t("activity.read.listedProjects"));
+  if (!parts.length) return reads.some((r) => r.tool.startsWith("memory_")) ? "" : t("activity.read.none");
+  const text = parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")}${t("activity.and")}${parts.at(-1)}`;
   return text[0]!.toUpperCase() + text.slice(1) + ".";
 }
 
@@ -69,7 +81,7 @@ export function readsLine(reads: AgentActivityRequest["reads"]): string {
 export function memoryLines(reads: AgentActivityRequest["reads"]): string[] {
   return reads
     .filter((r) => (r.tool === "memory_remember" || r.tool === "memory_forget") && r.target)
-    .map((r) => `${r.tool === "memory_remember" ? "Anotou na memória" : "Tirou da memória"}: “${r.target}”.`);
+    .map((r) => t(r.tool === "memory_remember" ? "activity.mem.remember" : "activity.mem.forget", { fact: r.target! }));
 }
 
 /**
@@ -79,13 +91,13 @@ export function memoryLines(reads: AgentActivityRequest["reads"]): string[] {
 export function heldLines(r: Pick<AgentActivityRequest, "reads" | "requestHeld">): string[] {
   const where = new Map<string, number>();
   const add = (k: string, n: number) => where.set(k, Math.max(where.get(k) ?? 0, n));
-  if (r.requestHeld) add("no pedido", r.requestHeld);
+  if (r.requestHeld) add(t("activity.held.request"), r.requestHeld);
   for (const x of r.reads) {
     if (!x.held) continue;
-    if (x.tool === "notes_search") add("nos resultados da busca", x.held);
-    else if (x.target) add(`em ${noteName(x.target.split(" › ")[0]!)}`, x.held);
+    if (x.tool === "notes_search") add(t("activity.held.search"), x.held);
+    else if (x.target) add(t("activity.held.in", { note: noteName(x.target.split(" › ")[0]!) }), x.held);
   }
-  return [...where].map(([k, n]) => `O Kiwi segurou ${plural(n, "segredo", "segredos")} ${k}.`);
+  return [...where].map(([k, n]) => t("activity.held", { n, where: k }));
 }
 
 /**
@@ -93,13 +105,12 @@ export function heldLines(r: Pick<AgentActivityRequest, "reads" | "requestHeld">
  * em Projetos/Kiwi, linha 4 (•••• (32 caracteres)) e segurou desta vez."
  */
 export function doubtLine(d: { path: string; line: number; mask: string }): string {
-  const where = d.path ? `em ${noteName(d.path)}, linha ${d.line}` : "no seu pedido";
-  return `O Kiwi ficou em dúvida ${where} (${d.mask}) e segurou desta vez.`;
+  const where = d.path ? t("activity.doubt.where", { note: noteName(d.path), line: d.line }) : t("activity.doubt.request");
+  return t("activity.doubt", { where, mask: d.mask });
 }
 
 /** A mudança que tirou segredos da nota (spec #9818): o aviso, com o caminho de volta. */
-export const removedLine = (n: number) =>
-  `Esta mudança tirou ${plural(n, "segredo", "segredos")} da nota. O Desfazer ${n === 1 ? "o traz" : "os traz"} de volta, e o texto de antes está nas Versões.`;
+export const removedLine = (n: number) => t("activity.removed", { n });
 
 /** Um arquivo que não é nota (o que o agente gerou, spec #11549): a Atividade oferece o Finder no lugar do [Ver]. */
 export const isFile = (path: string) => !/\.md$/i.test(path);
@@ -107,7 +118,7 @@ export const isFile = (path: string) => !/\.md$/i.test(path);
 /** Uma mudança: "Criou Projetos/Resumo", "Acrescentou em Ideias", "Trocou Kiwi › Prazo". */
 export function changeLine(c: Pick<ActivityChange, "kind" | "path" | "section">): string {
   const where = `${noteName(c.path)}${c.section ? ` › ${c.section}` : ""}`;
-  return c.kind === "created" ? `Criou ${where}` : c.kind === "appended" ? `Acrescentou em ${where}` : `Trocou ${where}`;
+  return t(c.kind === "created" ? "activity.change.created" : c.kind === "appended" ? "activity.change.appended" : "activity.change.replaced", { where });
 }
 
 /** O começo do pedido, como a lista mostra: a primeira linha com texto (o registro guarda os primeiros 300 caracteres). */
@@ -119,70 +130,69 @@ export const openChanges = (r: AgentActivityRequest) => r.changes.filter((c) => 
 /** O aviso em cima do [Ver], ou null quando o depois é o texto exato do agente numa nota que já existia. */
 export function viewNotice(v: AgentChangeView): string | null {
   if (v.before === null && v.state !== "exact" && v.state !== "changed")
-    return "A cópia de antes não está mais guardada: não há o que mostrar.";
+    return t("activity.view.noCopy");
   switch (v.state) {
     case "undone":
-      return `Desfeito ${dayHour(v.undone!)}. O texto que o agente tinha escrito está nas Versões da nota; abaixo, o texto de antes.`;
+      return t("activity.view.undone", { when: dayHour(v.undone!) });
     case "gone":
-      return "A nota não está mais lá: foi renomeada, movida ou apagada. Abaixo, o texto de antes.";
+      return t("activity.view.gone");
     case "otherFolder":
-      return "A nota está em outra pasta de notas. Abra aquela pasta para ver a nota de agora; abaixo, o texto de antes.";
+      return t("activity.view.otherFolder");
     case "changed":
-      return "A nota mudou depois do agente: abaixo está a nota de agora, que já não é só o que ele escreveu.";
+      return t("activity.view.changed");
     case "exact":
-      if (v.before === null) return "A cópia de antes não está mais guardada: abaixo, só o texto que o agente deixou.";
-      return v.kind === "created" ? "A nota que o agente criou." : null;
+      if (v.before === null) return t("activity.view.exactNoCopy");
+      return v.kind === "created" ? t("activity.view.created") : null;
   }
 }
 
-/** "às 14:32" hoje, ou "em 12 nov, às 14:32". */
+/** "às 14:32" hoje, "ontem, às 14:32", ou "em 12 nov, às 14:32". */
 function dayHour(iso: string, now = Date.now()): string {
-  const w = whenOf(iso, now);
-  return w.startsWith("hoje") ? `às ${hourOf(iso)}` : w.startsWith("ontem") ? `ontem, às ${hourOf(iso)}` : `em ${w.replace(", ", ", às ")}`;
+  const d = new Date(iso);
+  const diff = daysAgo(d, now);
+  const time = hourOf(iso);
+  return diff === 0 ? t("activity.at", { time }) : diff === 1 ? t("activity.atYesterday", { time }) : t("activity.atDay", { date: shortDay(d), time });
 }
 
 /** "Desfeito às 14:32", na linha da mudança. */
-export const undoneLine = (iso: string, now = Date.now()) => `Desfeito ${dayHour(iso, now)}`;
+export const undoneLine = (iso: string, now = Date.now()) => t("activity.undoneAt", { when: dayHour(iso, now) });
 
 /** O que o desfazer fez numa nota, em palavras simples. `requestAt` é a hora do pedido desfeito. */
 export function undoLine(n: AgentUndoNote, requestId: string, now = Date.now()): string {
   const name = noteName(n.path);
-  if (n.result === "restored") return `${name} voltou ao texto de antes.`;
-  if (n.result === "trashed") return `${name} foi para a Lixeira. Nos próximos 10 minutos, dá para trazer de volta pelas Notas.`;
-  if (n.result === "already") return `${name} já tinha sido desfeita. Nada mudou.`;
+  if (n.result === "restored") return t("activity.undo.restored", { name });
+  if (n.result === "trashed") return t("activity.undo.trashed", { name });
+  if (n.result === "already") return t("activity.undo.already", { name });
   switch (n.reason) {
     case "E_CHANGED":
-      return `${name} mudou depois do agente, então ficou como está. O texto de antes continua guardado.`;
+      return t("activity.undo.changed", { name });
     case "E_GONE":
-      return `${name} foi renomeada, movida ou apagada depois do agente. Nada mudou.`;
+      return t("activity.undo.gone", { name });
     case "E_LATER_WRITE": {
       const l = n.later;
-      if (l && l.request === requestId)
-        return `O agente escreveu de novo em ${name} depois, neste mesmo pedido. Desfaça antes a mudança mais nova, ou o pedido inteiro. Nada mudou.`;
-      if (l) return `O agente escreveu de novo em ${name} no pedido ${l.at ? `de ${whenOf(l.at, now)}` : "seguinte"}. Desfaça antes aquele pedido. Nada mudou.`;
-      return `O agente escreveu de novo em ${name} depois. Desfaça antes a escrita mais nova. Nada mudou.`;
+      if (l && l.request === requestId) return t("activity.undo.laterSame", { name });
+      if (l) return l.at ? t("activity.undo.laterAt", { name, when: whenOf(l.at, now) }) : t("activity.undo.laterNext", { name });
+      return t("activity.undo.later", { name });
     }
     case "E_OTHER_FOLDER":
-      return `O agente escreveu em ${name} em outra pasta de notas. Abra aquela pasta para desfazer. Nada mudou.`;
+      return t("activity.undo.otherFolder", { name });
     case "E_EXPIRED":
-      return `A mudança em ${name} tem mais de 30 dias: não há mais o que desfazer.`;
+      return t("activity.undo.expired", { name });
     case "E_NO_COPY":
-      return `A cópia de antes de ${name} não está mais guardada: não há o que desfazer.`;
+      return t("activity.undo.noCopy", { name });
     default:
-      return n.message ?? `${name} ficou como está.`;
+      return n.message ?? t("activity.undo.default", { name });
   }
 }
 
 /** O pedido saiu do registro entre abrir a lista e clicar (passou dos 30 dias): o aviso fica na seção, fora da lista. */
-export const goneRequest = (at?: string, now = Date.now()) =>
-  `${at ? `O pedido de ${whenOf(at, now)}` : "Esse pedido"} passou dos 30 dias: não há mais o que desfazer.`;
+export const goneRequest = (at?: string, now = Date.now()) => (at ? t("activity.goneAt", { when: whenOf(at, now) }) : t("activity.gone"));
 
 /** A seção sem pedidos. */
-export const EMPTY_ACTIVITY = "O agente ainda não fez nada.";
+export const emptyActivity = () => t("activity.empty");
 
 /** A dica da seção. */
-export const ACTIVITY_HINT =
-  "Cada pedido dos últimos 30 dias, com o que o agente leu e mudou. O Desfazer volta a nota ao texto de antes, se ninguém mexeu nela depois; o texto do agente fica nas Versões.";
+export const activityHint = () => t("activity.hint");
 
 /** Quantos pedidos a lista mostra antes do "Mostrar mais", e até onde ele vai. */
 export const ACTIVITY_FIRST = 50;
