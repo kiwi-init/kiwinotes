@@ -3,9 +3,29 @@
 
 import { describe, expect, test } from "bun:test";
 
+import { EN_PARTS } from "./en.ts";
 import { AUTO_FOLLOWS_SYSTEM, appLocale, LANGUAGE_CHOICE, languageChoice, CATALOGS, formatDate, formatDateTime, formatNumber, formatTime, isLanguageSetting, localeFromSystem, LOCALES, placeholders, resolveLocale, type TextKey, translate } from "./index.ts";
+import { PT_PARTS } from "./pt.ts";
 
 describe("catálogo", () => {
+  // As áreas (`<área>.pt.ts`) entram no `pt.ts` pelo espalhar: uma chave em duas some calada, a última ganha (#29295).
+  test("cada chave está numa parte só, e o catálogo é a soma de todas as partes, nas duas línguas", () => {
+    for (const [parts, catalog] of [[PT_PARTS, CATALOGS.pt], [EN_PARTS, CATALOGS.en]] as const) {
+      const where = new Map<string, string>();
+      for (const [part, entries] of Object.entries(parts)) {
+        for (const key of Object.keys(entries)) {
+          expect({ key, alsoIn: where.get(key) ?? null }).toEqual({ key, alsoIn: null });
+          where.set(key, part);
+        }
+      }
+      expect([...where.keys()].sort()).toEqual(Object.keys(catalog).sort());
+    }
+    expect(Object.keys(EN_PARTS).sort()).toEqual(Object.keys(PT_PARTS).sort());
+    for (const part of Object.keys(PT_PARTS) as (keyof typeof PT_PARTS)[]) {
+      expect({ part, keys: Object.keys(EN_PARTS[part]).sort() }).toEqual({ part, keys: Object.keys(PT_PARTS[part]).sort() });
+    }
+  });
+
   test("todas as línguas têm exatamente as chaves do português", () => {
     const keys = Object.keys(CATALOGS.pt).sort();
     for (const l of LOCALES) expect(Object.keys(CATALOGS[l]).sort()).toEqual(keys);
