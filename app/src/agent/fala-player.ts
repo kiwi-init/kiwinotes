@@ -52,6 +52,11 @@ export interface FalaPlayerOpts {
   sintese: SinteseFala;
   saida: SaidaFala;
   midia?: MidiaFala;
+  /**
+   * Na hora em que uma fala começa, antes do 1º pedaço ir à saída: quem divide a saída com o player (o Ouvir dos
+   * Ajustes, T27825) para aqui, para as duas vozes não se intercalarem na fila.
+   */
+  antesDeFalar?(): void;
   evento?(e: FalaEvento): void;
   log?(m: string): void;
 }
@@ -100,6 +105,11 @@ export class FalaPlayer {
     }
     const frases = fala.frases.filter((f) => f.trim());
     if (frases.length === 0) return Promise.resolve();
+    try {
+      this.o.antesDeFalar?.();
+    } catch (err) {
+      this.o.log?.(`fala: o antesDeFalar falhou: ${mensagem(err)}`);
+    }
     this.cancelar();
     const turno: Turno = { id: fala.turnId, abort: new AbortController(), midiaBaixa: false, fim: Promise.resolve() };
     this.atual = turno;

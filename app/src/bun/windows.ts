@@ -171,13 +171,16 @@ export function startCatVoiceOutput(sidecar: Sidecar): void {
     { log },
   );
   // `midia` fica para o T26830: abaixar os outros apps sem abaixar o gato (#17697), nunca o volume do Mac.
-  const player = new FalaPlayer({ sintese: catVoice.voice, saida, log });
+  // A saída é uma só: a fala do gato para o Ouvir antes de tocar, e o Ouvir espera a fala do gato acabar.
+  let preview: CatVoicePreview | undefined;
+  const player = new FalaPlayer({ sintese: catVoice.voice, saida, antesDeFalar: () => preview?.parar(), log });
   const off = ligarFalaPlayer(player, { agent: stores.agent, helper: { on: (t, fn) => sidecar.on(t, fn) }, log });
-  const preview = createCatVoicePreview(catVoice, { saida, falaDoGato: () => player.falaAtual, log });
+  preview = createCatVoicePreview(catVoice, { saida, falaDoGato: () => player.falaAtual, log });
+  const p = preview;
   catVoiceOutput = {
-    preview,
+    preview: p,
     stop: () => {
-      preview.parar();
+      p.parar();
       off();
       saida.dispose();
     },

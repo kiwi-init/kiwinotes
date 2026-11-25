@@ -30,7 +30,10 @@ final class EngineSpeech: SpeechPlaying {
     func play(_ samples: [Float], done: @escaping () -> Void) throws {
         idle?.cancel()
         idle = nil
-        if !engine.isRunning {
+        // A troca do dispositivo de saída (o fone entrou ou saiu) para o motor sozinho, e o nó pode seguir dizendo
+        // `isPlaying` sem tocar nada: depois de religar, o `play()` vai sempre (#28376).
+        let restarted = !engine.isRunning
+        if restarted {
             engine.prepare()
             try engine.start()
         }
@@ -43,7 +46,7 @@ final class EngineSpeech: SpeechPlaying {
         node.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             DispatchQueue.main.async { self?.finished(id) }
         }
-        if !node.isPlaying { node.play() }
+        if restarted || !node.isPlaying { node.play() }
     }
 
     func stop() {

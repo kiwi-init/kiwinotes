@@ -2,12 +2,15 @@
 import { describe, expect, test } from "bun:test";
 import { FalaPlayer, type FalaEvento } from "../agent/fala-player.ts";
 import { pcmBase64, saidaHelper, type SpeechHelper } from "./speech-output.ts";
+import { CatVoicePreview } from "./cat-voice-preview.ts";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 /** O helper falso: guarda cada `speech.play`, e o teste diz quando um pedaço acabou (`tocou`). */
 function fakeHelper(o: { volume?: number; falha?: boolean } = {}) {
   const plays: { seq: number; pcm: string }[] = [];
+  /** Os comandos na ordem em que chegam ao helper: `play:<seq>` e `stop`. */
+  const ordem: string[] = [];
   let stops = 0;
   const played = new Set<(e: { seq: number }) => void>();
   const closes = new Set<() => void>();
@@ -15,10 +18,12 @@ function fakeHelper(o: { volume?: number; falha?: boolean } = {}) {
     async request(c) {
       if (o.falha) throw new Error("speech_output");
       plays.push({ seq: c.seq, pcm: c.pcm });
+      ordem.push(`play:${c.seq}`);
       return { data: { volume: o.volume ?? 0.5 } };
     },
     async send() {
       stops++;
+      ordem.push("stop");
     },
     on(_t, fn) {
       played.add(fn);
@@ -32,6 +37,7 @@ function fakeHelper(o: { volume?: number; falha?: boolean } = {}) {
   return {
     helper,
     plays,
+    ordem,
     get stops() {
       return stops;
     },
@@ -173,5 +179,85 @@ describe("saidaHelper (T27825)", () => {
     await saida.drenar();
     expect(eventos.at(-1)).toEqual({ tipo: "terminou", turnId: "t1", motivo: "cancelado" });
     saida.dispose();
+  });
+
+  describe("a fala do gato e o Ouvir dividem a saída (#28376)", () => {
+    const GATO = pcmBase64(pcm(1920, 2222));
+    const PREVIA = pcmBase64(pcm(1920, 1111));
+    /** Ligados como no app (`startCatVoiceOutput`, src/bun/windows.ts). */
+    function montar() {
+      const f = fakeHelper();
+      const saida = saidaHelper(f.helper);
+      const eventos: FalaEvento[] = [];
+      let previa: CatVoicePreview | undefined;
+      const player = new FalaPlayer({
+        sintese: {
+          async *sintetizar() {
+            for (let i = 0; i < 3; i++) yield pcm(1920, 2222);
+          },
+        },
+        saida,
+        antesDeFalar: () => previa?.parar(),
+        evento: (e) => eventos.push(e),
+      });
+      previa = new CatVoicePreview({
+        sintese: () => ({
+          async *sintetizar(_frase, signal) {
+            for (let i = 0; i < 6 && !signal.aborted; i++) yield pcm(1920, 1111);
+          },
+        }),
+        frases: () => ["Olá."],
+        saida,
+        falaDoGato: () => player.falaAtual,
+      });
+      const quem = (seq: number) => (f.plays.find((p) => p.seq === seq)?.pcm === GATO ? "gato" : "previa");
+      return { f, saida, player, previa, eventos, quem };
+    }
+    const esperar = async (ok: () => boolean) => {
+      for (let i = 0; i < 50 && !ok(); i++) await tick();
+    };
+
+    test("o gato fala durante uma prévia: a prévia para antes, e a fila fica só com a voz dele", async () => {
+      const { f, saida, player, previa, eventos, quem } = montar();
+      void previa.ouvir("pt-a");
+      await esperar(() => f.plays.length >= 2);
+      expect(f.plays.map((p) => p.pcm)).toEqual([PREVIA, PREVIA]);
+      let acabou = false;
+      void player.falar({ turnId: "t1", frases: ["a"] }).then(() => (acabou = true));
+      await esperar(() => f.plays.some((p) => p.pcm === GATO));
+      // O stop da prévia vai antes do 1º pedaço do gato, e depois dele só vem a voz do gato.
+      const primeiroGato = f.ordem.findIndex((o) => o.startsWith("play:") && quem(Number(o.slice(5))) === "gato");
+      expect(f.ordem.slice(0, primeiroGato)).toContain("stop");
+      expect(f.ordem.slice(primeiroGato).filter((o) => o !== "stop").map((o) => quem(Number(o.slice(5))))).toEqual(
+        f.ordem.slice(primeiroGato).filter((o) => o !== "stop").map(() => "gato"),
+      );
+      expect(previa.tocando).toBeNull();
+      // O terminou do gato espera só os pedaços dele.
+      for (let i = 0; i < 5 && !acabou; i++) {
+        for (const p of [...f.plays].filter((p) => p.pcm === GATO)) f.tocou(p.seq);
+        await esperar(() => acabou);
+      }
+      expect(acabou).toBe(true);
+      expect(eventos.at(-1)).toEqual({ tipo: "terminou", turnId: "t1", motivo: "fim" });
+      expect(f.plays.filter((p) => p.pcm === GATO).length).toBe(3);
+      expect(f.plays.filter((p) => p.pcm === PREVIA).length).toBe(2); // nenhum pedaço da prévia depois do gato
+      saida.dispose();
+    });
+
+    test("a prévia que espera a fala do gato, parada, não corta o gato", async () => {
+      const { f, saida, player, previa, quem } = montar();
+      void player.falar({ turnId: "t1", frases: ["a"] });
+      await esperar(() => f.plays.length >= 2);
+      void previa.ouvir("pt-a");
+      await tick();
+      expect(previa.tocando).toBe("pt-a");
+      previa.parar();
+      await tick();
+      expect(f.stops).toBe(0);
+      expect(f.plays.map((p) => quem(p.seq))).toEqual(["gato", "gato"]);
+      expect(player.falando).toBe("t1");
+      player.cancelar();
+      saida.dispose();
+    });
   });
 });

@@ -30,7 +30,8 @@ const abortado = (signal: AbortSignal) =>
   new Promise<void>((r) => (signal.aborted ? r() : signal.addEventListener("abort", () => r(), { once: true })));
 
 export class CatVoicePreview {
-  private atual: { id: CatVoiceId; abort: AbortController } | null = null;
+  /** `saiu`: já mandou pedaço à saída. A prévia que só espera a fala do gato não limpa a saída ao parar (é dele). */
+  private atual: { id: CatVoiceId; abort: AbortController; saiu: boolean } | null = null;
 
   constructor(private readonly o: CatVoicePreviewOptions) {}
 
@@ -44,7 +45,7 @@ export class CatVoicePreview {
     const frases = this.o.frases(id);
     if (!frases || frases.length === 0) throw new Error(`a voz ${id} ainda não tem prévia`);
     this.parar();
-    const me = { id, abort: new AbortController() };
+    const me = { id, abort: new AbortController(), saiu: false };
     const { signal } = me.abort;
     this.atual = me;
     this.o.onChange?.(id);
@@ -58,6 +59,7 @@ export class CatVoicePreview {
       for (const frase of frases) {
         for await (const pcm of sintese.sintetizar(frase, signal)) {
           if (signal.aborted) return;
+          me.saiu = true;
           await this.o.saida.tocar(pcm, () => {});
           if (signal.aborted) return;
         }
@@ -79,9 +81,11 @@ export class CatVoicePreview {
     if (!a) return;
     this.atual = null;
     a.abort.abort();
-    try {
-      this.o.saida.limpar();
-    } catch {}
+    if (a.saiu) {
+      try {
+        this.o.saida.limpar();
+      } catch {}
+    }
     this.o.onChange?.(null);
   }
 }
