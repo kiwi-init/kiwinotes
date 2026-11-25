@@ -7,10 +7,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { AgentNoticeState } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Button, Row, Switch } from "../src/kit/index.tsx";
-import { NOTICE_LABEL, noticeHint } from "./agentText.ts";
+import { noticeHint } from "./agentText.ts";
 
 export function NoticeRow() {
+  const { t, locale } = useT();
   const [state, setState] = useState<AgentNoticeState | null>(null);
   const [asking, setAsking] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -50,13 +52,13 @@ export function NoticeRow() {
   };
 
   return (
-    <Row label={NOTICE_LABEL} hint={failed ? "Não deu para salvar. Tente de novo." : noticeHint(state, asking)}>
+    <Row label={t("agent.notice.label")} hint={failed ? t("agent.saveFailed") : noticeHint(state, asking, locale)}>
       {state.permission === "notDetermined" ? (
         <Button onClick={allow} disabled={asking}>
-          Ligar as notificações
+          {t("agent.notice.allow")}
         </Button>
       ) : state.permission === "allowed" ? (
-        <Switch label={NOTICE_LABEL} checked={state.enabled} onChange={change} />
+        <Switch label={t("agent.notice.label")} checked={state.enabled} onChange={change} />
       ) : null}
     </Row>
   );

@@ -61,6 +61,16 @@ export const MIGRATED = [
   // Ajustes de Reuniões (T29273).
   "ui/settings/AgentMeetings.tsx",
   "ui/settings/MeetingsRows.tsx",
+  // Ajustes › Agente (T29271).
+  "ui/settings/Agent.tsx",
+  "ui/settings/CatRow.tsx",
+  "ui/settings/CatSpeaksRow.tsx",
+  "ui/settings/ControlRow.tsx",
+  "ui/settings/ModelRows.tsx",
+  "ui/settings/NoteModel.tsx",
+  "ui/settings/NoticeRow.tsx",
+  "ui/settings/Placar.tsx",
+  "ui/settings/UsageMeter.tsx",
 ];
 
 /** O main e a notificação já no catálogo (T28192): menu, bandeja, status, diálogo do link, pílula e notificação. */

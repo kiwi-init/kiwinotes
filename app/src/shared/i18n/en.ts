@@ -2,6 +2,7 @@
 // A missing or extra key breaks `tsc`; the i18n test also checks that both ask for the same `{params}`.
 
 import { enCatOverlay } from "./catoverlay.en.ts";
+import { enAgent } from "./agent.en.ts";
 import { enCommon } from "./common.en.ts";
 import type { Catalog, Entry } from "./index.ts";
 import { enMeetingsSettings } from "./meetings-settings.en.ts";
@@ -112,6 +113,7 @@ export const EN_PARTS = {
   settings: enSettings,
   meetingsSettings: enMeetingsSettings,
   catOverlay: enCatOverlay,
+  agent: enAgent,
 } as const;
 
 export const en: Catalog = {
@@ -121,4 +123,5 @@ export const en: Catalog = {
   ...enSettings,
   ...enMeetingsSettings,
   ...enCatOverlay,
+  ...enAgent,
 };
