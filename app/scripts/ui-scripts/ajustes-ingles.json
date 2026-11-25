@@ -1,7 +1,7 @@
 {
   "window": "hub",
   "steps": [
-    { "invoke": "settings.set", "args": { "language": "en" }, "name": "o app em inglês (T28297)" },
+    { "invoke": "settings.set", "args": { "language": "en" }, "name": "o app em inglês (T28297); a escolha da língua está escondida (#380): o headless sobe com KIWI_LANGUAGE_CHOICE=1" },
     { "waitFor": ".kn-tab", "name": "o hub abre" },
     { "click": "[role='tab'][data-section='settings']", "name": "vai para as Configurações" },
     { "click": ".kn-prefs-item[data-topic=appearance]", "name": "Aparência" },
