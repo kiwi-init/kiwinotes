@@ -1405,6 +1405,26 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect(m.svc.usageView().placar!.ultimos[0]!.faro).toMatchObject({ kind: "nada" });
   });
 
+  test("o aviso da atividade no fim do pedido já vê a trilha aprendida (T28584): Ajustes › Agente recarrega por ele", async () => {
+    const notas = { "Projetos/Kiwi.md": "# Kiwi\n\nO cronograma do lançamento fica para março.\n", "Ideias.md": "gatos" };
+    // Uma pasta de verdade demora a listar: a trilha sai depois da escrita da resposta, se ela não esperar.
+    const reader = memoryReader(notas);
+    const list = reader.list.bind(reader);
+    reader.list = async () => (await Bun.sleep(50), list());
+    const m = make({ reader });
+    await readyNow(m);
+    // O que a seção das trilhas leria a cada aviso, como o `TrailsSection` faz.
+    const vistas: number[] = [];
+    m.svc.onActivity(() => vistas.push(m.svc.trails().trilhas[0]?.vezes ?? 0));
+    await askAndWait(m, "na verdade, como anda o cronograma do lançamento?");
+    await Bun.sleep(120);
+    expect(vistas.at(-1)).toBe(1);
+    m.svc.newConversation();
+    await askAndWait(m, "beleza, e o cronograma do lançamento?");
+    await Bun.sleep(120);
+    expect(vistas.at(-1)).toBe(2);
+  });
+
   test("as trilhas pela pasta da maioria (T21325): o agente leu notas de pastas diferentes, e a trilha vai para a pasta com mais delas", async () => {
     const notas = { "Ideias.md": "gatos", "Horta Norte/Plantio.md": "canteiro", "Horta Norte/Colheita.md": "canteiro", "Horta Sul/Plantio.md": "x" };
     const m = make({ reader: memoryReader(notas) });

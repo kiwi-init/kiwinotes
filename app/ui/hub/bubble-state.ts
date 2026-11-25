@@ -4,6 +4,7 @@
 //
 // - Enquanto o agente trabalha, o balão mostra só a linha de estado ("Pesquisando na web…", o aviso do limite) ou o que
 //   a pessoa falou (spec #9876). O texto que o agente diz entre as ferramentas não vai ao balão: fica no [Ver mais].
+//   O aviso do limite fica pelo menos o tempo de leitura (`readingMs`), mesmo que a resposta chegue antes (T28584).
 // - Quando a resposta chega (`done`), entra um balão só, com o resumo, de uma vez: ele não troca de trecho, não digita
 //   e não muda com o relógio. O resumo é a fala do `cat_speak` (o evento `speech`), quando o agente mandou; senão, o
 //   começo da resposta final, cortado no fim de uma frase que caiba (`summaryOf`). O [Ver mais] aparece quando a
@@ -203,6 +204,13 @@ export class BubbleFeed {
    * no `ANSWER_HOLD_MS`.
    */
   private held: { view: BubbleView; until: number } | null = null;
+  /**
+   * O aviso de limite fica o tempo de leitura (T28584): o que vem depois dele no pedido (a resposta, a linha de outra
+   * ferramenta, o canto vazio) espera em `afterWarning` até `warnUntil`. Sem isso, uma resposta rápida o tirava da tela
+   * antes de dar para ler. O erro não espera.
+   */
+  private warnUntil = 0;
+  private afterWarning: { head: Head | null } | null = null;
 
   constructor(
     private readonly fits: (s: string) => boolean,
@@ -260,7 +268,7 @@ export class BubbleFeed {
       this.closedLen = this.said.length;
       if (this.dismissed) return;
       // A web (spec #11908): o balão diz que o agente saiu do cofre, até a próxima ferramenta ou a resposta.
-      this.head = "tool" in e && e.tool === "web" ? this.line(WEB_LINE) : null;
+      this.put("tool" in e && e.tool === "web" ? this.line(WEB_LINE) : null, now);
     } else if (e.type === "done") {
       this.finish(e.id);
       let base = this.closedLen;
@@ -270,20 +278,23 @@ export class BubbleFeed {
         this.said = e.text;
         this.saidLinks = e.links ?? [];
       }
-      this.head = null;
       // Fechar o balão é fechar o desenho: o leitor de tela ainda ouve a resposta, uma vez, no fim (revisão #10936).
       if (e.stopReason === "end_turn" && this.said.trim()) this.announced = this.said;
-      if (e.stopReason !== "end_turn" || this.dismissed) return;
-      this.head = this.answer(base);
+      this.put(e.stopReason !== "end_turn" || this.dismissed ? null : this.answer(base), now);
     } else if (e.type === "limit") {
       // O limite (spec #11084): o aviso do agente entra como a linha de estado, até a resposta; o limite acabado troca a
       // mensagem do erro que vem em seguida pela hora de volta, se o agente disse. A hora de volta se lê no relógio de
       // parede: o `now` daqui é o do balão (o `performance.now()` da tela).
       const line = limitBubble(e.status, e.percent, e.resetsAt, this.wall());
       if (e.status === "out") this.outLine = line;
-      else if (!this.dismissed) this.head = this.line(line);
+      else if (!this.dismissed) {
+        this.head = this.line(line);
+        this.afterWarning = null;
+        this.warnUntil = now + readingMs(line);
+      }
     } else if (e.type === "error") {
       this.finish(e.id);
+      this.afterWarning = null;
       const line = (e.code === "E_AGENT_LIMIT" && this.outLine ? this.outLine : e.message || e.code).split("\n")[0]!.trim();
       this.head = { key: ++this.keys, text: line, kind: "error" };
       this.dismissed = false;
@@ -307,12 +318,18 @@ export class BubbleFeed {
   /** O clique no balão: fecha (o resto deste pedido não aparece mais no balão; o [Ver mais] não abre mais). */
   close(): void {
     this.held = null;
+    this.afterWarning = null;
+    this.warnUntil = 0;
     this.dismissed = true;
     this.head = null;
   }
 
   /** O que o balão mostra agora; null sem balão. */
   view(now: number): BubbleView | null {
+    if (this.afterWarning && now >= this.warnUntil) {
+      this.head = this.afterWarning.head;
+      this.afterWarning = null;
+    }
     if (this.held) {
       if (this.head || this.ended || this.dismissed || now >= this.held.until) this.held = null;
       else return this.held.view;
@@ -324,10 +341,17 @@ export class BubbleFeed {
     return { text: h.text, full: h.text, error: h.kind === "error", more, key: h.key, ...(h.links ? { links: h.links } : {}) };
   }
 
-  /** Quando o balão muda sozinho de novo: só a resposta de antes, parada no canto; Infinity se nada muda. */
+  /** Quando o balão muda sozinho de novo: a resposta de antes, parada no canto, ou o que espera o aviso de limite; Infinity se nada muda. */
   nextWake(now: number): number {
+    if (this.afterWarning && now < this.warnUntil) return this.warnUntil;
     if (this.held && !this.head && !this.ended && !this.dismissed && now < this.held.until) return this.held.until;
     return Infinity;
+  }
+
+  /** O próximo do balão; com o aviso de limite na tela, ele espera o tempo de leitura do aviso (T28584). */
+  private put(head: Head | null, now: number): void {
+    if (this.head?.kind === "line" && now < this.warnUntil) this.afterWarning = { head };
+    else this.head = head;
   }
 
   private line(text: string): Head {
@@ -369,6 +393,8 @@ export class BubbleFeed {
     this.dismissed = false;
     this.announced = null;
     this.outLine = null;
+    this.afterWarning = null;
+    this.warnUntil = 0;
   }
 
   private finish(id: string): void {

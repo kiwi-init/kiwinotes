@@ -2230,9 +2230,6 @@ export class AgentService {
       });
       this.prefixSent = resend || !sent ? { host, stable: parts.stable, requests: 1 } : { ...sent, requests: sent.requests + 1 };
       answered = answer.text;
-      // A resposta guardada passa pelo filtro, como o pedido: um segredo que a pessoa deixou ir e o agente repetiu não
-      // vai para o disco (nem, depois, para a cápsula).
-      void this.activity.setAnswer(turn.id, this.guard.request(answer.text).text).catch((err) => this.d.log?.(`[agent] activity: ${String((err as Error)?.message ?? err)}`));
       if (answer.usage) {
         // A pergunta guardada é a que já passou pelo guardrail (sem segredo).
         const placar = this.placar?.fim(answer.usage);
@@ -2240,6 +2237,10 @@ export class AgentService {
         this.emitUsage();
       }
       if (answer.stopReason !== "cancelled" && !turn.cancelled && !isRoutinePrompt(text)) await this.learnTrail(decided.text).catch((err) => this.d.log?.(`[agent] trilha: ${String((err as Error)?.message ?? err)}`));
+      // Depois da trilha (T28584): o aviso desta escrita faz Ajustes › Agente recarregar as trilhas, e elas já têm a de agora.
+      // A resposta guardada passa pelo filtro, como o pedido: um segredo que a pessoa deixou ir e o agente repetiu não
+      // vai para o disco (nem, depois, para a cápsula).
+      void this.activity.setAnswer(turn.id, this.guard.request(answer.text).text).catch((err) => this.d.log?.(`[agent] activity: ${String((err as Error)?.message ?? err)}`));
       const links = answer.stopReason === "cancelled" ? undefined : await this.bubbleLinks(answer.text);
       this.emitTurn({ id: turn.id, type: "done", stopReason: answer.stopReason, text: answer.text, ...(links ? { links } : {}) });
       succeeded = answer.stopReason !== "cancelled" && !turn.cancelled;

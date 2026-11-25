@@ -159,6 +159,8 @@ export class AgentActivity {
       if (!cut) return;
       o.record.answer = cut;
       await this.save(o);
+      // O fim do pedido (T28584): a Atividade mostra a resposta, e Ajustes › Agente recarrega as trilhas aprendidas nele.
+      this.changed(id);
     });
   }
 

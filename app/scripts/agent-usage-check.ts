@@ -171,6 +171,8 @@ try {
   const h = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "dark", width: 900, height: 620, motion: false, browser: "webkit", query: { section: "about" } });
   const q = h.page;
   await q.waitForSelector('.kn-kiwicat[data-ready="true"]', { timeout: 15000 });
+  // O hub à vista (spec #9810): sem isso, no headless o gato do pedido vai ao overlay e o hub esconde o balão dele.
+  assert.equal((await ctx.send({ cmd: "hubView", view: true })).ok, true);
   await invoke("agent.ask", { text: "/aviso" });
   // O trecho do aviso inteiro e já digitado.
   await q.waitForFunction(
