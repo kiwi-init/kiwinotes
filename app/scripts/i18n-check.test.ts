@@ -76,7 +76,9 @@ test("uma tela migrada com texto fixo faz o check sair 1, e sem ele sai 0 (T2829
   // migrada com um texto fixo a mais.
   const dir = path.join(tempDir("i18n-check-"), "app");
   mkdirSync(dir);
-  for (const d of ["ui", "src/bun", "src/agent"]) cpSync(path.join(root, d), path.join(dir, d), { recursive: true, filter: (p) => !p.includes("node_modules") });
+  // As pastas das telas e as do main migrado (o `MIGRATED_MAIN` cresce: o T29006 pôs arquivos de `scripts/`).
+  const dirs = new Set(["ui", ...MIGRATED_MAIN.map((f) => path.dirname(f))]);
+  for (const d of dirs) cpSync(path.join(root, d), path.join(dir, d), { recursive: true, filter: (p) => !p.includes("node_modules") });
   for (const d of SWIFT_DIRS) cpSync(path.join(root, d), path.join(dir, d), { recursive: true });
   const run = () => Bun.spawnSync(["bun", path.join(root, "scripts/i18n-check.ts")], { env: { ...process.env, KIWI_I18N_ROOT: dir, GITHUB_ACTIONS: "" } });
   expect(run().exitCode).toBe(0);
