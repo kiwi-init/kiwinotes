@@ -34,14 +34,17 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 - **Check vermelho por instabilidade:** `gh run rerun <run> --failed`, só os jobs que falharam, nunca o run inteiro (cada job de novo pega outra máquina macOS).
 
 ## Releases
-- **Só com o ok do harry**, e quem solta é o lead.
+- **Só com o ok do harry**, e quem solta é o releaser (harry #24906), falando antes com o lead.
+- **Tag só pelo `release-tag.ts`.** Ele só tagueia um sha com o CI verde. Um tag à mão num sha com o CI rodando cai vermelho se outro merge cancelar esse run, e já terá gastado os ~30 min do build.
 - **A versão é `vANO.MÊS.N`**, no formato do Channels (spec #13879). O N conta os releases do mês: `v2026.11.1`, `v2026.11.2`, `v2026.12.1`. Não há mais rc.
-- **O passo a passo:**
-  1. Na `main` verde, o próximo tag: `cd app && bun scripts/update-feed.ts next $(date +%Y-%m) $(git tag -l 'v*')`.
-  2. Um PR com o `app/package.json` nessa versão, sem o `v`, e o CHANGELOG com a seção dela no lugar de "Ainda sem versão".
-  3. Depois do merge: `git tag vANO.MÊS.N <sha do merge>` e `git push origin vANO.MÊS.N`.
-  4. O `release.yml` confere que o tag bate com o `package.json`, assina, notariza e publica o "Kiwi Notes ANO.MÊS.N". As notas listam os PRs desde o release anterior, com um rodapé de onde baixar e como conferir. O release também sobrescreve o feed antigo das rc (`updates-rc`), para quem está numa rc receber a versão nova.
-  5. Confira o release: as notas, o `.dmg`, o `.tar.zst` e o `-update.json`, e que ele virou o "latest".
+- **Congelamento** (spec #29579): do "pode soltar" do harry até o tag, só entram na `main` os PRs que o release precisa. O lead avisa no #general quando congela e quando solta; os outros PRs esperam, aprovados. Depois do tag, os merges voltam um por vez: o próximo só quando o CI da `main` do anterior ficar verde.
+- **O tag vai num sha verde da `main`.** O CI da `main` cancela a suíte do commit anterior quando entra outro merge, então um commit cancelado não tem resultado. O último verde: `cd app && bun scripts/main-green.ts`; um sha certo: `bun scripts/main-green.ts <sha>`.
+- **O passo a passo** (spec #29579, sem o PR da versão), com o lease `kiwi lock release-tag --ttl 1h`:
+  1. `cd app && bun scripts/release-tag.ts --dry-run`: o último sha verde da `main` e o próximo tag. Com um sha que o lead indicou: `bun scripts/release-tag.ts <sha> --dry-run`.
+  2. `bun scripts/release-tag.ts` (ou `… <sha>`): cria e envia o tag, acompanha o `release.yml` e, no fim, imprime a tabela com o tempo de cada etapa. Ela vai no thread do release.
+  3. O `release.yml` confere que o tag é `vANO.MÊS.N` num commit da `main` (`on-main`), espera o CI daquele sha verde (`ci-green`, até 45 min), carimba a versão do tag no `app/package.json` do build, assina, notariza e publica o "Kiwi Notes ANO.MÊS.N". As notas listam os PRs desde o release anterior, com um rodapé de onde baixar e como conferir. O release também sobrescreve o feed antigo das rc (`updates-rc`).
+  4. Confira o release: as notas, o `.dmg`, o `.tar.zst` e o `-update.json`, e que ele virou o "latest".
+- A `main` não muda no release: o `app/package.json` dela fica na versão do último PR que a mudou, e o CHANGELOG aponta para as notas de cada release.
 
 ## Ordem do trabalho
 - O trabalho segue a ordem dos rooms do Kiwi Channels: **1. #meetings** (reuniões, fase 2) → **2. #overall-levelup** (nivelar a qualidade do app em todos os aspectos e funções) → **3. #mega-idea** (o agente e o Kiwi-cat).

@@ -14,6 +14,7 @@
 //   bun scripts/update-feed.ts version <tag>              # o KIWI_VERSION do build (`v2026.11.1` → `2026.11.1`)
 //   bun scripts/update-feed.ts name <tag>                 # o nome do release (`Kiwi Notes 2026.11.1`)
 //   bun scripts/update-feed.ts next <AAAA-MM> [tags…]     # o tag do próximo release do mês, pelos tags que já existem
+//   bun scripts/update-feed.ts stamp <tag> <package.json> # põe a versão do tag no package.json do build (spec #29579)
 
 /** O feed antigo das rc: só o publish escreve nele, para as rc instaladas chegarem à versão nova. */
 export const RC_FEED_TAG = "updates-rc";
@@ -63,6 +64,21 @@ export function nextTag(month: string, tags: readonly string[]): string {
   return `${prefix}${Math.max(0, ...n) + 1}`;
 }
 
+/**
+ * O package.json do build com a versão do tag (spec #29579, T29584). Sem o PR da versão, o tag sai de qualquer sha verde
+ * da `main`, e a `main` não diz a versão: o run do tag a escreve na cópia dele, antes do build. Só o campo `version`
+ * muda; o resto do texto fica igual. Lança fora de um tag de release ou num package.json sem `"version"`.
+ */
+export function stampVersion(pkg: string, tag: string): string {
+  const v = tagVersion(tag);
+  if (!v) throw new Error(`update-feed: ${tag} isn't vANO.MÊS.N`);
+  const re = /^(\s*"version"\s*:\s*)"[^"]*"/m;
+  if (!re.test(pkg)) throw new Error("update-feed: the package.json has no \"version\"");
+  const out = pkg.replace(re, `$1"${v}"`);
+  if ((JSON.parse(out) as { version?: unknown }).version !== v) throw new Error("update-feed: the stamped version didn't take");
+  return out;
+}
+
 /** O manifesto do build, conferido contra o version.json do app assinado. Lança se não bate. */
 export function updateManifest(built: unknown, app: Record<string, unknown>): UpdateManifest {
   const m = built as Partial<UpdateManifest>;
@@ -99,8 +115,13 @@ if (import.meta.main) {
   else if (cmd === "url" && tag !== undefined && rest[0]) console.log(feedUrl(tag, rest[0]));
   else if (cmd === "name" && tag !== undefined) console.log(releaseName(tag));
   else if (cmd === "next" && tag !== undefined) console.log(nextTag(tag, rest));
+  else if (cmd === "stamp" && tag !== undefined && rest[0]) {
+    const file = Bun.file(rest[0]);
+    await Bun.write(rest[0], stampVersion(await file.text(), tag));
+    console.log(`${rest[0]}: version ${tagVersion(tag)}`);
+  }
   else {
-    console.error("usage: bun scripts/update-feed.ts url <tag> <owner/repo> | version <tag> | name <tag> | next <AAAA-MM> [tags…]");
+    console.error("usage: bun scripts/update-feed.ts url <tag> <owner/repo> | version <tag> | name <tag> | next <AAAA-MM> [tags…] | stamp <tag> <package.json>");
     process.exit(2);
   }
 }

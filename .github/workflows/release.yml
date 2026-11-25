@@ -3,7 +3,8 @@
 # release-build.yml): MAC_CERT_P12_BASE64, MAC_CERT_PASSWORD, APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER.
 # Nenhum valor passa pelo repo nem pela sala. Os builds dos agentes, no Mac, seguem ad hoc.
 #
-# - tag v* (com a versão do app/package.json): publica a Release;
+# - tag v* num commit da `main` (spec #29579): o build carimba a versão do tag no app/package.json, e o `publish` só sai
+#   com o CI daquele sha verde. Não há PR da versão: `bun scripts/release-tag.ts` cria o tag e mede cada etapa;
 # - "Run workflow" à mão: com rehearsal ligado, assina ad hoc e não notariza (ensaio sem as chaves).
 
 name: release
@@ -27,13 +28,75 @@ on:
 permissions:
   contents: read
 
+# O tag e o ensaio rodam até o fim. O `helper-cache` (o push na `main`) tem um grupo próprio, que cancela o anterior.
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+  group: release-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
 jobs:
+  # O desenho do Channels (kiwi-init/channels, release.yml): o tag tem o formato e está num commit da `main`. Barato,
+  # antes do build: um tag fora disso não assina nem publica nada.
+  on-main:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: The tag is vANO.MÊS.N on a commit of main
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,4}$ ]] || {
+            echo "::error::$GITHUB_REF_NAME isn't vANO.MÊS.N (like v2026.11.15): nothing is built, signed or published"
+            exit 1
+          }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::$GITHUB_REF_NAME is on $GITHUB_SHA, which isn't on main: nothing is built, signed or published"
+            exit 1
+          }
+          echo "$GITHUB_REF_NAME is on $GITHUB_SHA, on main"
+
+  # O CI do ci.yml naquele sha, verde (`main-green.ts`, T29585). Corre junto com o build: o build leva ~30 min e o CI
+  # da main costuma acabar antes; quem espera os dois é o `publish`. Um run cancelado ou vermelho barra na hora.
+  ci-green:
+    needs: on-main
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: app/scripts
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+
+      - name: The CI of the tagged commit is green
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          for i in $(seq 1 90); do
+            if out=$(bun scripts/main-green.ts "$GITHUB_SHA"); then echo "$out"; exit 0; fi
+            echo "$out"
+            case "$out" in
+              *"ainda está"*|*"sem run"*) sleep 30 ;;
+              *) echo "::error::the CI of $GITHUB_SHA isn't green: nothing is published"; exit 1 ;;
+            esac
+          done
+          echo "::error::the CI of $GITHUB_SHA didn't finish in 45 min"
+          exit 1
+
   mac:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    needs: on-main
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || (startsWith(github.ref, 'refs/tags/v') && needs.on-main.result == 'success')) }}
     runs-on: macos-latest
     timeout-minutes: 90
     defaults:
@@ -51,15 +114,11 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      - name: The tag matches the app version
+      # Sem o PR da versão (spec #29579): a versão do tag vai para o app/package.json só no build, e o resto do build
+      # (o electrobun.config, o release.ts, a UI) lê dali. A main não muda; o `update-feed.ts next` conta pelos tags.
+      - name: Stamp the tag's version
         if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: |
-          v=$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')
-          # O formato do Channels (spec #13879): vANO.MÊS.N, como v2026.11.1, igual ao app/package.json, como texto
-          # (#1480). Não há mais rc: um tag com "-" ou fora do formato não publica nada.
-          t=$(bun scripts/update-feed.ts version "$GITHUB_REF_NAME")
-          [[ -n "$t" && "$t" == "$v" ]] || { echo "the tag $GITHUB_REF_NAME must be vANO.MÊS.N and match app/package.json ($v)"; exit 1; }
+        run: bun scripts/update-feed.ts stamp "$GITHUB_REF_NAME" package.json
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -185,7 +244,8 @@ jobs:
 
   # Compila só o helper e a voz num push na `main` e guarda o app/.helper e o app/.voice no cache da `main`, de onde o
   # run do tag restaura (#1805). Assim o cache que o release assina só nasce de código que já está na main: sem secret, sem `bun install`
-  # (nenhum script de dependência roda aqui), sem `pull_request`.
+  # (nenhum script de dependência roda aqui), sem `pull_request`. Um Mac por vez (spec #29579): um push novo em `native/`
+  # cancela o build do anterior, e o novo guarda o cache. Um tag que sai antes dele acabar compila o helper no próprio run.
   helper-cache:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
@@ -233,7 +293,7 @@ jobs:
         run: bun scripts/build-voice.ts
 
   publish:
-    needs: mac
+    needs: [mac, ci-green]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
