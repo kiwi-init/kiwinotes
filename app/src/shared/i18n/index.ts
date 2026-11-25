@@ -38,8 +38,16 @@ export function localeFromSystem(languages: readonly string[]): Locale {
   return /^pt(?:[-_]|$)/i.test(first.trim()) ? "pt" : "en";
 }
 
-export function resolveLocale(setting: LanguageSetting, systemLanguages: readonly string[]): Locale {
-  return setting === "auto" ? localeFromSystem(systemLanguages) : setting;
+/**
+ * A chave do spec #28171 (lead, #28346): enquanto as telas não estão todas no catálogo (T28191, T28192, T28297), o
+ * Automático fica em português, para um Mac em inglês não ver o app misturado. O English se escolhe à mão. A última
+ * parte do spec vira esta chave para `true` e troca o teste que a marca (`i18n.test.ts`).
+ */
+export const AUTO_FOLLOWS_SYSTEM = false;
+
+export function resolveLocale(setting: LanguageSetting, systemLanguages: readonly string[], followSystem = AUTO_FOLLOWS_SYSTEM): Locale {
+  if (setting !== "auto") return setting;
+  return followSystem ? localeFromSystem(systemLanguages) : "pt";
 }
 
 const PLURALS = new Map<Locale, Intl.PluralRules>();
@@ -104,12 +112,11 @@ export interface AppLocale {
   setting: LanguageSetting;
   /** A língua em que o app está agora. */
   locale: Locale;
-  /** A língua que o Automático daria (a do macOS), para o seletor dizer "agora em …". */
+  /** A língua do macOS, a que o Automático segue quando `AUTO_FOLLOWS_SYSTEM` estiver ligado. */
   system: Locale;
 }
 
-export function appLocale(setting: LanguageSetting, systemLanguages: readonly string[]): AppLocale {
-  const system = localeFromSystem(systemLanguages);
-  return { setting, locale: setting === "auto" ? system : setting, system };
+export function appLocale(setting: LanguageSetting, systemLanguages: readonly string[], followSystem = AUTO_FOLLOWS_SYSTEM): AppLocale {
+  return { setting, locale: resolveLocale(setting, systemLanguages, followSystem), system: localeFromSystem(systemLanguages) };
 }
 

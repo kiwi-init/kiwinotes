@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { CATALOGS, formatDate, formatDateTime, formatNumber, formatTime, isLanguageSetting, localeFromSystem, LOCALES, placeholders, resolveLocale, type TextKey, translate } from "./index.ts";
+import { AUTO_FOLLOWS_SYSTEM, appLocale, CATALOGS, formatDate, formatDateTime, formatNumber, formatTime, isLanguageSetting, localeFromSystem, LOCALES, placeholders, resolveLocale, type TextKey, translate } from "./index.ts";
 
 describe("catálogo", () => {
   test("todas as línguas têm exatamente as chaves do português", () => {
@@ -66,7 +66,17 @@ describe("a língua do app", () => {
   test("a escolha fixa vale por cima do macOS", () => {
     expect(resolveLocale("en", ["pt-BR"])).toBe("en");
     expect(resolveLocale("pt", ["en-US"])).toBe("pt");
-    expect(resolveLocale("auto", ["en-GB"])).toBe("en");
+    expect(resolveLocale("auto", ["en-GB"], true)).toBe("en");
+  });
+
+  test("a chave do spec #28171: até a última parte, o Automático fica em português (lead, #28346)", () => {
+    // A última parte (T28191/T28192/T28297) liga a chave e troca este teste.
+    expect(AUTO_FOLLOWS_SYSTEM).toBe(false);
+    expect(resolveLocale("auto", ["en-US"])).toBe("pt");
+    expect(appLocale("auto", ["en-US"])).toEqual({ setting: "auto", locale: "pt", system: "en" });
+    // O English, à mão, já vale.
+    expect(appLocale("en", ["pt-BR"])).toEqual({ setting: "en", locale: "en", system: "pt" });
+    expect(appLocale("auto", ["en-US"], true)).toEqual({ setting: "auto", locale: "en", system: "en" });
   });
 
   test("só auto, pt e en são escolhas válidas", () => {

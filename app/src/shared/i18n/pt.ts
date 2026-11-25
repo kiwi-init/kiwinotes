@@ -30,4 +30,5 @@ export const pt = {
   "settings.language.hint": "Automático segue a língua do macOS. O ditado, a voz do gato e as respostas do agente não mudam aqui.",
   "settings.language.auto": "Automático",
   "settings.language.autoNow": "Pelo macOS, agora em {language}.",
+  "settings.language.autoPending": "Por enquanto, o Automático fica em português: o resto do app ainda está sendo traduzido.",
 } as const;

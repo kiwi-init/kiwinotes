@@ -28,4 +28,5 @@ export const en: Catalog = {
   "settings.language.hint": "Automatic follows the macOS language. Dictation, the cat's voice and the agent's replies don't change here.",
   "settings.language.auto": "Automatic",
   "settings.language.autoNow": "From macOS, now in {language}.",
+  "settings.language.autoPending": "For now, Automatic stays in Portuguese: the rest of the app is still being translated.",
 };
