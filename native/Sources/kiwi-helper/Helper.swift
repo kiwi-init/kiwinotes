@@ -41,6 +41,8 @@ final class Helper {
     private var agentBusy = false
     /// T5833 (#213): os sons de início e de fim. Ligados por padrão; o app manda o ajuste no `config.set {cues}`.
     private let cues: RecordingCues
+    /// A voz do gato (T27825): o motor de áudio no app, a muda no headless. Só existe na 1ª fala.
+    private lazy var speech: SpeechPlaying = headless ? SilentSpeech() : EngineSpeech()
     /// ⌥ was held when the dictation key last went down: the recording it starts is a quick note (T1320).
     private var nextIsNote = false
     private var tap: HotkeyTap!
@@ -1128,6 +1130,22 @@ final class Helper {
             let summary = message.string("summary")
             let cat = catOverlay
             MainActor.assumeIsolated { cat.bubble(text: text, error: error, ask: ask, links: links, summary: summary) }
+            reply(id, ok: true)
+        case "speech.play":
+            // Um pedaço da voz do gato (T27825), em fila. A resposta leva o volume da saída; o `speech.played` com o
+            // mesmo `seq` diz que ele acabou de tocar (ou que o `speech.stop` o limpou).
+            guard let pcm = message.string("pcm"), let samples = SpeechPCM.floats(base64: pcm), let seq = message.double("seq") else {
+                return reply(id, ok: false, error: "invalid_value")
+            }
+            do {
+                try speech.play(samples) { [weak self] in self?.emit("speech.played", ["seq": seq]) }
+                reply(id, ok: true, ["volume": Double(speech.volume)])
+            } catch {
+                emit("log", ["level": "warn", "message": "speech: a saída falhou: \(error.localizedDescription)"])
+                reply(id, ok: false, error: "speech_output")
+            }
+        case "speech.stop":
+            speech.stop()
             reply(id, ok: true)
         case "catOverlay.unload":
             catOverlayLoaded = false

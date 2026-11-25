@@ -41,6 +41,9 @@ import { readNoteModel } from "../agent/note-model.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { HomeChanges } from "./home.ts";
+import { FalaPlayer, ligarFalaPlayer } from "../agent/fala-player.ts";
+import { CatVoicePreview, createCatVoicePreview } from "./cat-voice-preview.ts";
+import { saidaHelper } from "./speech-output.ts";
 import { hubFrame, type IntroLayout, introWindow, parseHubFrame, type Rect } from "../shared/intro-layout.ts";
 import { systemLanguages } from "./system-language.ts";
 
@@ -144,6 +147,46 @@ export const catVoice = createCatVoice({
   // A voz escolhida nos Ajustes (T27778): lida no começo de cada fala, então a troca vale da próxima em diante.
   selected: async () => (await stores.settings.load()).kiwicat.voz,
 });
+/**
+ * A voz do gato no alto-falante (T27825): o player da fala e o Ouvir dos Ajustes tocam pelo helper (`speech.play`),
+ * ligados quando o helper sobe (`startCatVoiceOutput`). Antes disso, o Ouvir não toca.
+ */
+let catVoiceOutput: { preview: CatVoicePreview; stop(): void } | undefined;
+const catVoicePreview = {
+  ouvir: async (id: Parameters<CatVoicePreview["ouvir"]>[0]) => {
+    if (!catVoiceOutput) throw new Error("helper_unavailable");
+    return catVoiceOutput.preview.ouvir(id);
+  },
+  parar: () => catVoiceOutput?.preview.parar(),
+};
+export function startCatVoiceOutput(sidecar: Sidecar): void {
+  catVoiceOutput?.stop();
+  const log = (m: string) => console.log(`[cat-voice] ${m}`);
+  const saida = saidaHelper(
+    {
+      request: (c) => sidecar.request(c),
+      send: (c) => sidecar.send(c),
+      on: (t, fn) => sidecar.on(t, fn),
+      onClose: (fn) => sidecar.onClose(fn),
+    },
+    { log },
+  );
+  // `midia` fica para o T26830: abaixar os outros apps sem abaixar o gato (#17697), nunca o volume do Mac.
+  // A saída é uma só: a fala do gato para o Ouvir antes de tocar, e o Ouvir espera a fala do gato acabar.
+  let preview: CatVoicePreview | undefined;
+  const player = new FalaPlayer({ sintese: catVoice.voice, saida, antesDeFalar: () => preview?.parar(), log });
+  const off = ligarFalaPlayer(player, { agent: stores.agent, helper: { on: (t, fn) => sidecar.on(t, fn) }, log });
+  preview = createCatVoicePreview(catVoice, { saida, falaDoGato: () => player.falaAtual, log });
+  const p = preview;
+  catVoiceOutput = {
+    preview: p,
+    stop: () => {
+      p.parar();
+      off();
+      saida.dispose();
+    },
+  };
+}
 const capabilities = uiCapabilities({
   introDone: () => {
     for (const fn of introDoneListeners) fn();
@@ -221,6 +264,7 @@ const capabilities = uiCapabilities({
   audioInputs: async () => (await session.get()?.audioInputs()) ?? null,
   precise: () => session.get()?.precise.status() ?? null,
   catVoice: catVoice.model,
+  catVoicePreview,
   // O passo da primeira abertura (T20796): o botão de cada permissão pede pelo helper; o fim solta os pedidos da abertura.
   setup: {
     live: () => session.get()?.setupLive() ?? null,
