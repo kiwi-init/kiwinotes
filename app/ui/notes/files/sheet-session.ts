@@ -2,6 +2,7 @@
 // gravação sozinha, como a nota (um instante depois da última edição, condicional pela versão). O arquivo gravado é
 // sempre o original mais as operações que valem (`docBytes`): desfazer e gravar devolve o arquivo como estava.
 
+import { t as tNow } from "../../src/i18n.ts";
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DelimitedError } from "../../../src/shared/sheet/delimited.ts";
@@ -52,7 +53,8 @@ export interface SheetCell {
   col: number;
 }
 
-const LOST = "O arquivo mudou fora do Kiwi: abri a versão nova, e a última edição não foi gravada.";
+/** Os avisos saem na língua da hora em que acontecem (`tNow`): a tela da planilha redesenha com o `useT()`. */
+const LOST = () => tNow("files.sheet.changedOutside");
 
 /**
  * `bytes` e `version`: o arquivo como o `files.read` o leu; mudam quando ele muda no disco. A leitura que volta depois
@@ -150,7 +152,7 @@ export function useSheetSession(opts: {
       }
       const mine = pending?.length && theirs ? rebaseOps(pending, theirs) : [];
       if (!mine.length) {
-        if (pending === null || (pending.length && !theirs)) setNotice(LOST);
+        if (pending === null || (pending.length && !theirs)) setNotice(LOST());
         dirty.current = false;
         setKiwi(play);
         setBoxMoved(moved);
@@ -164,7 +166,7 @@ export function useSheetSession(opts: {
         try {
           history.current.do(await editBatch(doc, doc.base, mine, display));
         } catch {
-          setNotice(LOST);
+          setNotice(LOST());
         }
         if (docRef.current !== doc) return;
         await show();
@@ -208,11 +210,11 @@ export function useSheetSession(opts: {
         if (e instanceof DelimitedError) {
           history.current.undo();
           dirty.current = true;
-          setNotice(`Não deu para gravar: ${e.message}. A edição foi desfeita.`);
+          setNotice(tNow("files.sheet.saveError", { error: e.message }));
           void show();
           return save();
         }
-        setNotice("Não deu para gravar esta planilha.");
+        setNotice(tNow("files.sheet.saveFailed"));
         return false;
       }
       try {
@@ -232,7 +234,7 @@ export function useSheetSession(opts: {
         return false;
       } catch {
         dirty.current = true;
-        setNotice("Não deu para gravar esta planilha agora. O Kiwi tenta de novo na próxima edição.");
+        setNotice(tNow("files.sheet.saveLater"));
         return false;
       }
     })();
@@ -290,7 +292,7 @@ export function useSheetSession(opts: {
   );
 
   const readOnly =
-    state.kind === "ready" ? (opts.readOnly ?? state.doc.readOnly ?? (canSave ? null : "Este Kiwi ainda não grava planilhas.")) : null;
+    state.kind === "ready" ? (opts.readOnly ?? state.doc.readOnly ?? (canSave ? null : tNow("files.sheet.cantSave"))) : null;
 
   const edit = useCallback(
     (ops: SheetOp[]) => {
@@ -305,7 +307,7 @@ export function useSheetSession(opts: {
           history.current.do(op);
           setNotice(null);
         } catch (e) {
-          setNotice(e instanceof SheetOpError ? `Não deu: ${e.message}.` : "Não deu para fazer esta edição.");
+          setNotice(e instanceof SheetOpError ? tNow("files.sheet.opError", { error: e.message }) : tNow("files.sheet.editFailed"));
           return;
         }
         await show();

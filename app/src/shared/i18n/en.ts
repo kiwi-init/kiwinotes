@@ -14,6 +14,7 @@ import { enMeetings } from "./meetings.en.ts";
 import { enNotes } from "./notes.en.ts";
 import type { PT_PARTS } from "./pt.ts";
 import { enSettings } from "./settings.en.ts";
+import { enViewers } from "./viewers.en.ts";
 
 const enBase: { readonly [K in keyof typeof PT_PARTS.base]: Entry } = {
   "language.pt": "Português",
@@ -116,6 +117,7 @@ export const EN_PARTS = {
   common: enCommon,
   notes: enNotes,
   editor: enEditor,
+  viewers: enViewers,
   settings: enSettings,
   meetingsSettings: enMeetingsSettings,
   catOverlay: enCatOverlay,
@@ -140,4 +142,6 @@ export const en: Catalog = {
   ...enActivity,
   // O editor das Notas (T29842): `editor.en.ts`.
   ...enEditor,
+  // Os visualizadores das Notas (T29245): `viewers.en.ts`.
+  ...enViewers,
 };

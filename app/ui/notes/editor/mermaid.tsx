@@ -3,6 +3,7 @@
 // mermaid é carregado só quando aparece o primeiro diagrama. Mudanças: os tokens das Notas, os textos em português,
 // sem o botão Copiar (o app não escreve no clipboard por conta própria), links pelo `externalUrl` das Notas.
 
+import { useT } from "../../src/i18n.ts";
 import { type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { externalUrl } from "../links.ts";
@@ -260,6 +261,7 @@ const linkOf = (a: Element): string | null => a.getAttribute("href") ?? a.getAtt
  * erro). `onShown` avisa o editor que a altura mudou.
  */
 export function MermaidBlock({ source, code, onLink, onShown }: { source: string; code: ReactNode; onLink: (url: string) => void; onShown?: () => void }) {
+  const { t } = useT();
   const scheme = useScheme();
   const [drawn, setDrawn] = useState<Drawn>(null);
   const [showCode, setShowCode] = useState(false);
@@ -331,7 +333,7 @@ export function MermaidBlock({ source, code, onLink, onShown }: { source: string
     return (
       <div className="kn-mermaid">
         {code}
-        <p className="kn-mermaid-error">Não deu para desenhar este diagrama: {drawn.message}</p>
+        <p className="kn-mermaid-error">{t("editor.mermaid.failed", { error: drawn.message })}</p>
       </div>
     );
   }
@@ -342,7 +344,7 @@ export function MermaidBlock({ source, code, onLink, onShown }: { source: string
         {drawn && (
           <div className="kn-mermaid-tools">
             <button type="button" onClick={() => setShowCode(false)}>
-              Diagrama
+              {t("editor.mermaid.diagram")}
             </button>
           </div>
         )}
@@ -353,11 +355,11 @@ export function MermaidBlock({ source, code, onLink, onShown }: { source: string
     <div className="kn-mermaid">
       <figure ref={box} onScroll={measure} onClick={clicked} className={more ? "kn-mermaid-drawn is-more" : "kn-mermaid-drawn"}>
         {/* SVG do mermaid em `securityLevel: "strict"`, sem link nem imagem de fora; entra pelo `svgNode`. */}
-        <div ref={host} role="img" aria-label="Diagrama Mermaid" />
+        <div ref={host} role="img" aria-label={t("editor.mermaid.label")} />
       </figure>
       <div className="kn-mermaid-tools">
         <button type="button" onClick={() => setShowCode(true)}>
-          Código
+          {t("editor.mermaid.code")}
         </button>
       </div>
     </div>

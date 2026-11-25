@@ -10,6 +10,7 @@
 // docx fechado, o realce vem na primeira abertura. O parágrafo com o cursor da pessoa vai ao `files.editing`, e o gato
 // espera ela sair dele.
 
+import { useT } from "../../src/i18n.ts";
 import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { docxOpsResult } from "../../../src/shared/docx/ops.ts";
@@ -21,7 +22,7 @@ import { externalUrl } from "../links.ts";
 import { bytesOf } from "./csv.ts";
 import type { DocxHandle } from "./docxEngine.ts";
 import { barSpot, type DocxBarSpot, DocxFormatBar } from "./DocxFormatBar.tsx";
-import { caretReporter, DocxSaver } from "./docxSaver.ts";
+import { caretReporter, type DocxNotice, DocxSaver } from "./docxSaver.ts";
 import { docxBodyParagraphs, sameText } from "./docxText.ts";
 import { type DocxMatch, type DocxParagraph, docxParagraphs, findInDocx } from "./docxFind.ts";
 import { stepMatch } from "./pdfSearch.ts";
@@ -35,22 +36,23 @@ import { recallZoom, stepZoom } from "./zoom.ts";
 type State = { kind: "loading" } | { kind: "ready"; pages: number } | { kind: "tooLarge" } | { kind: "error"; why: "password" | "engine" | "format" };
 
 const ERROR_TEXT = {
-  password: "Este documento tem senha, e o Kiwi não abre documento com senha. Ele fica como está: abra no Word para ler ou editar.",
-  engine: "O Kiwi não conseguiu mostrar este documento, e não mexeu nele: o arquivo fica como está. Abra no app padrão.",
-  format: "Não deu para abrir este documento. Ele pode estar corrompido ou ser de outro formato (o .doc antigo, por exemplo).",
+  password: "files.docx.password",
+  engine: "files.docx.engine",
+  format: "files.docx.format",
 } as const;
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 
 export function DocxViewer({ path, file, files, flushRef, at, kiwi, readOnly }: FileViewerProps) {
+  const { t } = useT();
   const incoming = "base64" in file ? file.base64 : "";
   // O que está aberto no motor. Uma leitura nova (outro app gravou) só reabre se não for a nossa própria gravação.
   // Cada leitura nova é um objeto novo e reabre, mesmo com os bytes e a versão da primeira (restaurar a versão de antes
   // de uma edição, T22797).
   const [source, setSource] = useState({ base64: incoming, version: file.version });
   const base64 = source.base64;
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<DocxNotice | null>(null);
   const saver = useMemo(
     () =>
       new DocxSaver(
@@ -73,7 +75,7 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi, readOnly }: 
   );
   // Só leitura com o motivo (T22797): a versão antiga no painel Versões se olha e não se edita.
   const editable = saver.canSave && !readOnly;
-  const readOnlyNote = readOnly ? `Só leitura: ${readOnly}` : "Só leitura: este Kiwi ainda não grava documentos.";
+  const readOnlyNote = readOnly ? t("files.docx.readOnly", { why: readOnly }) : t("files.docx.cantSave");
   const kiwiSource = useRef(kiwi);
   kiwiSource.current = kiwi;
   // As gravações do gato tocam uma depois da outra.
@@ -312,19 +314,19 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi, readOnly }: 
     }
   };
 
-  const count = useMemo(() => (matches === null ? "" : matches.length ? `${current + 1} de ${matches.length.toLocaleString("pt-BR")}` : "Nada encontrado"), [matches, current]);
+  const count = matches === null ? "" : matches.length ? t("notes.find.count", { at: current + 1, total: matches.length }) : t("notes.find.none");
 
   if (state.kind === "error") {
     return (
       <div className="kn-file-notice" role="status" data-why={state.why}>
-        <p>{ERROR_TEXT[state.why]}</p>
+        <p>{t(ERROR_TEXT[state.why])}</p>
       </div>
     );
   }
   if (state.kind === "tooLarge") {
     return (
       <div className="kn-file-notice" role="status">
-        <p>Este documento é grande demais para abrir aqui. Abra no app padrão.</p>
+        <p>{t("files.docx.tooLarge")}</p>
       </div>
     );
   }
@@ -342,30 +344,30 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi, readOnly }: 
     >
       {notice || (ready && !editable) ? (
         <div className="kn-file-text-note" role="status">
-          {notice ?? readOnlyNote}
+          {notice ? t(notice) : readOnlyNote}
         </div>
       ) : null}
-      <div className="kn-file-pdf-bar" role="toolbar" aria-label="Documento">
+      <div className="kn-file-pdf-bar" role="toolbar" aria-label={t("files.docx")}>
         <span className="kn-file-pdf-group">
-          <button type="button" className="kn-bt" aria-label="Diminuir o zoom" disabled={!ready || z <= MIN_ZOOM} onClick={() => zoomBy(stepZoom(z, -1, MIN_ZOOM, MAX_ZOOM) / z)}>
+          <button type="button" className="kn-bt" aria-label={t("files.zoomOut")} disabled={!ready || z <= MIN_ZOOM} onClick={() => zoomBy(stepZoom(z, -1, MIN_ZOOM, MAX_ZOOM) / z)}>
             −
           </button>
           <span className="kn-file-pdf-zoom" aria-live="polite">{`${Math.round(z * 100)}%`}</span>
-          <button type="button" className="kn-bt" aria-label="Aumentar o zoom" disabled={!ready || z >= MAX_ZOOM} onClick={() => zoomBy(stepZoom(z, 1, MIN_ZOOM, MAX_ZOOM) / z)}>
+          <button type="button" className="kn-bt" aria-label={t("files.zoomIn")} disabled={!ready || z >= MAX_ZOOM} onClick={() => zoomBy(stepZoom(z, 1, MIN_ZOOM, MAX_ZOOM) / z)}>
             +
           </button>
           <button type="button" className="kn-bt" disabled={!ready || zoom === null} onClick={() => zoomTo(null)}>
             100%
           </button>
         </span>
-        <span className="kn-file-pdf-page">{ready ? `${state.pages} ${state.pages === 1 ? "página" : "páginas"}` : ""}</span>
+        <span className="kn-file-pdf-page">{ready ? t("files.docx.pages", { n: state.pages }) : ""}</span>
         <span className="kn-file-pdf-group kn-file-pdf-find">
           <input
             ref={queryBox}
             className="kn-file-pdf-query"
             type="search"
-            placeholder="Buscar no documento"
-            aria-label="Buscar no documento"
+            placeholder={t("files.docx.find")}
+            aria-label={t("files.docx.find")}
             value={query}
             disabled={!ready}
             {...NO_TEXT_ASSIST}
@@ -381,17 +383,17 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi, readOnly }: 
           <span className="kn-file-pdf-count" aria-live="polite">
             {count}
           </span>
-          <button type="button" className="kn-bt" aria-label="Achado anterior" disabled={!matches?.length} onClick={() => step(-1)}>
+          <button type="button" className="kn-bt" aria-label={t("notes.find.prev")} disabled={!matches?.length} onClick={() => step(-1)}>
             ↑
           </button>
-          <button type="button" className="kn-bt" aria-label="Próximo achado" disabled={!matches?.length} onClick={() => step(1)}>
+          <button type="button" className="kn-bt" aria-label={t("notes.find.next")} disabled={!matches?.length} onClick={() => step(1)}>
             ↓
           </button>
         </span>
       </div>
       {/* Com foco (o clique numa página): as setas e o Page Down rolam, e o ⌘F chega aqui. */}
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a área rolável do documento, como a do pdf no Preview */}
-      <div className="kn-file-docx-scroll docx-editor docx-editor__scroll-container" ref={scroller} tabIndex={0} aria-label="Páginas do documento" onScroll={bar ? placeBar : undefined}>
+      <div className="kn-file-docx-scroll docx-editor docx-editor__scroll-container" ref={scroller} tabIndex={0} aria-label={t("files.docx.pagesArea")} onScroll={bar ? placeBar : undefined}>
         <div className="docx-paginated-surface" ref={host} />
       </div>
       {bar && ready && editable ? (

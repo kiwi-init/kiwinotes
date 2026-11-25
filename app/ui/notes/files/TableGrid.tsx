@@ -3,6 +3,7 @@
 // Numbers; inserir e apagar linhas e colunas pelo menu do botão direito; ⌘F; ordenar e filtrar só na vista. Sem `edit`,
 // é só leitura, como antes.
 
+import { useT } from "../../src/i18n.ts";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { NO_TEXT_ASSIST } from "../../src/textAssist.ts";
@@ -134,6 +135,9 @@ interface Editing {
   typed: boolean;
 }
 
+/** A etiqueta do cursor do gato: o nome dele, o mesmo nas duas línguas. */
+const CAT_NAME = "Kiwi";
+
 /**
  * A grade da planilha (T21038, spec #21008), para o csv e para o xlsx: cada coluna da largura do conteúdo, uma linha
  * por célula com "…" no que não cabe, a rolagem para os dois lados com a linha das letras, a linha de cima e a coluna
@@ -141,6 +145,7 @@ interface Editing {
  * com 256 colunas e 100.000 linhas. As linhas e colunas vazias do fim não contam (na grade que edita, a folga fica).
  */
 export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal, columnTotal, widthMemory, name = "", rowNumbers, edit, view: viewSpec, zoomKey = "", kiwi, moveEditing, goTo }: GridProps) {
+  const { t: tr } = useT();
   const editable = !!edit;
   const { rows, columns } = useMemo(
     () => (editable ? { rows: rawRows, columns: rawColumns } : trimEmpty(rawHeader, rawRows, rawColumns)),
@@ -257,7 +262,6 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
   }, [numW, head, z]);
 
   const offsets = useMemo(() => (widths && widths.length === columns ? offsetsOf(widths) : null), [widths, columns]);
-  const n = (value: number) => value.toLocaleString("pt-BR");
   const total = rowTotal ?? rows.length;
   const colTotal = columnTotal ?? columns;
   const width = numW + (offsets?.[columns] ?? 0);
@@ -534,15 +538,13 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
       a = { r0: row, c0: col, r1: row, c1: col };
     }
     const rs = a ? a.r1 - a.r0 + 1 : 1;
-    const linhas = (k: number) => (k === 1 ? "linha" : `${k} linhas`);
-    const colunas = (k: number) => (k === 1 ? "coluna" : `${k} colunas`);
     const items: MenuItem[] = [];
     if (edit) {
       if (row !== null && a) {
         items.push(
-          { label: `Inserir ${linhas(rs)} acima`, onSelect: () => edit.insertRows(a.r0, rs) },
-          { label: `Inserir ${linhas(rs)} abaixo`, onSelect: () => edit.insertRows(a.r1 + 1, rs) },
-          { label: `Apagar ${linhas(rs)}`, danger: true, onSelect: () => edit.deleteRows(Array.from({ length: rs }, (_, i) => a.r0 + i)) },
+          { label: tr("files.grid.insertRowsAbove", { n: rs }), onSelect: () => edit.insertRows(a.r0, rs) },
+          { label: tr("files.grid.insertRowsBelow", { n: rs }), onSelect: () => edit.insertRows(a.r1 + 1, rs) },
+          { label: tr("files.grid.deleteRows", { n: rs }), danger: true, onSelect: () => edit.deleteRows(Array.from({ length: rs }, (_, i) => a.r0 + i)) },
           { kind: "separator" },
         );
       }
@@ -550,19 +552,19 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
       const c1 = row !== null && a ? a.c1 : col;
       const k = c1 - c0 + 1;
       items.push(
-        { label: `Inserir ${colunas(k)} à esquerda`, onSelect: () => edit.insertCols(c0, k) },
-        { label: `Inserir ${colunas(k)} à direita`, onSelect: () => edit.insertCols(c1 + 1, k) },
-        { label: `Apagar ${colunas(k)}`, danger: true, onSelect: () => edit.deleteCols(c0, c1) },
+        { label: tr("files.grid.insertColsLeft", { n: k }), onSelect: () => edit.insertCols(c0, k) },
+        { label: tr("files.grid.insertColsRight", { n: k }), onSelect: () => edit.insertCols(c1 + 1, k) },
+        { label: tr("files.grid.deleteCols", { n: k }), danger: true, onSelect: () => edit.deleteCols(c0, c1) },
       );
     }
     if (viewSpec) {
       if (items.length) items.push({ kind: "separator" });
       const value = row !== null && row > 0 ? cellText({ row, col }, header, rows) : null;
       items.push(
-        { label: "Ordenar de A a Z", onSelect: () => viewSpec.sort(col, 1) },
-        { label: "Ordenar de Z a A", onSelect: () => viewSpec.sort(col, -1) },
-        ...(value !== null ? [{ label: value ? `Mostrar só “${value.length > 30 ? `${value.slice(0, 30)}…` : value}”` : "Mostrar só as vazias", onSelect: () => viewSpec.filterTo(col, value) }] : []),
-        ...(viewSpec.label ? [{ label: "Mostrar todas as linhas, na ordem do arquivo", onSelect: () => viewSpec.clear() }] : []),
+        { label: tr("files.grid.sortAsc"), onSelect: () => viewSpec.sort(col, 1) },
+        { label: tr("files.grid.sortDesc"), onSelect: () => viewSpec.sort(col, -1) },
+        ...(value !== null ? [{ label: value ? tr("files.grid.onlyValue", { value: value.length > 30 ? `${value.slice(0, 30)}…` : value }) : tr("files.grid.onlyEmpty"), onSelect: () => viewSpec.filterTo(col, value) }] : []),
+        ...(viewSpec.label ? [{ label: tr("files.grid.showAll"), onSelect: () => viewSpec.clear() }] : []),
       );
     }
     setMenu({ x: e.clientX, y: e.clientY, items });
@@ -639,7 +641,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
               <span className="kn-kiwi-caret" />
               <span className={kiwi!.tagStill ? "kn-kiwi-tag kn-kiwi-tag-still" : "kn-kiwi-tag"}>
                 {kiwi!.face ? <img className="kn-kiwi-face" src={kiwi!.face} alt="" draggable={false} /> : <span className="kn-kiwi-face" />}
-                Kiwi
+                {CAT_NAME}
               </span>
             </span>
           </>
@@ -650,7 +652,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     );
   };
 
-  const findCount = find && find.query.trim() ? (hits.length ? `${find.index >= 0 ? find.index + 1 : 0} de ${hits.length}` : "nada") : "";
+  const findCount = find && find.query.trim() ? (hits.length ? tr("notes.find.count", { at: find.index >= 0 ? find.index + 1 : 0, total: hits.length }) : tr("files.grid.findNone")) : "";
 
   return (
     <div
@@ -661,12 +663,12 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
       onKeyDownCapture={kiwi && !kiwi.fading ? kiwi.skip : undefined}
     >
       <div className="kn-grid-bar">
-        <span className="kn-grid-addr" aria-label="Célula selecionada">
+        <span className="kn-grid-addr" aria-label={tr("files.grid.cell")}>
           {sel ? (multi && area ? `${cellAddress({ row: area.r0, col: area.c0 }, firstRow)}:${cellAddress({ row: area.r1, col: area.c1 }, firstRow)}` : cellAddress(sel, firstRow)) : ""}
         </span>
-        <div className="kn-grid-value" aria-label="Conteúdo da célula" data-empty={sel ? undefined : ""}>
-          {sel ? barText : "Clique numa célula para ver o conteúdo inteiro"}
-          {stale ? <span className="kn-grid-stale-note"> O Kiwi não sabe refazer esta fórmula: o valor é o que o arquivo tinha, e o Excel recalcula ao abrir.</span> : null}
+        <div className="kn-grid-value" aria-label={tr("files.grid.value")} data-empty={sel ? undefined : ""}>
+          {sel ? barText : tr("files.grid.pick")}
+          {stale ? <span className="kn-grid-stale-note"> {tr("files.grid.stale")}</span> : null}
         </div>
         {find ? (
           <div className="kn-grid-find" role="search">
@@ -674,8 +676,8 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
               ref={findInput}
               type="search"
               {...NO_TEXT_ASSIST}
-              aria-label="Procurar na planilha"
-              placeholder="Procurar"
+              aria-label={tr("files.grid.find")}
+              placeholder={tr("notes.find.placeholder")}
               value={find.query}
               autoFocus
               onChange={(e) => setFind({ query: e.target.value, index: -1 })}
@@ -691,7 +693,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
         ref={scroll}
         className="kn-grid"
         role="grid"
-        aria-label="Tabela"
+        aria-label={tr("files.grid.table")}
         aria-readonly={editable ? undefined : "true"}
         aria-multiselectable={editable ? "true" : undefined}
         aria-rowcount={rows.length + 1}
@@ -730,7 +732,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
                       key={`r${c}`}
                       className="kn-grid-resize"
                       data-col={c}
-                      title="Arraste para mudar a largura; dois cliques ajustam ao conteúdo"
+                      title={tr("files.grid.resize")}
                       style={{ left: numW + offsets[c + 1]! - 4 }}
                       onPointerDown={onResizeDown(c)}
                       onPointerMove={onResizeMove}
@@ -766,7 +768,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
         </div>
       </div>
       <div className="kn-file-table-foot" aria-live="polite">
-        {`${n(total)} ${total === 1 ? "linha" : "linhas"}, ${n(colTotal)} ${colTotal === 1 ? "coluna" : "colunas"}`}
+        {`${tr("files.grid.rows", { n: total })}, ${tr("files.grid.cols", { n: colTotal })}`}
         {viewSpec?.label ? `, ${viewSpec.label}` : ""}
         {foot ? `, ${foot}` : ""}
       </div>

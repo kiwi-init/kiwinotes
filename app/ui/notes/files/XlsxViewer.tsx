@@ -4,6 +4,7 @@
 // que depende da célula recalcula (T21108). Um xlsx com senha ou com macros abre só para leitura, e diz por quê. O
 // SheetJS CE (Apache-2.0) vai no pack e só carrega quando um xlsx abre: dele vem o texto de cada formato de número.
 
+import { useT } from "../../src/i18n.ts";
 import { useEffect, useMemo, useState } from "react";
 
 import { cellRef } from "../../../src/shared/file-view.ts";
@@ -16,6 +17,7 @@ import { SheetPane } from "./SheetPane.tsx";
 import type { FileViewerProps } from "./viewers.ts";
 
 export function XlsxViewer({ path, file, files, flushRef, kiwi, readOnly, at }: FileViewerProps) {
+  const { t } = useT();
   const base64 = "base64" in file ? file.base64 : "";
   const name = path.split("/").at(-1) ?? path;
   const decimal: Decimal = useMemo(() => systemDecimal(), []);
@@ -50,14 +52,14 @@ export function XlsxViewer({ path, file, files, flushRef, kiwi, readOnly, at }: 
   if (state.kind === "error") {
     return (
       <div className="kn-file-notice" role="status">
-        <p>Não deu para abrir esta planilha. Ela pode estar corrompida, ter senha ou ser de outro formato.</p>
+        <p>{t("files.sheet.openFailed")}</p>
       </div>
     );
   }
   if (state.kind === "tooLarge") {
     return (
       <div className="kn-file-notice" role="status">
-        <p>Esta planilha é grande demais para abrir aqui. Abra no app padrão.</p>
+        <p>{t("files.sheet.tooLarge")}</p>
       </div>
     );
   }
@@ -68,8 +70,8 @@ export function XlsxViewer({ path, file, files, flushRef, kiwi, readOnly, at }: 
   const hidden = doc.hidden.length;
   const notes = [
     session.notice ?? "",
-    session.readOnly ? `Só leitura: ${session.readOnly}` : "",
-    hidden ? `${hidden} ${hidden === 1 ? "aba escondida" : "abas escondidas"} no Excel não ${hidden === 1 ? "aparece" : "aparecem"} aqui.` : "",
+    session.readOnly ? t("files.sheet.readOnly", { why: session.readOnly }) : "",
+    hidden ? t("files.sheet.hidden", { n: hidden }) : "",
   ].filter(Boolean);
   const empty = !sheet || !sheet.rows.some((r) => r?.some((c) => c && c.text !== ""));
 
@@ -81,7 +83,7 @@ export function XlsxViewer({ path, file, files, flushRef, kiwi, readOnly, at }: 
         </div>
       ) : null}
       {sheets.length > 1 ? (
-        <div className="kn-file-sheet-tabs" role="tablist" aria-label="Abas da planilha">
+        <div className="kn-file-sheet-tabs" role="tablist" aria-label={t("files.sheet.tabs")}>
           {sheets.map((s) => (
             <button key={s.name} type="button" role="tab" className="kn-file-sheet-tab" aria-selected={s === sheet} onClick={() => setTab(s.name)}>
               {s.name}
@@ -91,7 +93,7 @@ export function XlsxViewer({ path, file, files, flushRef, kiwi, readOnly, at }: 
       ) : null}
       {!sheet || (empty && session.readOnly) ? (
         <div className="kn-file-notice" role="status">
-          <p>{sheets.length ? "Esta aba está vazia." : "Esta planilha não tem abas para mostrar."}</p>
+          <p>{sheets.length ? t("files.sheet.emptyTab") : t("files.sheet.noTabs")}</p>
         </div>
       ) : (
         <SheetPane key={sheet.name} session={session} doc={doc} sheet={sheet} decimal={decimal} widthMemory={widthMemory} zoomKey={path} goTo={found?.cell && found.sheet === sheet.name ? found.cell : undefined} />

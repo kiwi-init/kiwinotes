@@ -7,6 +7,8 @@
 // parágrafo, lista, tabela, negrito, itálico, sublinhado, tachado, link) e sai o estilo da página (fonte, cor, tamanho,
 // fundo, classes), que no docx viraria lixo nos trechos. Nada de imagem nem de pedido à rede.
 
+import type { TextKey } from "../../../src/shared/i18n/index.ts";
+
 /** O que a barra e os atalhos fazem. */
 export type DocxFormatAction =
   | "bold"
@@ -35,18 +37,19 @@ export interface DocxFormatState {
   alignment: "left" | "center" | "right" | "justify" | null;
 }
 
-export const DOCX_FORMAT_BUTTONS: readonly { action: DocxFormatAction; label: string; title: string; group: number }[] = [
-  { action: "bold", label: "B", title: "Negrito (⌘B)", group: 0 },
-  { action: "italic", label: "I", title: "Itálico (⌘I)", group: 0 },
-  { action: "underline", label: "U", title: "Sublinhado (⌘U)", group: 0 },
-  { action: "strike", label: "S", title: "Tachado (⇧⌘X)", group: 0 },
-  { action: "heading", label: "H", title: "Título (⌘2; ⌘1 a ⌘6 escolhem o nível)", group: 1 },
-  { action: "bullet", label: "•", title: "Lista (⇧⌘8)", group: 1 },
-  { action: "ordered", label: "1.", title: "Lista numerada (⇧⌘7)", group: 1 },
-  { action: "left", label: "", title: "Alinhar à esquerda (⌘L)", group: 2 },
-  { action: "center", label: "", title: "Centralizar (⌘E)", group: 2 },
-  { action: "right", label: "", title: "Alinhar à direita", group: 2 },
-  { action: "justify", label: "", title: "Justificar (⌘J)", group: 2 },
+/** `title` é a chave do catálogo (`viewers.*.ts`): a barra traduz na língua da tela. */
+export const DOCX_FORMAT_BUTTONS: readonly { action: DocxFormatAction; label: string; title: TextKey; group: number }[] = [
+  { action: "bold", label: "B", title: "files.docx.format.bold", group: 0 },
+  { action: "italic", label: "I", title: "files.docx.format.italic", group: 0 },
+  { action: "underline", label: "U", title: "files.docx.format.underline", group: 0 },
+  { action: "strike", label: "S", title: "files.docx.format.strike", group: 0 },
+  { action: "heading", label: "H", title: "files.docx.format.heading", group: 1 },
+  { action: "bullet", label: "•", title: "files.docx.format.bullet", group: 1 },
+  { action: "ordered", label: "1.", title: "files.docx.format.ordered", group: 1 },
+  { action: "left", label: "", title: "files.docx.format.left", group: 2 },
+  { action: "center", label: "", title: "files.docx.format.center", group: 2 },
+  { action: "right", label: "", title: "files.docx.format.right", group: 2 },
+  { action: "justify", label: "", title: "files.docx.format.justify", group: 2 },
 ];
 
 /** O botão aceso para este estado. */

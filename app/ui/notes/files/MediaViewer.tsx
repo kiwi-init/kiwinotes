@@ -6,6 +6,7 @@
 // O vídeo tem a pinça e o ⌘+/⌘−/⌘0 da imagem (T22178, spec #21198): começa ajustado à área e cresce centrado nos dedos,
 // com rolagem. O áudio é só a barra do player: não tem o que ampliar.
 
+import { useT } from "../../src/i18n.ts";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { bytesOf } from "./csv.ts";
@@ -19,6 +20,7 @@ import { recallZoom } from "./zoom.ts";
 const PAD = { x: 24, y: 24 };
 
 export function MediaViewer({ path, file }: FileViewerProps) {
+  const { t } = useT();
   const base64 = "base64" in file ? file.base64 : "";
   const type = mediaType(path);
   const [failed, setFailed] = useState(false);
@@ -60,7 +62,7 @@ export function MediaViewer({ path, file }: FileViewerProps) {
   if (!type || !url || failed) {
     return (
       <div className="kn-file-notice" role="status">
-        <p>Não deu para tocar este arquivo aqui. Abra no app padrão.</p>
+        <p>{t("files.media.failed")}</p>
       </div>
     );
   }

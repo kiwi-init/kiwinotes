@@ -3,6 +3,7 @@
 // linhas que não mudaram como estavam. O arquivo chega em bytes, e um csv que não é UTF-8 (o do Excel no Windows) é
 // lido e gravado na codificação dele.
 
+import { useT } from "../../src/i18n.ts";
 import { useMemo } from "react";
 
 import { plainDisplay } from "../../../src/shared/sheet/ops.ts";
@@ -16,6 +17,7 @@ export { TableGrid } from "./TableGrid.tsx";
 const ENCODINGS = { "utf-8": "UTF-8", "utf-16le": "UTF-16", "utf-16be": "UTF-16", "windows-1252": "Windows-1252" } as const;
 
 export function TableViewer({ path, file, files, flushRef, kiwi, at }: FileViewerProps) {
+  const { t } = useT();
   // Um engine antigo entrega o texto: vira bytes em UTF-8, como estava.
   const base64 = useMemo(() => ("base64" in file ? file.base64 : "text" in file ? base64Of(new TextEncoder().encode(file.text)) : ""), [file]);
   const name = path.split("/").at(-1) ?? path;
@@ -27,7 +29,7 @@ export function TableViewer({ path, file, files, flushRef, kiwi, at }: FileViewe
   if (state.kind === "error" || state.kind === "tooLarge") {
     return (
       <div className="kn-file-notice" role="status">
-        <p>Não deu para ler este arquivo como tabela.</p>
+        <p>{t("files.table.readFailed")}</p>
       </div>
     );
   }
@@ -36,7 +38,7 @@ export function TableViewer({ path, file, files, flushRef, kiwi, at }: FileViewe
   if (!sheet.rows.some((r) => r?.some((c) => c && c.text !== ""))) {
     return (
       <div className="kn-file-notice" role="status">
-        <p>Este arquivo está vazio.</p>
+        <p>{t("files.table.empty")}</p>
       </div>
     );
   }
@@ -48,7 +50,7 @@ export function TableViewer({ path, file, files, flushRef, kiwi, at }: FileViewe
           {session.notice}
         </div>
       ) : null}
-      <SheetPane session={session} doc={state.doc} sheet={sheet} decimal="," countHeader={false} widthMemory={widthMemory} zoomKey={path} foot={enc && enc !== "utf-8" ? `lido como ${ENCODINGS[enc]}` : null} goTo={at && "line" in at ? at : undefined} />
+      <SheetPane session={session} doc={state.doc} sheet={sheet} decimal="," countHeader={false} widthMemory={widthMemory} zoomKey={path} foot={enc && enc !== "utf-8" ? t("files.table.encoding", { encoding: ENCODINGS[enc] }) : null} goTo={at && "line" in at ? at : undefined} />
     </div>
   );
 }

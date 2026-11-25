@@ -14,6 +14,7 @@ import { Button, Empty, HoverLabel } from "../src/kit/index.tsx";
 import { TopBar } from "../src/topbar.tsx";
 import { useShortcuts } from "../src/useShortcuts.ts";
 import { useT } from "../src/i18n.ts";
+import { NoteFacts } from "./NoteFacts.tsx";
 import type { TextKey } from "../../src/shared/i18n/index.ts";
 import { DEFAULT_SHORTCUTS, matchesKeyEvent, shortcutLabel } from "../../src/shared/shortcuts.ts";
 import { Popover } from "./Popover.tsx";
@@ -56,7 +57,7 @@ import { catPalette } from "../../src/shared/kiwicat-colors.ts";
 import { fillTemplate } from "../../src/shared/templates.ts";
 import { Palette } from "./Palette.tsx";
 import { type SideRoot, type SideTarget, Sidebar, sideKey, whereLabel } from "./Sidebar.tsx";
-import { ancestors, buildTree, editedLabel, filterTree, filterTreeToPaths, recentNotes, type SortBy,
+import { ancestors, buildTree, filterTree, filterTreeToPaths, recentNotes, type SortBy,
 } from "./tree.ts";
 import { TrashView } from "./TrashView.tsx";
 import { VersionsDialog } from "./VersionsDialog.tsx";
@@ -1971,10 +1972,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
                   #{t}
                 </button>
               ))}
-              {[editedLabel(note, undefined, locale), tr("notes.words", { n: words }),
-                  ].map((t) => (
-                <span key={t}>{t}</span>
-              ))}
+              <NoteFacts note={note} words={words} />
               <button
                 ref={backRef}
                 type="button"

@@ -2,6 +2,7 @@
 // tipo vem dos bytes e não do nome, e uma imagem com pixels demais (`imageInfo.ts`) é recusada antes de o WebKit
 // decodificar. O SVG entra como <img>, onde script não roda e nada de fora carrega. Só leitura.
 
+import { useT } from "../../src/i18n.ts";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { bytesOf } from "./csv.ts";
@@ -14,6 +15,7 @@ import { recallZoom } from "./zoom.ts";
 const PAD = { x: 24, y: 24 };
 
 export function ImageViewer({ path, file }: FileViewerProps) {
+  const { t, number } = useT();
   const base64 = "base64" in file ? file.base64 : "";
   // O arquivo inteiro: o tamanho de um jpeg pode vir depois de 72 KB de metadados (revisão do T7113).
   const info = useMemo(() => imageInfo(bytesOf(base64)), [base64]);
@@ -48,10 +50,10 @@ export function ImageViewer({ path, file }: FileViewerProps) {
       <div className="kn-file-notice" role="status">
         <p>
           {problem === "tooLarge"
-            ? `Esta imagem tem ${info?.width?.toLocaleString("pt-BR")} × ${info?.height?.toLocaleString("pt-BR")} pixels, grande demais para abrir aqui. Abra no app padrão.`
+            ? t("files.image.tooLarge", { width: number(info?.width ?? 0), height: number(info?.height ?? 0) })
             : problem === "unknown" && info
-              ? "Não deu para saber o tamanho desta imagem, e por isso ela não abre aqui. Abra no app padrão."
-              : "Não deu para mostrar esta imagem aqui. Abra no app padrão."}
+              ? t("files.image.unknown")
+              : t("files.image.failed")}
         </p>
       </div>
     );
@@ -63,23 +65,23 @@ export function ImageViewer({ path, file }: FileViewerProps) {
 
   return (
     <div className="kn-file-image">
-      <div className="kn-file-pdf-bar" role="toolbar" aria-label="Imagem">
+      <div className="kn-file-pdf-bar" role="toolbar" aria-label={t("files.image")}>
         <span className="kn-file-pdf-group">
-          <button type="button" className="kn-bt" aria-label="Diminuir o zoom" onClick={() => zoomTo(stepImageZoom(scale, -1))}>
+          <button type="button" className="kn-bt" aria-label={t("files.zoomOut")} onClick={() => zoomTo(stepImageZoom(scale, -1))}>
             −
           </button>
           <span className="kn-file-pdf-zoom" aria-live="polite">{`${Math.round(scale * 100)}%`}</span>
-          <button type="button" className="kn-bt" aria-label="Aumentar o zoom" onClick={() => zoomTo(stepImageZoom(scale, 1))}>
+          <button type="button" className="kn-bt" aria-label={t("files.zoomIn")} onClick={() => zoomTo(stepImageZoom(scale, 1))}>
             +
           </button>
           <button type="button" className="kn-bt" disabled={zoom === null} onClick={() => zoomTo(null)}>
-            Ajustar à janela
+            {t("files.fitWindow")}
           </button>
           <button type="button" className="kn-bt" disabled={zoom === 1} onClick={() => zoomTo(1)}>
-            Tamanho real
+            {t("files.actualSize")}
           </button>
         </span>
-        <span className="kn-file-pdf-page">{size ? `${size.width.toLocaleString("pt-BR")} × ${size.height.toLocaleString("pt-BR")} px` : ""}</span>
+        <span className="kn-file-pdf-page">{size ? t("files.image.size", { width: number(size.width), height: number(size.height) }) : ""}</span>
       </div>
       <div className="kn-file-image-area" ref={box} data-zoomed={zoom !== null && scale > fit ? "true" : undefined}>
         <img
