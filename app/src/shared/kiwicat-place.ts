@@ -1,6 +1,8 @@
 // Onde o Kiwi Cat aparece por cima dos apps, e o tamanho dele (spec #12949). O helper monta a janela com isso
 // (`CatPlacement` em native/Sources/KiwiHelperCore/CatOverlayModel.swift, os mesmos nomes e limites).
 
+import { formatNumber, type Locale } from "./i18n/index.ts";
+
 /** As seis posições, na ordem dos controles. O padrão é o centro, como antes. */
 export const CAT_POSITIONS = [
   { id: "center", label: "Centro" },
@@ -26,8 +28,8 @@ export function catSize(v: unknown): number {
   return Math.round(Math.min(Math.max(v, CAT_SIZE.min), CAT_SIZE.max) * 10) / 10;
 }
 
-/** O tamanho como a tela mostra: "1×", "1,3×". */
-export const catSizeLabel = (v: number) => `${catSize(v).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}×`;
+/** O tamanho como a tela mostra: "1×", "1,3×" (em inglês, "1.3×"). */
+export const catSizeLabel = (v: number, locale: Locale = "pt") => `${formatNumber(locale, catSize(v), { maximumFractionDigits: 1 })}×`;
 
 /** A tela de exemplo da prévia: 1440 × 900, com a barra de menus (25) e o Dock (70). */
 const SCREEN = { w: 1440, h: 900, menu: 25, dock: 70 } as const;

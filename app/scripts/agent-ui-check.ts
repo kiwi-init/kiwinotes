@@ -36,6 +36,8 @@
 //   remover. A voz vem de um servidor falso e local (a chave `KIWI_CAT_VOICE_MANIFEST`), com um modelo e duas vozes
 //   inventados, e o `kiwi-voice` é o falso: nada fala. As vozes (T27778): o idioma, só as vozes dele, o "Usar" que grava
 //   o `kiwicat.voz`, o Ouvir (Parar enquanto toca, numa saída muda) sem mudar a escolhida, e a PT-1, a padrão, que abre no Português.
+// - `ajustes-agente-ingles.json` (T29271): o agente pronto e o app em inglês; os rótulos, a cor do gato, o Testar e o
+//   medidor em inglês, e nenhum rótulo em português.
 // Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
 import { createHash } from "node:crypto";
@@ -195,6 +197,13 @@ async function agentReady(data: string, env: Record<string, string>): Promise<vo
     if (Date.now() > end) throw new Error("o adaptador não baixou");
     await Bun.sleep(200);
   }
+}
+
+/** O agente pronto e o app em inglês (T29271): o Idioma do app só aparece com o `KIWI_LANGUAGE_CHOICE`. */
+async function englishReady(data: string, env: Record<string, string>): Promise<void> {
+  await agentReady(data, env);
+  const r = await cli(["invoke", "settings.set", JSON.stringify({ language: "en" }), "--data", data], env);
+  if (r.code !== 0) throw new Error(`settings.set: ${r.out}`);
 }
 
 /**
@@ -658,6 +667,8 @@ try {
   ok = (await scenario("aviso-negado", noticeScript(true), { KIWI_FAKE_NOTICES: "denied" }, { before: agentReady, prefix: "aviso-" })) && ok;
   ok = (await scenario("duvida", doubtFile, { KIWI_DOUBT_TIMEOUT_MS: "4000" }, { before: doubtReady, prefix: "duvida-" })) && ok;
   ok = (await scenario("gato-fala", "ajustes-gato-fala.json", catVoiceEnv, { before: agentReady, prefix: "gato-fala-" })) && ok;
+  // Ajustes › Agente em inglês (T29271): o agente pronto, o app em inglês, e nenhum rótulo em português.
+  ok = (await scenario("ingles", "ajustes-agente-ingles.json", { KIWI_LANGUAGE_CHOICE: "1" }, { before: englishReady, prefix: "ingles-" })) && ok;
 } finally {
   reg.stop();
   voiceServer.stop(true);

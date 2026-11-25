@@ -6,12 +6,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AgentStatus, AgentUsageView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Button, Row, Section } from "../src/kit/index.tsx";
 import { kindOf } from "./agentText.ts";
 import { Placar } from "./Placar.tsx";
-import { at, limitLine, outLine, SUBAGENT_NOTE, subscriptionLine, sumLine, tokens } from "./usageText.ts";
+import { at, limitLine, outLine, subagentNote, subscriptionLine, sumLine, tokens } from "./usageText.ts";
 
 export function UsageMeter() {
+  const { t, locale } = useT();
+  const failedText = t("agent.usage.readFailed");
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [view, setView] = useState<AgentUsageView | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,9 +42,9 @@ export function UsageMeter() {
     setError(null);
     void api.agent
       .usageRefresh()
-      .then(setView, (e: unknown) => setError(e instanceof Error ? e.message : "Não deu para ver o uso agora."))
+      .then(setView, (e: unknown) => setError(e instanceof Error ? e.message : failedText))
       .finally(() => setRefreshing(false));
-  }, []);
+  }, [failedText]);
 
   // O `/usage` ao abrir o medidor: uma vez, quando a seção aparece com o agente pronto e livre. Nunca sozinho depois.
   useEffect(() => {
@@ -52,39 +55,39 @@ export function UsageMeter() {
 
   if (!has("agent.usage") || !ready || !view) return null;
   const now = Date.now();
-  const out = outLine(view.out, now);
-  const limit = limitLine(view.limit, now);
+  const out = outLine(view.out, now, locale);
+  const limit = limitLine(view.limit, now, locale);
   return (
     <>
       {view.placar ? <Placar v={view.placar} now={now} /> : null}
-      <Section title="O gasto do agente">
-      {out ? <Row label="Limite" hint={out} /> : null}
-      <Row label="A sua assinatura" hint={error ?? subscriptionLine(view.subscription, now)}>
+      <Section title={t("agent.usage.section")}>
+      {out ? <Row label={t("agent.usage.limitLabel")} hint={out} /> : null}
+      <Row label={t("agent.usage.subscription")} hint={error ?? subscriptionLine(view.subscription, now, locale)}>
         <Button onClick={refresh} disabled={refreshing || !!status?.busy}>
-          {refreshing ? "Atualizando…" : "Atualizar"}
+          {refreshing ? t("agent.usage.refreshing") : t("agent.usage.refresh")}
         </Button>
       </Row>
-      {limit ? <Row label="O último aviso do agente" hint={limit} /> : null}
-      <Row label="Últimas 5 horas" hint={sumLine(view.fiveHours)} />
-      <Row label="Esta semana" hint={`${sumLine(view.week)} ${SUBAGENT_NOTE}`} />
+      {limit ? <Row label={t("agent.usage.lastNotice")} hint={limit} /> : null}
+      <Row label={t("agent.usage.fiveHours")} hint={sumLine(view.fiveHours, locale)} />
+      <Row label={t("agent.usage.week")} hint={`${sumLine(view.week, locale)} ${subagentNote(locale)}`} />
       {view.top.length ? (
         <div className="kn-usage-top">
-          <div className="kn-row-label">Os pedidos mais caros da semana</div>
+          <div className="kn-row-label">{t("agent.usage.top")}</div>
           <ol>
-            {view.top.map((t) => (
-              <li key={t.request}>
-                <span className="kn-usage-q">{t.question || "(sem texto)"}</span>
+            {view.top.map((r) => (
+              <li key={r.request}>
+                <span className="kn-usage-q">{r.question || t("agent.usage.noText")}</span>
                 <span className="kn-usage-meta">
-                  {at(t.at, now)} · {tokens(t.tokens)}
+                  {at(r.at, now, locale)} · {tokens(r.tokens, locale)}
                 </span>
               </li>
             ))}
           </ol>
         </div>
       ) : null}
-      <Row label="Apagar o gasto guardado" hint="O gasto fica guardado só no Mac, por 8 dias. O registro do agente não muda.">
+      <Row label={t("agent.usage.clear")} hint={t("agent.usage.clear.hint")}>
         <Button onClick={() => void api.agent.usageClear().then(setView, () => {})} disabled={!view.week.requests}>
-          Apagar
+          {t("agent.usage.clear.button")}
         </Button>
       </Row>
       </Section>
