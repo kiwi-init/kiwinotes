@@ -43,6 +43,47 @@ export function ptPieces(): string[] {
 }
 
 /**
+ * As frases curtas do catálogo em português (de 3 letras para cima) que mudam em inglês, inteiras: "Ontem", "Fechar",
+ * "Notas". Um texto de botão, de título ou de `aria-label` igual a uma delas é português, mesmo sem acento.
+ */
+export function ptExact(): Set<string> {
+  const EN = en as Record<string, Entry>;
+  const enAll = new Set(Object.values(EN).flatMap(forms));
+  const exact = new Set<string>();
+  for (const [key, ptEntry] of Object.entries(pt) as [string, Entry][]) {
+    const enForms = forms(EN[key]);
+    for (const f of forms(ptEntry)) {
+      const t = f.trim();
+      // Fica de fora o que é igual em inglês (nesta chave ou noutra, como "Kiwi" ou "Ok") e o que tem `{param}`.
+      if (t.length < 3 || /\{\w+\}/.test(t) || enForms.includes(f) || enAll.has(t)) continue;
+      exact.add(t);
+    }
+  }
+  return exact;
+}
+
+/** Os textos inteiros da tela: cada nó de texto visível e os `aria-label`, `placeholder` e `title`. */
+async function screenTexts(p: Page): Promise<string[]> {
+  return p.evaluate(() => {
+    const out: string[] = [];
+    const visible = (el: Element | null) => !!el && (el as HTMLElement).checkVisibility?.({ opacityProperty: false, visibilityProperty: true }) !== false;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const t = n.textContent?.trim();
+      if (t && visible(n.parentElement)) out.push(t);
+    }
+    for (const el of document.querySelectorAll("[aria-label], [placeholder], [title]")) {
+      if (!visible(el)) continue;
+      for (const a of ["aria-label", "placeholder", "title"]) {
+        const v = el.getAttribute(a)?.trim();
+        if (v) out.push(v);
+      }
+    }
+    return out;
+  });
+}
+
+/**
  * O português que não está no catálogo (um texto escrito direto no código): as letras que o inglês não tem (ã, õ, ç)
  * e palavras que só o português usa. Os dados de exemplo dos roteiros são em inglês, então nada disso devia aparecer.
  */
@@ -132,6 +173,7 @@ export async function startEnglish(opts: EnglishOptions = {}): Promise<EnglishSe
   const browser: Browser = await webkit.launch({ headless: true });
   await cli(["start", "--no-helper"]);
   const pieces = ptPieces();
+  const exact = ptExact();
   const problems: string[] = [];
   const known: string[] = [];
   const report = (finding: string) => {
@@ -167,6 +209,8 @@ export async function startEnglish(opts: EnglishOptions = {}): Promise<EnglishSe
       for (const k of skip) text = typeof k === "string" ? text.split(k).join("") : text.replace(new RegExp(k.source, k.flags.includes("g") ? k.flags : k.flags + "g"), "");
       for (const piece of pieces) if (text.includes(piece)) report(`${name}: "${piece}"`);
       for (const line of ptWords(text)) report(`${name}: «${line}»`);
+      const strip = (t: string) => skip.reduce<string>((acc, k) => (typeof k === "string" ? acc.split(k).join("") : acc.replace(new RegExp(k.source, k.flags.includes("g") ? k.flags : k.flags + "g"), "")), t).trim();
+      for (const t of new Set((await screenTexts(p)).map(strip))) if (exact.has(t)) report(`${name}: [${t}]`);
       const file = join(out, `${name}.png`);
       await p.screenshot({ path: file });
       shots.push(file);
