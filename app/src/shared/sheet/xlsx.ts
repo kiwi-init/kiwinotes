@@ -9,20 +9,27 @@
 // com o motivo, e o resto da planilha continua editável.
 
 import { flatOps, shiftOf, type CellValue, checkOp, type SheetOp, SheetOpError } from "./ops.ts";
+import { why, whyText, type SheetWhy } from "./why.ts";
 import { cellName, colIndex, parseCell, renameInFormula, type Shift, shiftFormula, shiftRange, shiftSpan, shiftSqref, moveFormula } from "./refs.ts";
 import { partText, readZip, writeZip, type ZipPart, ZipError } from "./zip.ts";
 
 export type ReadOnlyReason = "password" | "macro" | "unknown";
 
-export type Inspection = { editable: true } | { editable: false; reason: ReadOnlyReason; detail: string };
+export type Inspection = { editable: true } | { editable: false; reason: ReadOnlyReason; detail: string; why: SheetWhy };
 
-/** O arquivo abre só para leitura; `detail` é a frase que a tela mostra. */
+/**
+ * O arquivo abre só para leitura. `why` é o motivo, que a tela traduz (T29245); `detail` é a frase em português, a que
+ * vai ao agente.
+ */
 export class XlsxReadOnly extends Error {
+  readonly detail: string;
   constructor(
     readonly reason: ReadOnlyReason,
-    readonly detail: string,
+    readonly why: SheetWhy,
   ) {
+    const detail = whyText("pt", why);
     super(detail);
+    this.detail = detail;
   }
 }
 
@@ -32,7 +39,7 @@ export function inspectXlsx(bytes: Uint8Array, name = ""): Inspection {
     Book.open(bytes, name, true);
     return { editable: true };
   } catch (e) {
-    if (e instanceof XlsxReadOnly) return { editable: false, reason: e.reason, detail: e.detail };
+    if (e instanceof XlsxReadOnly) return { editable: false, reason: e.reason, detail: e.detail, why: e.why };
     throw e;
   }
 }
@@ -132,7 +139,7 @@ function applyOp(book: Book, op: Exclude<SheetOp, { op: "batch" }>): void {
   if (op.op === "addSheet") return addSheet(book, op.name);
   const info = infos.find((s) => s.name.toLowerCase() === op.sheet.toLowerCase())!;
   if (op.op === "renameSheet") return renameSheet(book, info, op.name);
-  if (info.kind !== "worksheet") throw new SheetOpError(`${info.name} é uma aba de gráfico`);
+  if (info.kind !== "worksheet") throw new SheetOpError(why("files.sheet.why.chartSheet", { name: info.name }));
   if (op.op === "set") return setCell(book, info, op);
   if (op.op === "cached") return setCached(book, info, op);
   return shiftSheet(book, info, shiftOf(op)!);
@@ -144,12 +151,12 @@ function setCell(book: Book, info: SheetInfo, input: Extract<SheetOp, { op: "set
   const here = { row: op.row, col: op.col };
   for (const f of elements(xml, "f")) {
     const ref = attr(f.attrs, "ref");
-    if (attr(f.attrs, "t") === "array" && ref && inRange(here, ref) && ref.includes(":")) throw new SheetOpError("a célula faz parte de uma fórmula de matriz");
+    if (attr(f.attrs, "t") === "array" && ref && inRange(here, ref) && ref.includes(":")) throw new SheetOpError(why("files.sheet.why.arrayFormula"));
   }
   for (const m of elements(xml, "mergeCell")) {
     const ref = attr(m.attrs, "ref") ?? "";
     const top = parseCell(ref.split(":")[0]!);
-    if (inRange(here, ref) && top && (top.row !== op.row || top.col !== op.col)) throw new SheetOpError("a célula está dentro de uma mescla");
+    if (inRange(here, ref) && top && (top.row !== op.row || top.col !== op.col)) throw new SheetOpError(why("files.sheet.why.merged"));
   }
   const model = parseSheet(xml);
   let row = model.rows.find((r) => r.r === op.row);
@@ -199,9 +206,9 @@ function tableHeader(book: Book, info: SheetInfo, op: Extract<SheetOp, { op: "se
     if (!ends || attr(tAttrs, "headerRowCount") === "0") continue;
     const [p, q] = ends;
     if (op.row !== p.row || op.col < p.col! || op.col > q.col!) continue;
-    if (op.formula !== undefined) throw new SheetOpError("o cabeçalho de uma tabela não leva fórmula");
+    if (op.formula !== undefined) throw new SheetOpError(why("files.sheet.why.headerFormula"));
     const typed = op.value === null ? "" : typeof op.value === "boolean" ? (op.value ? "VERDADEIRO" : "FALSO") : String(op.value);
-    if (!typed.trim()) throw new SheetOpError("o cabeçalho de uma tabela não pode ficar vazio");
+    if (!typed.trim()) throw new SheetOpError(why("files.sheet.why.headerEmpty"));
     const columns = elements(t, "tableColumn").map((c) => unescapeXml(attr(c.attrs, "name") ?? ""));
     const index = op.col - p.col!;
     const from = columns[index];
@@ -343,7 +350,7 @@ function setCached(book: Book, info: SheetInfo, op: Extract<SheetOp, { op: "cach
   const re = new RegExp(`<c\\b(?=[^>]*\\br="${name}")([^>]*?)(?:/>|>([\\s\\S]*?)</c>)`);
   const m = re.exec(xml);
   const inner = m?.[2] ?? "";
-  if (!m || !/<f\b/.test(inner)) throw new SheetOpError(`${name} não tem fórmula`);
+  if (!m || !/<f\b/.test(inner)) throw new SheetOpError(why("files.sheet.why.noFormulaIn", { name: name }));
   const content = cellContent(op.value, "");
   const v = content?.inner.replace(/^<f>.*?<\/f>/, "") ?? "";
   const nextInner = inner.replace(/<v\b[^>]*\/>|<v\b[^>]*>[\s\S]*?<\/v>/, "").replace(/(<f\b[^>]*\/>|<f\b[^>]*>[\s\S]*?<\/f>)/, `$1${v}`);
@@ -377,21 +384,21 @@ function numberText(n: number): string {
 
 /** Linhas ou colunas entrando ou saindo de uma aba: as células, e tudo que aponta para elas no arquivo. */
 function shiftSheet(book: Book, info: SheetInfo, s: Shift): void {
-  const what = s.axis === "row" ? (s.count > 0 ? "inserir linhas" : "apagar linhas") : s.count > 0 ? "inserir colunas" : "apagar colunas";
+  const what = { key: s.axis === "row" ? (s.count > 0 ? "files.sheet.why.what.insertRows" : "files.sheet.why.what.deleteRows") : s.count > 0 ? "files.sheet.why.what.insertCols" : "files.sheet.why.what.deleteCols" } as const;
   const rels = book.rels(info.path);
   let xml = expandShared(book.text(info.path));
   // O que o Kiwi não sabe mover junto: recusa a operação, e a planilha continua editável.
-  if (book.has(/^xl\/pivot(Cache|Table)s\//)) throw new SheetOpError(`não dá para ${what}: a planilha tem tabela dinâmica`);
-  if (/<legacyDrawing\b/.test(xml) || rels.some((r) => /\/(comments|threadedComment)s?$/.test(r.type))) throw new SheetOpError(`não dá para ${what}: a aba tem comentários`);
-  if (/<f\b[^>]*\bt="dataTable"/.test(xml)) throw new SheetOpError(`não dá para ${what}: a aba tem tabela de dados (teste de hipóteses)`);
+  if (book.has(/^xl\/pivot(Cache|Table)s\//)) throw new SheetOpError(why("files.sheet.why.pivot", { what: what }));
+  if (/<legacyDrawing\b/.test(xml) || rels.some((r) => /\/(comments|threadedComment)s?$/.test(r.type))) throw new SheetOpError(why("files.sheet.why.comments", { what: what }));
+  if (/<f\b[^>]*\bt="dataTable"/.test(xml)) throw new SheetOpError(why("files.sheet.why.dataTable", { what: what }));
   for (const f of elements(xml, "f")) {
     const ref = attr(f.attrs, "ref");
     if (attr(f.attrs, "t") !== "array" || !ref) continue;
     const next = shiftRange(ref, s);
-    if (next !== null && spanOf(next, s.axis) !== spanOf(ref, s.axis)) throw new SheetOpError(`não dá para ${what} no meio de uma fórmula de matriz`);
+    if (next !== null && spanOf(next, s.axis) !== spanOf(ref, s.axis)) throw new SheetOpError(why("files.sheet.why.midArray", { what: what }));
   }
   const filter = elements(xml, "autoFilter")[0];
-  if (s.axis === "col" && filter?.inner && crosses(attr(filter.attrs, "ref") ?? "", s)) throw new SheetOpError(`não dá para ${what} dentro de um filtro aplicado`);
+  if (s.axis === "col" && filter?.inner && crosses(attr(filter.attrs, "ref") ?? "", s)) throw new SheetOpError(why("files.sheet.why.inFilter", { what: what }));
   const tables = rels.filter((r) => r.type.endsWith("/table"));
   const tableXml = new Map<string, string>();
   const dropped: Rel[] = [];
@@ -405,15 +412,15 @@ function shiftSheet(book: Book, info: SheetInfo, s: Shift): void {
       dropped.push(rel);
       continue;
     }
-    if (s.axis === "col" && crosses(ref, s)) throw new SheetOpError(`não dá para ${what} dentro de uma tabela`);
-    if (spanOf(next, "row") < 2) throw new SheetOpError(`não dá para ${what}: uma tabela ficaria sem linhas`);
+    if (s.axis === "col" && crosses(ref, s)) throw new SheetOpError(why("files.sheet.why.inTable", { what: what }));
+    if (spanOf(next, "row") < 2) throw new SheetOpError(why("files.sheet.why.tableEmpty", { what: what }));
     // O cabeçalho e a linha de totais só saem com a tabela inteira (revisão do T21107): sem eles, a primeira linha de dados
     // viraria o cabeçalho, e os `tableColumn` não bateriam mais.
     const tAttrs = /<table\b([^>]*)>/.exec(t)?.[1] ?? "";
     const ends = rangeEnds(ref);
     const gone = (row: number | undefined) => s.axis === "row" && s.count < 0 && row !== undefined && row >= s.at && row <= s.at - s.count - 1;
-    if (attr(tAttrs, "headerRowCount") !== "0" && gone(ends?.[0].row)) throw new SheetOpError(`não dá para ${what}: o cabeçalho de uma tabela sairia sem ela`);
-    if (Number(attr(tAttrs, "totalsRowCount") ?? "0") > 0 && gone(ends?.[1].row)) throw new SheetOpError(`não dá para ${what}: a linha de totais de uma tabela sairia sem ela`);
+    if (attr(tAttrs, "headerRowCount") !== "0" && gone(ends?.[0].row)) throw new SheetOpError(why("files.sheet.why.tableHeader", { what: what }));
+    if (Number(attr(tAttrs, "totalsRowCount") ?? "0") > 0 && gone(ends?.[1].row)) throw new SheetOpError(why("files.sheet.why.tableTotals", { what: what }));
     tableXml.set(path, editTags(t, ["table", "autoFilter", "sortState"], (attrs) => mapAttr(attrs, "ref", (r) => shiftRange(r, s) ?? r)));
   }
 
@@ -606,51 +613,51 @@ class Book {
   ) {
     this.byName = new Map(parts.map((p) => [p.name, p]));
     const root = this.relsAt("_rels/.rels", "").find((r) => r.type.endsWith("/officeDocument"));
-    if (!root || !this.byName.has(root.path)) throw new XlsxReadOnly("unknown", "a planilha não tem a parte principal (workbook)");
+    if (!root || !this.byName.has(root.path)) throw new XlsxReadOnly("unknown", why("files.sheet.why.ro.noWorkbook"));
     this.workbook = root.path;
   }
 
   /** `check`: confere tudo o que impede gravar sem perda (senha, macro, estrutura); sem ele, só o que impede ler. */
   static open(bytes: Uint8Array, name: string, check: boolean): Book {
     if (bytes.length >= 8 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0) {
-      throw new XlsxReadOnly("password", "a planilha tem senha para abrir");
+      throw new XlsxReadOnly("password", why("files.sheet.why.ro.password"));
     }
-    if (check && /\.(xlsm|xltm|xlam)$/i.test(name)) throw new XlsxReadOnly("macro", "a planilha tem macros");
+    if (check && /\.(xlsm|xltm|xlam)$/i.test(name)) throw new XlsxReadOnly("macro", why("files.sheet.why.ro.macro"));
     let parts: ZipPart[];
     try {
       parts = readZip(bytes);
     } catch (e) {
-      if (e instanceof ZipError) throw new XlsxReadOnly("unknown", "o arquivo não é um xlsx que o Kiwi saiba ler");
+      if (e instanceof ZipError) throw new XlsxReadOnly("unknown", why("files.sheet.why.ro.notXlsx"));
       throw e;
     }
     let book: Book;
     try {
-      if (!parts.some((p) => p.name === "[Content_Types].xml")) throw new XlsxReadOnly("unknown", "a planilha não tem a lista de partes ([Content_Types].xml)");
+      if (!parts.some((p) => p.name === "[Content_Types].xml")) throw new XlsxReadOnly("unknown", why("files.sheet.why.ro.noContentTypes"));
       book = new Book(bytes, parts);
       const wb = book.text(book.workbook);
-      if (/purl\.oclc\.org\/ooxml/.test(wb)) throw new XlsxReadOnly("unknown", "a planilha está no formato Strict, que o Kiwi não grava");
-      if (!/^(<\?xml[^>]*\?>\s*)?<workbook[\s>]/.test(wb.replace(/^﻿/, ""))) throw new XlsxReadOnly("unknown", "a planilha usa uma estrutura que o Kiwi não conhece");
+      if (/purl\.oclc\.org\/ooxml/.test(wb)) throw new XlsxReadOnly("unknown", why("files.sheet.why.ro.strict"));
+      if (!/^(<\?xml[^>]*\?>\s*)?<workbook[\s>]/.test(wb.replace(/^﻿/, ""))) throw new XlsxReadOnly("unknown", why("files.sheet.why.ro.unknownWorkbook"));
       if (!check) return book;
       // O tipo que vale é o da parte do workbook: o Excel põe um `<Default Extension="bin" … macroEnabled …>` até num
       // xlsx sem macro nenhuma.
       const types = book.text("[Content_Types].xml");
       const wbType = elements(types, "Override").find((o) => attr(o.attrs, "PartName")?.replace(/^\//, "") === book.workbook);
       if (parts.some((p) => /vbaProject\.bin$/i.test(p.name)) || /macroEnabled/i.test((wbType && attr(wbType.attrs, "ContentType")) ?? "")) {
-        throw new XlsxReadOnly("macro", "a planilha tem macros");
+        throw new XlsxReadOnly("macro", why("files.sheet.why.ro.macro"));
       }
       const protection = /<workbookProtection\b([^>]*)>/.exec(wb)?.[1] ?? "";
       if (/\b(lockStructure|lockWindows)="(1|true)"/.test(protection) || /\b(workbookPassword|workbookHashValue)=/.test(protection)) {
-        throw new XlsxReadOnly("password", "a estrutura da planilha está protegida por senha");
+        throw new XlsxReadOnly("password", why("files.sheet.why.ro.structurePassword"));
       }
       for (const s of book.sheets()) {
         if (s.kind !== "worksheet") continue;
         const x = book.text(s.path);
-        if (!/^(<\?xml[^>]*\?>\s*)?<worksheet[\s>]/.test(x.replace(/^﻿/, ""))) throw new XlsxReadOnly("unknown", `a aba ${s.name} usa uma estrutura que o Kiwi não conhece`);
+        if (!/^(<\?xml[^>]*\?>\s*)?<worksheet[\s>]/.test(x.replace(/^﻿/, ""))) throw new XlsxReadOnly("unknown", why("files.sheet.why.ro.unknownSheet", { name: s.name }));
         const sp = /<sheetProtection\b([^>]*)>/.exec(x)?.[1];
-        if (sp !== undefined && /\bsheet="(1|true)"/.test(sp)) throw new XlsxReadOnly("password", `a aba ${s.name} está protegida`);
+        if (sp !== undefined && /\bsheet="(1|true)"/.test(sp)) throw new XlsxReadOnly("password", why("files.sheet.why.ro.sheetProtected", { name: s.name }));
       }
     } catch (e) {
-      if (e instanceof ZipError) throw new XlsxReadOnly("unknown", "uma parte da planilha está danificada");
+      if (e instanceof ZipError) throw new XlsxReadOnly("unknown", why("files.sheet.why.ro.damaged"));
       throw e;
     }
     return book;
@@ -670,7 +677,7 @@ class Book {
     let t = this.cache.get(name);
     if (t === undefined) {
       const part = this.byName.get(name);
-      if (!part || this.removed.has(name)) throw new XlsxReadOnly("unknown", `a planilha não tem a parte ${name}`);
+      if (!part || this.removed.has(name)) throw new XlsxReadOnly("unknown", why("files.sheet.why.ro.missingPart", { name: name }));
       t = partText(this.bytes, part);
       this.cache.set(name, t);
     }
@@ -745,7 +752,7 @@ class Book {
    */
   ensureFormat(base: number, code: string): number {
     const path = this.stylesPath();
-    if (!path) throw new SheetOpError("a planilha não tem estilos para guardar o formato");
+    if (!path) throw new SheetOpError(why("files.sheet.why.noStyles"));
     let xml = this.text(path);
     let id = Number(Object.entries(BUILTIN_FORMATS).find(([, c]) => c === code)?.[0] ?? NaN);
     if (Number.isNaN(id)) {
@@ -761,7 +768,7 @@ class Book {
       }
     }
     const block = /<cellXfs\b([^>]*)>([\s\S]*?)<\/cellXfs>/.exec(xml);
-    if (!block) throw new SheetOpError("a planilha não tem estilos de célula");
+    if (!block) throw new SheetOpError(why("files.sheet.why.noCellStyles"));
     const xfs = elements(block[2]!, "xf");
     const from = xfs[base] ?? xfs[0]!;
     if (Number(attr(from.attrs, "numFmtId") ?? 0) === id) {
@@ -885,7 +892,7 @@ function parseSheet(xml: string): SheetM {
   if (empty && (!open || empty.index <= open.index)) {
     return { head: `${xml.slice(0, empty.index)}<sheetData${empty[1]}>`, rows: [], tail: `</sheetData>${xml.slice(empty.index + empty[0].length)}` };
   }
-  if (!open) throw new XlsxReadOnly("unknown", "uma aba não tem as células (sheetData)");
+  if (!open) throw new XlsxReadOnly("unknown", why("files.sheet.why.ro.noSheetData"));
   const start = open.index + open[0].length;
   const end = xml.indexOf("</sheetData>", start);
   const rows: RowM[] = [];

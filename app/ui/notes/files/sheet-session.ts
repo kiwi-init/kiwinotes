@@ -2,12 +2,13 @@
 // gravação sozinha, como a nota (um instante depois da última edição, condicional pela versão). O arquivo gravado é
 // sempre o original mais as operações que valem (`docBytes`): desfazer e gravar devolve o arquivo como estava.
 
-import { t as tNow } from "../../src/i18n.ts";
+import { appLocale, t as tNow } from "../../src/i18n.ts";
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DelimitedError } from "../../../src/shared/sheet/delimited.ts";
 import { type Display, type Grid, SheetHistory, type SheetOp, SheetOpError } from "../../../src/shared/sheet/ops.ts";
 import { moveCell, rebaseOps } from "../../../src/shared/sheet/rebase.ts";
+import { whyText } from "../../../src/shared/sheet/why.ts";
 import { base64Of, bytesOf } from "./csv.ts";
 import type { KiwiPlay, KiwiSheetSource } from "./kiwi-sheet.ts";
 import { docBytes, editBatch, openDoc, replay, type SheetDoc, shownGrid } from "./sheet-doc.ts";
@@ -55,6 +56,13 @@ export interface SheetCell {
 
 /** Os avisos saem na língua da hora em que acontecem (`tNow`): a tela da planilha redesenha com o `useT()`. */
 const LOST = () => tNow("files.sheet.changedOutside");
+
+/** Por que a planilha abre só para leitura, na língua de agora (o motivo vem do motor como chave, T29245). */
+export const readOnlyText = (doc: Pick<SheetDoc, "readOnly">): string | null => doc.readOnly && whyText(appLocale().locale, doc.readOnly);
+
+/** O aviso de uma edição recusada, na língua de agora: o motivo do motor, ou o genérico. */
+export const refusedText = (e: unknown): string =>
+  e instanceof SheetOpError ? tNow("files.sheet.opError", { error: whyText(appLocale().locale, e.why) }) : tNow("files.sheet.editFailed");
 
 /**
  * `bytes` e `version`: o arquivo como o `files.read` o leu; mudam quando ele muda no disco. A leitura que volta depois
@@ -210,7 +218,7 @@ export function useSheetSession(opts: {
         if (e instanceof DelimitedError) {
           history.current.undo();
           dirty.current = true;
-          setNotice(tNow("files.sheet.saveError", { error: e.message }));
+          setNotice(tNow("files.sheet.saveError", { error: whyText(appLocale().locale, e.why) }));
           void show();
           return save();
         }
@@ -292,7 +300,7 @@ export function useSheetSession(opts: {
   );
 
   const readOnly =
-    state.kind === "ready" ? (opts.readOnly ?? state.doc.readOnly ?? (canSave ? null : tNow("files.sheet.cantSave"))) : null;
+    state.kind === "ready" ? (opts.readOnly ?? readOnlyText(state.doc) ?? (canSave ? null : tNow("files.sheet.cantSave"))) : null;
 
   const edit = useCallback(
     (ops: SheetOp[]) => {
@@ -307,7 +315,7 @@ export function useSheetSession(opts: {
           history.current.do(op);
           setNotice(null);
         } catch (e) {
-          setNotice(e instanceof SheetOpError ? tNow("files.sheet.opError", { error: e.message }) : tNow("files.sheet.editFailed"));
+          setNotice(refusedText(e));
           return;
         }
         await show();

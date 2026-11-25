@@ -4,14 +4,22 @@
 // fatos da nota.
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { translate } from "../../src/shared/i18n/index.ts";
 import { fileSize } from "../../src/shared/file-view.ts";
+import { checkOp, SheetOpError } from "../../src/shared/sheet/ops.ts";
+import { why, whyText } from "../../src/shared/sheet/why.ts";
+import { partText, readZip, writeZip } from "../../src/shared/sheet/zip.ts";
 import { setAppLocale } from "../src/i18n.ts";
 import { DocxFormatBar } from "./files/DocxFormatBar.tsx";
 import { CHANGED_OUTSIDE, SAVE_FAILED } from "./files/docxSaver.ts";
 import { modified, typeLabel } from "./files/fileCard.ts";
+import { openDoc } from "./files/sheet-doc.ts";
+import { readOnlyText, refusedText } from "./files/sheet-session.ts";
 import { TableGrid } from "./files/TableGrid.tsx";
 import { findCount } from "./find.ts";
 import { FindBar } from "./FindBar.tsx";
@@ -155,5 +163,33 @@ describe("os visualizadores das Notas em inglês (T29245)", () => {
     expect(fileSize(1024, "en")).toBe("1 KB");
     expect(translate("en", CHANGED_OUTSIDE)).toBe("The file changed outside Kiwi: the new version is open, and your last edit wasn't saved.");
     expect(translate("pt", SAVE_FAILED)).toBe("Não deu para gravar este documento agora. O Kiwi tenta de novo na próxima edição.");
+  });
+
+  test("o motivo da planilha (revisão #30550): a tela traduz, e o agente segue com a frase em português", () => {
+    // Uma aba protegida: a planilha abre só para leitura, e o motivo vem do motor como chave, com o nome da aba.
+    const original = new Uint8Array(readFileSync(join(import.meta.dir, "../../test/fixtures/sheet/estoque.xlsx")));
+    const sheet1 = partText(original, readZip(original).find((p) => p.name === "xl/worksheets/sheet1.xml")!);
+    const locked = sheet1.replace("<autoFilter", '<sheetProtection sheet="1"/><autoFilter');
+    const bytes = writeZip(original, readZip(original), new Map([["xl/worksheets/sheet1.xml", new TextEncoder().encode(locked)]]));
+    const doc = openDoc(bytes, "Projeto X/estoque.xlsx");
+    english();
+    expect(readOnlyText(doc)).toBe("tab Estoque is protected");
+    expect(translate("en", "files.sheet.readOnly", { why: readOnlyText(doc)! })).toBe("Read only: tab Estoque is protected");
+    expect(doc.readOnly && whyText("pt", doc.readOnly)).toBe("a aba Estoque está protegida");
+    // Uma edição recusada: a tela em inglês; o `message`, que vai ao agente, igual ao de antes.
+    let refused: unknown;
+    try {
+      checkOp({ op: "renameSheet", sheet: "Estoque", name: "a/b" }, ["Estoque"]);
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused).toBeInstanceOf(SheetOpError);
+    expect(refusedText(refused)).toBe("Couldn't do that: a tab name can't have \\ / ? * [ ] :.");
+    expect(whyText("en", (refused as SheetOpError).why)).toBe("a tab name can't have \\ / ? * [ ] :");
+    expect((refused as SheetOpError).message).toBe("o nome da aba não pode ter \\ / ? * [ ] :");
+    // O motivo com outro motivo dentro ("apagar linhas"): as duas partes na mesma língua.
+    const comments = why("files.sheet.why.comments", { what: { key: "files.sheet.why.what.deleteRows" } });
+    expect(whyText("en", comments)).toBe("can't delete rows: the tab has comments");
+    expect(new SheetOpError(comments).message).toBe("não dá para apagar linhas: a aba tem comentários");
   });
 });
