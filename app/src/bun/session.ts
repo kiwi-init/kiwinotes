@@ -9,6 +9,7 @@ import path from "node:path";
 import { sidecarLlm } from "../cleanup/index.ts";
 import { CorrectionOffers } from "./learn-dictionary.ts";
 import type { LlmMode } from "../cleanup/types.ts";
+import { followLocale, sendLocale, syncHelper } from "./helper-locale.ts";
 import { type Command, defaultSocketPath, type Event, type LearnAnswer, type LlmStatus, type Permission, type Permissions } from "../shared/ipc.ts";
 import type { AudioInputs } from "../shared/microphone.ts";
 import { GLOBAL_SHORTCUT_IDS } from "../shared/shortcuts.ts";
@@ -209,7 +210,7 @@ export class Session {
     });
     // O helper segue a língua do app (T28192): no `syncAll` de cada conexão e a cada troca.
     this.offLocale?.();
-    this.offLocale = mainLocale.onChange((l) => void this.localeChanged(l));
+    this.offLocale = followLocale(mainLocale, (c) => this.sidecar.send(c));
     this.sidecar.on("stt.status", (e) => {
       this.stt = e.state;
       if (e.state !== "loading") this.download = undefined;
@@ -333,13 +334,16 @@ export class Session {
       console.warn(`[session] couldn't read settings.json (${e instanceof Error ? e.message : String(e)}); using the defaults`);
       return DEFAULT_SETTINGS;
     });
-    await Promise.all([this.dictionaryChanged(terms), this.settingsChanged(settings), this.localeChanged(mainLocale.get())]);
+    await syncHelper({
+      dictionary: () => this.dictionaryChanged(terms),
+      settings: () => this.settingsChanged(settings),
+      locale: () => this.localeChanged(mainLocale.get()),
+    });
   }
 
   /** A língua dos textos do helper na tela (spec #28171). Um helper de antes do T28192 recusa o comando, e fica em português. */
-  async localeChanged(locale: Locale): Promise<void> {
-    const r = await this.sidecar.send({ type: "app.locale", locale }).catch(() => undefined);
-    if (r && !r.ok) console.warn(`[session] app.locale: ${r.error}`);
+  localeChanged(locale: Locale): Promise<void> {
+    return sendLocale((c) => this.sidecar.send(c), locale);
   }
 
   /** O helper vigia os atalhos globais das Configurações (T5349): o ditado, as Notas e as reuniões; null desliga. */
