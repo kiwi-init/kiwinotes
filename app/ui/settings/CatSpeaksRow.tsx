@@ -27,17 +27,20 @@ export function catSpeaksHint(on: boolean, failed: boolean): string {
 export function catVoiceLine(on: boolean, v: CatVoiceStatus): { hint: string; action: "download" | "retry" | "cancel" | "remove" | null } | null {
   const size = voiceSize(v.size);
   const here = v.phase === "ready" || v.phase === "noVoice" || (v.phase === "error" && v.error === "warmup");
-  // Desligado, a linha só aparece com a voz no disco, para poder apagar.
-  if (!on) return here ? { hint: `Baixada (${size}). Desligado, o gato não fala.`, action: "remove" } : null;
+  // Desligado, a linha aparece com a voz no disco, para poder apagar, e enquanto ela baixa ou se prepara (revisão do
+  // T26736): o download que segue em segundo plano fica à vista, com o Cancelar.
+  const off = on ? "" : " O gato está desligado: ele não fala até você ligar.";
+  if (!on && v.phase !== "downloading" && v.phase !== "warming")
+    return here ? { hint: `Baixada (${size}). Desligado, o gato não fala.`, action: "remove" } : null;
   switch (v.phase) {
     case "off":
       return { hint: `Para falar, o gato precisa do modelo de voz (${size}), baixado uma vez, só com o seu clique.`, action: "download" };
     case "downloading": {
       const pct = v.total ? Math.floor(((v.done ?? 0) / v.total) * 100) : 0;
-      return { hint: `Baixando a voz: ${pct}% de ${size}. Até terminar, o gato responde por escrito.`, action: "cancel" };
+      return { hint: `Baixando a voz: ${pct}% de ${size}.${off || " Até terminar, o gato responde por escrito."}`, action: "cancel" };
     }
     case "warming":
-      return { hint: "Preparando a voz neste Mac… Na primeira vez, leva uns 20 segundos.", action: null };
+      return { hint: `Preparando a voz neste Mac… Na primeira vez, leva uns 20 segundos.${off}`, action: null };
     case "ready":
       return { hint: "Pronta. A voz roda neste Mac: o texto e o áudio não saem daqui.", action: "remove" };
     case "noVoice":

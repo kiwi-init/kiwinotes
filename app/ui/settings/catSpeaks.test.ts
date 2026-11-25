@@ -18,9 +18,17 @@ test("o interruptor diz que a voz roda no Mac e que nada sai dele", () => {
   expect(catSpeaksHint(true, true)).toBe("Não deu para salvar. Tente de novo.");
 });
 
-test("desligado, a linha da voz só aparece com a voz no disco, para apagar", () => {
+test("desligado, a linha da voz aparece com a voz no disco, para apagar, e enquanto ela baixa ou se prepara", () => {
   expect(catVoiceLine(false, v({}))).toBeNull();
-  expect(catVoiceLine(false, v({ phase: "downloading", done: 1, total: SIZE }))).toBeNull();
+  // Desligar no meio do download não esconde o download (revisão do T26736): o andamento e o Cancelar ficam.
+  expect(catVoiceLine(false, v({ phase: "downloading", done: SIZE / 4, total: SIZE }))).toEqual({
+    hint: "Baixando a voz: 25% de 2 GB. O gato está desligado: ele não fala até você ligar.",
+    action: "cancel",
+  });
+  expect(catVoiceLine(false, v({ phase: "warming" }))).toEqual({
+    hint: "Preparando a voz neste Mac… Na primeira vez, leva uns 20 segundos. O gato está desligado: ele não fala até você ligar.",
+    action: null,
+  });
   expect(catVoiceLine(false, v({ phase: "error", error: "download" }))).toBeNull();
   for (const s of [v({ phase: "ready" }), v({ phase: "noVoice", voice: false }), v({ phase: "error", error: "warmup" })])
     expect(catVoiceLine(false, s)).toEqual({ hint: "Baixada (2 GB). Desligado, o gato não fala.", action: "remove" });
