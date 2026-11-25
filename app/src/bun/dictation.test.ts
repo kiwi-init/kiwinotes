@@ -13,9 +13,14 @@ import {
   NOTE_FAILED,
   NOTHING_TO_PASTE,
   noteCreated,
+  pillText,
+  type PillMessage,
   SECURE_INPUT_NOTICE,
   TRANSCRIPT_ERROR,
 } from "./dictation.ts";
+
+/** O texto da pílula em português, a língua padrão (T28192). */
+const pt = (m: PillMessage) => pillText("pt", m);
 
 type Listener = (e: EventMessage) => void;
 
@@ -55,7 +60,7 @@ const transcript = (text: string, extra: Partial<Extract<Event, { type: "transcr
   ...extra,
 });
 
-function setup(insert?: Parameters<typeof fakeSidecar>[0], opts: { dryRun?: boolean } = {}) {
+function setup(insert?: Parameters<typeof fakeSidecar>[0], opts: { dryRun?: boolean; locale?: () => "pt" | "en" } = {}) {
   const sidecar = fakeSidecar(insert);
   const added: NewHistoryEntry[] = [];
   const d = new Dictation({
@@ -186,12 +191,24 @@ describe("Dictation", () => {
     expect(added).toHaveLength(2);
   });
 
+  test("T28192: com o app em inglês, a pílula fala inglês, e a troca vale no próximo aviso", async () => {
+    let locale: "pt" | "en" = "en";
+    const { sidecar, d, overlays } = setup(undefined, { dryRun: true, locale: () => locale });
+    sidecar.emit({ type: "hotkey.pasteLast" });
+    await d.idle();
+    expect(overlays().at(-1)).toMatchObject({ state: "error", message: "No dictation to paste yet" });
+    locale = "pt";
+    sidecar.emit({ type: "hotkey.pasteLast" });
+    await d.idle();
+    expect(overlays().at(-1)).toMatchObject({ state: "error", message: "Ainda não há ditado para colar" });
+  });
+
   test("L9 (T5459): sem ditado no Histórico, a pílula avisa e nada é colado", async () => {
     const { sidecar, d, inserted, overlays } = setup(undefined, { dryRun: true });
     sidecar.emit({ type: "hotkey.pasteLast" });
     await d.idle();
     expect(inserted()).toEqual([]);
-    expect(overlays().at(-1)).toMatchObject({ state: "error", message: NOTHING_TO_PASTE });
+    expect(overlays().at(-1)).toMatchObject({ state: "error", message: pt(NOTHING_TO_PASTE) });
   });
 
   test("onDone also fires for an empty transcript and for transcript.error", async () => {
@@ -229,7 +246,7 @@ describe("Dictation", () => {
     const { sidecar, d, overlays, added } = setup(() => ok({ pasted: false, restored: false, reason: "no_text_field" }));
     sidecar.emit(transcript("teste"));
     await d.idle();
-    expect(overlays()).toEqual([{ type: "overlay.state", state: "error", message: NOT_PASTED.no_text_field }]);
+    expect(overlays()).toEqual([{ type: "overlay.state", state: "error", message: pt(NOT_PASTED.no_text_field) }]);
     expect(added).toHaveLength(1);
   });
 
@@ -237,14 +254,14 @@ describe("Dictation", () => {
     const { sidecar, d, overlays } = setup(() => ok({ pasted: true, restored: false, reason: "no_text_field" }));
     sidecar.emit(transcript("teste"));
     await d.idle();
-    expect(overlays()).toEqual([{ type: "overlay.state", state: "done", message: SECURE_INPUT_NOTICE }]);
+    expect(overlays()).toEqual([{ type: "overlay.state", state: "done", message: pt(SECURE_INPUT_NOTICE) }]);
   });
 
   test("secure input: done with the short notice (#224)", async () => {
     const { sidecar, d, overlays } = setup(() => ok({ pasted: true, restored: false, reason: "secure_input" }));
     sidecar.emit(transcript("teste"));
     await d.idle();
-    expect(overlays()).toEqual([{ type: "overlay.state", state: "done", message: SECURE_INPUT_NOTICE }]);
+    expect(overlays()).toEqual([{ type: "overlay.state", state: "done", message: pt(SECURE_INPUT_NOTICE) }]);
   });
 
   test("the mic drops mid-dictation: what it heard is pasted, and the pill says so (T883)", async () => {
@@ -263,7 +280,7 @@ describe("Dictation", () => {
     expect(inserted()).toEqual(["Primeiro ditado.", "O fone desligou no meio."]);
     expect(overlays()).toEqual([
       { type: "overlay.state", state: "done" },
-      { type: "overlay.state", state: "done", message: MIC_LOST_NOTICE },
+      { type: "overlay.state", state: "done", message: pt(MIC_LOST_NOTICE) },
     ]);
     expect(added).toHaveLength(2);
   });
@@ -275,7 +292,7 @@ describe("Dictation", () => {
     sidecar.emit(transcript(""));
     await d.idle();
     expect(inserted()).toEqual([]);
-    expect(overlays()).toEqual([{ type: "overlay.state", state: "error", message: MIC_LOST_EMPTY }]);
+    expect(overlays()).toEqual([{ type: "overlay.state", state: "error", message: pt(MIC_LOST_EMPTY) }]);
   });
 
   test("the chosen mic was not connected: the pill says which one recorded (T3344)", async () => {
@@ -300,8 +317,8 @@ describe("Dictation", () => {
   });
 
   test("the fell-back notice fits the pill (38 letters) with the Mac's mic and the default; the lid is no notice (T3344)", async () => {
-    expect(micFellBackNotice(micShortName({ name: "Microfone (MacBook Pro)", transport: "builtin", systemDefault: false })).length).toBeLessThanOrEqual(38);
-    expect(micFellBackNotice(micShortName({ name: "", transport: null, systemDefault: true }))).toBe("Mic escolhido ausente: usei o padrão");
+    expect(pt(micFellBackNotice(micShortName({ name: "Microfone (MacBook Pro)", transport: "builtin", systemDefault: false }))).length).toBeLessThanOrEqual(38);
+    expect(pt(micFellBackNotice(micShortName({ name: "", transport: null, systemDefault: true })))).toBe("Mic escolhido ausente: usei o padrão");
     expect(micShortName({ name: "Yeti", transport: "usb", systemDefault: false })).toBe("Yeti");
     const { sidecar, d, overlays } = setup();
     // The Mac's mic chosen by UID, lid closed: it's connected, just silent. Settings explain; the pill says nothing.
@@ -318,7 +335,7 @@ describe("Dictation", () => {
     sidecar.emit({ type: "record.stopped", reason: "hotkey", mode: "ptt", durationMs: 4000, samples: 64_000, lost: "no_audio" });
     sidecar.emit(transcript("caiu"));
     await d.idle();
-    expect(overlays()).toEqual([{ type: "overlay.state", state: "done", message: MIC_LOST_NOTICE }]);
+    expect(overlays()).toEqual([{ type: "overlay.state", state: "done", message: pt(MIC_LOST_NOTICE) }]);
   });
 
   test("insert.text failing still saves the dictation and shows an error", async () => {
@@ -361,7 +378,7 @@ describe("Dictation", () => {
     const { sidecar, d, overlays } = setup();
     sidecar.emit({ type: "transcript.error", error: "model_unavailable" });
     await d.idle();
-    expect(overlays()).toEqual([{ type: "overlay.state", state: "error", message: TRANSCRIPT_ERROR.model_unavailable }]);
+    expect(overlays()).toEqual([{ type: "overlay.state", state: "error", message: pt(TRANSCRIPT_ERROR.model_unavailable) }]);
   });
 
   test("dictations go out one at a time, in order", async () => {
@@ -459,7 +476,7 @@ describe("Dictation", () => {
     expect(made).toHaveLength(1);
     // O tom padrão, não o literal do terminal que estava na frente: a nota é texto, não comando.
     expect(made[0]!.text).toBe("Comprar café e açúcar.");
-    expect(overlays().at(-1)).toMatchObject({ state: "done", message: noteCreated("Comprar café") });
+    expect(overlays().at(-1)).toMatchObject({ state: "done", message: pt(noteCreated("Comprar café")) });
     expect(added).toHaveLength(1);
     expect(added[0]!.text).toBe("Comprar café e açúcar.");
     expect(added[0]!.at).toBe(made[0]!.at);
@@ -484,8 +501,8 @@ describe("Dictation", () => {
     // A nota é criada do mesmo jeito: o aviso só troca o que a pílula diz.
     expect(made.map((m) => m.text)).toEqual(["Comprar café.", "Comprar pão."]);
     expect(overlays().filter((o) => o.state === "done")).toEqual([
-      { type: "overlay.state", state: "done", message: micFellBackNotice("do Mac") },
-      { type: "overlay.state", state: "done", message: noteCreated("Comprar café") },
+      { type: "overlay.state", state: "done", message: pt(micFellBackNotice("do Mac")) },
+      { type: "overlay.state", state: "done", message: pt(noteCreated("Comprar café")) },
     ]);
   });
 
@@ -497,7 +514,7 @@ describe("Dictation", () => {
     sidecar.emit(transcript("uma ideia"));
     await d.idle();
     expect(inserted()).toEqual([]);
-    expect(overlays().at(-1)).toMatchObject({ state: "error", message: NOTE_FAILED });
+    expect(overlays().at(-1)).toMatchObject({ state: "error", message: pt(NOTE_FAILED) });
     expect(added.map((e) => e.text)).toEqual(["Uma ideia."]);
   });
 

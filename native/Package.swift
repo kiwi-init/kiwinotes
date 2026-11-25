@@ -3,6 +3,8 @@ import PackageDescription
 
 let package = Package(
     name: "KiwiHelper",
+    // O português é a língua de origem dos textos do helper; o inglês vem do mesmo catálogo (spec #28171, T28192).
+    defaultLocalization: "pt",
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "kiwi-helper", targets: ["kiwi-helper"]),
@@ -21,7 +23,8 @@ let package = Package(
     targets: [
         // Pure logic: IPC framing, hotkey gestures, levels, WAV, the transcript's post-processing.
         // Everything here is covered by `swift test`.
-        .target(name: "KiwiHelperCore"),
+        // Os textos na tela (a pílula, os cartões, as permissões) num catálogo por língua: `HelperLocale`.
+        .target(name: "KiwiHelperCore", resources: [.process("Localizable.xcstrings")]),
         // transcribe.cpp (MIT) for the precise mode's Whisper (T6602, ADR 0003): the release's xcframework, a static
         // libtranscribe with Metal, and its Swift wrapper copied from `bindings/swift` at the same tag (no SwiftPM
         // mirror is published yet).

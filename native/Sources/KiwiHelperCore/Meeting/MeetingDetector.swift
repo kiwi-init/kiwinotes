@@ -288,21 +288,26 @@ public struct MeetingDetector: Sendable {
     }
 }
 
-/// Portuguese text for the meeting panel.
+/// The meeting panel's text, in the app's language (`HelperLocale`).
 public enum MeetingText {
-    public static let suggestTitle = "Gravar esta reunião?"
-    public static let askEndedTitle = "A reunião acabou?"
-    public static let record = "Gravar"
-    public static let notNow = "Agora não"
-    public static let stop = "Parar"
-    public static let keepGoing = "Continuar"
+    public static var suggestTitle: String { HelperLocale.text("meeting.suggestTitle") }
+    public static var askEndedTitle: String { HelperLocale.text("meeting.askEndedTitle") }
+    public static var record: String { HelperLocale.text("meeting.record") }
+    public static var notNow: String { HelperLocale.text("meeting.notNow") }
+    public static var stop: String { HelperLocale.text("meeting.stop") }
+    public static var keepGoing: String { HelperLocale.text("meeting.keepGoing") }
+    /// The recording pill's buttons and its VoiceOver label.
+    public static var resumeMine: String { HelperLocale.text("meeting.resumeMine") }
+    public static var pauseMine: String { HelperLocale.text("meeting.pauseMine") }
+    public static var stopRecording: String { HelperLocale.text("meeting.stopRecording") }
+    public static func recording(_ elapsed: String) -> String { HelperLocale.text("meeting.recordingA11y", elapsed) }
 
     /// "Teams está usando o microfone": the line under "Gravar esta reunião?".
-    public static func from(_ app: MeetingApp) -> String { "\(app.name) está usando o microfone" }
+    public static func from(_ app: MeetingApp) -> String { HelperLocale.text("meeting.from", app.name) }
 
     /// "O Teams soltou o microfone há 2 min".
     public static func released(_ app: MeetingApp, minutes: Int) -> String {
-        "\(app.name) soltou o microfone há \(max(1, minutes)) min"
+        HelperLocale.text("meeting.released", app.name, max(1, minutes))
     }
 
     /// The pill's timer: "0:42", "12:05", "1:02:03".

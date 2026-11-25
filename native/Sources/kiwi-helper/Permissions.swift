@@ -37,16 +37,7 @@ enum Permission: String, CaseIterable {
 
     /// Shown in the app's onboarding next to the "open Settings" button.
     var why: String {
-        switch self {
-        case .systemAudio:
-            return "Para transcrever o áudio da reunião no Mac, só quando você pede. O áudio é apagado depois de transcrito."
-        case .microphone:
-            return "Para ouvir o ditado ou sua voz nas reuniões que você pedir para gravar. O áudio não sai do Mac."
-        case .accessibility:
-            return "Para colar o texto no app em que você está digitando, e para que os atalhos do Kiwi tenham prioridade sobre os dos outros apps."
-        case .inputMonitoring:
-            return "Para perceber os atalhos do Kiwi (o ditado, as reuniões, as notas) em qualquer app. O Kiwi Notes não lê o que você digita."
-        }
+        HelperLocale.text("permission.why.\(rawValue)")
     }
 
     var settingsURL: URL {

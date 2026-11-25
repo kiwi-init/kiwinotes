@@ -7,10 +7,12 @@
 // Os testes usam um `Notices` falso, que só registra (app/src/agent/notice.test.ts).
 
 import type { NoticePermission, Notices } from "../bun/notices.ts";
+import { type Locale, translate } from "../shared/i18n/index.ts";
 
 /** O id de cada notificação: um por cartão. */
 export const NOTICE_PREFIX = "kiwi.doubt.";
-export const NOTICE_TITLE = "O agente espera uma resposta sua";
+/** O título da notificação, na língua do app (T28192). */
+export const noticeTitle = (locale: Locale = "pt") => translate(locale, "notice.agent.title");
 /** Quanto tempo o Kiwi relê a permissão depois do clique em "Ligar as notificações". */
 export const ALLOW_WATCH_MS = 120_000;
 
@@ -38,15 +40,17 @@ export interface WaitingNoticeDeps {
   show: () => void;
   onChange?: (s: NoticeState) => void;
   log?: (m: string) => void;
+  /** A língua do app (T28192): o texto da notificação sai nela. Padrão: português. */
+  locale?: () => Locale;
   pollMs?: number;
   allowWatchMs?: number;
 }
 
 /** De onde vem a dúvida, para o corpo da notificação: a nota sem o `.md`, ou o texto do pedido. */
-export function noticeBody(card: NoticeCard): string {
+export function noticeBody(card: NoticeCard, locale: Locale = "pt"): string {
   const open = card.items.find((i) => i.answer === undefined) ?? card.items[0];
   const note = open?.path ? open.path.replace(/\.md$/i, "") : "";
-  return note ? `Dúvida em ${note}. Clique para responder.` : "Dúvida no texto do seu pedido. Clique para responder.";
+  return note ? translate(locale, "notice.agent.bodyNote", { note }) : translate(locale, "notice.agent.bodyRequest");
 }
 
 export class WaitingNotice {
@@ -138,7 +142,8 @@ export class WaitingNotice {
     if (this.d.notices.permission() !== "allowed" || !(await this.d.enabled())) return;
     const card = this.d.card();
     if (!card || card.id !== id || this.openCard !== id || this.d.inView()) return;
-    this.d.notices.post(NOTICE_PREFIX + id, NOTICE_TITLE, noticeBody(card));
+    const locale = this.d.locale?.() ?? "pt";
+    this.d.notices.post(NOTICE_PREFIX + id, noticeTitle(locale), noticeBody(card, locale));
     this.shown = this.posted = id;
     this.d.log?.("notice: posted (the main window is out of view)");
   }

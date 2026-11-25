@@ -31,6 +31,8 @@ import { HomeChanges } from "../bun/home.ts";
 import { remoteImageUrl } from "../notes/remote-image.ts";
 import { type AudioInput, type AudioInputs, type MicInUse, type MicrophoneChoice, microphoneUid } from "../shared/microphone.ts";
 import { envSystemLanguages } from "../bun/system-language.ts";
+import { mainLocale } from "../bun/locale.ts";
+import { appLocale } from "../shared/i18n/index.ts";
 
 /** A imagem de fora do headless (um quadrado azul de 16 px): o roteiro testa o caminho do clique sem rede. */
 const HEADLESS_IMAGE = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGOw6blDEmIY1TCqYfhqAACorqQQpPjnMgAAAABJRU5ErkJggg==", "base64");
@@ -255,7 +257,11 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     },
     // O headless não lê o Mac: o Automático segue o KIWI_SYSTEM_LANG (`en-US`), ou fica em português.
     systemLanguages: () => envSystemLanguages() ?? [],
-    localeChanged: (locale) => event("app.localeChanged", locale),
+    localeChanged: (locale) => {
+      // O main também (T28192): o rótulo do menu e o helper seguem a língua.
+      mainLocale.set(locale.locale);
+      event("app.localeChanged", locale);
+    },
     projectsChangedIn: (folderId) => event("projects.changed", { folderId }),
     dictationNotes: stores.dictationNotes,
     // Headless nunca encosta no clipboard da pessoa: o texto vai só para o log, como o dryRun do insert.
@@ -314,6 +320,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.agent.attachNotice({
       notices: fakeNotices({ permission: fakeNoticePermission, file: path.join(data, "fake-notices.jsonl") }),
       inView: () => fakeView,
+      locale: () => mainLocale.get(),
       show: () => {
         fakeShown.push(Date.now());
         fakeView = true;
@@ -415,6 +422,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       log: (m) => console.log(m),
     }));
   }
+  // A língua do main ao abrir, dos Ajustes deste data (T28192), antes do helper: ele a recebe ao conectar.
+  mainLocale.set(appLocale((await stores.settings.load().catch(() => null))?.language ?? "auto", envSystemLanguages() ?? []).locale);
   if (session) {
     offs.push(session.onStatus((s) => event("status", s)));
     offs.push(session.sidecar.on("*", (e) => (e.type === "audio.level" ? undefined : event("helper.event", e))));
@@ -430,7 +439,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     capabilities: UI_CAPABILITIES,
     helper: !session ? "off" : session.sidecar.supervision().state === "failed" ? "failed" : session.sidecar.ready ? "ready" : "starting",
     helperPath: session ? (process.env.KIWI_HELPER ?? null) : null,
-    menuLabel: session ? statusLabel(session.status()) : "Helper desligado",
+    menuLabel: session ? statusLabel(session.status(), mainLocale.get()) : mainLocale.t("status.helperOff"),
     session: session?.status() ?? null,
   });
 

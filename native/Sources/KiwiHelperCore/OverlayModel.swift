@@ -127,18 +127,25 @@ public enum OverlayLayout {
     }
 }
 
-/// Short Portuguese text for the `record.error` codes, shown in the pill.
+/// Short text for the `record.error` codes, shown in the pill, in the app's language (`HelperLocale`).
 public enum OverlayText {
     public static func error(_ code: String) -> String {
         switch code {
-        case "no_input_device": return "Nenhum microfone encontrado"
-        case "microphone_denied", "not_authorized": return "Sem permissão do microfone"
-        case "microphone_undetermined": return "Permita o microfone e tente de novo"
-        case "device_changed": return "O microfone mudou"
-        case "no_audio": return "Sem áudio do microfone"
-        case "mic_busy": return "Mic ocupado por outro app"
-        case "engine_start_failed", "audio_converter": return "Não deu para usar o microfone"
-        default: return "Algo deu errado"
+        case "no_input_device": return HelperLocale.text("overlay.error.noInput")
+        case "microphone_denied", "not_authorized": return HelperLocale.text("overlay.error.micDenied")
+        case "microphone_undetermined": return HelperLocale.text("overlay.error.micUndetermined")
+        case "device_changed": return HelperLocale.text("overlay.error.deviceChanged")
+        case "no_audio": return HelperLocale.text("overlay.error.noAudio")
+        case "mic_busy": return HelperLocale.text("overlay.error.micBusy")
+        case "engine_start_failed", "audio_converter": return HelperLocale.text("overlay.error.micFailed")
+        default: return generic
         }
     }
+
+    /// "Algo deu errado": the error without a known code.
+    public static var generic: String { HelperLocale.text("overlay.error.generic") }
+
+    /// The dictation pill's two buttons, for VoiceOver.
+    public static var cancel: String { HelperLocale.text("overlay.cancel") }
+    public static var finish: String { HelperLocale.text("overlay.finish") }
 }

@@ -154,6 +154,8 @@ export type Command =
   | { type: "record.stop" }
   /** `message` vale no `error` e no `done` (secure input, #224): com mensagem, o `done` fica 2,5 s em vez de 0,7 s. */
   | { type: "overlay.state"; state: OverlayState; message?: string }
+  /** A língua do app (spec #28171, T28192): os textos que o helper põe na tela (pílula, cartões) saem nela. */
+  | { type: "app.locale"; locale: "pt" | "en" }
   /**
    * O gato no overlay (spec #9810), numa janela do helper como a pílula. `load` prepara a página do gato (os arquivos
    * do app em `dir`), pronta e pausada; `show` mostra no centro da tela do app da frente, entrando em `fadeMs` (a partir
@@ -268,6 +270,7 @@ export interface CommandResults {
   "record.start": Record<string, never>;
   "record.stop": Record<string, never>;
   "overlay.state": Record<string, never>;
+  "app.locale": Record<string, never>;
   "catOverlay.load": Record<string, never>;
   "catOverlay.show": Record<string, never>;
   "catOverlay.state": Record<string, never>;
@@ -568,6 +571,7 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "record.start",
   "record.stop",
   "overlay.state",
+  "app.locale",
   "catOverlay.load",
   "catOverlay.show",
   "catOverlay.state",

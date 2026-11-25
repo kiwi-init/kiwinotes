@@ -15,7 +15,7 @@ public enum MicBusy {
 
     /// The pill's line (ADR 0005: up to 38 characters).
     public static func message(app: String) -> String {
-        let text = "Mic ocupado por \(app)"
+        let text = HelperLocale.text("overlay.error.micBusyBy", app)
         return text.count <= 38 ? text : String(text.prefix(37)) + "…"
     }
 }

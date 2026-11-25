@@ -26,6 +26,8 @@ import { MeetingNoteSession } from "./meeting-notes.ts";
 import { PreciseDictation } from "./precise-dictation.ts";
 import { RecoveryError } from "../store/recording-recovery.ts";
 import { stores } from "./stores.ts";
+import { mainLocale } from "./locale.ts";
+import type { Locale } from "../shared/i18n/index.ts";
 
 /** O helper que vai dentro do .app (o `copy` do electrobun.config.ts), ou `KIWI_HELPER`. */
 export function helperPath(viewsFolder: string): string {
@@ -122,6 +124,8 @@ export class Session {
   /** L26: a correção depois de colar vira pergunta no cartão do helper. */
   private readonly offers = new CorrectionOffers(stores.dictionary, (c) => this.sidecar.send(c), (terms) => this.dictionaryChanged(terms));
 
+  private offLocale?: () => void;
+
   constructor(viewsFolder: string) {
     const helper = helperPath(viewsFolder);
     if (!existsSync(helper)) console.warn(`[session] no helper at ${helper}: build it with \`swift build\` in native/`);
@@ -136,7 +140,7 @@ export class Session {
     const llm = sidecarLlm({ status: () => this.sidecar.ready?.llm, request: (c, signal) => this.sidecar.send(c, signal) });
     // Com KIWI_DEBUG=1 nada é colado nem vai para o clipboard (testes de agente, #490).
     const dryRun = process.env.KIWI_DEBUG === "1";
-    this.dictation = new Dictation({ sidecar: this.sidecar, history: stores.history, recovery:stores.recoveries, notes: stores.dictationNotes, llm, llmMode, dryRun });
+    this.dictation = new Dictation({ sidecar: this.sidecar, history: stores.history, recovery:stores.recoveries, notes: stores.dictationNotes, llm, llmMode, dryRun, locale: () => mainLocale.get() });
     // Com KIWI_DEBUG=1 (agentes), nada é pedido sozinho: nenhum diálogo do macOS abre (#537, #551).
     // Nem o reset do clique no menu (#666).
     this.meetingNotes = new MeetingNoteSession(this.sidecar, stores.meetingNotes);
@@ -203,6 +207,9 @@ export class Session {
       this.emitStatus();
       void this.syncAll();
     });
+    // O helper segue a língua do app (T28192): no `syncAll` de cada conexão e a cada troca.
+    this.offLocale?.();
+    this.offLocale = mainLocale.onChange((l) => void this.localeChanged(l));
     this.sidecar.on("stt.status", (e) => {
       this.stt = e.state;
       if (e.state !== "loading") this.download = undefined;
@@ -252,6 +259,7 @@ export class Session {
     this.dictation.detach();
     this.permissions.detach();
     stores.recoveries.stop();
+    this.offLocale?.();
     return Promise.all([this.sidecar.stop(),this.meetingNotes.detach()]).then(()=>{});
   }
 
@@ -325,7 +333,13 @@ export class Session {
       console.warn(`[session] couldn't read settings.json (${e instanceof Error ? e.message : String(e)}); using the defaults`);
       return DEFAULT_SETTINGS;
     });
-    await Promise.all([this.dictionaryChanged(terms), this.settingsChanged(settings)]);
+    await Promise.all([this.dictionaryChanged(terms), this.settingsChanged(settings), this.localeChanged(mainLocale.get())]);
+  }
+
+  /** A língua dos textos do helper na tela (spec #28171). Um helper de antes do T28192 recusa o comando, e fica em português. */
+  async localeChanged(locale: Locale): Promise<void> {
+    const r = await this.sidecar.send({ type: "app.locale", locale }).catch(() => undefined);
+    if (r && !r.ok) console.warn(`[session] app.locale: ${r.error}`);
   }
 
   /** O helper vigia os atalhos globais das Configurações (T5349): o ditado, as Notas e as reuniões; null desliga. */

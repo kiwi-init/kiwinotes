@@ -46,6 +46,7 @@ import { CatVoicePreview, createCatVoicePreview } from "./cat-voice-preview.ts";
 import { saidaHelper } from "./speech-output.ts";
 import { hubFrame, type IntroLayout, introWindow, parseHubFrame, type Rect } from "../shared/intro-layout.ts";
 import { systemLanguages } from "./system-language.ts";
+import { mainLocale } from "./locale.ts";
 
 export type WindowName = UiWindow;
 
@@ -99,10 +100,10 @@ const linkOpener = createLinkOpener({
     if (process.env.KIWI_DEBUG === "1") return false;
     const { response } = await Utils.showMessageBox({
       type: "question",
-      title: "Abrir o link?",
-      message: "Abrir este link no navegador?",
+      title: mainLocale.t("dialog.link.title"),
+      message: mainLocale.t("dialog.link.message"),
       detail: url,
-      buttons: ["Abrir", "Cancelar"],
+      buttons: [mainLocale.t("dialog.link.open"), mainLocale.t("dialog.link.cancel")],
       defaultId: 1,
       cancelId: 1,
     });
@@ -187,6 +188,9 @@ export function startCatVoiceOutput(sidecar: Sidecar): void {
     },
   };
 }
+// O motivo do Sobre sem atualizador (um build de dev). Vai ao log e ao agente; a tela não mostra.
+const UPDATER_OFF = "o atualizador ainda não subiu"; // i18n-ok: diagnóstico
+
 const capabilities = uiCapabilities({
   introDone: () => {
     for (const fn of introDoneListeners) fn();
@@ -213,6 +217,8 @@ const capabilities = uiCapabilities({
   // O idioma do app (spec #28171): a língua do macOS para o Automático, e a troca vai a todas as janelas.
   systemLanguages,
   localeChanged: (locale) => {
+    // O main também (T28192): o menu, a bandeja, as notificações e o helper seguem a língua.
+    mainLocale.set(locale.locale);
     for (const rpc of rpcs.values()) rpc.send.event({ name: "app.localeChanged", payload: locale });
   },
   // Os projetos (spec #9847): a barra lateral das Notas relê quando mudam por outro lugar.
@@ -348,9 +354,9 @@ const capabilities = uiCapabilities({
   },
   about: {
     info: () => about?.info() ?? { version: "dev", channel: "dev", releaseUrl: null },
-    view: () => about?.view() ?? { state: "off", reason: "o atualizador ainda não subiu", lastCheck: null },
-    check: () => about?.check() ?? Promise.resolve({ state: "off", reason: "o atualizador ainda não subiu", lastCheck: null }),
-    apply: () => about?.apply() ?? Promise.resolve({ state: "off", reason: "o atualizador ainda não subiu", lastCheck: null }),
+    view: () => about?.view() ?? { state: "off", reason: UPDATER_OFF, lastCheck: null },
+    check: () => about?.check() ?? Promise.resolve({ state: "off", reason: UPDATER_OFF, lastCheck: null }),
+    apply: () => about?.apply() ?? Promise.resolve({ state: "off", reason: UPDATER_OFF, lastCheck: null }),
   },
 });
 // As ferramentas do agente (spec #7496) leem pelas mesmas capacidades das janelas, só as de leitura; e escrevem (spec

@@ -320,7 +320,8 @@ public struct PhoneticVocabularyMatcher: Sendable {
 
     /// Short Portuguese and English words that tie others together: never part of a term they aren't in (T711).
     private static let connectives: Set<String> = [
-        "a", "o", "as", "os", "e", "é", "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
+        "a", "o", "as", "os", "e", "é", // i18n-ok: palavras do ditado, não da tela
+        "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
         "um", "uma", "pra", "pro", "por", "com", "que", "se", "ao",
         "the", "an", "and", "of", "to", "in", "on", "at", "for", "or", "is",
     ]
