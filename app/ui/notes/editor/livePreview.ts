@@ -12,6 +12,7 @@ import { tagsInLine } from "../../../src/shared/tags.ts";
 import { parseLinks } from "../links.ts";
 import { footnoteJump, footnoteLabel, footnotesOf, superscript } from "./footnotes.ts";
 import { type CellMove, cellAt, cellDisplay, cellOf, cellRange, moveCell, parseTable, setCell, TABLE_ACTIONS, type TableAction, tableAction } from "./table.ts";
+import { t as tx } from "../../src/i18n.ts";
 
 // ---------------------------------------------------------------- links
 
@@ -340,7 +341,7 @@ export function inlineDecorations(state: EditorState, focused: boolean, ranges: 
         const status = link.target ? resolver.status(link.target) : "ok";
         const cls = `cm-wikilink${status === "missing" ? " cm-wikilink-missing" : ""}`;
         const destination = link.target + (link.heading ? `#${link.heading}` : "");
-        const attributes = { "data-target": destination, title: status === "missing" ? `${link.target} (ainda não existe)` : destination };
+        const attributes = { "data-target": destination, title: status === "missing" ? tx("editor.linkMissing", { target: link.target }) : destination };
         if (near(a, b)) {
           out.push(Decoration.mark({ class: `${cls} cm-wikilink-raw`, attributes }).range(a, b));
           continue;
@@ -609,7 +610,7 @@ class TableWidget extends WidgetType {
         const input = document.createElement("input");
         input.className = "cm-md-table-input";
         input.value = shown;
-        input.setAttribute("aria-label", row === 0 ? `Cabeçalho, coluna ${col + 1}` : `Linha ${row - 1}, coluna ${col + 1}`);
+        input.setAttribute("aria-label", row === 0 ? tx("editor.table.headerCell", { col: col + 1 }) : tx("editor.table.cell", { row: row - 1, col: col + 1 }));
         const fit = () => { input.size = Math.max(4, [...input.value].length + 1); };
         fit();
         input.addEventListener("input", fit);

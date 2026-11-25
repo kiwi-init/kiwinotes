@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync }
 import path from "node:path";
 
 import { tempDir } from "../test/tmp.ts";
-import { fixedTexts, MIGRATED, MIGRATED_MAIN, mainFixedTexts, SWIFT_DIRS, swiftFixedTexts } from "./i18n-check.ts";
+import { fixedTexts, MIGRATED, MIGRATED_EDITOR, MIGRATED_MAIN, mainFixedTexts, SWIFT_DIRS, swiftFixedTexts } from "./i18n-check.ts";
 
 test("acha o texto entre as tags, os atributos visíveis e as opções; ignora o t(), o código e o sem letra (T28190)", () => {
   const src = `
@@ -88,4 +88,11 @@ test("uma tela migrada com texto fixo faz o check sair 1, e sem ele sai 0 (T2829
   expect(out.exitCode).toBe(1);
   expect(out.stderr.toString()).toContain(`${MIGRATED[0]}:`);
   expect(out.stderr.toString()).toContain("Texto solto");
+});
+
+test("o editor das Notas não tem texto fixo, e a chave do catálogo não conta como texto (T29842)", () => {
+  const root = path.resolve(import.meta.dir, "..");
+  for (const f of MIGRATED_EDITOR) expect({ f, texts: mainFixedTexts(f, readFileSync(path.join(root, f), "utf8")) }).toEqual({ f, texts: [] });
+  const src = 'const a = { label: "editor.menu.cut" };\nconst b = { label: "Recortar" };\nconst c = { label: "editor.naoExiste" };';
+  expect(mainFixedTexts("x.ts", src).map((t) => t.text)).toEqual(["Recortar", "editor.naoExiste"]);
 });

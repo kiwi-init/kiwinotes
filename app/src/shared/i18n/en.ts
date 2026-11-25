@@ -3,6 +3,7 @@
 
 import { enCatOverlay } from "./catoverlay.en.ts";
 import { enCommon } from "./common.en.ts";
+import { enEditor } from "./editor.en.ts";
 import type { Catalog, Entry } from "./index.ts";
 import { enMeetingsSettings } from "./meetings-settings.en.ts";
 import { enNotes } from "./notes.en.ts";
@@ -109,6 +110,7 @@ export const EN_PARTS = {
   base: enBase,
   common: enCommon,
   notes: enNotes,
+  editor: enEditor,
   settings: enSettings,
   meetingsSettings: enMeetingsSettings,
   catOverlay: enCatOverlay,
@@ -121,4 +123,6 @@ export const en: Catalog = {
   ...enSettings,
   ...enMeetingsSettings,
   ...enCatOverlay,
+  // O editor das Notas (T29842): `editor.en.ts`.
+  ...enEditor,
 };

@@ -2,6 +2,8 @@
 // tipo pelo menu. Sem DOM: o desenho fica em `renderedWidget.tsx`, e o ícone de cada tipo em `calloutIcons.tsx`. Referência de comportamento: Obsidian e SilverBullet
 // `codemirror/syntax/admonition.ts` (MIT), só como ideia.
 
+import { localized } from "../../src/i18n.ts";
+
 export type CalloutTone = "accent" | "danger" | "neutral";
 
 export interface CalloutKind {
@@ -12,19 +14,19 @@ export interface CalloutKind {
 }
 
 export const CALLOUT_KINDS: readonly CalloutKind[] = [
-  { id: "note", title: "Nota", tone: "accent" },
-  { id: "abstract", title: "Resumo", tone: "accent" },
-  { id: "info", title: "Info", tone: "accent" },
-  { id: "todo", title: "A fazer", tone: "accent" },
-  { id: "tip", title: "Dica", tone: "accent" },
-  { id: "success", title: "Sucesso", tone: "accent" },
-  { id: "question", title: "Pergunta", tone: "neutral" },
-  { id: "warning", title: "Atenção", tone: "danger" },
-  { id: "failure", title: "Falha", tone: "danger" },
-  { id: "danger", title: "Perigo", tone: "danger" },
-  { id: "bug", title: "Bug", tone: "danger" },
-  { id: "example", title: "Exemplo", tone: "neutral" },
-  { id: "quote", title: "Citação", tone: "neutral" },
+  localized({ id: "note", tone: "accent" }, { title: "editor.callout.note" }),
+  localized({ id: "abstract", tone: "accent" }, { title: "editor.callout.abstract" }),
+  localized({ id: "info", tone: "accent" }, { title: "editor.callout.info" }),
+  localized({ id: "todo", tone: "accent" }, { title: "editor.callout.todo" }),
+  localized({ id: "tip", tone: "accent" }, { title: "editor.callout.tip" }),
+  localized({ id: "success", tone: "accent" }, { title: "editor.callout.success" }),
+  localized({ id: "question", tone: "neutral" }, { title: "editor.callout.question" }),
+  localized({ id: "warning", tone: "danger" }, { title: "editor.callout.warning" }),
+  localized({ id: "failure", tone: "danger" }, { title: "editor.callout.failure" }),
+  localized({ id: "danger", tone: "danger" }, { title: "editor.callout.danger" }),
+  localized({ id: "bug", tone: "danger" }, { title: "editor.callout.bug" }),
+  localized({ id: "example", tone: "neutral" }, { title: "editor.callout.example" }),
+  localized({ id: "quote", tone: "neutral" }, { title: "editor.callout.quote" }),
 ];
 
 /** Os outros nomes que o Obsidian aceita, no tipo deles. */

@@ -3,6 +3,7 @@
 // quebram o `i18n.test.ts`: no espalhar, a última ganharia calada.
 import { ptCatOverlay } from "./catoverlay.pt.ts";
 import { ptCommon } from "./common.pt.ts";
+import { ptEditor } from "./editor.pt.ts";
 import { ptMeetingsSettings } from "./meetings-settings.pt.ts";
 import { ptNotes } from "./notes.pt.ts";
 import { ptSettings } from "./settings.pt.ts";
@@ -114,6 +115,7 @@ export const PT_PARTS = {
   base: ptBase,
   common: ptCommon,
   notes: ptNotes,
+  editor: ptEditor,
   settings: ptSettings,
   meetingsSettings: ptMeetingsSettings,
   catOverlay: ptCatOverlay,
@@ -126,4 +128,6 @@ export const pt = {
   ...ptSettings,
   ...ptMeetingsSettings,
   ...ptCatOverlay,
+  // O editor das Notas (T29842): `editor.pt.ts`.
+  ...ptEditor,
 } as const;

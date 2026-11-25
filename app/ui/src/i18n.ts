@@ -59,6 +59,18 @@ export const appLocale = (): AppLocale => current;
 /** O texto na língua de agora. Numa tela, prefira o `useT()`, que redesenha quando a língua muda. */
 export const t = (key: TextKey, params?: Params): string => translate(current.locale, key, params);
 
+/**
+ * Os textos de uma lista feita uma vez só, no carregamento (os menus do editor, T29842): cada campo em `keys` vira um
+ * getter que lê a língua de agora. O mesmo objeto sai em português ou em inglês, conforme a língua de quando é lido.
+ * Uma função no lugar da chave monta o texto (um parâmetro).
+ */
+export function localized<const T extends object, K extends string>(base: T, keys: { readonly [P in K]: TextKey | (() => string) }): T & { readonly [P in K]: string } {
+  for (const [field, key] of Object.entries(keys) as [string, TextKey | (() => string)][]) {
+    Object.defineProperty(base, field, { enumerable: true, configurable: true, get: typeof key === "function" ? key : () => t(key) });
+  }
+  return base as T & { readonly [P in K]: string };
+}
+
 const subscribe = (fn: () => void) => {
   listeners.add(fn);
   return () => void listeners.delete(fn);

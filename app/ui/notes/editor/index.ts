@@ -41,6 +41,8 @@ import { spellingAttributes, disableSpellcheck, SPELLING_EXCLUDED } from "./spel
 import { clearInline, insertLink, mapLines, setHeading, toggleInline, toggleList, toggleTask } from "./format.ts";
 import { cursorAfterTitle } from "./titleHeading.ts";
 import { kiwiWriting, kiwiWritingExtension } from "./kiwi-writing.ts";
+import { localized, t as tx } from "../../src/i18n.ts";
+import type { TextKey } from "../../../src/shared/i18n/index.ts";
 
 export interface LinkTarget {
   /** O título da nota (o que aparece na lista). */
@@ -418,7 +420,7 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     // O colar-link é o nosso (o `paste` abaixo): o do lang-markdown não escapa "(" nem ")" do endereço nem "[" do texto.
     markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax, highlightSyntax], addKeymap: true, pasteURLAsLink: false }),
     syntaxHighlighting(highlight),
-    searchAndFold,
+    searchAndFold(),
     searchablePreviews([
     // Os blocos fora do cursor, desenhados pela lib do Channels (T2983); antes do resto, para cobrir o preview de linha.
     renderedPreview(links, opts),
@@ -446,7 +448,7 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
     kiwiWritingExtension(),
     EditorView.lineWrapping,
-    placeholder("Escreva, ou segure Fn e dite"),
+    placeholder(tx("editor.placeholder")),
     theme,
     EditorView.updateListener.of((u) => {
       if (u.docChanged) opts.onChange(u.state.doc.toString(), u.transactions.every((tr) => !tr.docChanged || tr.annotation(kiwiWriting) === true));
@@ -558,7 +560,7 @@ export function slashCompletion(opts: Pick<EditorOptions, "onSlashTemplate">) {
       label: it.label,
       knIcon: it.icon,
       detail: it.detail,
-      section: !trig.typed && Object.keys(usage).length ? (usage[it.id] ? { name: "Mais usados", rank: 0 } : { name: "Outros comandos", rank: 1 }) : undefined,
+      section: !trig.typed && Object.keys(usage).length ? (usage[it.id] ? { name: tx("editor.slash.mostUsed"), rank: 0 } : { name: tx("editor.slash.others"), rank: 1 }) : undefined,
       // A ordem do slash.ts, não a do filtro do CodeMirror.
       boost: 100 - i,
       apply: (view: EditorView, _c: Completion, a: number, b: number) => {
@@ -622,31 +624,34 @@ const run = (make: (s: EditorState) => TransactionSpec | null) => (view: EditorV
  * O ⌘K só vira link com texto selecionado; sem seleção, a tecla segue para a paleta das Notas.
  */
 export const FORMAT_KEYS: { key: string; label: string; run: (view: EditorView) => boolean }[] = [
-  { key: "Mod-b", label: "Negrito", run: run((s) => toggleInline(s, "bold")) },
-  { key: "Mod-i", label: "Itálico", run: run((s) => toggleInline(s, "italic")) },
-  { key: "Shift-Mod-x", label: "Tachado", run: run((s) => toggleInline(s, "strike")) },
-  { key: "Shift-Mod-h", label: "Realce", run: run((s) => toggleInline(s, "highlight")) },
-  { key: "Mod-e", label: "Código", run: run((s) => toggleInline(s, "code")) },
-  { key: "Mod-/", label: "Comentário", run: run((s) => toggleInline(s, "comment")) },
-  { key: "Mod-k", label: "Link", run: run((s) => (s.selection.main.empty ? null : insertLink(s))) },
-  { key: "Mod-\\", label: "Limpar formatação", run: run(clearInline) },
-  ...[1, 2, 3, 4, 5, 6].map((level) => ({ key: `Mod-${level}`, label: `Título ${level}`, run: run((s) => mapLines(s, (ls) => ls.map((l) => setHeading(l, level)))) })),
-  { key: "Mod-0", label: "Corpo", run: run((s) => mapLines(s, (ls) => ls.map((l) => setHeading(l, 0)))) },
-  { key: "Shift-Mod-8", label: "Lista", run: run((s) => mapLines(s, (ls) => toggleList(ls, "bullet"))) },
-  { key: "Shift-Mod-7", label: "Lista numerada", run: run((s) => mapLines(s, (ls) => toggleList(ls, "numbered"))) },
-  { key: "Shift-Mod-9", label: "Lista de tarefas", run: run((s) => mapLines(s, (ls) => toggleList(ls, "task"))) },
-  { key: "Shift-Mod-.", label: "Citação", run: run((s) => mapLines(s, (ls) => toggleList(ls, "quote"))) },
-  { key: "Mod-l", label: "Marcar tarefa", run: run((s) => mapLines(s, (ls) => ls.map((l) => (l.trim() ? toggleTask(l) : l)))) },
+  localized({ key: "Mod-b", run: run((s) => toggleInline(s, "bold")) }, { label: "editor.fmt.bold" }),
+  localized({ key: "Mod-i", run: run((s) => toggleInline(s, "italic")) }, { label: "editor.fmt.italic" }),
+  localized({ key: "Shift-Mod-x", run: run((s) => toggleInline(s, "strike")) }, { label: "editor.fmt.strike" }),
+  localized({ key: "Shift-Mod-h", run: run((s) => toggleInline(s, "highlight")) }, { label: "editor.fmt.highlight" }),
+  localized({ key: "Mod-e", run: run((s) => toggleInline(s, "code")) }, { label: "editor.fmt.code" }),
+  localized({ key: "Mod-/", run: run((s) => toggleInline(s, "comment")) }, { label: "editor.fmt.comment" }),
+  localized({ key: "Mod-k", run: run((s) => (s.selection.main.empty ? null : insertLink(s))) }, { label: "editor.fmt.link" }),
+  localized({ key: "Mod-\\", run: run(clearInline) }, { label: "editor.fmt.clear" }),
+  ...[1, 2, 3, 4, 5, 6].map((level) => (localized({ key: `Mod-${level}`, run: run((s) => mapLines(s, (ls) => ls.map((l) => setHeading(l, level)))) }, { label: () => tx("editor.fmt.heading", { n: level }) }))),
+  localized({ key: "Mod-0", run: run((s) => mapLines(s, (ls) => ls.map((l) => setHeading(l, 0)))) }, { label: "editor.fmt.body" }),
+  localized({ key: "Shift-Mod-8", run: run((s) => mapLines(s, (ls) => toggleList(ls, "bullet"))) }, { label: "editor.fmt.list" }),
+  localized({ key: "Shift-Mod-7", run: run((s) => mapLines(s, (ls) => toggleList(ls, "numbered"))) }, { label: "editor.fmt.numbered" }),
+  localized({ key: "Shift-Mod-9", run: run((s) => mapLines(s, (ls) => toggleList(ls, "task"))) }, { label: "editor.fmt.tasks" }),
+  localized({ key: "Shift-Mod-.", run: run((s) => mapLines(s, (ls) => toggleList(ls, "quote"))) }, { label: "editor.fmt.quote" }),
+  localized({ key: "Mod-l", run: run((s) => mapLines(s, (ls) => ls.map((l) => (l.trim() ? toggleTask(l) : l)))) }, { label: "editor.fmt.toggleTask" }),
 ];
 
+/** O nome de cada botão da barra, o mesmo do atalho (`FORMAT_KEYS`). */
+const FMT_KEY = { bold: "editor.fmt.bold", italic: "editor.fmt.italic", strike: "editor.fmt.strike", highlight: "editor.fmt.highlight", code: "editor.fmt.code", link: "editor.fmt.link" } as const satisfies Record<string, TextKey>;
+
 const FORMAT_BUTTONS: { action: FormatAction; label: string; title: string }[] = [
-  { action: "bold", label: "B", title: "Negrito (⌘B)" },
-  { action: "italic", label: "I", title: "Itálico (⌘I)" },
-  { action: "strike", label: "S", title: "Tachado (⇧⌘X)" },
-  { action: "highlight", label: "==", title: "Realce (⇧⌘H)" },
-  { action: "code", label: "</>", title: "Código (⌘E)" },
-  { action: "link", label: "Link", title: "Link (⌘K)" },
-  { action: "heading", label: "H", title: "Cabeçalho" },
+  localized({ action: "bold", label: "B" }, { title: () => `${tx(FMT_KEY.bold)} (⌘B)` }), // i18n-ok: a letra do botão, a mesma nas duas línguas
+  localized({ action: "italic", label: "I" }, { title: () => `${tx(FMT_KEY.italic)} (⌘I)` }), // i18n-ok: a letra do botão, a mesma nas duas línguas
+  localized({ action: "strike", label: "S" }, { title: () => `${tx(FMT_KEY.strike)} (⇧⌘X)` }), // i18n-ok: a letra do botão, a mesma nas duas línguas
+  localized({ action: "highlight", label: "==" }, { title: () => `${tx(FMT_KEY.highlight)} (⇧⌘H)` }),
+  localized({ action: "code", label: "</>" }, { title: () => `${tx(FMT_KEY.code)} (⌘E)` }), // i18n-ok: a letra do botão, a mesma nas duas línguas
+  localized({ action: "link", label: "Link" }, { title: () => `${tx(FMT_KEY.link)} (⌘K)` }), // i18n-ok: a letra do botão, a mesma nas duas línguas
+  localized({ action: "heading", label: "H" }, { title: "editor.fmt.headingButton" }), // i18n-ok: a letra do botão
 ];
 
 function formatTooltip(state: EditorState): Tooltip | null {
@@ -664,7 +669,7 @@ function formatTooltip(state: EditorState): Tooltip | null {
       const dom = document.createElement("div");
       dom.className = "kn-fmt";
       dom.setAttribute("role", "toolbar");
-      dom.setAttribute("aria-label", "Formatação");
+      dom.setAttribute("aria-label", tx("editor.fmt.toolbar"));
       for (const b of FORMAT_BUTTONS) {
         const btn = document.createElement("button");
         btn.type = "button";

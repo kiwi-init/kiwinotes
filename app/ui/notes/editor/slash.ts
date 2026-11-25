@@ -4,6 +4,7 @@
 
 import { formatDate } from "../../../src/shared/templates.ts";
 import type { MenuIconName } from "./menuIcons.tsx";
+import { localized } from "../../src/i18n.ts";
 
 export interface SlashItem {
   id: string;
@@ -16,23 +17,23 @@ export interface SlashItem {
 }
 
 export const SLASH_ITEMS: SlashItem[] = [
-  { id: "h1", label: "Título", words: "titulo h1 cabecalho heading", detail: "#", icon: "h1" },
-  { id: "h2", label: "Subtítulo", words: "subtitulo h2 secao", detail: "##", icon: "h2" },
-  { id: "list", label: "Lista", words: "lista bullet topicos", detail: "-", icon: "bullet" },
-  { id: "numbered", label: "Lista numerada", words: "numerada ordenada 1.", detail: "1.", icon: "numbered" },
-  { id: "todo", label: "Checklist", words: "checklist tarefa todo caixa", detail: "- [ ]", icon: "task" },
-  { id: "table", label: "Tabela", words: "tabela table", detail: "| |", icon: "table" },
-  { id: "code", label: "Código", words: "codigo code bloco", detail: "```", icon: "code" },
-  { id: "quote", label: "Citação", words: "citacao quote", detail: ">", icon: "quote" },
-  { id: "callout", label: "Callout", words: "callout aviso nota destaque", detail: "> [!note]", icon: "callout" },
-  { id: "divider", label: "Divisor", words: "divisor linha separador hr", detail: "---", icon: "divider" },
-  { id: "link", label: "Link para nota", words: "link nota wikilink", detail: "[[ ]]", icon: "note-link" },
+  localized({ id: "h1", words: "titulo h1 cabecalho heading title", detail: "#", icon: "h1" }, { label: "editor.slash.h1" }),
+  localized({ id: "h2", words: "subtitulo h2 secao subheading subtitle section", detail: "##", icon: "h2" }, { label: "editor.slash.h2" }),
+  localized({ id: "list", words: "lista bullet topicos list", detail: "-", icon: "bullet" }, { label: "editor.slash.list" }),
+  localized({ id: "numbered", words: "numerada ordenada 1. numbered ordered", detail: "1.", icon: "numbered" }, { label: "editor.slash.numbered" }),
+  localized({ id: "todo", words: "checklist tarefa todo caixa task", detail: "- [ ]", icon: "task" }, { label: "editor.slash.todo" }),
+  localized({ id: "table", words: "tabela table", detail: "| |", icon: "table" }, { label: "editor.slash.table" }),
+  localized({ id: "code", words: "codigo code bloco", detail: "```", icon: "code" }, { label: "editor.slash.code" }),
+  localized({ id: "quote", words: "citacao quote", detail: ">", icon: "quote" }, { label: "editor.slash.quote" }),
+  localized({ id: "callout", words: "callout aviso nota destaque note", detail: "> [!note]", icon: "callout" }, { label: "editor.slash.callout" }), // i18n-ok: o Markdown do callout
+  localized({ id: "divider", words: "divisor linha separador hr divider line", detail: "---", icon: "divider" }, { label: "editor.slash.divider" }),
+  localized({ id: "link", words: "link nota wikilink note", detail: "[[ ]]", icon: "note-link" }, { label: "editor.slash.link" }),
   // A nota de rodapé precisa da nota inteira (o próximo número e o fim): o editor insere (`insertFootnote`).
-  { id: "footnote", label: "Nota de rodapé", words: "rodape footnote referencia fonte", detail: "[^1]", icon: "footnote" },
-  { id: "template", label: "Modelo", words: "modelo template", detail: "…", icon: "template" },
-  { id: "tomorrow", label: "Amanhã", words: "amanha tomorrow", detail: "AAAA-MM-DD", icon: "date" },
-  { id: "yesterday", label: "Ontem", words: "ontem yesterday", detail: "AAAA-MM-DD", icon: "date" },
-  { id: "today", label: "Data de hoje", words: "data hoje dia date", detail: "AAAA-MM-DD", icon: "date" },
+  localized({ id: "footnote", words: "rodape footnote referencia fonte", detail: "[^1]", icon: "footnote" }, { label: "editor.slash.footnote" }),
+  localized({ id: "template", words: "modelo template", detail: "…", icon: "template" }, { label: "editor.slash.template" }),
+  localized({ id: "tomorrow", words: "amanha tomorrow", icon: "date" }, { label: "editor.slash.tomorrow", detail: "editor.slash.dateFormat" }),
+  localized({ id: "yesterday", words: "ontem yesterday", icon: "date" }, { label: "editor.slash.yesterday", detail: "editor.slash.dateFormat" }),
+  localized({ id: "today", words: "data hoje dia date today", icon: "date" }, { label: "editor.slash.today", detail: "editor.slash.dateFormat" }),
 ];
 
 const fold = (s: string) =>

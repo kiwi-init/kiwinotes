@@ -194,7 +194,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
           ...(code ? [codeGutter] : []),
           theme,
           // ⌘F busca e troca, como na nota .md.
-          searchOnly,
+          searchOnly(),
           foundLine,
           lang.of([]),
           // A pessoa digitou: a sessão só marca, e lê o texto inteiro quando grava (depois da pausa).

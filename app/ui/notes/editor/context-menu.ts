@@ -15,6 +15,7 @@ import { focusEditorNow } from "./livePreview.ts";
 import { linkFromPaste } from "./text.ts";
 import { TEXT_TOOLS, textTool, splitAt } from "./tools.ts";
 import { TABLE_ACTIONS, canTableAction, tableContext } from "./table.ts";
+import { t } from "../../src/i18n.ts";
 
 export interface EditorClipboard {
   read?(): Promise<string>;
@@ -136,7 +137,7 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
   const perform = (action: () => void) => () => { if (safe()) { focusEditorNow(view); action(); } };
   const asyncAction = (action: () => Promise<unknown>) => () => {
     if (safe()) void action()
-      .catch(() => onError("Não foi possível acessar a área de transferência. Tente novamente."))
+      .catch(() => onError(t("editor.menu.clipboardFailed")))
       .finally(() => { if (safe()) view.focus(); });
   };
   const command = (key: string): MenuItem => {
@@ -157,9 +158,9 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
   const range = tableAt(view.state, at);
   const ctx = range && (at !== undefined || view.state.selection.ranges.length === 1)
     ? tableContext(view.state.sliceDoc(range.from, range.to), (at ?? view.state.selection.main.head) - range.from) : null;
-  const tableItems: MenuItem[] = ctx ? [{ kind: "submenu", label: "Tabela", items: [
-    ...([ ["row", "Linha"], ["column", "Coluna"], ["align", "Alinhamento"], ["sort", "Ordenar pela coluna"] ] as const).map(([group, label]): MenuItem => ({
-      kind: "submenu", label, items: TABLE_ACTIONS.filter((item) => item.group === group).map((item) => ({
+  const tableItems: MenuItem[] = ctx ? [{ kind: "submenu", label: t("editor.menu.table"), items: [
+    ...([ ["row", "editor.menu.row"], ["column", "editor.menu.column"], ["align", "editor.menu.align"], ["sort", "editor.menu.sort"] ] as const).map(([group, key]): MenuItem => ({
+      kind: "submenu", label: t(key), items: TABLE_ACTIONS.filter((item) => item.group === group).map((item) => ({
         label: item.label, hint: item.hint, disabled: !canTableAction(ctx, item.id),
         checked: "align" in item ? (ctx.table.align[ctx.col] ?? null) === item.align : undefined,
         onSelect: perform(() => { tableActionCommand(item.id)(view, at); }),
@@ -167,10 +168,10 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
     })),
     ...(at === undefined ? [] : [{ kind: "separator" as const },
       // O Markdown cru, só quando a pessoa pede (spec #19323): o cursor entra na célula, e a tabela vira texto.
-      { label: "Editar como Markdown", onSelect: perform(() => view.dispatch({ selection: { anchor: at }, scrollIntoView: true })) }]),
+      { label: t("editor.menu.editMarkdown"), onSelect: perform(() => view.dispatch({ selection: { anchor: at }, scrollIntoView: true })) }]),
   ] }, { kind: "separator" }] : [];
   const callout = opts.plain ? null : calloutAtCursor(chosenState);
-  const calloutItems: MenuItem[] = callout ? [{ kind: "submenu", label: "Tipo do callout", items: CALLOUT_KINDS.map((kind): MenuItem => ({
+  const calloutItems: MenuItem[] = callout ? [{ kind: "submenu", label: t("editor.menu.calloutType"), items: CALLOUT_KINDS.map((kind): MenuItem => ({
     // Só o título (spec #12626): o menu é de texto, e o glifo saiu.
     label: kind.title,
     checked: kind.id === callout.kind.id,
@@ -178,39 +179,39 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
   })) }, { kind: "separator" }] : [];
   return [
     ...calloutItems,
-    ...(heading ? [{ label: "Renomear título e seus links…", onSelect: perform(() => onRenameHeading?.(heading.from, heading.title, chosenState.doc.toString())) }, { kind: "separator" as const }] : []),
+    ...(heading ? [{ label: t("editor.menu.renameHeading"), onSelect: perform(() => onRenameHeading?.(heading.from, heading.title, chosenState.doc.toString())) }, { kind: "separator" as const }] : []),
     ...tableItems,
     // O código (T19312): sem o Markdown, que num .py ou num .css viraria lixo.
-    ...(opts.code ? [] : [{ kind: "submenu" as const, label: "Formatar", items: [
+    ...(opts.code ? [] : [{ kind: "submenu" as const, label: t("editor.menu.format"), items: [
       ...["Mod-b", "Mod-i", "Shift-Mod-x", "Shift-Mod-h", "Mod-e", "Mod-/"].map(command),
       { kind: "separator" }, command("Mod-\\"),
     ] },
-    { kind: "submenu", label: "Parágrafo", items: [
+    { kind: "submenu", label: t("editor.menu.paragraph"), items: [
       ...[1, 2, 3, 4, 5, 6].map((n) => command(`Mod-${n}`)), command("Mod-0"),
       { kind: "separator" }, ...["Shift-Mod-8", "Shift-Mod-7", "Shift-Mod-9", "Shift-Mod-.", "Mod-l"].map(command),
     ] },
     // O Inserir com um ícone em cada opção (spec #17703), os mesmos do menu do "/".
-    { kind: "submenu", label: "Inserir", items: [
-      { label: "Link", icon: "link", onSelect: perform(() => view.dispatch(insertLink(view.state))) },
-      ...(opts.plain ? [] : [{ label: "Link para nota", icon: "note-link" as const, onSelect: insertBlock("link") }]),
-      { label: "Tabela", icon: "table", onSelect: insertBlock("table") },
-      { label: "Bloco de código", icon: "code", onSelect: insertBlock("code") },
-      { label: "Separador", icon: "divider", onSelect: insertBlock("divider") },
-      { label: "Callout", icon: "callout", onSelect: insertBlock("callout") },
-      { label: "Nota de rodapé", icon: "footnote", onSelect: perform(() => view.dispatch(insertFootnote(view.state))) },
+    { kind: "submenu", label: t("editor.menu.insert"), items: [
+      { label: t("editor.fmt.link"), icon: "link", onSelect: perform(() => view.dispatch(insertLink(view.state))) },
+      ...(opts.plain ? [] : [{ label: t("editor.menu.noteLink"), icon: "note-link" as const, onSelect: insertBlock("link") }]),
+      { label: t("editor.menu.table"), icon: "table", onSelect: insertBlock("table") },
+      { label: t("editor.menu.codeBlock"), icon: "code", onSelect: insertBlock("code") },
+      { label: t("editor.menu.separator"), icon: "divider", onSelect: insertBlock("divider") },
+      { label: t("editor.menu.callout"), icon: "callout", onSelect: insertBlock("callout") },
+      { label: t("editor.menu.footnote"), icon: "footnote", onSelect: perform(() => view.dispatch(insertFootnote(view.state))) },
     ] }] satisfies MenuItem[]),
-    { kind: "submenu", label: "Ferramentas de texto", items: TEXT_TOOLS.map(item => ({ label: item.label,
+    { kind: "submenu", label: t("editor.menu.textTools"), items: TEXT_TOOLS.map(item => ({ label: item.label,
       disabled: !textTool(chosenState, item.id), onSelect: perform(() => { const tr = textTool(view.state, item.id); if (tr) view.dispatch(tr); }),
     })) },
-    ...(opts.plain ? [] : [{ label: "Dividir nota aqui", disabled: !onSplit || !splitAt(chosenState), onSelect: perform(() => onSplit?.()) }]),
+    ...(opts.plain ? [] : [{ label: t("editor.menu.split"), disabled: !onSplit || !splitAt(chosenState), onSelect: perform(() => onSplit?.()) }]),
     { kind: "separator" },
-    { label: "Recortar", hint: "⌘X", disabled: !selected || !clipboard.write, onSelect: asyncAction(() => cutSelection(view, clipboard)) },
-    { label: "Copiar", hint: "⌘C", disabled: !selected || !clipboard.write, onSelect: asyncAction(async () => {
+    { label: t("editor.menu.cut"), hint: "⌘X", disabled: !selected || !clipboard.write, onSelect: asyncAction(() => cutSelection(view, clipboard)) },
+    { label: t("editor.menu.copy"), hint: "⌘C", disabled: !selected || !clipboard.write, onSelect: asyncAction(async () => {
       const sel = chosenState.selection.main;
       await clipboard.write!(chosenState.sliceDoc(sel.from, sel.to));
       if (safe()) view.focus();
     }) },
-    { label: "Colar", hint: "⌘V", disabled: !clipboard.read, onSelect: asyncAction(() => pasteSelection(view, clipboard, false)) },
-    { label: "Colar sem formatação", hint: "⇧⌘V", disabled: !clipboard.read, onSelect: asyncAction(() => pasteSelection(view, clipboard, true)) },
+    { label: t("editor.menu.paste"), hint: "⌘V", disabled: !clipboard.read, onSelect: asyncAction(() => pasteSelection(view, clipboard, false)) },
+    { label: t("editor.menu.pastePlain"), hint: "⇧⌘V", disabled: !clipboard.read, onSelect: asyncAction(() => pasteSelection(view, clipboard, true)) },
   ];
 }

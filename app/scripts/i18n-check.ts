@@ -7,8 +7,9 @@
 //
 // O que conta: o texto entre as tags (`<p>Salvar</p>`) e as aspas dos atributos que aparecem (`label`, `hint`, `title`,
 // `aria-label`, `placeholder`, `alt`), também num `{"…"}`, e as mesmas chaves num objeto (`{ label: "…" }`, as opções).
-// Um texto sem letra (`·`, `›`, `%`) não conta, nem a linha com `// i18n-ok: <motivo>` (um nome próprio). Ainda não
-// conta: os textos dos `.ts` ao lado (`agentText.ts`).
+// Um texto sem letra (`·`, `›`, `%`) não conta, nem a linha com `// i18n-ok: <motivo>` (um nome próprio). Dos `.ts` ao
+// lado, só os do editor (`MIGRATED_EDITOR`, T29842), pela régua do main; os outros (`agentText.ts`) ainda não contam.
+// Uma chave do catálogo (`"editor.menu.cut"`) não é texto.
 //
 // O main e o helper (T28192) também: no main (`src/bun`, a notificação do agente), o texto de um item de menu, de um
 // diálogo (`label`, `title`, `message`, `detail`, `buttons`) e toda frase com acento, fora dos logs e dos erros; no
@@ -19,6 +20,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+
+import { pt } from "../src/shared/i18n/pt.ts";
 
 // `KIWI_I18N_ROOT`: só o teste, que roda o check numa árvore falsa para provar o `exit 1`.
 const ROOT = process.env.KIWI_I18N_ROOT ?? path.resolve(import.meta.dir, "..");
@@ -78,6 +81,24 @@ export const MIGRATED_MAIN = [
   "scripts/info-plist.ts",
   "scripts/app-plist.ts",
   "scripts/usage-strings.ts",
+];
+/**
+ * O editor das Notas (T29842): os menus e os textos que o CodeMirror desenha saem de `.ts`, pela mesma régua do main (a
+ * chave visível e a frase com acento). Barra em todos.
+ */
+export const MIGRATED_EDITOR = [
+  "ui/notes/editor/attachments.ts",
+  "ui/notes/editor/callouts.ts",
+  "ui/notes/editor/code-copy.ts",
+  "ui/notes/editor/context-menu.ts",
+  "ui/notes/editor/footnotes.ts",
+  "ui/notes/editor/index.ts",
+  "ui/notes/editor/livePreview.ts",
+  "ui/notes/editor/search-fold.ts",
+  "ui/notes/editor/slash.ts",
+  "ui/notes/editor/spelling.ts",
+  "ui/notes/editor/table.ts",
+  "ui/notes/editor/tools.ts",
 ];
 /** Todo o Swift do helper barra: as telas dele são poucas e já estão no `Localizable.xcstrings`. */
 export const SWIFT_DIRS = ["../native/Sources/kiwi-helper", "../native/Sources/KiwiHelperCore"];
@@ -153,7 +174,7 @@ export function mainFixedTexts(file: string, source: string): FixedText[] {
     let text: string | null = null;
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) text = node.text;
     else if (ts.isTemplateExpression(node)) text = [node.head.text, ...node.templateSpans.map((s) => s.literal.text)].join(" ");
-    if (text !== null && hasLetter(text) && !(ts.isPropertyAssignment(node.parent) && node.parent.name === node)) {
+    if (text !== null && hasLetter(text) && !(ts.isPropertyAssignment(node.parent) && node.parent.name === node) && !Object.hasOwn(pt, text)) {
       const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
       const fixed = (ACCENT.test(text) || visibleProp(node)) && !inLog(node) && !/i18n-ok:/.test(lines[line - 1] ?? "");
       if (fixed) out.push({ line, text: text.replace(/\s+/g, " ").trim() });
@@ -243,7 +264,9 @@ if (import.meta.main) {
   const swift = SWIFT_DIRS.flatMap((d) => filesUnder(path.join(ROOT, d), ".swift"))
     .map((f) => ({ file: path.relative(ROOT, f), texts: swiftFixedTexts(readFileSync(f, "utf8")) }))
     .filter((r) => r.texts.length > 0);
-  const failures = [...broken, ...main.filter((r) => MIGRATED_MAIN.includes(r.file)), ...swift];
+  // O editor (T29842): barra em todos.
+  const editor = MIGRATED_EDITOR.map((f) => ({ file: f, texts: mainFixedTexts(f, readFileSync(path.join(ROOT, f), "utf8")) })).filter((r) => r.texts.length > 0);
+  const failures = [...broken, ...main.filter((r) => MIGRATED_MAIN.includes(r.file)), ...swift, ...editor];
   if (failures.length) {
     for (const r of failures) for (const t of r.texts) console.error(`✗ ${r.file}:${t.line} já está no catálogo e tem um texto fixo: ${t.text}`);
     process.exit(1);
