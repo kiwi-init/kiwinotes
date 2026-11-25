@@ -14,7 +14,7 @@ const before = g.window;
 g.window = {
   engine: {
     has: (cap: string) => cap === "app.locale" || cap === "settings.set",
-    invoke: async (cap: string) => (cap === "app.locale" ? ({ setting: "auto", locale: "en", system: "en" } satisfies AppLocale) : {}),
+    invoke: async (cap: string) => (cap === "app.locale" ? ({ setting: "en", locale: "en", system: "en" } satisfies AppLocale) : {}),
     on: (name: string, fn: (payload: unknown) => void) => void handlers.set(name, fn),
   },
 };
@@ -25,18 +25,22 @@ afterAll(() => {
 test("a janela sobe na língua do engine e troca na hora com o app.localeChanged", async () => {
   expect(t("settings.language.label")).toBe("Idioma do app");
   await startLocale();
-  expect(appLocale()).toEqual({ setting: "auto", locale: "en", system: "en" });
+  expect(appLocale()).toEqual({ setting: "en", locale: "en", system: "en" });
   expect(t("settings.language.label")).toBe("App language");
   const en = renderToStaticMarkup(<LanguageSection />);
   expect(en).toContain("App language");
   expect(en).toContain("Automatic");
-  expect(en).toContain("From macOS, now in English.");
+  // A língua fixa: a dica sem a parte do Automático.
+  expect(en).not.toContain("For now");
+
+  // O Automático, até o fim do spec #28171, fica em português (`AUTO_FOLLOWS_SYSTEM`), e a dica diz isso.
+  handlers.get("app.localeChanged")!({ setting: "auto", locale: "pt", system: "en" } satisfies AppLocale);
+  expect(renderToStaticMarkup(<LanguageSection />)).toContain("Por enquanto, o Automático fica em português");
 
   handlers.get("app.localeChanged")!({ setting: "pt", locale: "pt", system: "en" } satisfies AppLocale);
   expect(t("settings.topic.general")).toBe("Geral");
   const pt = renderToStaticMarkup(<LanguageSection />);
   expect(pt).toContain("Idioma do app");
   expect(pt).toContain("Automático");
-  // A língua fixa: sem o "agora em".
-  expect(pt).not.toContain("Pelo macOS");
+  expect(pt).not.toContain("Por enquanto");
 });
