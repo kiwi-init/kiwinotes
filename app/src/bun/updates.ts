@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { type AppChannel, type UpdatesLastCheck, UPDATES_OFF_BY_SETTING, type UpdatesView } from "../shared/ui-contract.ts";
+import { type Locale, translate } from "../shared/i18n/index.ts";
 
 export const IDENTIFIER = "app.kiwinotes.desktop";
 /** O time do Developer ID que assina o Kiwi Notes (Jonatas Walker, T1349). */
@@ -446,10 +447,12 @@ export function channelOf(electrobunChannel: string): AppChannel {
 }
 
 /** A linha do menu para a atualização pronta, ou null. */
-export function updateMenuLabel(s: UpdateState, currentVersion: string): string | null {
-  if (s.kind === "applying") return "Atualizando…";
+export function updateMenuLabel(s: UpdateState, currentVersion: string, locale: Locale = "pt"): string | null {
+  if (s.kind === "applying") return translate(locale, "tray.updating");
   if (s.kind !== "ready") return null;
-  return s.version && s.version !== currentVersion ? `Atualizar e reiniciar (v${s.version})` : "Atualizar e reiniciar";
+  return s.version && s.version !== currentVersion
+    ? translate(locale, "tray.updateRestartVersion", { version: s.version })
+    : translate(locale, "tray.updateRestart");
 }
 
 /** O motivo de estar desligado, para a pessoa (o do `updatesOff` é técnico e vai para o log). */

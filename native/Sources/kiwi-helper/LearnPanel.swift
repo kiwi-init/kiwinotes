@@ -131,9 +131,9 @@ private struct LearnCardFrameKey: PreferenceKey {
 }
 
 enum LearnText {
-    static let title = "Adicionar ao dicionário?"
-    static let notNow = "Agora não"
-    static let add = "Adicionar"
+    static var title: String { HelperLocale.text("learn.title") }
+    static var notNow: String { HelperLocale.text("learn.notNow") }
+    static var add: String { HelperLocale.text("learn.add") }
     static func swap(_ offer: LearnOffer) -> String { "\(offer.from) → \(offer.to)" }
 }
 

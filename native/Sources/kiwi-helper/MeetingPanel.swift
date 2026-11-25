@@ -301,12 +301,12 @@ struct MeetingView: View {
                 symbol: minePaused ? "mic.slash.fill" : "mic.fill",
                 fill: minePaused ? MeetingStyle.danger(scheme).opacity(0.16) : MeetingStyle.quiet(scheme),
                 mark: minePaused ? MeetingStyle.danger(scheme) : MeetingStyle.text(scheme),
-                label: minePaused ? "Voltar meu mic" : "Pausar meu mic",
+                label: minePaused ? MeetingText.resumeMine : MeetingText.pauseMine,
                 action: state.onTogglePause
             )
             CircleButton(
                 symbol: "checkmark", fill: MeetingStyle.accent(scheme), mark: MeetingStyle.onAccent(scheme),
-                label: "Parar a gravação", action: state.onStop
+                label: MeetingText.stopRecording, action: state.onStop
             )
         }
         .padding(.horizontal, 6)
@@ -318,7 +318,7 @@ struct MeetingView: View {
                 .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.16), radius: 10, y: 4)
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Gravando a reunião, \(state.elapsed)")
+        .accessibilityLabel(MeetingText.recording(state.elapsed))
     }
 }
 

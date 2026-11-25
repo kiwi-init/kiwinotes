@@ -15,6 +15,7 @@ import type { HistoryEntry, NewHistoryEntry } from "../store/history.ts";
 import { expandSnippets, type Snippet } from "../store/snippets.ts";
 import { toneFor } from "../cleanup/tone.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
+import { type Locale, type Params, type TextKey, translate } from "../shared/i18n/index.ts";
 
 type Transcript = Extract<Event, { type: "transcript.final" }>;
 type InsertResult = ResultMessage<"insert.text">;
@@ -39,38 +40,49 @@ export interface DictationOptions {
   log?: (message: string) => void;
   /** A nota rápida (T1320): um ditado com `target: "note"` vira uma nota nova, em vez de ser colado. */
   notes?: { toNew(text: string, at: Date, id: string, options?: { fresh?: boolean }): Promise<ToNoteResult> };
+  /** A língua do app (T28192): as mensagens da pílula saem nela. Padrão: português. */
+  locale?: () => Locale;
 }
 
-/** O que a pílula diz quando o texto não foi colado (ele ficou no clipboard). */
-export const NOT_PASTED: Record<string, string> = {
-  no_focus: "Nenhum campo em foco: está no clipboard",
-  no_text_field: "Não é um campo de texto: está no clipboard",
-  no_accessibility: "Falta a Acessibilidade: está no clipboard",
-};
-/** O "colar a última" (L9) sem nenhum ditado no Histórico. Cabe nas 38 letras da pílula. */
-export const NOTHING_TO_PASTE = "Ainda não há ditado para colar";
-/** Com secure input o ⌘V pode ter sido descartado: o texto fica no clipboard, e o antigo não volta (#224). */
-export const SECURE_INPUT_NOTICE = "O texto também ficou no clipboard";
-/** O mic caiu no meio do ditado: o que ele ouviu até ali foi transcrito, em vez de ir para o lixo (T883). */
-export const MIC_LOST_NOTICE = "O microfone caiu: transcrevi até aqui";
-/** O mic escolhido nos Ajustes não estava conectado, e o ditado gravou por outro (T3344, spec #3202). */
 /**
- * O mic escolhido não estava conectado e o ditado gravou por outro (T3344). A pílula tem uma linha de 38 letras
- * (`OverlayModel.maxMessageLength`): o do Mac e o padrão cabem inteiros; o nome de outro mic pode sair cortado.
+ * Uma mensagem da pílula (T28192): a chave do catálogo, com os parâmetros. O texto sai na língua do app na hora de
+ * mandar ao helper (`pillText`). A pílula tem uma linha de 38 letras (`OverlayModel.maxMessageLength`).
  */
-export const micFellBackNotice = (mic: string) => `Mic escolhido ausente: usei o ${mic}`;
+export type PillMessage = TextKey | { key: TextKey; params: Params };
+export const pillText = (locale: Locale, m: PillMessage): string =>
+  typeof m === "string" ? translate(locale, m) : translate(locale, m.key, m.params);
+
+/** O que a pílula diz quando o texto não foi colado (ele ficou no clipboard). */
+export const NOT_PASTED: Record<string, TextKey> = {
+  no_focus: "pill.notPasted.noFocus",
+  no_text_field: "pill.notPasted.noTextField",
+  no_accessibility: "pill.notPasted.noAccessibility",
+};
+/** O "colar a última" (L9) sem nenhum ditado no Histórico. */
+export const NOTHING_TO_PASTE: TextKey = "pill.nothingToPaste";
+/** Com secure input o ⌘V pode ter sido descartado: o texto fica no clipboard, e o antigo não volta (#224). */
+export const SECURE_INPUT_NOTICE: TextKey = "pill.secureInput";
+/** O mic caiu no meio do ditado: o que ele ouviu até ali foi transcrito, em vez de ir para o lixo (T883). */
+export const MIC_LOST_NOTICE: TextKey = "pill.micLost";
+/**
+ * O mic escolhido não estava conectado e o ditado gravou por outro (T3344, spec #3202): o do Mac e o padrão cabem
+ * inteiros; o nome de outro mic pode sair cortado.
+ */
+export const micFellBackNotice = (mic: string): PillMessage => ({ key: "pill.micFellBack", params: { mic } });
 /** Como o aviso chama o mic: "do Mac", "padrão" ou o nome. */
-export const micShortName = (m: { name: string; transport: string | null; systemDefault: boolean }) =>
-  m.transport === "builtin" ? "do Mac" : m.systemDefault || !m.name ? "padrão" : m.name;
+export const micShortName = (m: { name: string; transport: string | null; systemDefault: boolean }, locale: Locale = "pt") =>
+  m.transport === "builtin" ? translate(locale, "pill.mic.builtin") : m.systemDefault || !m.name ? translate(locale, "pill.mic.default") : m.name;
 /** O mic caiu e o que ele ouviu não tinha fala. */
-export const MIC_LOST_EMPTY = "Sem áudio do microfone";
+export const MIC_LOST_EMPTY: TextKey = "pill.micLostEmpty";
 /** A nota rápida deu certo: a pílula diz o título. */
-export const noteCreated = (title: string) => `Virou nota: ${title}`;
+export const noteCreated = (title: string): PillMessage => ({ key: "pill.noteCreated", params: { title } });
 /** A nota rápida não deu: o texto não se perde, fica no Histórico. */
-export const NOTE_FAILED = "Não deu para criar a nota: o texto está no Histórico";
-export const TRANSCRIPT_ERROR: Record<string, string> = {
-  model_unavailable: "O modelo de voz não está pronto",
-  stt_failed: "Não deu para transcrever",
+export const NOTE_FAILED: TextKey = "pill.noteFailed";
+/** O colar falhou de vez (o helper não respondeu ao `insert.text`). */
+export const PASTE_FAILED: TextKey = "pill.pasteFailed";
+export const TRANSCRIPT_ERROR: Record<string, TextKey> = {
+  model_unavailable: "pill.modelUnavailable",
+  stt_failed: "pill.sttFailed",
 };
 
 export interface DictationOutcome {
@@ -161,7 +173,7 @@ export class Dictation {
         const cli = e.reason === "debug" ? this.pendingWav.shift() : undefined;
         const mic = sanitizeMicInUse(e.microphone);
         // Com a tampa fechada o escolhido (o mic do Mac) está conectado, só não grava: a Ajustes explica, a pílula não.
-        const fellBackTo = mic?.fellBack && !mic.lidClosed ? micShortName(mic) : undefined;
+        const fellBackTo = mic?.fellBack && !mic.lidClosed ? micShortName(mic, this.options.locale?.() ?? "pt") : undefined;
         if(e.recovery)this.options.recovery?.activate(e.recovery);
         this.recordings.push({ recovery:e.recovery, app, note, simulate: cli?.simulate, done: cli?.done, ...(fellBackTo ? { fellBackTo } : {}) });
         // A nota não leva o tom do app da frente (um terminal daria o tom literal): o prewarm é o do tom padrão.
@@ -302,7 +314,7 @@ export class Dictation {
       .send(this.options.dryRun ? { ...command, dryRun: true } : command)
       .catch((e) => ({ v: 1, type: "result", id: "", ok: false, error: e instanceof Error ? e.message : String(e) }) as InsertResult);
     const pasted = insert.ok && (insert.data.pasted || insert.data.dryRun === true);
-    if (!insert.ok) await this.overlay("error", "Não deu para colar o texto");
+    if (!insert.ok) await this.overlay("error", PASTE_FAILED);
     else if (insert.data.dryRun) await this.overlay("done");
     else if (!insert.data.pasted) await this.overlay("error", NOT_PASTED[insert.data.reason ?? ""] ?? NOT_PASTED.no_focus);
     else await this.overlay("done", insert.data.reason ? SECURE_INPUT_NOTICE : undefined);
@@ -355,9 +367,9 @@ export class Dictation {
     }
     // Um dryRun conta como colado: o teste segue o caminho de um ditado que deu certo.
     const pasted = insert.ok && (insert.data.pasted || insert.data.dryRun === true);
-    if (!insert.ok) await this.overlay("error", "Não deu para colar o texto");
+    if (!insert.ok) await this.overlay("error", PASTE_FAILED);
     // O mic escolhido não estava conectado (T3344): avisa por qual gravou. Também no dryRun, para o teste ver.
-    else if (insert.data.dryRun) await this.overlay("done", fellBackTo && micFellBackNotice(fellBackTo));
+    else if (insert.data.dryRun) await this.overlay("done", fellBackTo ? micFellBackNotice(fellBackTo) : undefined);
     else if (!insert.data.pasted) await this.overlay("error", NOT_PASTED[insert.data.reason ?? ""] ?? NOT_PASTED.no_focus);
     // Colou, mas o texto ficou também no clipboard: secure input, ou um foco que não parece campo de texto (T984).
     else if (insert.data.reason) await this.overlay("done", SECURE_INPUT_NOTICE);
@@ -470,7 +482,8 @@ export class Dictation {
     catch{this.log("recovery_update_failed");}
   }
 
-  private async overlay(state: "hidden" | "done" | "error", message?: string) {
+  private async overlay(state: "hidden" | "done" | "error", pill?: PillMessage) {
+    const message = pill && pillText(this.options.locale?.() ?? "pt", pill);
     try {
       await this.options.sidecar.send(message ? { type: "overlay.state", state, message } : { type: "overlay.state", state });
     } catch {

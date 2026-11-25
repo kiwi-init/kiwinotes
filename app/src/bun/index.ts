@@ -11,8 +11,10 @@ import { makeIntro } from "./intro.ts";
 import { repairInstallRegistry, runningBundle } from "./install-registry.ts";
 import { cleanLaunchServices, realLsRegister } from "./launch-services.ts";
 import { claimInstance, releaseInstance } from "./instance.ts";
-import { PERMISSION_NAMES } from "./permissions.ts";
-import { statusLabel } from "./session-status.ts";
+import { mainLocale } from "./locale.ts";
+import { appMenu, trayMenu } from "./menus.ts";
+import { appLocale } from "../shared/i18n/index.ts";
+import { systemLanguages } from "./system-language.ts";
 import { helperPath, Session, session, type SessionStatus } from "./session.ts";
 import { helperRunner } from "../notes/ocr.ts";
 import { helperPdf } from "../notes/export.ts";
@@ -58,38 +60,13 @@ const openHub = (section?: HubSection) => void hub.open(section);
 // A notificação quando o agente espera uma resposta (spec #9839): o próprio app notifica, pela dylib ao lado do helper.
 // Nada aqui pede a permissão; só o botão "Ligar as notificações" de Ajustes › Agente. O clique volta pela engine.
 void loadNotices(path.join(PATHS.VIEWS_FOLDER, "..", "bin", NOTIFY_LIBRARY), (m) => console.log(m)).then((notices) =>
-  stores.agent.attachNotice({ notices, inView: hubInView, show: () => openHub() }),
+  stores.agent.attachNotice({ notices, inView: hubInView, show: () => openHub(), locale: () => mainLocale.get() }),
 );
 Electrobun.events.on("notification-response", (e) => stores.agent.noticeResponse(e.data));
 
-// Com o Dock, o app tem menu de app: ⌘Q sai pelo mesmo caminho do "Sair" da barra, ⌘W fecha o hub, e a edição
-// (⌘C, ⌘V, ⌘Z…) segue funcionando nas notas.
-ApplicationMenu.setApplicationMenu([
-  {
-    label: "Kiwi Notes",
-    submenu: [
-      { role: "hide" },
-      { role: "hideOthers" },
-      { role: "showAll" },
-      { type: "separator" },
-      { label: "Sair do Kiwi Notes", action: "quit", accelerator: "q" },
-    ],
-  },
-  {
-    label: "Editar",
-    submenu: [
-      { role: "undo" },
-      { role: "redo" },
-      { type: "separator" },
-      { role: "cut" },
-      { role: "copy" },
-      { role: "paste" },
-      { role: "pasteAndMatchStyle" },
-      { role: "selectAll" },
-    ],
-  },
-  { label: "Janela", submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "close" }, { type: "separator" }, { role: "bringAllToFront" }] },
-]);
+// O menu do app (menus.ts), na língua do app: refeito quando ela muda (T28192).
+const setAppMenu = () => ApplicationMenu.setApplicationMenu(appMenu(mainLocale.get()));
+setAppMenu();
 ApplicationMenu.on("application-menu-clicked", (event) => {
   if ((event as { data?: { action?: string } }).data?.action === "quit") quit();
 });
@@ -155,26 +132,8 @@ provideAbout({
 updates.onChange(() => void sendToWindow("hub", "updates.status", updatesNow()));
 
 function setMenu(s: SessionStatus) {
-  const update = updateMenuLabel(updates.status(), appVersion);
-  tray.setMenu([
-    { type: "normal", label: "Abrir o Kiwi Notes", action: "hub" },
-    { type: "divider" },
-    { type: "normal", label: statusLabel(s), action: "status", enabled: false },
-    // Enquanto faltar alguma permissão: pede a próxima (o diálogo do macOS, ou os Ajustes no lugar certo).
-    ...(s.connected && s.missing.length
-      ? [{ type: "normal" as const, label: `Permitir acesso… (${PERMISSION_NAMES[s.missing[0]!]})`, action: "permissions" }]
-      : []),
-    { type: "divider" },
-    // As janelas soltas de antes viraram seções do hub (#2100).
-    { type: "normal", label: "Notas…", action: "notes" },
-    { type:"normal",label:"Abrir pasta de notas…",action:"notes-folder" },
-    { type: "normal", label: "Ditado…", action: "dictation" },
-    { type: "normal", label: "Configurações…", action: "settings" },
-    { type: "normal", label: "Sobre o Kiwi Notes…", action: "about" },
-    { type: "divider" },
-    ...(update ? [{ type: "normal" as const, label: update, action: "update", enabled: updates.status().kind === "ready" }] : []),
-    { type: "normal", label: "Sair do Kiwi Notes", action: "quit" },
-  ]);
+  const locale = mainLocale.get();
+  tray.setMenu(trayMenu(s, { label: updateMenuLabel(updates.status(), appVersion, locale), ready: updates.status().kind === "ready" }, locale));
 }
 
 // O sidecar (atalho, mic, STT, overlay, colagem) e o fluxo do ditado (T58).
@@ -213,6 +172,16 @@ startCatOverlay(dictation.sidecar);
 startAgentVoice(dictation.sidecar);
 startCatVoiceOutput(dictation.sidecar);
 updates.onChange(() => setMenu(dictation.status()));
+// A língua do app (spec #28171, T28192): a dos Ajustes ao abrir, pela mesma função das telas; a troca chega pelo
+// `localeChanged` das janelas (windows.ts). O menu do app e a bandeja se refazem nela.
+mainLocale.onChange(() => {
+  setAppMenu();
+  setMenu(dictation.status());
+});
+void stores.settings.load().then(
+  (s) => mainLocale.set(appLocale(s.language, systemLanguages()).locale),
+  () => {},
+);
 void updates.start();
 
 tray.on("tray-clicked", (event) => {

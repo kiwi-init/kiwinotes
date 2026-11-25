@@ -197,7 +197,7 @@ public struct StreamClock: Sendable {
 /// "Você" for the mic; "Pessoa 1, 2…" for the diarizer's speakers on the system channel, numbered in the order they
 /// first talk, and stable for the whole meeting.
 public struct SpeakerNames: Sendable {
-    public static let you = "Você"
+    public static let you = "Você" // i18n-ok: rótulo da transcrição, não da tela
     public static let unknown = "Pessoa"
     private var names: [Int: String] = [:]
 

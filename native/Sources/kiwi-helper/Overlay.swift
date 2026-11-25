@@ -258,12 +258,12 @@ struct OverlayView: View {
             HStack(spacing: 10) {
                 RoundButton(
                     symbol: "xmark", fill: OverlayStyle.cancelFill, mark: .white,
-                    label: "Cancelar ditado", action: state.onCancel
+                    label: OverlayText.cancel, action: state.onCancel
                 )
                 Waveform(bars: state.bars, reduceMotion: reduceMotion)
                 RoundButton(
                     symbol: "checkmark", fill: OverlayStyle.finishFill, mark: OverlayStyle.finishMark,
-                    label: "Terminar ditado", action: state.onFinish
+                    label: OverlayText.finish, action: state.onFinish
                 )
             }
             .transition(.opacity)
@@ -295,7 +295,7 @@ struct OverlayView: View {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(OverlayStyle.danger)
-                Text(state.message ?? "Algo deu errado")
+                Text(state.message ?? OverlayText.generic)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(OverlayStyle.text)
                     .lineLimit(1)
@@ -396,7 +396,7 @@ enum OverlaySnapshots {
             ("listening-speech", .listening, nil, listening([0.1, 0.5, 0.3, 0.8, 0.6, 1, 0.4])),
             ("processing", .processing, nil, []),
             ("done", .done, nil, []),
-            ("done-message", .done, "O texto também ficou no clipboard", []),
+            ("done-message", .done, HelperLocale.code == "en" ? "The text is on the clipboard too" : "O texto também ficou no clipboard", []), // i18n-ok: a mensagem vem do app
             ("error", .error, OverlayText.error("no_input_device"), []),
             ("error-mic-busy", .error, MicBusy.message(app: "Chrome"), []),
         ]

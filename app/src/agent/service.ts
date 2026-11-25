@@ -145,6 +145,7 @@ import {
 import { ToolError, type MemorySink, type ProposalDraft, type ProposalSink, type SpeechSink, type SummaryDraft } from "./tools/tools.ts";
 import { DEFAULT_AGENT_MEETING_SETTINGS, DEFAULT_AGENT_SETTINGS, effortOf, isAgentChoice, sanitizeAgentMeetingSettings, sanitizeEffortByModel, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
 import type { Notices } from "../bun/notices.ts";
+import type { Locale } from "../shared/i18n/index.ts";
 import { WaitingNotice, type NoticeState } from "./notice.ts";
 import { LiveWrites, liveWriter } from "./live-write.ts";
 
@@ -2719,7 +2720,7 @@ export class AgentService {
    * Liga a notificação (spec #9839) à janela do app: as notificações do macOS (a dylib, ou o aviso falso da CLI), se a
    * janela principal está na vista, e como trazê-la. A janela avisa quando entra e sai da vista pelo `noticeView`.
    */
-  attachNotice(o: { notices: Notices; inView: () => boolean; show: () => void }): void {
+  attachNotice(o: { notices: Notices; inView: () => boolean; show: () => void; locale?: () => Locale }): void {
     this.notice?.stop();
     this.notice = new WaitingNotice({
       ...o,

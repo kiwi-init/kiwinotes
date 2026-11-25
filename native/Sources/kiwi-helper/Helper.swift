@@ -1082,6 +1082,12 @@ final class Helper {
             llm.handle(message) { [weak self] ok, error, fields in self?.reply(id, ok: ok, error: error, fields) }
         case "audio.inputs":
             reply(id, ok: true, mic.inputs())
+        case "app.locale":
+            // A língua do app (spec #28171, T28192): os próximos textos na tela saem nela.
+            guard let locale = message.string("locale"), HelperLocale.set(locale) else {
+                return reply(id, ok: false, error: "invalid_value")
+            }
+            reply(id, ok: true)
         case "overlay.state":
             guard let name = message.string("state"), let phase = OverlayPhase(rawValue: name) else {
                 return reply(id, ok: false, error: "unknown_state")

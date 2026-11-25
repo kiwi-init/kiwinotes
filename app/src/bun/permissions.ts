@@ -15,18 +15,15 @@ import path from "node:path";
 
 import type { Command, Event, EventMessage, Permission, Permissions, ResultMessage } from "../shared/ipc.ts";
 import { readJson, writeJson } from "../store/files.ts";
+import { type Locale, translate } from "../shared/i18n/index.ts";
 
 /** A ordem em que o app pede: sem o atalho nada começa; sem colar, o texto fica no clipboard; o mic pede no uso. */
 export const ASK_ORDER: Permission[] = ["inputMonitoring", "accessibility", "microphone"];
 /** As que o app pede sozinho ao abrir. O microfone fica para o primeiro ditado. */
 const ON_LAUNCH: Permission[] = ["inputMonitoring", "accessibility"];
 
-export const PERMISSION_NAMES: Record<Permission, string> = {
-  systemAudio: "Áudio do sistema",
-  microphone: "Microfone",
-  accessibility: "Acessibilidade",
-  inputMonitoring: "Monitoramento de Entrada",
-};
+/** O nome da permissão como o Ajustes do Sistema a chama, na língua do app (T28192). */
+export const permissionName = (p: Permission, locale: Locale = "pt"): string => translate(locale, `permission.${p}`);
 
 export interface PermissionsSidecar {
   send<C extends Command>(command: C): Promise<ResultMessage<C["type"]>>;

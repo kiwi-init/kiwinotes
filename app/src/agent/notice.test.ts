@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { NoticePermission } from "../bun/notices.ts";
 import { fakeNotices } from "./fake/notices.ts";
-import { NOTICE_PREFIX, NOTICE_TITLE, noticeBody, type NoticeCard, type NoticeState, WaitingNotice } from "./notice.ts";
+import { NOTICE_PREFIX, noticeBody, noticeTitle, type NoticeCard, type NoticeState, WaitingNotice } from "./notice.ts";
 
 function make(o: { permission?: NoticePermission; answer?: NoticePermission; inView?: boolean; enabled?: boolean } = {}) {
   const notices = fakeNotices({ permission: o.permission ?? "allowed", ...(o.answer ? { answer: o.answer } : {}) });
@@ -53,7 +53,7 @@ describe("WaitingNotice", () => {
     // O cartão muda a cada resposta e o evento vem de novo: continua uma só.
     await m.open(CARD);
     expect(m.notices.calls).toEqual([
-      { op: "post", id: `${NOTICE_PREFIX}c1`, title: NOTICE_TITLE, body: "Dúvida em Projetos/Kiwi. Clique para responder." },
+      { op: "post", id: `${NOTICE_PREFIX}c1`, title: noticeTitle(), body: "Dúvida em Projetos/Kiwi. Clique para responder." },
     ]);
     await m.close("c1");
     expect(m.notices.calls.at(-1)).toEqual({ op: "remove", id: `${NOTICE_PREFIX}c1` });
