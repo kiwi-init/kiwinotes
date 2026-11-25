@@ -149,10 +149,10 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     }
 
     /// O balão da resposta (spec #12938): `nil` tira. Com o gato esperando a pílula, ele aparece junto com o gato.
-    func bubble(text: String?, error: Bool, ask: Bool = false, links: Any? = nil) {
+    func bubble(text: String?, error: Bool, ask: Bool = false, links: Any? = nil, summary: String? = nil) {
         let shown = CatOverlayBubble.links(links, textLength: text?.utf16.count ?? 0)
         bubblePaths = text == nil ? [] : shown.compactMap { $0["path"] as? String }
-        bubble = CatOverlayBubble.script(text: text, error: error, ask: ask, links: shown)
+        bubble = CatOverlayBubble.script(text: text, error: error, ask: ask, links: shown, summary: summary)
         if gate.shows { script("window.kiwiOverlay?.set({bubble: \(bubble)})") }
     }
 

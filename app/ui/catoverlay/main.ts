@@ -18,6 +18,7 @@ import { openPlacement, openShellWidth, overlayPlacement } from "./placement";
 import { tailSvg } from "../kiwicat-v2/bubbleTail";
 import type { BubbleLink } from "../../src/shared/ui-contract";
 import { plainMarkdown, renderMarkdown } from "../src/bubbleMarkdown";
+import { bubblePlain, summaryOf } from "../hub/bubble-state";
 import { EXIT_MS, exitStyle, HIDDEN_STYLE, shownStyle, type CatTransitionStyle } from "./transition";
 import type { FogState } from "../kiwicat/visual";
 
@@ -34,7 +35,8 @@ interface OverlayStats {
   cor: string;
   /** O balão na tela agora (spec #12938), ou null. */
   /** `links` (spec #17683): as notas e os arquivos que o main achou na resposta, que viram link no balão aberto. */
-  bubble: { text: string; error: boolean; links: BubbleLink[] } | null;
+  /** `summary` (spec #27881, T28010): de onde sai o resumo do fechado (a fala do `cat_speak` ou a resposta final). */
+  bubble: { text: string; error: boolean; links: BubbleLink[]; summary?: string } | null;
   /** O texto não cabe nas três linhas: o "Ver mais" aparece (spec #13378). */
   bubbleMore: boolean;
   /** O balão aberto no "Ver mais". */
@@ -119,30 +121,20 @@ function showFull(text: string, links: readonly BubbleLink[]) {
 }
 
 /**
- * O resumo do balão fechado (revisão do #526): o começo que cabe nas três linhas, cortado numa palavra. Com "…" no fim,
- * menos quando o corte já termina a frase ("pessoas." fica sem as reticências). Devolve se cortou. O texto chega sem os
- * símbolos do markdown (`plainMarkdown`, spec #17679).
+ * O resumo do balão fechado (spec #27881, o mesmo do Hub): a fala do `cat_speak` ou, sem ela, as frases do começo da
+ * resposta que cabem nas três linhas, sem o título (#28009). Devolve se o aberto tem mais que o resumo (o "Ver mais").
  */
-function fitSummary(full: string): boolean {
+function fitSummary(b: { text: string; summary?: string }): boolean {
   bubbleText.classList.remove("kn-md");
-  bubbleText.textContent = full;
-  if (fits()) return false;
-  const words = full.split(" ");
-  const cut = (n: number) => {
-    const s = words.slice(0, n).join(" ").replace(/[\s,;:\u2013\u2014-]+$/, "");
-    return /[.!?…]$/.test(s) ? s : `${s}…`;
-  };
-  let lo = 1;
-  let hi = words.length - 1;
-  while (lo < hi) {
-    const mid = Math.ceil((lo + hi) / 2);
-    bubbleText.textContent = cut(mid);
-    if (fits()) lo = mid;
-    else hi = mid - 1;
-  }
-  bubbleText.textContent = cut(lo);
-  return true;
+  const full = bubblePlain(b.text);
+  const shown = summaryOf(bubblePlain(b.summary ?? b.text), (s) => {
+    bubbleText.textContent = s;
+    return fits();
+  });
+  bubbleText.textContent = shown;
+  return words(shown) !== words(full);
 }
+const words = (s: string) => s.split(/\s+/).filter(Boolean).join(" ");
 
 /** O degradê das bordas do texto aberto: só onde há mais para rolar. */
 function fades() {
@@ -160,7 +152,7 @@ function setOpen(open: boolean) {
   moreButton.setAttribute("aria-expanded", String(open));
   if (stats.bubble) {
     if (open) showFull(stats.bubble.text, stats.bubble.links);
-    else fitSummary(plainMarkdown(stats.bubble.text));
+    else fitSummary(stats.bubble);
   }
   bubbleText.scrollTop = 0;
   fades();
@@ -169,7 +161,7 @@ function setOpen(open: boolean) {
 
 /** O texto passa das três linhas: só aí o "Ver mais" aparece. */
 function measureMore() {
-  stats.bubbleMore = stats.bubble !== null && fitSummary(plainMarkdown(stats.bubble.text));
+  stats.bubbleMore = stats.bubble !== null && fitSummary(stats.bubble);
   bubbleEl.dataset.more = String(stats.bubbleMore);
   if (stats.bubbleOpen && stats.bubble) showFull(stats.bubble.text, stats.bubble.links);
 }
@@ -190,8 +182,9 @@ function setAsk(on: boolean) {
  * O balão (spec #12938): só texto (`textContent`) ou o markdown montado em elementos (spec #17679), nunca HTML. Uma resposta nova chega fechada; a mesma resposta com ou
  * sem a pergunta (spec #13380) só muda a pergunta, e o balão fica como a pessoa deixou.
  */
-function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown } | null) {
+function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown; summary?: unknown } | null) {
   const text = b && typeof b.text === "string" ? b.text : "";
+  const summary = b && typeof b.summary === "string" && b.summary.trim() ? b.summary : undefined;
   const links = linksOf(b?.links);
   const ask = b?.ask === true;
   if (!text) {
@@ -202,7 +195,7 @@ function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: 
     setAsk(false);
     return;
   }
-  if (stats.bubble && stats.bubble.text === text && stats.bubble.error === (b?.error === true)) {
+  if (stats.bubble && stats.bubble.text === text && stats.bubble.summary === summary && stats.bubble.error === (b?.error === true)) {
     // Os links podem chegar depois do texto (com a pergunta): o aberto se monta de novo, no mesmo lugar.
     if (JSON.stringify(links) !== JSON.stringify(stats.bubble.links)) {
       stats.bubble.links = links;
@@ -216,7 +209,7 @@ function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: 
     report();
     return;
   }
-  stats.bubble = { text, error: b?.error === true, links };
+  stats.bubble = { text, error: b?.error === true, links, ...(summary ? { summary } : {}) };
   setAsk(ask);
   bubbleEl.dataset.error = String(stats.bubble.error);
   bubbleEl.dataset.on = "true";
@@ -293,7 +286,7 @@ function measureFirstFrame(start: number) {
 const api = {
   set(input: {
     estado?: string; visible?: boolean; voz?: number | null; cor?: string; sala?: number; largura?: number; catHover?: boolean;
-    bubble?: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown } | null;
+    bubble?: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown; summary?: unknown } | null;
   }) {
     // O mouse sobre o gato (spec #13380): o × da cabeça aparece, e o helper passa a deixar o clique nele.
     if (typeof input.catHover === "boolean" && input.catHover !== stats.catHover) {

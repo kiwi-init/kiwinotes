@@ -180,6 +180,29 @@ try {
     assert.equal(s.bubbleMore, false);
     assert.equal(await p.isVisible("#bubble-more"), false);
     report.checks.push("a short answer has no 'Ver mais'; when the bubble goes, the helper gets bubble: null");
+
+    // O balão único (spec #27881, T28010): a fala do `cat_speak` é o resumo do fechado, e o "Ver mais" abre a resposta
+    // inteira, com o título e o que veio antes da ferramenta.
+    const FALA = "Achei o plano da semana do Projeto X.";
+    const INTEIRA = `Vou ler a nota.\n\n## Plano\n\n${LONG}`;
+    await p.evaluate(([t, f]) => (window as any).kiwiOverlay.set({ visible: true, bubble: { text: t, error: false, summary: f } }), [INTEIRA, FALA]);
+    await settle(p);
+    s = await stats(p);
+    assert.equal(await p.textContent("#bubble-text"), FALA, "fechado, a fala do cat_speak");
+    assert.equal(s.bubbleMore, true, "a resposta inteira é maior que a fala: Ver mais");
+    await shot(p, `8-fala-${theme}.png`, `Fechado (${tema}): a fala do cat_speak e o Ver mais`, width, height);
+    await p.click("#bubble-more");
+    await settle(p);
+    const aberto = (await p.textContent("#bubble-text"))!;
+    assert.ok(aberto.startsWith("Vou ler a nota.") && aberto.includes("Plano"), `aberto, a resposta inteira: ${aberto.slice(0, 40)}`);
+    await shot(p, `9-fala-aberto-${theme}.png`, `Ver mais (${tema}): a resposta inteira`, width, height);
+    await p.click("#bubble-more");
+    // Sem a fala, o resumo sai da resposta e pula o título do começo (#28009).
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ visible: true, bubble: { text: t, error: false } }), `## Plano\n\n${LONG}`);
+    await settle(p);
+    const semFala = (await p.textContent("#bubble-text"))!;
+    assert.ok(!semFala.startsWith("Plano") && LONG.startsWith(semFala.replace(/…$/, "")), `sem fala, o começo do parágrafo: ${semFala}`);
+    report.checks.push("the cat_speak summary shows closed with 'Ver mais', which opens the whole answer; without it, the summary skips the leading title");
     await ctx.close();
   }
 
@@ -345,7 +368,8 @@ try {
     await settle(p);
     const closed = (await p.textContent("#bubble-text"))!;
     for (const sym of ["**", "##", "|", "`", "[x]"]) assert.ok(!closed.includes(sym), `o resumo fechado sem "${sym}": ${closed}`);
-    assert.ok(closed.startsWith("Plano da semana"), `o resumo começa pelo título: ${closed}`);
+    // O título do começo não é o resumo (#28009): o fechado começa no parágrafo; o aberto ainda tem o título (o h2).
+    assert.ok(closed.startsWith("Resumo das três tarefas"), `o resumo começa pelo parágrafo, sem o título: ${closed}`);
     assert.equal(await p.locator("#bubble-text *").count(), 0, "fechado, só texto");
     await shot(p, "7-markdown-fechado.png", "Markdown, fechado: sem os símbolos", width, height);
     await p.click("#bubble-more");
