@@ -50,6 +50,12 @@ export interface CatVoiceRef {
 /** A voz escolhida (#26939). Até a escolha, nenhuma: o modelo baixa, e o estado fica `noVoice`. */
 export const CAT_VOICE_REF: CatVoiceRef | null = null;
 
+/**
+ * O prazo do aquecimento (#27141). A 1ª vez de um binário leva ~20 s compilando os kernels Metal (T26732); 2 min deixam
+ * folga para um Mac quente ou ocupado. Um `kiwi-voice` vivo que trava não prende o estado em `warming` para sempre.
+ */
+export const WARM_MS = 120_000;
+
 export interface CatVoiceModelOptions {
   modelsDir: string;
   manifest?: ModelManifest;
@@ -61,6 +67,8 @@ export interface CatVoiceModelOptions {
   stallMs?: number;
   /** O `warmup` do processo da voz (`VoiceProcess.warmup`). */
   warm?: () => Promise<unknown>;
+  /** O prazo do `warm` (o `WARM_MS`, 2 min, por padrão): passou, o processo travado cai e o estado vira `error: warmup`. */
+  warmMs?: number;
   /** Derruba o processo da voz antes de apagar os arquivos que ele usa. */
   stopVoice?: () => Promise<void>;
   log?: (msg: string) => void;
@@ -198,9 +206,11 @@ export class CatVoiceModel {
     if (this.o.warm) {
       this.set({ phase: "warming" });
       try {
-        const ms = await this.o.warm();
+        const ms = await this.warmWithin(abort.signal);
         this.log(`warmup: ${typeof ms === "number" ? `${ms} ms` : "ok"}`);
       } catch (e) {
+        // Travado (o prazo) ou cancelado no meio: o processo cai, para não ficar preso num aquecimento sem fim.
+        if ((e as { code?: string }).code === "E_WARM_STOP") await this.o.stopVoice?.().catch(() => {});
         if (!live()) return;
         this.log(`warmup: ${e instanceof Error ? e.message : String(e)}`);
         this.set({ phase: "error", error: "warmup" });
@@ -209,6 +219,24 @@ export class CatVoiceModel {
       if (!live()) return;
     }
     this.set({ phase: "ready" });
+  }
+
+  /** O `warm` com o prazo e o `cancel`: o que vier primeiro. Os dois casos saem com o código `E_WARM_STOP`. */
+  private warmWithin(signal: AbortSignal): Promise<unknown> {
+    const ms = this.o.warmMs ?? WARM_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    const stop = new Promise<never>((_, reject) => {
+      const fail = (why: string) => reject(Object.assign(new Error(why), { code: "E_WARM_STOP" }));
+      timer = setTimeout(() => fail(`sem resposta em ${Math.round(ms / 1000)} s`), ms);
+      onAbort = () => fail("cancelado");
+      if (signal.aborted) onAbort();
+      else signal.addEventListener("abort", onAbort, { once: true });
+    });
+    return Promise.race([this.o.warm!(), stop]).finally(() => {
+      clearTimeout(timer);
+      if (onAbort) signal.removeEventListener("abort", onAbort);
+    });
   }
 
   private set(next: Phase): void {

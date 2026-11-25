@@ -205,6 +205,28 @@ describe("CatVoiceModel", () => {
     expect((await m.assets()).refText).toBe(VOICE().text);
   });
 
+  test("o aquecimento travado vira erro pelo prazo e derruba o processo (#27141)", async () => {
+    const { m, stops } = make({ warmMs: 50, warm: () => new Promise(() => {}) });
+    await m.download();
+    expect(m.status()).toMatchObject({ phase: "error", error: "warmup" });
+    expect(stops()).toBe(1);
+    // A falha não prende o clique seguinte.
+    expect(await Promise.race([m.download().then(() => "fim"), Bun.sleep(1000).then(() => "preso")])).toBe("fim");
+  });
+
+  test("cancelar e remover durante um aquecimento travado não ficam esperando (#27141)", async () => {
+    const { m, modelsDir } = make({ warmMs: 60_000, warm: () => new Promise(() => {}) });
+    void m.download();
+    while (m.status().phase !== "warming") await Bun.sleep(5);
+    const tempo = <T,>(p: Promise<T>) => Promise.race([p.then(() => "fim"), Bun.sleep(1000).then(() => "preso")]);
+    expect(await tempo(m.cancel())).toBe("fim");
+    void m.download();
+    while (m.status().phase !== "warming") await Bun.sleep(5);
+    expect(await tempo(m.remove())).toBe("fim");
+    expect(m.status().phase).toBe("off");
+    expect(existsSync(path.dirname(modelDir(modelsDir, MODEL)))).toBe(false);
+  });
+
   test("o que uma sessão anterior baixou conta como pronto, sem baixar nem aquecer", async () => {
     const first = make();
     await first.m.download();
