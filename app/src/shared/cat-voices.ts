@@ -17,5 +17,5 @@ export const CAT_VOICES: Record<CatVoiceId, { code: string; description: string;
   "pt-a": { code: "Kiwi PT-1", description: "Leve, com sotaque brasileiro", language: "portuguese" },
 };
 
-/** A voz de quem ainda não escolheu. Provisória: a padrão quem escolhe é o harry (spec #27531). */
-export const DEFAULT_CAT_VOICE: CatVoiceId = "en-a";
+/** A voz de quem ainda não escolheu: a em português (harry #28142). Os Ajustes abrem no idioma dela. */
+export const DEFAULT_CAT_VOICE: CatVoiceId = "pt-a";

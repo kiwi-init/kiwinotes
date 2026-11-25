@@ -11,7 +11,7 @@ import type { Fetcher, ModelManifest } from "../notes/semantic/model.ts";
 import { modelDir } from "../notes/semantic/model.ts";
 import { tempDir } from "../../test/tmp.ts";
 import type { CatVoiceStatus } from "../shared/ui-contract.ts";
-import { CAT_VOICE_IDS, CAT_VOICES, type CatVoiceId } from "../shared/cat-voices.ts";
+import { CAT_VOICE_IDS, CAT_VOICES, type CatVoiceId, DEFAULT_CAT_VOICE } from "../shared/cat-voices.ts";
 import { CAT_VOICE_REFS, CatVoiceModel, type CatVoiceRef, headlessCatVoiceSource, QWEN3_TTS } from "./cat-voice-model.ts";
 import { spawnVoice, VoiceProcess } from "./voice-process.ts";
 
@@ -102,6 +102,8 @@ function make(over: Partial<ConstructorParameters<typeof CatVoiceModel>[0]> = {}
     modelsDir,
     manifest: MODEL,
     voices: VOICES(),
+    // Aqui a pt-a é "em breve": a escolhida é uma das inventadas (no app, a padrão é a pt-a, #28142).
+    selected: () => "en-a",
     fetch: fakeFetch,
     warm: async () => {
       warms++;
@@ -427,10 +429,12 @@ describe("o manifesto de verdade", () => {
     expect(total).toBeLessThan(2.1e9);
   });
 
-  test("o catálogo (spec #27531): en-a e en-b com o WAV do release fixo e o SHA-256; a pt-a ainda em breve", () => {
+  test("o catálogo (spec #27531, #28142): as três vozes com o WAV do release fixo e o SHA-256; a padrão é a pt-a", () => {
     expect(Object.keys(CAT_VOICE_REFS).sort()).toEqual([...CAT_VOICE_IDS].sort());
-    expect(CAT_VOICE_REFS["pt-a"]).toBeNull();
-    for (const id of ["en-a", "en-b"] as const) {
+    expect(DEFAULT_CAT_VOICE).toBe("pt-a");
+    expect(CAT_VOICE_REFS["pt-a"]!.manifest.files[0]).toMatchObject({ name: "PT-ref.wav", size: 440_684, sha256: "76f2e075ec3659fe120b690274337b1d9fb8209f6c7c9340b84336d79b6b20e1" });
+    expect(CAT_VOICE_REFS["pt-a"]!.text).toBe("Achei! Era exatamente essa nota que você queria! Pronto. A nota está salva e organizada.");
+    for (const id of CAT_VOICE_IDS) {
       const r = CAT_VOICE_REFS[id]!;
       expect(r.language).toBe(CAT_VOICES[id].language);
       expect(r.manifest.files.length).toBe(1);
@@ -442,6 +446,6 @@ describe("o manifesto de verdade", () => {
       expect(r.preview!.length).toBeGreaterThan(0);
     }
     // Um diretório por voz: apagar ou baixar uma não mexe na outra.
-    expect(new Set(Object.values(CAT_VOICE_REFS).flatMap((r) => (r ? [r.manifest.id] : []))).size).toBe(2);
+    expect(new Set(Object.values(CAT_VOICE_REFS).flatMap((r) => (r ? [r.manifest.id] : []))).size).toBe(3);
   });
 });

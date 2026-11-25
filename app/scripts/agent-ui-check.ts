@@ -35,7 +35,7 @@
 //   baixam nada; o botão com o tamanho, o andamento, cancelar, baixar de novo, "Preparando" e "Pronta", desligar e
 //   remover. A voz vem de um servidor falso e local (a chave `KIWI_CAT_VOICE_MANIFEST`), com um modelo e duas vozes
 //   inventados, e o `kiwi-voice` é o falso: nada fala. As vozes (T27778): o idioma, só as vozes dele, o "Usar" que grava
-//   o `kiwicat.voz`, o Ouvir (Parar enquanto toca, numa saída muda) sem mudar a escolhida, e a pt-a "em breve".
+//   o `kiwicat.voz`, o Ouvir (Parar enquanto toca, numa saída muda) sem mudar a escolhida, e a PT-1, a padrão, que abre no Português.
 // Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
 import { createHash } from "node:crypto";
@@ -74,6 +74,7 @@ const voiceFiles: Record<string, Uint8Array> = {
   "/exemplo/voz-modelo/resolve/rev-exemplo/model.safetensors": random(3_000_000),
   "/vozes/ana-exemplo.wav": random(200_000),
   "/vozes/bia-exemplo.wav": random(150_000),
+  "/vozes/cris-exemplo.wav": random(120_000),
 };
 const voiceServer = Bun.serve({
   port: 0,
@@ -109,10 +110,10 @@ writeFileSync(
         { name: "model.safetensors", ...voiceFile("/exemplo/voz-modelo/resolve/rev-exemplo/model.safetensors") },
       ],
     },
-    // As vozes (T27778): duas inventadas no lugar da en-a e da en-b, e a pt-a "em breve".
+    // As vozes (T27778, T28150): três inventadas no lugar da en-a, da en-b e da pt-a.
     voices: Object.fromEntries(
-      (["ana", "bia"] as const).map((nome, i) => [
-        i === 0 ? "en-a" : "en-b",
+      (["ana", "bia", "cris"] as const).map((nome, i) => [
+        (["en-a", "en-b", "pt-a"] as const)[i]!,
         {
           manifest: {
             id: `voz-${nome}-exemplo`,
@@ -120,8 +121,8 @@ writeFileSync(
             revision: "v1",
             files: [{ name: `${nome}-exemplo.wav`, ...voiceFile(`/vozes/${nome}-exemplo.wav`), url: `http://127.0.0.1:${voiceServer.port}/vozes/${nome}-exemplo.wav` }],
           },
-          text: `Oi, eu sou a ${nome === "ana" ? "Ana" : "Bia"}, uma voz inventada.`,
-          language: "english",
+          text: `Oi, eu sou a ${nome[0]!.toUpperCase() + nome.slice(1)}, uma voz inventada.`,
+          language: nome === "cris" ? "portuguese" : "english",
           preview: ["Uma frase de exemplo.", "Outra frase de exemplo."],
         },
       ]),

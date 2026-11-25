@@ -57,6 +57,10 @@ export interface CatVoiceRef {
 const EN_LINES = "Hi. I'm Kiwi. Your notes have a cat now. Hmm. Found it. That note was hiding. Done. Your note is right where it belongs.";
 const EN_PREVIEW = ["Hi. I'm Kiwi. Your notes have a cat now.", "Hmm. Found it. That note was hiding.", "Done. Your note is right where it belongs."];
 
+/** A voz em português (#28142): o texto exato da referência (a R0, harry #28133) e as falas da prévia. */
+const PT_LINES = "Achei! Era exatamente essa nota que você queria! Pronto. A nota está salva e organizada.";
+const PT_PREVIEW = ["Oi. Eu sou o Kiwi. Suas notas agora têm um gato.", "Hum. Achei. Essa nota estava escondida.", "Pronto. Sua nota está no lugar certo."];
+
 /** Um WAV do release `cat-voices-1` (spec #27531): a URL fixa, os bytes e o SHA-256 de lá. */
 const releaseWav = (id: string, name: string, size: number, sha256: string): ModelManifest => ({
   id: `cat-voice-${id}`,
@@ -66,8 +70,8 @@ const releaseWav = (id: string, name: string, size: number, sha256: string): Mod
 });
 
 /**
- * As referências do catálogo (spec #27531, #27781). `null`: a voz ainda não tem referência e aparece como "em breve";
- * a do `pt-a` chega com a rodada 18, com o texto e a prévia em português.
+ * As referências do catálogo (spec #27531, #27781, #28142). `null`: a voz ainda não tem referência e aparece como
+ * "em breve".
  */
 export const CAT_VOICE_REFS: Record<CatVoiceId, CatVoiceRef | null> = {
   "en-a": {
@@ -82,7 +86,12 @@ export const CAT_VOICE_REFS: Record<CatVoiceId, CatVoiceRef | null> = {
     language: "english",
     preview: EN_PREVIEW,
   },
-  "pt-a": null,
+  "pt-a": {
+    manifest: releaseWav("pt-a", "PT-ref.wav", 440_684, "76f2e075ec3659fe120b690274337b1d9fb8209f6c7c9340b84336d79b6b20e1"),
+    text: PT_LINES,
+    language: "portuguese",
+    preview: PT_PREVIEW,
+  },
 };
 
 /**
