@@ -215,15 +215,36 @@ describe("o que fica como antes", () => {
     expect(r.view(60_000)).toBeNull();
   });
 
-  test("o limite (spec #11084): o aviso do agente é a linha de estado até a resposta; o limite acabado mostra a hora de volta", () => {
+  test("o limite (spec #11084): o aviso do agente é a linha de estado até a resposta, e fica o tempo de leitura (T28584); o limite acabado mostra a hora de volta", () => {
     const f = new BubbleFeed(fits(80));
     f.event(ev({ type: "started" }), 0);
     f.event(ev({ type: "text", text: "Começando." }), 0);
     f.event(ev({ type: "limit", status: "warning", percent: 82 }), 10);
-    expect(f.view(10)).toMatchObject({ text: "Você já usou 82% do seu limite. Eu sigo, mas vale ir com calma.", more: false });
+    const aviso = "Você já usou 82% do seu limite. Eu sigo, mas vale ir com calma.";
+    expect(f.view(10)).toMatchObject({ text: aviso, more: false });
     f.event(ev({ type: "text", text: " E terminando." }), 20);
+    // A resposta rápida espera o aviso ser lido (T28584): antes, ela o tirava da tela 20 ms depois.
     f.event(ev({ type: "done", stopReason: "end_turn", text: "Começando. E terminando." }), 30);
-    expect(f.view(30)).toMatchObject({ text: "Começando. E terminando.", more: false });
+    const lido = 10 + readingMs(aviso);
+    expect(f.view(30)).toMatchObject({ text: aviso });
+    expect(f.nextWake(30)).toBe(lido);
+    expect(f.view(lido - 1)).toMatchObject({ text: aviso });
+    expect(f.view(lido)).toMatchObject({ text: "Começando. E terminando.", more: false });
+    expect(f.nextWake(lido)).toBe(Infinity);
+    // Uma ferramenta que começa também espera; o clique fecha tudo, e o que esperava não volta.
+    const g = new BubbleFeed(fits(80));
+    g.event(ev({ type: "started" }), 0);
+    g.event(ev({ type: "limit", status: "warning", percent: 82 }), 0);
+    g.event(ev({ type: "status", status: "running", tool: "web" }), 5);
+    expect(g.view(5)).toMatchObject({ text: aviso });
+    g.close();
+    expect(g.view(readingMs(aviso))).toBeNull();
+    // O erro não espera o aviso.
+    const h = new BubbleFeed(fits(80));
+    h.event(ev({ type: "started" }), 0);
+    h.event(ev({ type: "limit", status: "warning", percent: 82 }), 0);
+    h.event(ev({ type: "error", code: "E_X", message: "Deu errado." }), 5);
+    expect(h.view(5)).toMatchObject({ text: "Deu errado.", error: true });
     // O limite acabado: o erro de limite vem com a hora que o agente informou.
     // O relógio do balão (aqui 0) não é o de parede: a hora de volta se lê no de parede.
     const out = new BubbleFeed(fits(80), false, () => new Date(2026, 10, 13, 14, 0).getTime());
