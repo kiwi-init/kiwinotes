@@ -3,7 +3,8 @@
 //
 //   bun scripts/agent-usage-check.ts [pasta]
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
@@ -14,7 +15,8 @@ import { fakeRegistry } from "../src/agent/fake/registry";
 const app = resolve(import.meta.dir, "..");
 const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T11114-usage"));
 mkdirSync(out, { recursive: true });
-const data = mkdtempSync(join(tmpdir(), "kiwi-usage-"));
+let data = mkdtempSync(join(tmpdir(), "kiwi-usage-"));
+const dirs = [data];
 const registry = fakeRegistry([
   { name: "@agentclientprotocol/claude-agent-acp", version: "0.106.0", files: { "dist/index.js": "" } },
   { name: "zod", version: "4.6.7", files: { "index.js": "" } },
@@ -199,11 +201,92 @@ try {
   report.checks.push("the limit over in the balloon, with the return time");
   report.problems.push(...h.report.problems);
   await h.close();
+
+  // 6. O mesmo no overlay (T29063): com o hub fora de vista, o gato do pedido vai ao overlay, e o aviso e o limite acabado
+  // vão ao balão dele. Sem o helper, os `catOverlay.*` chegam como evento; a página do overlay de verdade, num WebKit
+  // headless, aplica cada um como o CatOverlay.swift.
+  {
+    // O aviso sai uma vez por janela de uso (o `warned` do medidor): o overlay ganha um app novo, numa pasta nova, como
+    // a pessoa que vê o primeiro aviso com o Kiwi fora da frente.
+    await cli(["stop"]);
+    data = mkdtempSync(join(tmpdir(), "kiwi-usage-overlay-"));
+    dirs.push(data);
+    await cli(["start", "--no-helper"]);
+    await invoke("agent.enable", { consent: true });
+    await invoke("agent.configure", { onboarding: { state: "done" } });
+    await invoke("agent.download");
+    for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
+    const dir = join(app, "dist", "catoverlay");
+    const build = spawnSync("bun", ["x", "vite", "build"], { cwd: app, stdio: "ignore", env: { ...process.env, KIWI_UI_WINDOW: "catoverlay" } });
+    assert.ok(build.status === 0 && existsSync(join(dir, "index.html")), "o build da página catoverlay");
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(r) {
+        const file = Bun.file(join(dir, new URL(r.url).pathname.replace(/^\/$/, "/index.html")));
+        return (await file.exists()) ? new Response(file) : new Response("", { status: 404 });
+      },
+    });
+    const o = await (await browser.newContext({ viewport: { width: 420, height: 400 }, deviceScaleFactor: 2 })).newPage();
+    const problems: string[] = [];
+    o.on("pageerror", (e) => problems.push(String(e)));
+    await o.goto(`http://127.0.0.1:${server.port}/index.html`);
+    await o.addStyleTag({ content: "html{background:linear-gradient(135deg,#25324a,#3d2d4f)} body{margin:24px auto 0}" });
+    await o.waitForFunction(() => (window as any).kiwiOverlayStats?.ready === true);
+    const bubbles: { text: string | null; error?: boolean }[] = [];
+    const queue: any[] = [];
+    const seen: any[] = [];
+    const unsub = await ctx.subscribe(["events"], (line: any) => {
+      if (line.event !== "catOverlay.command") return;
+      queue.push(line.payload);
+      seen.push(line.payload);
+      if (line.payload.type === "catOverlay.bubble") bubbles.push(line.payload);
+    });
+    let pumping = true;
+    const pump = (async () => {
+      while (pumping) {
+        const c = queue.shift();
+        if (!c) { await Bun.sleep(5); continue; }
+        if (c.type === "catOverlay.show" || c.type === "catOverlay.state") await o.evaluate((e) => (window as any).kiwiOverlay.set({ estado: e, visible: true }), c.estado);
+        else if (c.type === "catOverlay.hide") await o.evaluate(() => (window as any).kiwiOverlay.set({ visible: false, bubble: null }));
+        else if (c.type === "catOverlay.bubble") await o.evaluate((b) => (window as any).kiwiOverlay.set({ bubble: b.text ? b : null }), c);
+      }
+    })();
+    const waitBubble = async (want: string, error: boolean) => {
+      for (let n = 0; !bubbles.some((b) => b.text?.includes(want) && !!b.error === error); n++) {
+        assert.ok(n < 300, `o balão do overlay com "${want}": ${JSON.stringify(seen)}`);
+        await Bun.sleep(50);
+      }
+      try {
+        await o.waitForFunction((w) => document.getElementById("bubble-text")?.textContent?.includes(w), want, { timeout: 15000 });
+      } catch {
+        throw new Error(`a página do overlay sem "${want}": ${JSON.stringify({ seen, page: await o.evaluate(() => [document.getElementById("bubble-text")?.textContent, (window as any).kiwiOverlayStats]) })}`);
+      }
+      await Bun.sleep(400);
+    };
+    await invoke("agent.ask", { text: "/aviso" });
+    await waitBubble("do seu limite", false);
+    await o.screenshot({ path: join(out, "6-overlay-aviso.png") });
+    await idle();
+    report.checks.push("without the hub in view, the agent's warning in the overlay balloon");
+    await invoke("agent.ask", { text: "/limite-com-hora" });
+    await waitBubble("O seu limite acabou. Ele volta", true);
+    await o.screenshot({ path: join(out, "7-overlay-limite.png") });
+    await idle();
+    assert.ok(!bubbles.some((b) => b.text?.includes("usage limit")), `a mensagem crua do agente não vai ao balão: ${JSON.stringify(bubbles)}`);
+    report.checks.push("without the hub in view, the limit over in the overlay balloon, with the return time");
+    pumping = false;
+    await pump;
+    unsub();
+    server.stop(true);
+    await o.context().close();
+    report.problems.push(...problems);
+  }
   assert.deepEqual(report.problems, []);
   console.log(JSON.stringify({ ok: true, ...report }, null, 2));
 } finally {
   await browser.close().catch(() => {});
   await cli(["stop"]).catch(() => {});
   registry.stop();
-  rmSync(data, { recursive: true, force: true });
+  for (const d of dirs) rmSync(d, { recursive: true, force: true });
 }

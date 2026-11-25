@@ -21,7 +21,9 @@
 //   balão ou da cabeça (`catOverlay.close`) fecha na hora. O Control com o gato na tela volta a ouvir dali, sem a
 //   entrada e com o balão onde estava; só depois que ele sai, o Control começa de novo, com a entrada.
 
-import { CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
+import { readingMs } from "../../ui/hub/bubble-state.ts";
+import { CAT_LIMIT_CODE, CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
+import { limitBubble } from "../../ui/settings/usageText.ts";
 import { type Locale, translate } from "../shared/i18n/index.ts";
 import { mainLocale } from "./locale.ts";
 import { ptCatOverlay } from "../shared/i18n/catoverlay.pt.ts";
@@ -169,6 +171,14 @@ export class CatOverlay {
   private usedTool = false;
   /** A fala do `cat_speak` neste pedido (spec #27881): o resumo do balão fechado. */
   private speechText = "";
+  /**
+   * O aviso de limite de uso na tela (T29063, como o hub desde o #370): até ele acabar o tempo de leitura (`readingMs`),
+   * a resposta espera em `afterWarning`. O erro não espera.
+   */
+  private warnTimer: unknown = null;
+  private afterWarning: (() => void) | null = null;
+  /** O limite acabado (`limit` `out`): a frase com a hora de volta, que troca a mensagem do erro `E_AGENT_LIMIT`. */
+  private outLine: string | null = null;
 
   constructor(
     private readonly host: CatOverlayHost,
@@ -234,6 +244,7 @@ export class CatOverlay {
       this.phase = "idle";
       return;
     }
+    if (e.type === "limit") return this.limit(e);
     if (e.type === "started" && state === "acordou") {
       this.cancelTimer();
       if (this.hubInView) {
@@ -260,11 +271,64 @@ export class CatOverlay {
     this.host.send({ type: "catOverlay.state", estado: state });
     if (voice && e.type === "done" && state === "pronto") {
       const a = this.answerOf(e.text, e.links);
-      this.speak(a.text, false, OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit, a.links, a.summary);
+      const answer = () => this.speak(a.text, false, OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit, a.links, a.summary);
+      // O aviso de limite ainda no tempo de leitura: a resposta entra quando ele acaba.
+      if (this.warnTimer !== null) this.afterWarning = answer;
+      else answer();
     }
-    else if (voice && e.type === "error") this.speak(voiceErrorLine(e.message), true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
-    else if (state === "pronto") this.linger(OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
-    else if (state === "erro") this.linger(OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+    else if (voice && e.type === "error") {
+      this.cancelWarning();
+      const line = e.code === CAT_LIMIT_CODE && this.outLine ? this.outLine : voiceErrorLine(e.message);
+      this.speak(line, true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+    }
+    // O limite acabado sai no balão em qualquer pedido, como no hub (T29063): sem ele, o gato some com cara de erro.
+    else if (e.type === "error" && e.code === CAT_LIMIT_CODE && this.outLine) {
+      this.cancelWarning();
+      this.speak(this.outLine, true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+    }
+    else if (state === "pronto") {
+      const leave = () => this.linger(OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
+      if (this.warnTimer !== null) this.afterWarning = leave;
+      else leave();
+    }
+    else if (state === "erro") {
+      this.cancelWarning();
+      this.linger(OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+    }
+  }
+
+  /**
+   * O limite de uso (spec #11084, T29063): como no balão do hub. O aviso entra no balão enquanto o agente trabalha e
+   * fica pelo menos o tempo de leitura; o limite acabado guarda a hora de volta para o erro que vem em seguida. Vale
+   * para qualquer pedido com o gato no overlay, não só a fala: é da conta da pessoa, não uma resposta (spec #12938).
+   */
+  private limit(e: Extract<AgentTurnEvent, { type: "limit" }>): void {
+    if (e.id !== this.turnId) return;
+    const line = limitBubble(e.status, e.percent, e.resetsAt, Date.now());
+    if (e.status === "out") {
+      this.outLine = line;
+      return;
+    }
+    if (this.phase !== "shown") return;
+    this.bubbleShown = true;
+    this.asking = false;
+    this.bubbleNow = { text: line, error: false };
+    this.host.send({ type: "catOverlay.bubble", ...this.bubbleNow });
+    this.cancelWarning();
+    this.warnTimer = this.clock.setTimeout(() => {
+      this.warnTimer = null;
+      const next = this.afterWarning;
+      this.afterWarning = null;
+      next?.();
+    }, readingMs(line));
+  }
+
+  /** O aviso de limite sai do caminho: a resposta que esperava por ele não entra mais. */
+  private cancelWarning(): void {
+    this.afterWarning = null;
+    if (this.warnTimer === null) return;
+    this.clock.clearTimeout(this.warnTimer);
+    this.warnTimer = null;
   }
 
   /** O que o agente disse no pedido, para o balão da resposta (o `done` traz o texto inteiro). */
@@ -275,6 +339,8 @@ export class CatOverlay {
       this.closedLen = 0;
       this.usedTool = false;
       this.speechText = "";
+      this.outLine = null;
+      this.cancelWarning();
       return;
     }
     if (e.id !== this.turnId) return;
@@ -538,6 +604,7 @@ export class CatOverlay {
 
   private hideNow(fadeMs: number): void {
     this.cancelTimer();
+    this.cancelWarning();
     if (!this.overlayShown) return;
     this.overlayShown = false;
     // O helper tira o balão junto com o gato (e solta o `hold` sem avisar).
