@@ -164,10 +164,11 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect((await invoke("agent.configure", { catSpeaks: false })).json).toMatchObject({ ok: true, value: { catSpeaks: false } });
   }, 30_000);
 
-  test("as vozes do gato pela capacidade: o catálogo, a escolha nos Ajustes e o Ouvir sem a voz no disco (T27778)", async () => {
+  test("as vozes do gato pela capacidade: o catálogo, a escolha nos Ajustes e o Ouvir sem a voz no disco (T27778, T28150)", async () => {
     const s = (await invoke("catVoice.status")).json!.value;
-    expect(s.voices.map((v: { id: string; state: string }) => `${v.id}:${v.state}`)).toEqual(["en-a:missing", "en-b:missing", "pt-a:soon"]);
-    expect(s.selected).toBe("en-a");
+    expect(s.voices.map((v: { id: string; state: string }) => `${v.id}:${v.state}`)).toEqual(["en-a:missing", "en-b:missing", "pt-a:missing"]);
+    // A padrão é a em português (harry #28142).
+    expect(s.selected).toBe("pt-a");
     expect((await invoke("settings.set", { kiwicat: { voz: "en-b" } })).json!.value.kiwicat.voz).toBe("en-b");
     expect((await invoke("catVoice.status")).json!.value.selected).toBe("en-b");
     expect((await invoke("settings.set", { kiwicat: { voz: "ana" } })).json).toMatchObject({ ok: false });
@@ -175,7 +176,7 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect((await invoke("catVoice.preview", { id: "en-a" })).json).toMatchObject({ ok: false, code: "E_UNAVAILABLE" });
     expect((await invoke("catVoice.preview", { id: "xx" })).json).toMatchObject({ ok: false });
     expect((await invoke("catVoice.preview", { id: null })).json).toMatchObject({ ok: true, value: { preview: null, selected: "en-b" } });
-    await invoke("settings.set", { kiwicat: { voz: "en-a" } });
+    await invoke("settings.set", { kiwicat: { voz: "pt-a" } });
   }, 30_000);
 
   test("o agente lê o cofre pelas ferramentas do Kiwi (spec #7496): responde a uma pergunta sobre uma nota", async () => {

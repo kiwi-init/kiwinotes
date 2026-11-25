@@ -10,18 +10,25 @@ o texto dele e o texto do Ouvir).
 |---|---|---|---|---|---:|---|
 | `en-a` | Kiwi EN-1 | Animada e divertida | inglês | `T-ref.wav` | 566444 | `e1fe8f725c475e65be6dcceb5128e07ae693ec6be3c605da20a48a0dc26f7d80` |
 | `en-b` | Kiwi EN-2 | Suave e fofa | inglês | `B-ref.wav` | 662444 | `0c75109a3de8af28611055f249d3f9263b052d229878a9db6b928b3c922418d8` |
-| `pt-a` | Kiwi PT-1 | Leve, com sotaque brasileiro | português | em breve (rodada 18) | | |
+| `pt-a` | Kiwi PT-1 | Leve, com sotaque brasileiro | português | `PT-ref.wav` | 440684 | `76f2e075ec3659fe120b690274337b1d9fb8209f6c7c9340b84336d79b6b20e1` |
 
+- **A padrão é a `pt-a`** (harry #28142, T28150). Quem nunca escolheu ouve a Kiwi PT-1, e o seletor de idioma abre
+  em Português. Uma escolha guardada (`kiwicat.voz`) não muda.
 - **O id é estável.** O nome e a descrição podem mudar sem mexer no que já foi baixado nem na escolha guardada
   (`kiwicat.voz`).
 - **Cada WAV fica num diretório só dele** (`cat-voice-<id>`, revisão `cat-voices-1`). Baixar ou apagar uma voz não
   mexe na outra. Os pesos do Qwen3-TTS são os mesmos para todas.
 - **A URL é fixa:** `https://github.com/kiwi-init/kiwinotes/releases/download/cat-voices-1/<WAV>`. O release
-  `cat-voices-1` sai pelo lead, com o ok do harry. Até lá, o clique dá erro de download nas vozes.
+  `cat-voices-1` está publicado (pre-release, não é o latest), com os três WAV (#28153).
 - **O WAV:** PCM16 mono, 24 kHz, 11,8 s (en-a) e 13,8 s (en-b). São três falas da rodada 11, com dois intervalos de
   300 ms.
 - **A transcrição dos dois** (o `refText` do clone), que também é o texto do Ouvir:
   `Hi. I'm Kiwi. Your notes have a cat now. Hmm. Found it. That note was hiding. Done. Your note is right where it belongs.`
+- **A `pt-a`:** a referência original, a R0, nunca a refinada R1, que afinava o timbre no fim das frases longas
+  (harry #28133). A transcrição dela (o `refText`):
+  `Achei! Era exatamente essa nota que você queria! Pronto. A nota está salva e organizada.`
+  O Ouvir dela fala outras três frases: `Oi. Eu sou o Kiwi. Suas notas agora têm um gato.`,
+  `Hum. Achei. Essa nota estava escondida.` e `Pronto. Sua nota está no lugar certo.`
 
 ## As receitas (#27781)
 
@@ -41,7 +48,7 @@ O que se acrescenta, depois de um espaço:
 - **en-a:** `Mischievous: playful and teasing, a bouncy rhythm with a grin in the voice, as if it is up to something.`
 - **en-b:** `A cute little creature: soft, cozy and gentle, rounded tone, with a faint purring quality in the way it speaks.`
 
-A receita da `pt-a` entra aqui com a rodada 18.
+A `pt-a` é a referência R0 da rodada em português (#28133), com `language: "portuguese"` no app.
 
 ## Como o app usa
 
