@@ -18,4 +18,10 @@ export const enCommon: { readonly [K in keyof typeof ptCommon]: Entry } = {
   "common.discard": "Discard",
   "common.continue": "Continue",
   "common.skip": "Skip",
+  "common.save": "Save",
+  "common.edit": "Edit",
+  "common.delete": "Delete",
+  "common.saving": "Saving…",
+  "common.reading": "Reading…",
+  "common.noText": "(no text)",
 };

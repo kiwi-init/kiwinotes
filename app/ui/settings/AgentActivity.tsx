@@ -11,13 +11,14 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { AgentActivityRequest, AgentChangeView, AgentUndoNote } from "../../src/shared/ui-contract.ts";
 import { collapse, lineDiff } from "../notes/diff.ts";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Button, Section } from "../src/kit/index.tsx";
 import {
   ACTIVITY_FIRST,
-  ACTIVITY_HINT,
+  activityHint,
   ACTIVITY_MORE,
   changeLine,
-  EMPTY_ACTIVITY,
+  emptyActivity,
   isFile,
   goneRequest,
   heldLines,
@@ -33,7 +34,7 @@ import {
   whenOf,
 } from "./activityText.ts";
 import { ProposalList, useProposals } from "./Proposals.tsx";
-import { openProposals, PROPOSALS_HINT, PROPOSALS_TITLE } from "./proposalText.ts";
+import { openProposals, proposalsHint, proposalsTitle } from "./proposalText.ts";
 
 /** O [Ver] aberto de uma mudança: carregando, os dois textos, ou o erro. */
 export type View = { phase: "loading" } | { phase: "ready"; view: AgentChangeView } | { phase: "error"; message: string };
@@ -44,6 +45,7 @@ type Outcome = { lines: { text: string; ok: boolean }[] };
 const keyOf = (request: string, change?: number) => (change ? `${request}:${change}` : request);
 
 export function AgentActivitySection() {
+  const { t } = useT();
   const proposals = useProposals();
   const [requests, setRequests] = useState<AgentActivityRequest[] | null>(null);
   const [limit, setLimit] = useState(ACTIVITY_FIRST);
@@ -157,14 +159,14 @@ export function AgentActivitySection() {
   };
 
   return (
-    <Section title="Atividade do agente">
+    <Section title={t("settings.topic.activity")}>
       <div className="kn-activity">
-        <p className="kn-row-hint kn-activity-hint">{ACTIVITY_HINT}</p>
+        <p className="kn-row-hint kn-activity-hint">{activityHint()}</p>
         {/* As propostas das reuniões (spec #8360): ficam aqui até a pessoa aplicar ou descartar, por 30 dias. */}
         {openProposals(proposals ?? []).length ? (
           <div className="kn-activity-proposals">
-            <h3 className="kn-proposal-h">{PROPOSALS_TITLE}</h3>
-            <p className="kn-row-hint">{PROPOSALS_HINT}</p>
+            <h3 className="kn-proposal-h">{proposalsTitle()}</h3>
+            <p className="kn-row-hint">{proposalsHint()}</p>
             <ProposalList list={proposals!} />
           </div>
         ) : null}
@@ -179,9 +181,9 @@ export function AgentActivitySection() {
           </p>
         ) : null}
         {requests === null ? null : requests.length === 0 ? (
-          notice ? null : <p className="kn-activity-empty">{EMPTY_ACTIVITY}</p>
+          notice ? null : <p className="kn-activity-empty">{emptyActivity()}</p>
         ) : (
-          <ul className="kn-activity-list" aria-label="Pedidos ao agente">
+          <ul className="kn-activity-list" aria-label={t("activity.listAria")}>
             {requests.map((r) => (
               <Request
                 key={r.id}
@@ -203,7 +205,7 @@ export function AgentActivitySection() {
         )}
         {requests && requests.length >= limit && limit < ACTIVITY_MORE ? (
           <div className="kn-activity-more">
-            <Button onClick={() => setLimit(ACTIVITY_MORE)}>Mostrar mais</Button>
+            <Button onClick={() => setLimit(ACTIVITY_MORE)}>{t("activity.more")}</Button>
           </div>
         ) : null}
       </div>
@@ -228,6 +230,7 @@ function Request({
   onUndo: (change?: number) => void;
   onDoubt: (fingerprint: string, answer: "send" | "hold") => void;
 }) {
+  const { t } = useT();
   const open = openChanges(r);
   const running = [...busy].some((b) => b === r.id || b.startsWith(`${r.id}:`));
   return (
@@ -237,11 +240,11 @@ function Request({
           {whenOf(r.at)}
         </time>
         <span className="kn-activity-text" title={r.request}>
-          {requestLine(r.request) || "(sem texto)"}
+          {requestLine(r.request) || t("common.noText")}
         </span>
         {r.changes.length > 1 && open > 0 ? (
-          <Button onClick={() => onUndo()} disabled={running} aria-label={`Desfazer o pedido de ${whenOf(r.at)}`}>
-            {busy.has(r.id) ? "Desfazendo…" : "Desfazer o pedido"}
+          <Button onClick={() => onUndo()} disabled={running} aria-label={t("activity.undoRequestAria", { when: whenOf(r.at) })}>
+            {busy.has(r.id) ? t("activity.undoing") : t("activity.undoRequest")}
           </Button>
         ) : null}
       </div>
@@ -257,16 +260,16 @@ function Request({
         </p>
       ))}
       {r.doubts?.length ? (
-        <ul className="kn-activity-doubts" aria-label="Dúvidas sem resposta">
+        <ul className="kn-activity-doubts" aria-label={t("activity.doubtsAria")}>
           {r.doubts.map((d) => (
             <li key={d.fingerprint} className="kn-activity-doubt">
               <span className="kn-activity-what">{doubtLine(d)}</span>
               {d.answered ? (
-                <span className="kn-activity-undone">{d.answered === "send" ? "Você deixou mandar." : "Você disse que é segredo."}</span>
+                <span className="kn-activity-undone">{d.answered === "send" ? t("activity.doubt.sent") : t("activity.doubt.held")}</span>
               ) : (
                 <span className="kn-activity-actions">
-                  <Button onClick={() => onDoubt(d.fingerprint, "hold")}>É segredo</Button>
-                  <Button onClick={() => onDoubt(d.fingerprint, "send")}>Pode mandar</Button>
+                  <Button onClick={() => onDoubt(d.fingerprint, "hold")}>{t("hub.doubt.secret")}</Button>
+                  <Button onClick={() => onDoubt(d.fingerprint, "send")}>{t("hub.doubt.send")}</Button>
                 </span>
               )}
             </li>
@@ -275,7 +278,7 @@ function Request({
       ) : null}
       {r.changes.length === 0 ? (
         // Só a memória mudou (spec #11469): as linhas dela já dizem; "Não mudou nada" seria falso.
-        memoryLines(r.reads).length ? null : <p className="kn-activity-none">Não mudou nada.</p>
+        memoryLines(r.reads).length ? null : <p className="kn-activity-none">{t("activity.nothing")}</p>
       ) : (
         <ul className="kn-activity-changes">
           {r.changes.map((c, i) => {
@@ -292,18 +295,18 @@ function Request({
                     {isFile(c.path) ? (
                       // Um arquivo gerado (spec #11549) não tem texto para comparar: ele abre no Finder.
                       c.undone ? null : (
-                        <Button onClick={() => void api.notes.reveal(c.path).catch(() => {})} aria-label={`Abrir no Finder: ${changeLine(c)}`}>
-                          Abrir no Finder
+                        <Button onClick={() => void api.notes.reveal(c.path).catch(() => {})} aria-label={t("activity.finderAria", { what: changeLine(c) })}>
+                          {t("activity.finder")}
                         </Button>
                       )
                     ) : (
                       <Button onClick={() => onView(n)} aria-expanded={!!view} aria-controls={viewId}>
-                        {view ? "Fechar" : "Ver"}
+                        {view ? t("common.close") : t("common.see")}
                       </Button>
                     )}
                     {c.undone ? null : (
-                      <Button onClick={() => onUndo(n)} disabled={running} aria-label={`Desfazer: ${changeLine(c)}`}>
-                        {busy.has(k) ? "Desfazendo…" : "Desfazer"}
+                      <Button onClick={() => onUndo(n)} disabled={running} aria-label={t("activity.undoAria", { what: changeLine(c) })}>
+                        {busy.has(k) ? t("activity.undoing") : t("common.undo")}
                       </Button>
                     )}
                   </span>
@@ -338,7 +341,8 @@ function Request({
 
 /** O [Ver]: o aviso, e o antes contra o depois com as linhas mudadas marcadas (ou só um dos dois). */
 export function ViewPanel({ view }: { view: View }) {
-  if (view.phase === "loading") return <p className="kn-activity-notice">Lendo…</p>;
+  const { t } = useT();
+  if (view.phase === "loading") return <p className="kn-activity-notice">{t("common.reading")}</p>;
   if (view.phase === "error") return <p className="kn-activity-notice" role="alert">{view.message}</p>;
   const v = view.view;
   const notice = viewNotice(v);
@@ -354,11 +358,11 @@ export function ViewPanel({ view }: { view: View }) {
     <>
       {notice ? <p className="kn-activity-notice">{notice}</p> : null}
       {shown ? (
-        <pre className="kn-diff" aria-label={both ? "O texto de antes e o que o agente deixou" : "O texto"}>
+        <pre className="kn-diff" aria-label={both ? t("activity.diffAria") : t("activity.textAria")}>
           {lines.map((l, i) =>
             l.kind === "gap" ? (
               <div key={i} className="kn-diff-gap">
-                … {l.count} {l.count === 1 ? "linha igual" : "linhas iguais"}
+                … {t("diff.same", { n: l.count })}
               </div>
             ) : (
               <div key={i} className={`kn-diff-${l.kind}`}>

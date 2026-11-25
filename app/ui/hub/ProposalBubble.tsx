@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { openProposals, PROPOSAL_LATER } from "../settings/proposalText.ts";
+import { openProposals } from "../settings/proposalText.ts";
 import { ProposalItem, ProposalPanel, useProposals } from "../settings/Proposals.tsx";
 import { onAdjust } from "../settings/routineAdjust.ts";
 import { BubblePresence } from "./BubblePresence";
@@ -77,7 +77,7 @@ export function ProposalBubble({ hidden, reduced = false, onPending }: { hidden:
           <div className="kn-bubble-shell kn-bubble kn-proposal-bubble" onMouseDown={keepFocus} role="region" aria-label={t("hub.proposal.aria")}>
             <ProposalItem p={small} inline={false} viewOpen={false} onView={setBigOpen} />
             <button type="button" className="kn-proposal-later" onClick={dismiss}>
-              {PROPOSAL_LATER}
+              {t("proposal.later")}
             </button>
             <BubbleTail />
           </div>

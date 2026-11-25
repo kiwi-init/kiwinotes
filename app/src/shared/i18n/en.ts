@@ -3,6 +3,7 @@
 
 import { enCatOverlay } from "./catoverlay.en.ts";
 import { enAgent } from "./agent.en.ts";
+import { enActivity } from "./activity.en.ts";
 import { enCommon } from "./common.en.ts";
 import { enHistory } from "./history.en.ts";
 import { enHub } from "./hub.en.ts";
@@ -120,6 +121,7 @@ export const EN_PARTS = {
   meetings: enMeetings,
   history: enHistory,
   hub: enHub,
+  activity: enActivity,
 } as const;
 
 export const en: Catalog = {
@@ -133,4 +135,5 @@ export const en: Catalog = {
   ...enMeetings,
   ...enHistory,
   ...enHub,
+  ...enActivity,
 };

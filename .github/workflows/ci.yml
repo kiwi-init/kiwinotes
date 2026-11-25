@@ -165,6 +165,13 @@ jobs:
             bun scripts/$c-check.ts "$RUNNER_TEMP/$c" || exit 1
           done
 
+      # As telas do agente em English (T29272): a memória, as rotinas, o placar, as trilhas, as respostas, a Atividade e
+      # a proposta, com o agente e o registro de pacotes de mentira.
+      - name: agent-english-check
+        if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: bun scripts/agent-english-check.ts "$RUNNER_TEMP/agent-english"
+
       - name: hub-goo-check
         if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10

@@ -16,4 +16,10 @@ export const ptCommon = {
   "common.discard": "Descartar",
   "common.continue": "Continuar",
   "common.skip": "Pular",
+  "common.save": "Salvar",
+  "common.edit": "Editar",
+  "common.delete": "Apagar",
+  "common.saving": "Salvando…",
+  "common.reading": "Lendo…",
+  "common.noText": "(sem texto)",
 } as const;

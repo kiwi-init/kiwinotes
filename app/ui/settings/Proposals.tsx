@@ -10,26 +10,12 @@ import { Fragment, useEffect, useState } from "react";
 
 import type { AgentProposalSummary, AgentProposalView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Button } from "../src/kit/index.tsx";
-import {
-  choiceJoin,
-  mainDiff,
-  openProposals,
-  PROPOSAL_ADJUST,
-  PROPOSAL_APPLY,
-  PROPOSAL_CREATE,
-  PROPOSAL_DISCARD,
-  PROPOSAL_HIDE,
-  PROPOSAL_NONE,
-  PROPOSAL_NOT_NOW,
-  PROPOSAL_PREPARE,
-  PROPOSAL_UNDO,
-  PROPOSAL_VIEW,
-  proposalLine,
-} from "./proposalText.ts";
+import { choiceJoin, mainDiff, openProposals, proposalLine } from "./proposalText.ts";
 import { useHubNav } from "../src/hubNav.ts";
 import { requestAdjust } from "./routineAdjust.ts";
-import { ROUTINES_TITLE } from "./routinesText.ts";
+import { routinesTitle } from "./routinesText.ts";
 import "./proposal.css";
 
 /** As propostas, lidas de novo a cada `agent.proposalsChanged`. Null antes da primeira leitura. */
@@ -62,7 +48,8 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** O [Ver a proposta]: a nota nova e a diferença na nota principal. */
 export function ProposalView({ state }: { state: ViewState }) {
-  if (state.phase === "loading") return <p className="kn-proposal-note">Lendo…</p>;
+  const { t } = useT();
+  if (state.phase === "loading") return <p className="kn-proposal-note">{t("common.reading")}</p>;
   if (state.phase === "error")
     return (
       <p className="kn-proposal-note" role="alert">
@@ -75,20 +62,20 @@ export function ProposalView({ state }: { state: ViewState }) {
     <div className="kn-proposal-view">
       {v.note ? (
         <h3 className="kn-proposal-h">
-          A nota nova: <span className="kn-proposal-path">{`${folder}${v.note.title}.md`}</span>
+          {t("proposal.newNote")} <span className="kn-proposal-path">{`${folder}${v.note.title}.md`}</span>
         </h3>
       ) : v.kind === "references" ? (
         // As referências (spec #11908): as linhas que entram no fim da nota.
         <h3 className="kn-proposal-h">
-          As referências, no fim de <span className="kn-proposal-path">{v.references?.note ?? ""}</span>:
+          {t("proposal.refsAt")} <span className="kn-proposal-path">{v.references?.note ?? ""}</span>:
         </h3>
       ) : (
         // O resumo executivo (spec #11546): a seção como vai ficar, no topo da nota principal.
         <h3 className="kn-proposal-h">
-          O resumo executivo{v.replaces ? `, no lugar do de ${v.replaces.split("-").reverse().join("/")} (que fica nas Versões)` : ""}:
+          {t("proposal.summaryHead", { replaces: v.replaces ? t("proposal.replaces", { date: v.replaces.split("-").reverse().join("/") }) : "" })}
         </h3>
       )}
-      <pre className="kn-diff" aria-label={v.note ? "O texto da nota nova" : v.kind === "references" ? "As referências" : "O resumo executivo"}>
+      <pre className="kn-diff" aria-label={v.note ? t("proposal.newNoteAria") : v.kind === "references" ? t("proposal.refsAria") : t("proposal.summaryAria")}>
         {v.noteContent.replace(/\n$/, "").split("\n").map((l, i) => (
           <div key={i} className="kn-diff-add">
             {"+ "}
@@ -99,13 +86,13 @@ export function ProposalView({ state }: { state: ViewState }) {
       {v.main ? (
         <>
           <h3 className="kn-proposal-h">
-            Na nota principal: <span className="kn-proposal-path">{v.main.path}</span>
+            {t("proposal.inMain")} <span className="kn-proposal-path">{v.main.path}</span>
           </h3>
-          <pre className="kn-diff" aria-label="As linhas que entram na nota principal">
+          <pre className="kn-diff" aria-label={t("proposal.mainAria")}>
             {mainDiff(v.main.lines).map((l, i) =>
               l.kind === "gap" ? (
                 <div key={i} className="kn-diff-gap">
-                  … {l.count} {l.count === 1 ? "linha igual" : "linhas iguais"}
+                  … {t("diff.same", { n: l.count })}
                 </div>
               ) : (
                 <div key={i} className={`kn-diff-${l.kind}`}>
@@ -117,7 +104,7 @@ export function ProposalView({ state }: { state: ViewState }) {
           </pre>
         </>
       ) : (
-        <p className="kn-proposal-note">Sem nota principal: só a nota da reunião.</p>
+        <p className="kn-proposal-note">{t("proposal.noMain")}</p>
       )}
     </div>
   );
@@ -138,6 +125,7 @@ export function ProposalItem({
   viewOpen?: boolean;
   inline?: boolean;
 }) {
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [view, setView] = useState<ViewState | null>(null);
@@ -171,7 +159,7 @@ export function ProposalItem({
     <div className="kn-proposal" data-status={p.status} data-proposal={p.id}>
       {choosing ? (
         <p className="kn-proposal-line">
-          {proposalLine(p)} É do{" "}
+          {proposalLine(p)} {t("proposal.choose")}{" "}
           {p.candidates.map((c, i) => (
             <Fragment key={c.folder}>
               {choiceJoin(i, p.candidates.length)}
@@ -181,16 +169,16 @@ export function ProposalItem({
           ?
         </p>
       ) : (
-        <p className="kn-proposal-line">{undone || p.undoneAt ? "Desfeito: as notas voltaram como estavam." : proposalLine(p)}</p>
+        <p className="kn-proposal-line">{undone || p.undoneAt ? t("proposal.undone") : proposalLine(p)}</p>
       )}
       <div className="kn-proposal-actions">
         {p.status === "offer" ? (
           <>
             <Button variant="primary" disabled={busy} onClick={() => void run(() => api.agent.proposalPrepare(p.id))}>
-              {PROPOSAL_PREPARE}
+              {t("proposal.prepare")}
             </Button>
             <Button data-role="dismiss" disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
-              {PROPOSAL_NOT_NOW}
+              {t("proposal.notNow")}
             </Button>
           </>
         ) : choosing ? (
@@ -203,47 +191,47 @@ export function ProposalItem({
             {/* O resumo executivo é sempre de um projeto (spec #11546): sem o "Nenhum". */}
             {p.kind === "summary" ? null : (
               <Button disabled={busy} onClick={() => void run(() => api.agent.proposalChoose(p.id, null))}>
-                {PROPOSAL_NONE}
+                {t("proposal.none")}
               </Button>
             )}
             <Button data-role="dismiss" disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
-              {PROPOSAL_DISCARD}
+              {t("common.discard")}
             </Button>
           </>
         ) : p.status === "pending" && p.kind === "routine" && p.routine ? (
           // A rotina (spec #12944): [Criar] a cria desligada; [Ajustar] abre o cartão em Ajustes › Agente › Rotinas.
           <>
             <Button variant="primary" disabled={busy} onClick={() => void run(() => api.agent.proposalApply(p.id))}>
-              {PROPOSAL_CREATE}
+              {t("proposal.create")}
             </Button>
             <Button
               onClick={() => {
                 requestAdjust({ proposal: p.id, routine: p.routine! });
-                nav?.openSettings("agent", ROUTINES_TITLE);
+                nav?.openSettings("agent", routinesTitle());
               }}
             >
-              {PROPOSAL_ADJUST}
+              {t("proposal.adjust")}
             </Button>
             <Button data-role="dismiss" disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
-              {PROPOSAL_DISCARD}
+              {t("common.discard")}
             </Button>
           </>
         ) : p.status === "pending" ? (
           <>
             {/* Uma ação principal (spec #12626): o Aplicar na frente, o Ver como secundário, e o Descartar em texto no balão. */}
             <Button variant="primary" disabled={busy} onClick={() => void run(() => api.agent.proposalApply(p.id))}>
-              {PROPOSAL_APPLY}
+              {t("proposal.apply")}
             </Button>
             <Button aria-expanded={open} onClick={toggleView}>
-              {open ? PROPOSAL_HIDE : PROPOSAL_VIEW}
+              {open ? t("proposal.hide") : t("proposal.view")}
             </Button>
             <Button data-role="dismiss" disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
-              {PROPOSAL_DISCARD}
+              {t("common.discard")}
             </Button>
           </>
         ) : p.status === "applied" && p.applyRequest && !undone && !p.undoneAt ? (
           <Button disabled={busy} onClick={() => void run(async () => (await api.agent.undo(p.applyRequest!), setUndone(true)))}>
-            {PROPOSAL_UNDO}
+            {t("common.undo")}
           </Button>
         ) : null}
       </div>
@@ -259,10 +247,11 @@ export function ProposalItem({
 
 /** As propostas abertas, na Atividade do agente: cada uma até ser aplicada ou descartada, por 30 dias. */
 export function ProposalList({ list }: { list: readonly AgentProposalSummary[] }) {
+  const { t } = useT();
   const open = openProposals(list);
   if (!open.length) return null;
   return (
-    <ul className="kn-proposal-list" aria-label="Propostas das reuniões">
+    <ul className="kn-proposal-list" aria-label={t("proposal.listAria")}>
       {open.map((p) => (
         <li key={p.id}>
           <ProposalItem p={p} />
