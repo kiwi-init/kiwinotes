@@ -27,6 +27,9 @@ const ENTRIES = [
 
 const s = await startEnglish({
   name: "history-english",
+  // A pasta da nota nova é a do disco (`INBOX`, `fromDictation.ts`), "Caixa de entrada" também em English. Se ela muda
+  // de nome em inglês é decisão do lead (#28171); até lá sai no resumo, sem reprovar.
+  known: [["Caixa de entrada", "#28171"]],
   seed(data) {
     const dir = join(data, "history");
     mkdirSync(dir, { recursive: true });

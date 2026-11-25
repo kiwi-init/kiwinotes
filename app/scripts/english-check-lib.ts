@@ -46,7 +46,7 @@ export function ptPieces(): string[] {
  * O português que não está no catálogo (um texto escrito direto no código): as letras que o inglês não tem (ã, õ, ç)
  * e palavras que só o português usa. Os dados de exemplo dos roteiros são em inglês, então nada disso devia aparecer.
  */
-const PT_WORD = /[ãõçÃÕÇ]|(?<![\p{L}-])(não|você|está|até|também|então|pelo|pela|uma|das|dos|nas|nos|com|sem|para)(?![\p{L}-])/u;
+const PT_WORD = /[ãõçÃÕÇ]|(?<![\p{L}-])(não|você|está|até|também|então|pelo|pela|uma|das|dos|nas|nos|com|sem|para|de|em)(?![\p{L}-])/u;
 
 /** O trecho em volta de cada achado do `PT_WORD`, para o relatório dizer onde está. */
 export function ptWords(text: string): string[] {
