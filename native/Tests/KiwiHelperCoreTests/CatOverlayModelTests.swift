@@ -317,3 +317,15 @@ final class CatOverlayColorTests: XCTestCase {
         }
     }
 }
+
+final class CatOverlayLangTests: XCTestCase {
+    func testOnlyTheHelperLanguagesReachThePage() {
+        XCTAssertEqual(CatOverlayLang.query("en"), "lang=en")
+        XCTAssertEqual(CatOverlayLang.query("pt"), "lang=pt")
+        XCTAssertEqual(CatOverlayLang.script("en"), "window.kiwiOverlay?.set({lang: 'en'})")
+        for bad in ["", "fr", "EN", "en-US", "en');alert(1)//"] {
+            XCTAssertEqual(CatOverlayLang.page(bad), "pt", bad)
+            XCTAssertEqual(CatOverlayLang.script(bad), "window.kiwiOverlay?.set({lang: 'pt'})", bad)
+        }
+    }
+}

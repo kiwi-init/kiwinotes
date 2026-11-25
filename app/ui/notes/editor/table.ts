@@ -1,6 +1,8 @@
 // Tabela Markdown com edição simples (spec #1107, fase A): Tab e ⇧Tab andam de célula em célula, Enter abre uma linha
 // nova, e a cada passo as colunas se alinham. Funções puras sobre o texto da tabela; o editor só aplica o resultado.
 
+import { localized } from "../../src/i18n.ts";
+
 export type Align = "left" | "center" | "right" | null;
 
 export interface Table {
@@ -195,24 +197,24 @@ export function moveCell(text: string, row: number, col: number, move: CellMove)
 
 // E3 (T5557): shared by the context menu and table-only keyboard commands. Original Kiwi code.
 export const TABLE_ACTIONS = [
-  { id: "row.insertAbove", group: "row", label: "Inserir acima", key: "Mod-Alt-Shift-ArrowUp", hint: "⇧⌥⌘↑" },
-  { id: "row.insertBelow", group: "row", label: "Inserir abaixo", key: "Mod-Alt-Shift-ArrowDown", hint: "⇧⌥⌘↓" },
-  { id: "row.moveUp", group: "row", label: "Mover para cima", key: "Mod-Alt-ArrowUp", hint: "⌥⌘↑" },
-  { id: "row.moveDown", group: "row", label: "Mover para baixo", key: "Mod-Alt-ArrowDown", hint: "⌥⌘↓" },
-  { id: "row.duplicate", group: "row", label: "Duplicar linha", key: null, hint: undefined },
-  { id: "row.delete", group: "row", label: "Apagar linha", key: "Mod-Alt-Backspace", hint: "⌥⌘⌫" },
-  { id: "column.insertLeft", group: "column", label: "Inserir à esquerda", key: "Mod-Alt-Shift-ArrowLeft", hint: "⇧⌥⌘←" },
-  { id: "column.insertRight", group: "column", label: "Inserir à direita", key: "Mod-Alt-Shift-ArrowRight", hint: "⇧⌥⌘→" },
-  { id: "column.moveLeft", group: "column", label: "Mover à esquerda", key: "Mod-Alt-ArrowLeft", hint: "⌥⌘←" },
-  { id: "column.moveRight", group: "column", label: "Mover à direita", key: "Mod-Alt-ArrowRight", hint: "⌥⌘→" },
-  { id: "column.duplicate", group: "column", label: "Duplicar coluna", key: "Mod-Alt-Shift-d", hint: "⇧⌥⌘D" },
-  { id: "column.delete", group: "column", label: "Apagar coluna", key: "Mod-Alt-Shift-Backspace", hint: "⇧⌥⌘⌫" },
-  { id: "align.left", group: "align", label: "À esquerda", key: "Mod-Alt-l", hint: "⌥⌘L", align: "left" },
-  { id: "align.center", group: "align", label: "Centralizado", key: "Mod-Alt-e", hint: "⌥⌘E", align: "center" },
-  { id: "align.right", group: "align", label: "À direita", key: "Mod-Alt-r", hint: "⌥⌘R", align: "right" },
-  { id: "align.default", group: "align", label: "Padrão", key: "Mod-Alt-0", hint: "⌥⌘0", align: null },
-  { id: "sort.asc", group: "sort", label: "Crescente (A–Z)", key: "Mod-Alt-s", hint: "⌥⌘S" },
-  { id: "sort.desc", group: "sort", label: "Decrescente (Z–A)", key: "Mod-Alt-Shift-s", hint: "⇧⌥⌘S" },
+  localized({ id: "row.insertAbove", group: "row", key: "Mod-Alt-Shift-ArrowUp", hint: "⇧⌥⌘↑" }, { label: "editor.table.insertAbove" }),
+  localized({ id: "row.insertBelow", group: "row", key: "Mod-Alt-Shift-ArrowDown", hint: "⇧⌥⌘↓" }, { label: "editor.table.insertBelow" }),
+  localized({ id: "row.moveUp", group: "row", key: "Mod-Alt-ArrowUp", hint: "⌥⌘↑" }, { label: "editor.table.moveUp" }),
+  localized({ id: "row.moveDown", group: "row", key: "Mod-Alt-ArrowDown", hint: "⌥⌘↓" }, { label: "editor.table.moveDown" }),
+  localized({ id: "row.duplicate", group: "row", key: null, hint: undefined }, { label: "editor.table.duplicateRow" }),
+  localized({ id: "row.delete", group: "row", key: "Mod-Alt-Backspace", hint: "⌥⌘⌫" }, { label: "editor.table.deleteRow" }),
+  localized({ id: "column.insertLeft", group: "column", key: "Mod-Alt-Shift-ArrowLeft", hint: "⇧⌥⌘←" }, { label: "editor.table.insertLeft" }),
+  localized({ id: "column.insertRight", group: "column", key: "Mod-Alt-Shift-ArrowRight", hint: "⇧⌥⌘→" }, { label: "editor.table.insertRight" }),
+  localized({ id: "column.moveLeft", group: "column", key: "Mod-Alt-ArrowLeft", hint: "⌥⌘←" }, { label: "editor.table.moveLeft" }),
+  localized({ id: "column.moveRight", group: "column", key: "Mod-Alt-ArrowRight", hint: "⌥⌘→" }, { label: "editor.table.moveRight" }),
+  localized({ id: "column.duplicate", group: "column", key: "Mod-Alt-Shift-d", hint: "⇧⌥⌘D" }, { label: "editor.table.duplicateColumn" }),
+  localized({ id: "column.delete", group: "column", key: "Mod-Alt-Shift-Backspace", hint: "⇧⌥⌘⌫" }, { label: "editor.table.deleteColumn" }),
+  localized({ id: "align.left", group: "align", key: "Mod-Alt-l", hint: "⌥⌘L", align: "left" }, { label: "editor.table.alignLeft" }),
+  localized({ id: "align.center", group: "align", key: "Mod-Alt-e", hint: "⌥⌘E", align: "center" }, { label: "editor.table.alignCenter" }),
+  localized({ id: "align.right", group: "align", key: "Mod-Alt-r", hint: "⌥⌘R", align: "right" }, { label: "editor.table.alignRight" }),
+  localized({ id: "align.default", group: "align", key: "Mod-Alt-0", hint: "⌥⌘0", align: null }, { label: "editor.table.alignDefault" }),
+  localized({ id: "sort.asc", group: "sort", key: "Mod-Alt-s", hint: "⌥⌘S" }, { label: "editor.table.sortAsc" }),
+  localized({ id: "sort.desc", group: "sort", key: "Mod-Alt-Shift-s", hint: "⇧⌥⌘S" }, { label: "editor.table.sortDesc" }),
 ] as const;
 export type TableAction = (typeof TABLE_ACTIONS)[number]["id"];
 export interface TableContext { table: Table; row: number; col: number }

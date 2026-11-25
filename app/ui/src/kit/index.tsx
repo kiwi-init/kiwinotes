@@ -18,7 +18,7 @@ import { createRoot } from "react-dom/client";
 import { api, engineReady, has, reportError } from "../api.ts";
 import { TopBar, useInHub } from "../topbar.tsx";
 import { startAppearance } from "../styles/appearance.ts";
-import { startLocale } from "../i18n.ts";
+import { startLocale, useT } from "../i18n.ts";
 import { startScrollbars } from "../scrollbar.ts";
 
 declare global {
@@ -53,6 +53,7 @@ function Booted({ children }: { children: ReactNode }) {
  * Recarregar troca sem fechar o app; Depois esconde a faixa, e a janela sobe a nova na próxima abertura.
  */
 export function UpdateReady() {
+  const { t } = useT();
   const [pending, setPending] = useState<string | null>(null);
   const [later, setLater] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -74,11 +75,11 @@ export function UpdateReady() {
   };
   return (
     <div className="kn-update-ready" role="status" data-testid="ui-update-ready">
-      <span>Nova aparência pronta</span>
+      <span>{t("uiUpdate.ready")}</span>
       <Button variant="primary" disabled={busy} onClick={reload}>
-        Recarregar
+        {t("uiUpdate.reload")}
       </Button>
-      <Button onClick={() => setLater(pending)}>Depois</Button>
+      <Button onClick={() => setLater(pending)}>{t("uiUpdate.later")}</Button>
     </div>
   );
 }

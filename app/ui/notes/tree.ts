@@ -4,6 +4,7 @@ import { subsequence } from "../../src/shared/fuzzy.ts";
 import { folderOf } from "./links.ts";
 import { extOf } from "../../src/shared/attachments.ts";
 import type { NoteMeta, VaultFile, VaultListing } from "./types.ts";
+import { formatDate, type Locale, translate } from "../../src/shared/i18n/index.ts";
 import { filesLineage } from "./files-delta.ts";
 
 export interface FolderNode {
@@ -231,17 +232,15 @@ export function ancestors(path: string): string[] {
   return out;
 }
 
-/** "editada hoje", "editada ontem" ou "editada em 28 de out". */
-export function editedLabel(meta: Pick<NoteMeta, "mtime">, now = new Date()): string {
+/** "editada hoje", "editada ontem" ou "editada em 28 de out", na língua das telas (T29244). */
+export function editedLabel(meta: Pick<NoteMeta, "mtime">, now = new Date(), locale: Locale = "pt"): string {
   const d = new Date(meta.mtime);
   const day = (x: Date) => x.toDateString();
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (day(d) === day(now)) return "editada hoje";
-  if (day(d) === day(yesterday)) return "editada ontem";
-  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
-  if (d.getFullYear() !== now.getFullYear()) opts.year = "numeric";
-  return `editada em ${d.toLocaleDateString("pt-BR", opts).replace(/\.$/, "")}`;
+  if (day(d) === day(now)) return translate(locale, "notes.edited.today");
+  if (day(d) === day(yesterday)) return translate(locale, "notes.edited.yesterday");
+  return translate(locale, "notes.edited.on", { date: formatDate(locale, d, now).replace(/\.$/, "") });
 }
 
 const fold = (s: string) =>

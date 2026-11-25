@@ -404,6 +404,50 @@ try {
   }
   report.checks.push("markdown: closed, the summary has no **, #, |, ` or [x]; open, the heading, bold, italics, tasks, the table (no pipes), code and link are elements; <script> and <img onerror> stay text; the link has no href and only a click sends it to the helper");
 
+  // 8. O app em English (T29351, spec #28171): o helper passa a língua na URL (`lang=en`) e, quando ela muda, por
+  // `set({lang})`. O "See more"/"See less", a pergunta, os dois × e o VoiceOver saem em inglês; a troca volta ao pt
+  // sem mexer no balão aberto.
+  {
+    const EN = "I read the three notes from yesterday's meeting. The deadline moved to April, and Ana takes the test " +
+      "script. Two things are still open: the studio budget, which Pedro sends by Friday, and the name of the paid " +
+      "version, left for the next meeting. I put the open actions in a list in the note Meetings/Kiwi.md, with who " +
+      "owns each one and the date. I also set the reminder for Thursday's meeting at 10 am. If you want, I can sum up " +
+      "the earlier talks about the name, so you get to the meeting with the options and what each person thought.";
+    const { ctx, p, width, height } = await openPage("escala=1.00&lado=right&balao=acima&lang=en", "dark", 360);
+    assert.equal(await p.evaluate(() => document.documentElement.lang), "en");
+    assert.equal(await p.getAttribute("#cat-close", "aria-label"), "Close Kiwi Cat");
+    assert.equal(await p.getAttribute("#bubble-close", "aria-label"), "Close");
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false, ask: true }, catHover: true }), EN);
+    await settle(p);
+    assert.equal(await p.textContent("#bubble-more"), "See more");
+    assert.equal(await p.textContent("#bubble-ask"), "Need anything else?");
+    assert.equal(await p.textContent("#bubble-sr"), `${EN} Need anything else?`);
+    await shot(p, "8-ingles-fechado.png", "English, closed: See more and the question", width, height);
+    await p.click("#bubble-more");
+    await settle(p);
+    assert.equal(await p.textContent("#bubble-more"), "See less");
+    await shot(p, "8-ingles-aberto.png", "English, open: See less", width, height);
+    const pt = ["Ver mais", "Ver menos", "Precisa de mais alguma coisa?", "Fechar"];
+    const shown = await p.evaluate(() => [document.body.innerText, ...[...document.querySelectorAll("[aria-label]")].map((e) => e.getAttribute("aria-label"))].join("\n"));
+    for (const line of pt) assert.ok(!shown.includes(line), `nenhum texto em pt com o app em English: ${line}`);
+    // A língua troca com a página aberta: os textos mudam, o balão fica aberto e com a mesma resposta.
+    await p.evaluate(() => (window as any).kiwiOverlay.set({ lang: "pt" }));
+    await settle(p);
+    const s = await stats(p);
+    assert.equal(s.lang, "pt");
+    assert.equal(s.bubbleOpen, true, "a troca de língua não fecha o balão");
+    assert.equal(s.bubble.text, EN);
+    assert.equal(await p.textContent("#bubble-more"), "Ver menos");
+    assert.equal(await p.textContent("#bubble-ask"), "Precisa de mais alguma coisa?");
+    assert.equal(await p.getAttribute("#cat-close", "aria-label"), "Fechar o Kiwi Cat");
+    assert.equal(await p.evaluate(() => document.documentElement.lang), "pt-BR");
+    // Uma língua que não é do app fica em português, e nada quebra.
+    await p.evaluate(() => (window as any).kiwiOverlay.set({ lang: "fr" }));
+    assert.equal((await stats(p)).lang, "pt");
+    await ctx.close();
+  }
+  report.checks.push("English (lang=en): See more/See less, the question, both × and the VoiceOver line in English, no pt text on the page; set({lang}) switches back to pt with the bubble still open");
+
   // A folha em WebP: cada print sobre um fundo de mesa, como por cima de outro app.
   const sheet = await browser.newPage({ deviceScaleFactor: 1, viewport: { width: 1480, height: 900 } });
   const img = (f: string) => `data:image/png;base64,${readFileSync(join(out, f)).toString("base64")}`;

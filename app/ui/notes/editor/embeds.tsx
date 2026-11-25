@@ -3,6 +3,7 @@
 // do engine (`notes.embed`). Com o cursor na linha, o texto fica para editar e o embed aparece logo embaixo, como os
 // anexos. Um embed dentro do embed vira link: um nível só, sem laço.
 
+import { t as tNow } from "../../src/i18n.ts";
 import { type EditorState, type Range, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
 import { createRoot, type Root } from "react-dom/client";
@@ -107,19 +108,19 @@ class NoteEmbedWidget extends WidgetType {
     root.render(
       <div className="kn-embed-box" data-state={e === undefined ? "loading" : e === null ? "missing-note" : "missing" in e ? "missing" : "ok"}>
         <div className="kn-embed-head">
-          <button type="button" className="kn-embed-title" onClick={open} title="Abrir a nota">
+          <button type="button" className="kn-embed-title" onClick={open} title={tNow("editor.embed.open")}>
             {e && "title" in e ? e.title : name.split("#")[0]}
-            {fragment ? <span className="kn-embed-fragment">{fragment.startsWith("^") ? " · bloco" : ` › ${fragment}`}</span> : null}
+            {fragment ? <span className="kn-embed-fragment">{fragment.startsWith("^") ? tNow("editor.embed.block") : ` › ${fragment}`}</span> : null}
           </button>
         </div>
         {e === undefined ? null : e === null ? (
-          <div className="kn-embed-note">Essa nota não existe.</div>
+          <div className="kn-embed-note">{tNow("editor.embed.noNote")}</div>
         ) : "missing" in e ? (
-          <div className="kn-embed-note">{e.missing.startsWith("^") ? `O bloco ${e.missing} não está nessa nota.` : `O título “${e.missing}” não está nessa nota.`}</div>
+          <div className="kn-embed-note">{e.missing.startsWith("^") ? tNow("editor.embed.noBlock", { block: e.missing }) : tNow("editor.embed.noHeading", { heading: e.missing })}</div>
         ) : e.content.trim() ? (
           <EmbeddedMarkdown markdown={this.markdown} actions={this.actions} onShown={() => view.requestMeasure()} />
         ) : (
-          <div className="kn-embed-note">Vazia.</div>
+          <div className="kn-embed-note">{tNow("editor.embed.empty")}</div>
         )}
       </div>,
     );

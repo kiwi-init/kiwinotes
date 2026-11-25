@@ -13,25 +13,16 @@ import { useEffect, useRef, useState } from "react";
 
 import type { NoteModel } from "../../src/shared/ui-contract.ts";
 import { api } from "../src/api.ts";
+import type { TextKey } from "../../src/shared/i18n/index.ts";
+import { useT } from "../src/i18n.ts";
 import { Button, Select, Switch } from "../src/kit/index.tsx";
 
 type Block = NoteModel["blocks"][number]["block"];
 type Body = NoteModel["body"];
 
-export const BLOCK_LABEL: Record<Block, string> = {
-  titulo: "Título",
-  propriedades: "Propriedades",
-  introducao: "Introdução",
-  sumario: "Sumário",
-  corpo: "Corpo",
-  fechamento: "Fechamento",
-};
-export const BODY_LABEL: Record<Body, string> = {
-  topicos: "Tópicos",
-  curtos: "Parágrafos curtos",
-  longos: "Parágrafos longos",
-  misto: "Misto",
-};
+/** O nome de cada bloco e de cada corpo no catálogo (T29271). */
+const blockKey = (b: Block) => `agent.nm.block.${b}` as TextKey;
+const bodyKey = (b: Body) => `agent.nm.body.${b}` as TextKey;
 const BODIES: Body[] = ["topicos", "curtos", "longos", "misto"];
 
 /** Move o bloco `from` para a posição `to` (os dois são índices na lista). */
@@ -127,6 +118,7 @@ function BlockShape({ block, model }: { block: Block; model: NoteModel }) {
 }
 
 export function NoteModelEditor({ first, onDone }: { first?: boolean; onDone?: () => void }) {
+  const { t } = useT();
   const [model, setModel] = useState<NoteModel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dragging = useRef<number | null>(null);
@@ -151,14 +143,11 @@ export function NoteModelEditor({ first, onDone }: { first?: boolean; onDone?: (
   return (
     <div className="kn-nm" data-first={first || undefined}>
       <div className="kn-nm-head">
-        <div className="kn-row-label">Modelo de nota</div>
-        <div className="kn-row-hint">
-          O jeito que o agente monta uma nota quando cria ou organiza. Arraste os blocos, ligue e desligue, e escolha o corpo. Mudar
-          aqui não reescreve nenhuma nota.
-        </div>
+        <div className="kn-row-label">{t("agent.nm.title")}</div>
+        <div className="kn-row-hint">{t("agent.nm.hintLong")}</div>
       </div>
       <div className="kn-nm-grid">
-        <ol className="kn-nm-blocks" aria-label="Os blocos da nota, na ordem">
+        <ol className="kn-nm-blocks" aria-label={t("agent.nm.blocks")}>
           {model.blocks.map((b, i) => (
             <li
               key={b.block}
@@ -189,16 +178,16 @@ export function NoteModelEditor({ first, onDone }: { first?: boolean; onDone?: (
               }}
             >
               <span className="kn-nm-grip" aria-hidden="true" />
-              <span className="kn-nm-block-name">{BLOCK_LABEL[b.block]}</span>
+              <span className="kn-nm-block-name">{t(blockKey(b.block))}</span>
               <span className="kn-nm-move">
-                <button type="button" tabIndex={0} className="kn-nm-arrow" aria-label={`Subir ${BLOCK_LABEL[b.block]}`} disabled={i === 0} onClick={() => move(i, i - 1)}>
+                <button type="button" tabIndex={0} className="kn-nm-arrow" aria-label={t("agent.nm.up", { block: t(blockKey(b.block)) })} disabled={i === 0} onClick={() => move(i, i - 1)}>
                   ↑
                 </button>
                 <button
                   type="button"
                   tabIndex={0}
                   className="kn-nm-arrow"
-                  aria-label={`Descer ${BLOCK_LABEL[b.block]}`}
+                  aria-label={t("agent.nm.down", { block: t(blockKey(b.block)) })}
                   disabled={i === model.blocks.length - 1}
                   onClick={() => move(i, i + 1)}
                 >
@@ -206,7 +195,7 @@ export function NoteModelEditor({ first, onDone }: { first?: boolean; onDone?: (
                 </button>
               </span>
               <Switch
-                label={`${BLOCK_LABEL[b.block]} ligado`}
+                label={t("agent.nm.blockOn", { block: t(blockKey(b.block)) })}
                 checked={b.on}
                 onChange={(on) => save({ ...model, blocks: model.blocks.map((x, j) => (j === i ? { ...x, on } : x)) })}
               />
@@ -224,7 +213,7 @@ export function NoteModelEditor({ first, onDone }: { first?: boolean; onDone?: (
             ))}
         </div>
       </div>
-      <div className="kn-nm-bodies" role="radiogroup" aria-label="O estilo do corpo">
+      <div className="kn-nm-bodies" role="radiogroup" aria-label={t("agent.nm.bodyStyle")}>
         {BODIES.map((style) => (
           <button
             key={style}
@@ -239,24 +228,24 @@ export function NoteModelEditor({ first, onDone }: { first?: boolean; onDone?: (
             <span className="kn-nm-thumb" aria-hidden="true">
               <BodyShape style={style} />
             </span>
-            <span>{BODY_LABEL[style]}</span>
+            <span>{t(bodyKey(style))}</span>
           </button>
         ))}
       </div>
       <div className="kn-nm-options">
         <label className="kn-nm-option">
-          <span>Títulos numerados</span>
-          <Switch label="Títulos numerados" checked={model.numbered} onChange={(numbered) => save({ ...model, numbered })} />
+          <span>{t("agent.nm.numbered")}</span>
+          <Switch label={t("agent.nm.numbered")} checked={model.numbered} onChange={(numbered) => save({ ...model, numbered })} />
         </label>
         <label className="kn-nm-option">
-          <span>O sumário desce até</span>
+          <span>{t("agent.nm.toc")}</span>
           <Select
-            label="O sumário desce até"
+            label={t("agent.nm.toc")}
             value={String(model.tocDepth) as "1" | "2" | "3"}
             options={[
-              { value: "1", label: "o 1º nível" },
-              { value: "2", label: "o 2º nível" },
-              { value: "3", label: "o 3º nível" },
+              { value: "1", label: t("agent.nm.level1") },
+              { value: "2", label: t("agent.nm.level2") },
+              { value: "3", label: t("agent.nm.level3") },
             ]}
             onChange={(v) => save({ ...model, tocDepth: Number(v) as 1 | 2 | 3 })}
           />
@@ -267,10 +256,10 @@ export function NoteModelEditor({ first, onDone }: { first?: boolean; onDone?: (
           {/* Pular fica com o padrão do spec: sem blocos na entrada, o Kiwi completa os seis na ordem padrão, todos ligados,
               com o corpo misto, sem numeração e o sumário até o 2º nível. */}
           <Button onClick={() => void api.agent.noteModelSet({ blocks: [], body: "misto", numbered: false, tocDepth: 2 }).then(() => onDone?.())}>
-            Pular
+            {t("agent.nm.skip")}
           </Button>
           <Button variant="primary" onClick={() => void api.agent.noteModelSet(model).then(() => onDone?.())}>
-            Pronto
+            {t("agent.nm.done")}
           </Button>
         </div>
       ) : null}
@@ -284,6 +273,7 @@ export function NoteModelEditor({ first, onDone }: { first?: boolean; onDone?: (
  * arquivo), a tela aparece aberta, depois do "Testar", com "Pular"; depois, fica atrás de "Mudar".
  */
 export function NoteModelRow() {
+  const { t } = useT();
   const [saved, setSaved] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -299,11 +289,11 @@ export function NoteModelRow() {
     <>
       <div className="kn-row">
         <div className="kn-row-text">
-          <div className="kn-row-label">Modelo de nota</div>
-          <div className="kn-row-hint">O jeito que o agente monta uma nota quando cria ou organiza.</div>
+          <div className="kn-row-label">{t("agent.nm.title")}</div>
+          <div className="kn-row-hint">{t("agent.nm.hint")}</div>
         </div>
         <Button onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-          {open ? "Fechar" : "Mudar"}
+          {open ? t("agent.nm.close") : t("agent.nm.change")}
         </Button>
       </div>
       {open ? <NoteModelEditor /> : null}

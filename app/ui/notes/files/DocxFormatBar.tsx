@@ -2,6 +2,7 @@
 // selecionado, com o que o Word tem a mais (o sublinhado, as listas e o alinhamento). Os botões acendem com o que já
 // está na seleção. O clique não tira o foco das páginas, e a seleção fica.
 
+import { useT } from "../../src/i18n.ts";
 import type { DocxHandle } from "./docxEngine.ts";
 import { DOCX_FORMAT_BUTTONS, type DocxFormatAction, type DocxFormatState, isActive } from "./docxFormat.ts";
 
@@ -33,9 +34,10 @@ const ALIGN: Partial<Record<DocxFormatAction, string>> = {
 };
 
 export function DocxFormatBar({ spot, onFormat }: { spot: DocxBarSpot; onFormat(action: DocxFormatAction): void }) {
+  const { t } = useT();
   let group = 0;
   return (
-    <div className="kn-fmt kn-file-docx-fmt" role="toolbar" aria-label="Formatação" style={{ top: spot.top, left: spot.left }}>
+    <div className="kn-fmt kn-file-docx-fmt" role="toolbar" aria-label={t("files.docx.format.bar")} style={{ top: spot.top, left: spot.left }}>
       {DOCX_FORMAT_BUTTONS.map((b) => {
         const gap = b.group !== group;
         group = b.group;
@@ -46,8 +48,8 @@ export function DocxFormatBar({ spot, onFormat }: { spot: DocxBarSpot; onFormat(
             <button
               type="button"
               className={`kn-fmt-bt kn-fmt-${b.action}`}
-              title={b.title}
-              aria-label={b.title.replace(/ \(.*\)$/, "")}
+              title={t(b.title)}
+              aria-label={t(b.title).replace(/ \(.*\)$/, "")}
               aria-pressed={isActive(b.action, spot.state)}
               // O mousedown tiraria a seleção das páginas: a barra age sem pegar o foco.
               onMouseDown={(e) => e.preventDefault()}

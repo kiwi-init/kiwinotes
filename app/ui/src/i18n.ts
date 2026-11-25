@@ -4,7 +4,7 @@
 // Como a Aparência: uma cópia local pinta a primeira tela já na língua certa; o `mount()` espera o engine (até um
 // limite) e troca se a resposta for outra. Um engine sem o `app.locale` (anterior ao 1.104.0) deixa em português.
 
-import { useSyncExternalStore } from "react";
+import { createElement, Fragment, type ReactNode, useSyncExternalStore } from "react";
 
 import { type AppLocale, formatDate, formatDateTime, formatNumber, formatTime, type Locale, LOCALES, type Params, type TextKey, translate } from "../../src/shared/i18n/index.ts";
 
@@ -59,6 +59,18 @@ export const appLocale = (): AppLocale => current;
 /** O texto na língua de agora. Numa tela, prefira o `useT()`, que redesenha quando a língua muda. */
 export const t = (key: TextKey, params?: Params): string => translate(current.locale, key, params);
 
+/**
+ * Os textos de uma lista feita uma vez só, no carregamento (os menus do editor, T29842): cada campo em `keys` vira um
+ * getter que lê a língua de agora. O mesmo objeto sai em português ou em inglês, conforme a língua de quando é lido.
+ * Uma função no lugar da chave monta o texto (um parâmetro).
+ */
+export function localized<const T extends object, K extends string>(base: T, keys: { readonly [P in K]: TextKey | (() => string) }): T & { readonly [P in K]: string } {
+  for (const [field, key] of Object.entries(keys) as [string, TextKey | (() => string)][]) {
+    Object.defineProperty(base, field, { enumerable: true, configurable: true, get: typeof key === "function" ? key : () => t(key) });
+  }
+  return base as T & { readonly [P in K]: string };
+}
+
 const subscribe = (fn: () => void) => {
   listeners.add(fn);
   return () => void listeners.delete(fn);
@@ -81,4 +93,14 @@ export function useT() {
     time: (d: Date) => formatTime(locale, d),
     dateTime: (d: Date, now?: Date) => formatDateTime(locale, d, now),
   };
+}
+
+/**
+ * Um texto do catálogo com um pedaço em negrito no lugar de um `{param}` (a tecla, o atalho): `text` recebe a marca e
+ * devolve o texto traduzido com ela, e a marca vira o `<strong>`. A frase fica inteira numa chave só, para a tradução.
+ */
+export function withStrong(text: (mark: string) => string, strong: string): ReactNode {
+  const MARK = "\u0001";
+  const [before = "", after = ""] = text(MARK).split(MARK);
+  return createElement(Fragment, null, before, createElement("strong", null, strong), after);
 }

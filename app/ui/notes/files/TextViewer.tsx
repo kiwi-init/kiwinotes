@@ -11,6 +11,7 @@
 // "Gravando…/Gravado"), e o texto quebra na largura da nota. O ⌘F busca e troca (T19312); o código tem os números de
 // linha, e o Tab recua como o arquivo já recua (T19403). O .html tem a prévia ao lado (T19314, `htmlPreview.ts`).
 
+import { useT } from "../../src/i18n.ts";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorSelection, EditorState, StateEffect, StateField, Transaction } from "@codemirror/state";
@@ -82,6 +83,7 @@ const codeGutter = [
 export const PREVIEW_DELAY_MS = 300;
 
 export function TextViewer({ path, file, files, flushRef, widthHandles, preview = false, at }: FileViewerProps) {
+  const { t: tr } = useT();
   const initial = "text" in file ? file : { text: "", version: file.version };
   const notUtf8 = "readOnly" in file && file.readOnly === true;
   const mixedEol = detectEol(initial.text) === null;
@@ -194,7 +196,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
           ...(code ? [codeGutter] : []),
           theme,
           // ⌘F busca e troca, como na nota .md.
-          searchOnly,
+          searchOnly(),
           foundLine,
           lang.of([]),
           // A pessoa digitou: a sessão só marca, e lê o texto inteiro quando grava (depois da pausa).
@@ -291,29 +293,29 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
       {readOnly ? (
         <div className="kn-file-text-note" role="status">
           {notUtf8
-            ? "Este arquivo não está em UTF-8. Aqui ele só é lido; para editar, abra no app padrão."
+            ? tr("files.text.notUtf8")
             : mixedEol
-              ? "Este arquivo mistura fins de linha do Windows e do Mac. Aqui ele só é lido; para editar, abra no app padrão."
-              : "Aqui este arquivo só é lido; para editar, abra no app padrão."}
+              ? tr("files.text.mixedEol")
+              : tr("files.text.readOnly")}
         </div>
       ) : state === "conflict" ? (
         <div className="kn-conflict kn-file-text-alert" role="alert">
-          O arquivo mudou fora do Kiwi Notes enquanto você editava.
+          {tr("files.changedOutside")}
           <span className="kn-conflict-actions">
             <button type="button" className="kn-bt" onClick={() => session.useTheirs()}>
-              Usar o de fora
+              {tr("files.useTheirs")}
             </button>
             <button type="button" className="kn-bt kn-bt-acc" onClick={() => void session.keepMine()}>
-              Manter o meu
+              {tr("files.keepMine")}
             </button>
           </span>
         </div>
       ) : state === "error" ? (
         <div className="kn-conflict kn-file-text-alert" role="alert">
-          Não deu para gravar o arquivo.
+          {tr("files.saveFailed")}
           <span className="kn-conflict-actions">
             <button type="button" className="kn-bt kn-bt-acc" onClick={() => void session.save()}>
-              Tentar de novo
+              {tr("notes.retry")}
             </button>
           </span>
         </div>

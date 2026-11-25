@@ -5,10 +5,11 @@
 import type { AgentStatus } from "../../src/shared/ui-contract.ts";
 import { DEFAULT_SHORTCUTS, parseShortcut, shortcutsConflict } from "../../src/shared/shortcuts.ts";
 import { api } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Row, Switch } from "../src/kit/index.tsx";
 import { useShortcuts } from "../src/useShortcuts.ts";
 import { holdName } from "../hub/onboarding/onboardingText.ts";
-import { CONTROL_LABEL, controlHint, SPOKEN_TEXT_HINT, SPOKEN_TEXT_LABEL } from "./agentText.ts";
+import { controlHint } from "./agentText.ts";
 import { ShortcutRow } from "./Shortcuts.tsx";
 import { useState } from "react";
 
@@ -17,6 +18,7 @@ export const dictationOnControl = (dictation: string | null | undefined, agent: 
   !!dictation && shortcutsConflict(dictation, agent ?? DEFAULT_SHORTCUTS.agent!);
 
 export function ControlRow({ status, onStatus }: { status: AgentStatus; onStatus(s: AgentStatus): void }) {
+  const { t, locale } = useT();
   const shortcuts = useShortcuts();
   const [failed, setFailed] = useState(false);
   if (!shortcuts) return null;
@@ -34,8 +36,8 @@ export function ControlRow({ status, onStatus }: { status: AgentStatus; onStatus
   };
   return (
     <>
-      <Row label={CONTROL_LABEL} hint={failed ? "Não deu para salvar. Tente de novo." : controlHint(blocked, holdName(agent), controlAlone)}>
-        <Switch label={CONTROL_LABEL} checked={!blocked && status.controlShortcut} disabled={blocked} onChange={change} />
+      <Row label={t("agent.control.label")} hint={failed ? t("agent.saveFailed") : controlHint(blocked, holdName(agent), controlAlone, locale)}>
+        <Switch label={t("agent.control.label")} checked={!blocked && status.controlShortcut} disabled={blocked} onChange={change} />
       </Row>
       {/* Desligado, o atalho não faz nada: o campo fica, mas só troca com o interruptor ligado (ou para sair do conflito). */}
       <ShortcutRow id="agent" shortcuts={shortcuts} disabled={!status.controlShortcut && !blocked} />
@@ -45,6 +47,7 @@ export function ControlRow({ status, onStatus }: { status: AgentStatus; onStatus
 
 /** "Mostrar o que eu falei" (spec #26055), em Ajustes › Agente: a transcrição da fala no balão, antes da resposta. */
 export function SpokenTextRow({ status, onStatus }: { status: AgentStatus; onStatus(s: AgentStatus): void }) {
+  const { t } = useT();
   const [failed, setFailed] = useState(false);
   const change = (on: boolean) => {
     setFailed(false);
@@ -55,8 +58,8 @@ export function SpokenTextRow({ status, onStatus }: { status: AgentStatus; onSta
     });
   };
   return (
-    <Row label={SPOKEN_TEXT_LABEL} hint={failed ? "Não deu para salvar. Tente de novo." : SPOKEN_TEXT_HINT}>
-      <Switch label={SPOKEN_TEXT_LABEL} checked={status.showSpokenText} onChange={change} />
+    <Row label={t("agent.spoken.label")} hint={failed ? t("agent.saveFailed") : t("agent.spoken.hint")}>
+      <Switch label={t("agent.spoken.label")} checked={status.showSpokenText} onChange={change} />
     </Row>
   );
 }

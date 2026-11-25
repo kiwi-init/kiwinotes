@@ -1,14 +1,25 @@
-// O catálogo em português (spec #28171): a fonte dos textos. Cada chave nova entra aqui e em `en.ts`.
+// O catálogo em português (spec #28171): a fonte dos textos. Cada chave nova entra aqui e em `en.ts`, ou no catálogo da
+// área (`<área>.pt.ts` e `<área>.en.ts`), que entra com uma linha só em `PT_PARTS`. Duas partes com a mesma chave
+// quebram o `i18n.test.ts`: no espalhar, a última ganharia calada.
+import { ptCatOverlay } from "./catoverlay.pt.ts";
+import { ptAgent } from "./agent.pt.ts";
+import { ptCommon } from "./common.pt.ts";
+import { ptActivity } from "./activity.pt.ts";
+import { ptHistory } from "./history.pt.ts";
+import { ptHub } from "./hub.pt.ts";
+import { ptEditor } from "./editor.pt.ts";
+import { ptMeetingsSettings } from "./meetings-settings.pt.ts";
+import { ptMeetings } from "./meetings.pt.ts";
+import { ptNotes } from "./notes.pt.ts";
+import { ptSettings } from "./settings.pt.ts";
+import { ptViewers } from "./viewers.pt.ts";
+
 // A chave diz onde o texto aparece (`settings.…` em Ajustes); o plural vai como `{ one, other }`, com o parâmetro `n`.
 
-export const pt = {
+const ptBase = {
   // As línguas, pelo nome delas mesmas (o seletor mostra "English" também com o app em português).
   "language.pt": "Português",
   "language.en": "English",
-
-  // Comuns.
-  "common.notes": { one: "{n} nota", other: "{n} notas" },
-  "common.saveFailed": "Não deu para salvar. Tente de novo.",
 
   // Ajustes: a casca e os assuntos (spec #11966).
   "settings.window.title": "Configurações",
@@ -103,4 +114,39 @@ export const pt = {
   // O porquê no pedido de permissão do macOS (T29006): vai ao InfoPlist.strings do .app e segue a língua do Mac.
   "system.micUsage": "O Kiwi Notes usa o microfone quando você dita ou pede para gravar uma reunião, e transcreve tudo no seu Mac.",
   "system.audioCaptureUsage": "O Kiwi Notes captura o áudio da reunião só quando você pede. A transcrição acontece no Mac e o áudio é apagado depois de transcrito.",
+} as const;
+
+/** As partes do catálogo, cada uma com as suas chaves. */
+export const PT_PARTS = {
+  base: ptBase,
+  common: ptCommon,
+  notes: ptNotes,
+  editor: ptEditor,
+  viewers: ptViewers,
+  settings: ptSettings,
+  meetingsSettings: ptMeetingsSettings,
+  catOverlay: ptCatOverlay,
+  agent: ptAgent,
+  meetings: ptMeetings,
+  history: ptHistory,
+  hub: ptHub,
+  activity: ptActivity,
+} as const;
+
+export const pt = {
+  ...ptBase,
+  ...ptCommon,
+  ...ptNotes,
+  ...ptSettings,
+  ...ptMeetingsSettings,
+  ...ptCatOverlay,
+  ...ptAgent,
+  ...ptMeetings,
+  ...ptHistory,
+  ...ptHub,
+  ...ptActivity,
+  // O editor das Notas (T29842): `editor.pt.ts`.
+  ...ptEditor,
+  // Os visualizadores das Notas (T29245): `viewers.pt.ts`.
+  ...ptViewers,
 } as const;

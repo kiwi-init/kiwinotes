@@ -6,6 +6,7 @@ import { type EditorState, Prec, type Range, StateEffect, StateField } from "@co
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
 
 import { ATTACHMENT_TYPES, extOf, isAttachmentName, MAX_ATTACHMENT_BYTES } from "../../../src/shared/attachments.ts";
+import { t } from "../../src/i18n.ts";
 
 export interface AttachmentFile {
   path: string;
@@ -53,8 +54,8 @@ export function sortFiles(files: readonly { name: string; type: string; size: nu
   const refused: { name: string; why: string }[] = [];
   files.forEach((f, i) => {
     const known = isAttachmentName(f.name) || Object.values(ATTACHMENT_TYPES).includes(f.type);
-    if (!known) refused.push({ name: f.name || "arquivo", why: "só imagem ou PDF" });
-    else if (f.size > MAX_ATTACHMENT_BYTES) refused.push({ name: f.name || "arquivo", why: "maior que 25 MB" });
+    if (!known) refused.push({ name: f.name || t("editor.attach.file"), why: t("editor.attach.onlyImagePdf") });
+    else if (f.size > MAX_ATTACHMENT_BYTES) refused.push({ name: f.name || t("editor.attach.file"), why: t("editor.attach.tooBig") });
     else ok.push(i);
   });
   return { ok, refused };
@@ -147,7 +148,7 @@ class AttachmentWidget extends WidgetType {
     }
     if (this.file === null) {
       wrap.classList.add("cm-attachment-missing");
-      wrap.textContent = `${name} não está no vault`;
+      wrap.textContent = t("editor.attach.notInVault", { name });
       return wrap;
     }
     if (this.file.mime === "application/pdf") {
@@ -230,7 +231,7 @@ export function attachmentPreview(source: AttachmentSource) {
 export function attachmentInput(source: AttachmentSource, onError: (text: string) => void, now: () => Date = () => new Date()) {
   const add = async (view: EditorView, files: File[], at: number) => {
     const { ok, refused } = sortFiles(files);
-    if (refused.length) onError(refused.length === 1 ? `${refused[0]!.name}: ${refused[0]!.why}` : `${refused.length} arquivos não entraram (${refused[0]!.why})`);
+    if (refused.length) onError(refused.length === 1 ? t("editor.attach.refused", { name: refused[0]!.name, why: refused[0]!.why }) : t("editor.attach.refusedMany", { n: refused.length, why: refused[0]!.why }));
     let pos = at;
     for (const i of ok) {
       const f = files[i]!;
@@ -242,7 +243,7 @@ export function attachmentInput(source: AttachmentSource, onError: (text: string
         view.dispatch({ changes: { from: pos, insert: ins.insert }, selection: { anchor: ins.anchor }, userEvent: "input.paste", scrollIntoView: true });
         pos = ins.anchor;
       } catch (e) {
-        onError(`${f.name || "O anexo"} não entrou: ${e instanceof Error ? e.message : String(e)}`);
+        onError(t("editor.attach.failed", { name: f.name || t("editor.attach.theAttachment"), error: e instanceof Error ? e.message : String(e) }));
       }
     }
   };

@@ -27,14 +27,17 @@ import { watchSlowFrames } from "../src/slowFrames.ts";
 import type { SettingsTopic } from "../settings/topics.ts";
 import { HubBarContext } from "../src/topbar.tsx";
 import { mount } from "../src/kit/index.tsx";
+import { useT } from "../src/i18n.ts";
+import type { TextKey } from "../../src/shared/i18n/index.ts";
 
-const LABELS: Record<HubSection, string> = {
-  home: "Início",
-  notes: "Notas",
-  meetings: "Reuniões",
-  dictation: "Ditado",
-  settings: "Configurações",
-  about: "Sobre",
+/** O nome de cada aba, no catálogo (spec #28171). */
+const LABELS: Record<HubSection, TextKey> = {
+  home: "hub.tab.home",
+  notes: "hub.tab.notes",
+  meetings: "hub.tab.meetings",
+  dictation: "hub.tab.dictation",
+  settings: "hub.tab.settings",
+  about: "hub.tab.about",
 };
 
 /** As abas da barra de cima. O `about` do contrato (o menu da barra, `?section=about`) abre Ajustes › Sobre. */
@@ -81,6 +84,7 @@ function Pane({ section, active, openRequest, searchRequest, searchSeen, onShowN
 
 /** A seleção acompanha só a seção ativa; o hover da aba muda apenas a cor do texto (T4535, #4521). */
 function Tabs({ section, onGo, homeView, onHomeView }: { section: Tab; onGo(s: Tab): void; homeView: InicioView; onHomeView(v: InicioView): void }) {
+  const { t } = useT();
   const group = useRef<HTMLDivElement>(null);
   /** O menu da aba Início (T15875): abre pela seta, pelo clique na aba já aberta ou pela ↓ nela. */
   const [menu, setMenu] = useState(false);
@@ -118,7 +122,7 @@ function Tabs({ section, onGo, homeView, onHomeView }: { section: Tab; onGo(s: T
     <div
       className="kn-tabs electrobun-webkit-app-region-no-drag"
       role="tablist"
-      aria-label="Seções"
+      aria-label={t("hub.tabs.aria")}
       ref={group}
       onKeyDown={(e) => {
         if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
@@ -154,8 +158,8 @@ function Tabs({ section, onGo, homeView, onHomeView }: { section: Tab; onGo(s: T
             }
           }}
         >
-          {s === "home" ? <InicioTabLabel view={homeView} /> : LABELS[s]}
-          {SOON.has(s) ? <span className="kn-tab-soon">breve</span> : null}
+          {s === "home" ? <InicioTabLabel view={homeView} /> : t(LABELS[s])}
+          {SOON.has(s) ? <span className="kn-tab-soon">{t("hub.tab.soon")}</span> : null}
         </button>
       ))}
       {menu ? (
@@ -181,6 +185,7 @@ function initialSection(): HubSection {
 }
 
 function Hub() {
+  const { t } = useT();
   const [section, setSection] = useState<Tab>(() => {
     const s = initialSection();
     return s === "about" ? "settings" : s;
@@ -326,7 +331,7 @@ function Hub() {
         {firstRun === "open" && settings ? <Welcome settings={settings} onClosed={() => setFirstRun("closed")} /> : null}
         <div className="kn-hub-main">
           {TABS.filter((s) => visited.has(s)).map((s) => (
-            <section key={s} className="kn-hub-pane" data-section={s} hidden={s !== section} aria-label={LABELS[s]}>
+            <section key={s} className="kn-hub-pane" data-section={s} hidden={s !== section} aria-label={t(LABELS[s])}>
               <HubBarContext.Provider value={{ start, end, active: s === section }}>
                 <Pane
                   section={s}

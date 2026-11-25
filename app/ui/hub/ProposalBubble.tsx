@@ -6,14 +6,16 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { openProposals, PROPOSAL_LATER } from "../settings/proposalText.ts";
+import { openProposals } from "../settings/proposalText.ts";
 import { ProposalItem, ProposalPanel, useProposals } from "../settings/Proposals.tsx";
 import { onAdjust } from "../settings/routineAdjust.ts";
 import { BubblePresence } from "./BubblePresence";
 import { BubbleTail } from "./BubbleTail";
+import { useT } from "../src/i18n.ts";
 
 /** `onPending` (T28350): há uma proposta para o balão, mesmo escondida; o balão da resposta dá lugar a ela. */
 export function ProposalBubble({ hidden, reduced = false, onPending }: { hidden: boolean; reduced?: boolean; onPending?: (has: boolean) => void }) {
+  const { t } = useT();
   const list = useProposals();
   const [later, setLater] = useState<ReadonlySet<string>>(new Set());
   /** A proposta que o balão mostrava: aplicada ali, ela fica com o [Desfazer] até o [Depois]. */
@@ -64,7 +66,7 @@ export function ProposalBubble({ hidden, reduced = false, onPending }: { hidden:
   return (
     <>
       {p && !hidden && bigOpen ? (
-        <div className="kn-bubble-big kn-proposal-big" ref={big} onMouseDown={keepFocus} role="dialog" aria-label="A proposta da reunião">
+        <div className="kn-bubble-big kn-proposal-big" ref={big} onMouseDown={keepFocus} role="dialog" aria-label={t("hub.proposal.aria")}>
           <ProposalItem p={p} inline={false} viewOpen onView={setBigOpen} />
           <ProposalPanel id={p.id} />
         </div>
@@ -72,10 +74,10 @@ export function ProposalBubble({ hidden, reduced = false, onPending }: { hidden:
       {/* A troca entre os balões (spec #11652): a proposta entra e sai pela mesma passagem que a resposta. */}
       <BubblePresence itemKey={small ? `proposta-${small.id}` : null} reduced={reduced}>
         {small ? (
-          <div className="kn-bubble-shell kn-bubble kn-proposal-bubble" onMouseDown={keepFocus} role="region" aria-label="A proposta da reunião">
+          <div className="kn-bubble-shell kn-bubble kn-proposal-bubble" onMouseDown={keepFocus} role="region" aria-label={t("hub.proposal.aria")}>
             <ProposalItem p={small} inline={false} viewOpen={false} onView={setBigOpen} />
             <button type="button" className="kn-proposal-later" onClick={dismiss}>
-              {PROPOSAL_LATER}
+              {t("proposal.later")}
             </button>
             <BubbleTail />
           </div>

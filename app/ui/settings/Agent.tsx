@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { AgentKind, AgentStatus } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Button, Row, Section, Segmented, Switch } from "../src/kit/index.tsx";
 import {
   adapterLine,
@@ -15,7 +16,6 @@ import {
   applyTurn,
   canTest,
   consentText,
-  KIND_LABEL,
   KIND_OPTIONS,
   kindHint,
   kindOf,
@@ -23,11 +23,8 @@ import {
   switchText,
   IDLE_TEST,
   economyHint,
-  ECONOMY_LABEL,
-  WEB_LABEL,
   webHint,
   switchHint,
-  TEST_HINT,
   type TestState,
 } from "./agentText.ts";
 import { NoticeRow } from "./NoticeRow.tsx";
@@ -44,13 +41,17 @@ import { CatColorRow, CatPlaceRow, CatRow, OverlayCatRow } from "./CatRow";
 const TEST_MAX = 500;
 
 export function AgentSection() {
+  const { t, locale } = useT();
+  /** A língua para os eventos do teste, que a escuta de quando a seção abriu lê. */
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [consenting, setConsenting] = useState(false);
   /** A troca de agente esperando a pessoa confirmar a tela "o que vai" do novo. */
   const [switching, setSwitching] = useState<AgentKind | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [prompt, setPrompt] = useState("Diga oi em uma frase.");
+  const [prompt, setPrompt] = useState(() => t("agent.test.prompt"));
   const [test, setTest] = useState<TestState>(IDLE_TEST);
   const lastPrompt = useRef("");
   /** Conta os eventos `agent.status`: a resposta de uma chamada só vale se nenhum evento chegou durante ela. */
@@ -64,13 +65,13 @@ export function AgentSection() {
     setChecking(true);
     api.agent.status(true).then(
       (s) => alive && setStatus(s),
-      () => alive && setFailure("Não deu para ler o estado do agente."),
+      () => alive && setFailure(t("agent.readFailed")),
     ).finally(() => alive && setChecking(false));
     const offStatus = api.agent.onStatus((s) => {
       events.current++;
       if (alive) setStatus(s);
     });
-    const offTurn = api.agent.onTurn((e) => alive && setTest((t) => applyTurn(t, e, name)));
+    const offTurn = api.agent.onTurn((e) => alive && setTest((cur) => applyTurn(cur, e, name, localeRef.current)));
     return () => {
       alive = false;
       offStatus();
@@ -82,8 +83,8 @@ export function AgentSection() {
 
   if (!has("agent.status") || !status) {
     return failure ? (
-      <Section title="Agente">
-        <Row label="Agente" hint={failure} />
+      <Section title={t("agent.section")}>
+        <Row label={t("agent.section")} hint={failure} />
       </Section>
     ) : null;
   }
@@ -132,12 +133,12 @@ export function AgentSection() {
   };
 
   const sendTest = async (text: string) => {
-    const t = text.trim().slice(0, TEST_MAX);
-    if (!t) return;
-    lastPrompt.current = t;
-    setTest({ ...IDLE_TEST, phase: "running", status: "Mandando o pedido…" });
+    const ask = text.trim().slice(0, TEST_MAX);
+    if (!ask) return;
+    lastPrompt.current = ask;
+    setTest({ ...IDLE_TEST, phase: "running", status: t("agent.turn.sending") });
     try {
-      const { id } = await api.agent.ask(t);
+      const { id } = await api.agent.ask(ask);
       setTest((cur) => (cur.id ? cur : { ...cur, id }));
     } catch (e) {
       const code = (e as { code?: string })?.code ?? "E_AGENT_FAILED";
@@ -168,9 +169,9 @@ export function AgentSection() {
   const running = test.phase === "running";
 
   return (
-    <Section title="Agente">
-      <Row label={KIND_LABEL} hint={kindHint(kind, status.enabled)}>
-        <Segmented label={KIND_LABEL} value={switching ?? kind} options={KIND_OPTIONS} onChange={choose} />
+    <Section title={t("agent.section")}>
+      <Row label={t("agent.kind.label")} hint={kindHint(kind, status.enabled, locale)}>
+        <Segmented label={t("agent.kind.label")} value={switching ?? kind} options={KIND_OPTIONS} onChange={choose} />
       </Row>
 
       {switching ? (
@@ -179,18 +180,18 @@ export function AgentSection() {
 
       {/* O estado de cada agente (spec #24666): o escolhido primeiro, e o outro embaixo, para comparar antes de trocar. */}
       {[kind, ...KIND_OPTIONS.map((o) => o.value).filter((k) => k !== kind)].map((k) => {
-        const line = agentLine(k, AGENTS[k].name, programOf({ ...status, kind: k }));
+        const line = agentLine(k, AGENTS[k].name, programOf({ ...status, kind: k }), locale);
         return (
-          <Row key={k} label={k === kind ? AGENTS[k].name : `${AGENTS[k].name} · não escolhido`} hint={line.text}>
+          <Row key={k} label={k === kind ? AGENTS[k].name : t("agent.notChosen", { name: AGENTS[k].name })} hint={line.text}>
             <Button onClick={() => void refresh()} disabled={checking}>
-              {checking ? "Conferindo…" : line.ok ? "Conferir de novo" : "Tentar de novo"}
+              {checking ? t("agent.checking") : line.ok ? t("agent.checkAgain") : t("agent.retry")}
             </Button>
           </Row>
         );
       })}
 
-      <Row label="Ligar o agente" hint={switchHint(status, consenting)}>
-        <Switch label="Ligar o agente" checked={status.enabled} onChange={toggle} />
+      <Row label={t("agent.enable")} hint={switchHint(status, consenting, locale)}>
+        <Switch label={t("agent.enable")} checked={status.enabled} onChange={toggle} />
       </Row>
 
       <CatRow />
@@ -202,20 +203,20 @@ export function AgentSection() {
 
       {/* O adaptador é só do Claude Code: o Gemini fala ACP sozinho (spec #24666). */}
       {!needsAdapter ? null : status.enabled ? (
-        <Row label="Adaptador" hint={adapterLine(status)}>
+        <Row label={t("agent.adapter")} hint={adapterLine(status, locale)}>
           {a.phase === "downloading" ? (
-            <Button onClick={() => void run(() => api.agent.cancel())}>Cancelar</Button>
+            <Button onClick={() => void run(() => api.agent.cancel())}>{t("agent.cancel")}</Button>
           ) : a.phase === "ready" ? (
-            <Button onClick={() => void run(() => api.agent.remove())}>Remover o adaptador</Button>
+            <Button onClick={() => void run(() => api.agent.remove())}>{t("agent.adapter.remove")}</Button>
           ) : (
             <Button variant="primary" onClick={() => void run(() => api.agent.download())}>
-              {a.phase === "error" ? "Tentar de novo" : "Baixar"}
+              {a.phase === "error" ? t("agent.retry") : t("agent.adapter.download")}
             </Button>
           )}
         </Row>
       ) : a.phase === "ready" ? (
-        <Row label="Adaptador" hint={`${adapterLine(status)} Desligado, ele não abre.`}>
-          <Button onClick={() => void run(() => api.agent.remove())}>Remover o adaptador</Button>
+        <Row label={t("agent.adapter")} hint={`${adapterLine(status, locale)} ${t("agent.adapter.offNote")}`}>
+          <Button onClick={() => void run(() => api.agent.remove())}>{t("agent.adapter.remove")}</Button>
         </Row>
       ) : null}
 
@@ -224,15 +225,15 @@ export function AgentSection() {
 
       {/* O modo econômico (spec #11084): só aqui, em Ajustes › Agente. */}
       {status.enabled && (!needsAdapter || a.phase === "ready") ? (
-        <Row label={ECONOMY_LABEL} hint={economyHint(status)}>
-          <Switch label={ECONOMY_LABEL} checked={status.economy === true} onChange={(economy) => void run(() => api.agent.configure({ economy }))} />
+        <Row label={t("agent.economy.label")} hint={economyHint(status, locale)}>
+          <Switch label={t("agent.economy.label")} checked={status.economy === true} onChange={(economy) => void run(() => api.agent.configure({ economy }))} />
         </Row>
       ) : null}
 
       {/* "Pesquisar na web" (spec #11908): ligado por padrão (spec #19273); vale já no próximo pedido. */}
       {status.enabled && (!needsAdapter || a.phase === "ready") ? (
-        <Row label={WEB_LABEL} hint={webHint(status)}>
-          <Switch label={WEB_LABEL} checked={status.webSearch === true} onChange={(webSearch) => void run(() => api.agent.configure({ webSearch }))} />
+        <Row label={t("agent.web.label")} hint={webHint(status, locale)}>
+          <Switch label={t("agent.web.label")} checked={status.webSearch === true} onChange={(webSearch) => void run(() => api.agent.configure({ webSearch }))} />
         </Row>
       ) : null}
 
@@ -258,9 +259,9 @@ export function AgentSection() {
 
       {/* O onboarding (spec #11955): abre de novo, do passo 1, por cima do hub. */}
       {status.enabled ? (
-        <Row label="Onboarding" hint="Os passos com o gato da primeira vez que o agente ligou: o jeito de falar, o Modelo, os projetos e a cor.">
+        <Row label={t("agent.onboarding")} hint={t("agent.onboarding.hint")}>
           <Button onClick={() => void run(() => api.agent.configure({ onboarding: { state: "open", step: 1 } }))} disabled={status.onboarding?.state === "open"}>
-            Refazer o onboarding
+            {t("agent.onboarding.redo")}
           </Button>
         </Row>
       ) : null}
@@ -268,8 +269,8 @@ export function AgentSection() {
       {ready ? (
         <div className="kn-agent-test">
           <div className="kn-row-text">
-            <div className="kn-row-label">Testar</div>
-            <div className="kn-row-hint">{TEST_HINT}</div>
+            <div className="kn-row-label">{t("agent.test")}</div>
+            <div className="kn-row-hint">{t("agent.test.hint")}</div>
           </div>
           <form
             className="kn-agent-test-form"
@@ -280,17 +281,17 @@ export function AgentSection() {
           >
             <input
               className="kn-input kn-agent-test-input"
-              aria-label="Pedido de teste"
+              aria-label={t("agent.test.input")}
               value={prompt}
               maxLength={TEST_MAX}
               disabled={running}
               onChange={(e) => setPrompt(e.target.value)}
             />
             {running ? (
-              <Button onClick={() => void run(() => api.agent.cancel())}>Cancelar</Button>
+              <Button onClick={() => void run(() => api.agent.cancel())}>{t("agent.cancel")}</Button>
             ) : (
               <Button variant="primary" type="submit" disabled={!prompt.trim()}>
-                Testar
+                {t("agent.test")}
               </Button>
             )}
           </form>
@@ -302,7 +303,7 @@ export function AgentSection() {
                 <p className="kn-agent-test-error">
                   {test.error.message}{" "}
                   <button type="button" className="kn-agent-link" onClick={() => void sendTest(lastPrompt.current)}>
-                    Tentar de novo
+                    {t("agent.retry")}
                   </button>
                 </p>
               ) : null}
@@ -314,7 +315,7 @@ export function AgentSection() {
       {/* O Modelo de nota (spec #11102): depois do teste; na primeira vez, aberto e com "Pular". */}
       {ready && has("agent.noteModel") ? <NoteModelRow /> : null}
 
-      {failure ? <Row label="Não deu certo" hint={failure} /> : null}
+      {failure ? <Row label={t("agent.failed")} hint={failure} /> : null}
     </Section>
   );
 }
@@ -324,33 +325,34 @@ export function AgentSection() {
  * (`switching`, spec #24666), com a empresa e o adaptador do agente que vai ser usado.
  */
 export function Consent({ kind, switching = false, onYes, onNo }: { kind: AgentKind; switching?: boolean; onYes: () => void; onNo: () => void }) {
+  const { t: tr, locale } = useT();
   const { name, company, adapter } = AGENTS[kind];
-  const t = consentText(name, company, adapter);
-  const sw = switching ? switchText(kind) : null;
+  const t = consentText(name, company, adapter, locale);
+  const sw = switching ? switchText(kind, locale) : null;
   return (
     <div className="kn-agent-consent" role="group" aria-label={sw?.title ?? t.title}>
       <h3>{sw?.title ?? t.title}</h3>
-      <h4>O que vai para o {name}</h4>
+      <h4>{tr("agent.consent.goesTo", { name })}</h4>
       <ul>
         {t.goes.map((l) => (
           <li key={l}>{l}</li>
         ))}
       </ul>
-      <h4>O que nunca vai</h4>
+      <h4>{tr("agent.consent.never")}</h4>
       <ul>
         {t.never.map((l) => (
           <li key={l}>{l}</li>
         ))}
       </ul>
-      <h4>Quem envia</h4>
+      <h4>{tr("agent.consent.who")}</h4>
       {t.who.map((l) => (
         <p key={l}>{l}</p>
       ))}
       <div className="kn-agent-consent-buttons">
         <Button variant="primary" onClick={onYes}>
-          {sw?.yes ?? `Ligar o ${name}`}
+          {sw?.yes ?? tr("agent.consent.turnOn", { name })}
         </Button>
-        <Button onClick={onNo}>Agora não</Button>
+        <Button onClick={onNo}>{tr("agent.consent.notNow")}</Button>
       </div>
     </div>
   );

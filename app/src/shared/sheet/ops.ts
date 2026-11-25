@@ -7,6 +7,7 @@
 // mescla e a formatação dela, sem nada escrito à mão para cada operação.
 
 import { MAX_COLS, MAX_ROWS, renameInFormula, shiftFormula, type Shift } from "./refs.ts";
+import { why, WhyError, type SheetWhy } from "./why.ts";
 
 /** O valor de uma célula; `null` é a célula vazia. */
 export type CellValue = string | number | boolean | null;
@@ -30,16 +31,16 @@ export type SheetOp =
   | { op: "batch"; ops: SheetOp[] };
 
 /** Uma operação que não cabe na planilha: a tela diz o porquê, e nada muda. */
-export class SheetOpError extends Error {}
+export class SheetOpError extends WhyError {}
 
 /** O que o Excel aceita como nome de aba. */
-export function sheetNameProblem(name: string, taken: readonly string[], except?: string): string | null {
-  if (!name.trim()) return "o nome da aba não pode ficar vazio";
-  if (name.length > 31) return "o nome da aba tem no máximo 31 caracteres";
-  if (/[\\/?*[\]:]/.test(name)) return "o nome da aba não pode ter \\ / ? * [ ] :";
-  if (name.startsWith("'") || name.endsWith("'")) return "o nome da aba não pode começar nem terminar com '";
+export function sheetNameProblem(name: string, taken: readonly string[], except?: string): SheetWhy | null {
+  if (!name.trim()) return why("files.sheet.why.nameEmpty");
+  if (name.length > 31) return why("files.sheet.why.nameLong");
+  if (/[\\/?*[\]:]/.test(name)) return why("files.sheet.why.nameChars");
+  if (name.startsWith("'") || name.endsWith("'")) return why("files.sheet.why.nameQuote");
   const lower = name.toLowerCase();
-  if (taken.some((t) => t.toLowerCase() === lower && t.toLowerCase() !== except?.toLowerCase())) return `já existe uma aba chamada ${name}`;
+  if (taken.some((t) => t.toLowerCase() === lower && t.toLowerCase() !== except?.toLowerCase())) return why("files.sheet.why.nameTaken", { name: name });
   return null;
 }
 
@@ -64,22 +65,22 @@ export function checkOp(op: SheetOp, sheets: readonly string[]): void {
       return;
     }
     case "renameSheet": {
-      if (!has(op.sheet)) throw new SheetOpError(`não há aba chamada ${op.sheet}`);
+      if (!has(op.sheet)) throw new SheetOpError(why("files.sheet.why.noSheet", { sheet: op.sheet }));
       const p = sheetNameProblem(op.name, sheets, op.sheet);
       if (p) throw new SheetOpError(p);
       return;
     }
     case "set":
     case "cached":
-      if (!has(op.sheet)) throw new SheetOpError(`não há aba chamada ${op.sheet}`);
-      if (!int(op.row) || !int(op.col) || op.row >= MAX_ROWS || op.col >= MAX_COLS) throw new SheetOpError("a célula fica fora da planilha");
-      if (typeof op.value === "number" && !Number.isFinite(op.value)) throw new SheetOpError("o número não é finito");
+      if (!has(op.sheet)) throw new SheetOpError(why("files.sheet.why.noSheet", { sheet: op.sheet }));
+      if (!int(op.row) || !int(op.col) || op.row >= MAX_ROWS || op.col >= MAX_COLS) throw new SheetOpError(why("files.sheet.why.outside"));
+      if (typeof op.value === "number" && !Number.isFinite(op.value)) throw new SheetOpError(why("files.sheet.why.notFinite"));
       return;
     default: {
-      if (!has(op.sheet)) throw new SheetOpError(`não há aba chamada ${op.sheet}`);
-      if (!int(op.at) || !Number.isInteger(op.count) || op.count < 1) throw new SheetOpError("posição ou quantidade inválida");
+      if (!has(op.sheet)) throw new SheetOpError(why("files.sheet.why.noSheet", { sheet: op.sheet }));
+      if (!int(op.at) || !Number.isInteger(op.count) || op.count < 1) throw new SheetOpError(why("files.sheet.why.badRange"));
       const max = op.op.endsWith("Rows") ? MAX_ROWS : MAX_COLS;
-      if (op.at + op.count > max) throw new SheetOpError("passa do fim da planilha");
+      if (op.at + op.count > max) throw new SheetOpError(why("files.sheet.why.pastEnd"));
     }
   }
 }
@@ -208,7 +209,7 @@ export function applyToGrid(grid: Grid, op: SheetOp, display: Display = plainDis
   }
   if (op.op === "cached") {
     const old = target.rows[op.row]?.[op.col];
-    if (old?.formula === undefined) throw new SheetOpError("a célula não tem fórmula");
+    if (old?.formula === undefined) throw new SheetOpError(why("files.sheet.why.noFormula"));
     const rows = target.rows.slice();
     const row = rows[op.row]!.slice();
     const { stale: _, ...rest } = old;

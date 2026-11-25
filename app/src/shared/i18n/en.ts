@@ -1,14 +1,24 @@
 // The English catalog (spec #28171): the same keys as `pt.ts`, written by the team (no cloud translation).
 // A missing or extra key breaks `tsc`; the i18n test also checks that both ask for the same `{params}`.
 
-import type { Catalog } from "./index.ts";
+import { enCatOverlay } from "./catoverlay.en.ts";
+import { enAgent } from "./agent.en.ts";
+import { enActivity } from "./activity.en.ts";
+import { enCommon } from "./common.en.ts";
+import { enHistory } from "./history.en.ts";
+import { enHub } from "./hub.en.ts";
+import { enEditor } from "./editor.en.ts";
+import type { Catalog, Entry } from "./index.ts";
+import { enMeetingsSettings } from "./meetings-settings.en.ts";
+import { enMeetings } from "./meetings.en.ts";
+import { enNotes } from "./notes.en.ts";
+import type { PT_PARTS } from "./pt.ts";
+import { enSettings } from "./settings.en.ts";
+import { enViewers } from "./viewers.en.ts";
 
-export const en: Catalog = {
+const enBase: { readonly [K in keyof typeof PT_PARTS.base]: Entry } = {
   "language.pt": "Português",
   "language.en": "English",
-
-  "common.notes": { one: "{n} note", other: "{n} notes" },
-  "common.saveFailed": "Couldn't save. Try again.",
 
   "settings.window.title": "Settings",
   "settings.topics.aria": "Settings topics",
@@ -99,4 +109,39 @@ export const en: Catalog = {
   "update.off.badUrl": "this build's update address isn't valid",
   "system.micUsage": "Kiwi Notes uses the microphone when you dictate or ask it to record a meeting, and transcribes everything on your Mac.",
   "system.audioCaptureUsage": "Kiwi Notes captures meeting audio only when you ask. Transcription happens on your Mac and the audio is deleted once it's transcribed.",
+};
+
+/** The same parts as `PT_PARTS`. */
+export const EN_PARTS = {
+  base: enBase,
+  common: enCommon,
+  notes: enNotes,
+  editor: enEditor,
+  viewers: enViewers,
+  settings: enSettings,
+  meetingsSettings: enMeetingsSettings,
+  catOverlay: enCatOverlay,
+  agent: enAgent,
+  meetings: enMeetings,
+  history: enHistory,
+  hub: enHub,
+  activity: enActivity,
+} as const;
+
+export const en: Catalog = {
+  ...enBase,
+  ...enCommon,
+  ...enNotes,
+  ...enSettings,
+  ...enMeetingsSettings,
+  ...enCatOverlay,
+  ...enAgent,
+  ...enMeetings,
+  ...enHistory,
+  ...enHub,
+  ...enActivity,
+  // O editor das Notas (T29842): `editor.en.ts`.
+  ...enEditor,
+  // Os visualizadores das Notas (T29245): `viewers.en.ts`.
+  ...enViewers,
 };

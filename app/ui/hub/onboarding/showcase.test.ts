@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import * as text from "./showcaseText.ts";
-import { catState, EXAMPLES, exampleMs, nextIndex, PAUSE_MS, sceneAt, stillScene, TYPE_MS, WORK_MS } from "./showcaseText.ts";
+import { catState, exampleMs, nextIndex, PAUSE_MS, sceneAt, SHOWCASE, showcase, stillScene, TYPE_MS, WORK_MS } from "./showcaseText.ts";
+
+const EXAMPLES = showcase().examples;
 
 describe("os exemplos (spec #20828)", () => {
   test("são os 4 do spec, na ordem", () => {
@@ -19,6 +21,13 @@ describe("os exemplos (spec #20828)", () => {
     const strings = JSON.stringify(text);
     const component = readFileSync(join(import.meta.dir, "KiwiShowcase.tsx"), "utf8").replace(/\/\/.*$/gm, "");
     for (const s of [strings, component]) expect(s).not.toMatch(/Kiwi[ -][Cc]at/);
+  });
+
+  test("em inglês, os mesmos exemplos, na mesma ordem e com o pedido nos mesmos", () => {
+    const shape = (l: keyof typeof SHOWCASE) => SHOWCASE[l].examples.map((e) => [e.id, e.ask === null]);
+    expect(shape("en")).toEqual(shape("pt"));
+    expect(SHOWCASE.en.sheet.map((r) => r.length)).toEqual(SHOWCASE.pt.sheet.map((r) => r.length));
+    expect(SHOWCASE.en.dot(2, 4, "Create a document")).toBe("Example 2 of 4: Create a document");
   });
 });
 

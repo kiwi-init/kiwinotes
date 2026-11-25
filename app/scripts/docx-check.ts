@@ -14,6 +14,7 @@ import { Bookmark, Document, InternalHyperlink, Packer, PageBreak, Paragraph, Te
 import { type Page, webkit } from "playwright-core";
 import { partBytes, partText, readZip, writeZip } from "../src/shared/sheet/zip.ts";
 import { ABRE_MS, medirAte } from "../test/regua/conferir.ts";
+import { translate } from "../src/shared/i18n/index.ts";
 import { CHANGED_OUTSIDE } from "../ui/notes/files/docxSaver.ts";
 import { connect, request } from "./cli";
 import { openWindow, type UiContext } from "./ui-page";
@@ -400,7 +401,7 @@ try {
         const outside = fromOutside("Versão da Carla, de outro app.");
         writeFileSync(join(vault, EDITAR), outside);
         await p.waitForSelector(".kn-file-text-note", { timeout: 10000 });
-        assert.equal(await p.locator(".kn-file-text-note").textContent(), CHANGED_OUTSIDE);
+        assert.equal(await p.locator(".kn-file-text-note").textContent(), translate("pt", CHANGED_OUTSIDE));
         await p.waitForFunction(() => document.querySelector(".docx-paginated-surface")?.textContent?.includes("Versão da Carla"), null, { timeout: 10000 });
         await p.waitForTimeout(800);
         assert.deepEqual(disk(EDITAR), outside, "o disco fica com o de fora");

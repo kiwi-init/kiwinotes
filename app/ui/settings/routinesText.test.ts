@@ -2,7 +2,7 @@
 
 import { expect, test } from "bun:test";
 
-import { lastRunLine, routineHint, scheduleLine, timeOptions, customScheduleLine, ROUTINES_PATHS } from "./routinesText.ts";
+import { lastRunLine, routineHint, scheduleLine, timeOptions, customScheduleLine, routinesPaths } from "./routinesText.ts";
 import { proposalLine } from "./proposalText.ts";
 import type { AgentProposalSummary } from "../../src/shared/ui-contract.ts";
 
@@ -41,8 +41,8 @@ test("quando uma rotina nova roda: todo dia, dias úteis, um dia ou a lista", ()
   expect(customScheduleLine({ time: "08:30", days: [6] })).toBe("Todo sábado às 08:30");
   expect(customScheduleLine({ time: "08:30", days: [1, 3, 5] })).toBe("Seg, qua e sex às 08:30");
   expect(customScheduleLine({ time: "08:30", days: [0, 1, 2, 3, 4, 5, 6] })).toBe("Todo dia às 08:30");
-  expect(ROUTINES_PATHS).toContain("Nova rotina");
-  expect(ROUTINES_PATHS).toContain("Kiwi Cat");
+  expect(routinesPaths()).toContain("Nova rotina");
+  expect(routinesPaths()).toContain("Kiwi Cat");
 });
 
 test("a proposta de rotina no balão: o nome, quando roda, e que entra desligada", () => {

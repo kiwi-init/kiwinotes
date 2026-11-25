@@ -7,7 +7,8 @@ import { Highlight } from "./Highlight.tsx";
 import { type PaletteCommand, type PaletteItem, paletteItems, snippetRanges, titleRanges } from "./palette.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { NoteMeta, NotesApi, SearchHit, VaultFile } from "./types.ts";
-import { SEARCH_TOO_LONG, searchTooLong } from "../../src/shared/query.ts";
+import { MAX_SEARCH_QUERY, searchTooLong } from "../../src/shared/query.ts";
+import { useT } from "../src/i18n.ts";
 import { type FileAt, fileAtLabel } from "../../src/shared/file-view.ts";
 
 export interface PaletteProps {
@@ -27,6 +28,7 @@ export interface PaletteProps {
 const NO_FILES: VaultFile[] = [];
 
 export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = "", commands = [], onCommand }: PaletteProps) {
+  const { t, locale } = useT();
   const [query, setQuery] = useState(initialQuery);
   const [search, setSearch] = useState<{ query: string; hits: SearchHit[]; files: VaultFile[] } | null>(null);
   const hits = search?.query === query ? search.hits : [];
@@ -41,7 +43,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
     const my = ++seq.current;
     // Longa demais (T7791): o engine recusaria; a lista dá lugar ao aviso.
     if (!query.trim() || tooLong) return setSearch(null);
-    const t = setTimeout(() => {
+    const id = setTimeout(() => {
       // Os arquivos pelo nome (T21240) vêm junto, do mesmo `findFiles` da barra; sem ele, só a busca.
       const byName = api.findFiles ? api.findFiles(query).catch(() => NO_FILES) : Promise.resolve(NO_FILES);
       Promise.all([api.search(query, 20), byName]).then(
@@ -49,7 +51,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
         () => my === seq.current && setSearch(null),
       );
     }, 120);
-    return () => clearTimeout(t);
+    return () => clearTimeout(id);
   }, [query, api, notes]);
 
   // Uma vez por mudança (T8110): o `setSel(0)` de cada letra desenhava de novo e refazia a lista das 10 mil notas.
@@ -74,18 +76,18 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
 
   return (
     <div className="kn-palette-scrim" onMouseDown={onClose}>
-      <div className="kn-palette" role="dialog" aria-label="Buscar notas" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="kn-palette" role="dialog" aria-label={t("notes.palette.label")} onMouseDown={(e) => e.stopPropagation()}>
         <input
           className="kn-palette-q"
           autoFocus
           {...NO_TEXT_ASSIST}
-          placeholder="Buscar ou criar nota"
-          aria-label="Buscar ou criar nota"
+          placeholder={t("notes.palette.placeholder")}
+          aria-label={t("notes.palette.placeholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKey}
         />
-        {tooLong ? <div className="kn-palette-long" role="status">{SEARCH_TOO_LONG}</div> : null}
+        {tooLong ? <div className="kn-palette-long" role="status">{t("notes.searchTooLong", { max: MAX_SEARCH_QUERY })}</div> : null}
         <div className="kn-palette-list" role="listbox">
           {items.map((it, i) => (
             <div
@@ -107,19 +109,19 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
                     {it.snippet ? <Snippet text={plainSnippet(it.snippet)} query={query} /> : null}
                   </span>
                   <span className="kn-palette-r">
-                    {it.format ? <span className="kn-palette-type" title={it.at ? fileAtLabel(it.at) : undefined}>{it.format}{it.at ? `:${"line" in it.at ? it.at.line : fileAtLabel(it.at)}` : ""}</span> : null}
-                    {it.semantic ? <span className="kn-palette-why" title="Sem as palavras da busca, mas sobre o mesmo assunto">pelo sentido</span> : null}
+                    {it.format ? <span className="kn-palette-type" title={it.at ? fileAtLabel(it.at, locale) : undefined}>{it.format}{it.at ? `:${"line" in it.at ? it.at.line : fileAtLabel(it.at, locale)}` : ""}</span> : null}
+                    {it.semantic ? <span className="kn-palette-why" title={t("notes.palette.semanticHint")}>{t("notes.palette.semantic")}</span> : null}
                     {it.detail}
                   </span>
                 </>
               ) : it.kind === "command" ? (
                 <span className="kn-palette-title kn-palette-create">{it.title}</span>
               ) : (
-                <span className="kn-palette-title kn-palette-create">Criar “{it.title}”</span>
+                <span className="kn-palette-title kn-palette-create">{t("notes.menu.createMain", { name: it.title })}</span>
               )}
             </div>
           ))}
-          {!items.length && !tooLong ? <div className="kn-palette-empty">{query.trim() ? "Nenhuma nota com isso" : "Nenhuma nota ainda"}</div> : null}
+          {!items.length && !tooLong ? <div className="kn-palette-empty">{t(query.trim() ? "notes.palette.none" : "notes.noNotes")}</div> : null}
         </div>
       </div>
     </div>

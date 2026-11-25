@@ -888,10 +888,9 @@ export function uiCapabilities(deps: CapabilityDeps,
       deps.settingsChanged?.(saved);
       if (languageBefore !== null && languageBefore !== saved.language) {
         const sys = deps.systemLanguages?.() ?? [];
-        const before = appLocale(languageBefore, sys);
-        const now = appLocale(saved.language, sys);
-        // Automático ↔ a mesma língua não troca texto nenhum, mas o seletor de outra janela precisa da escolha nova.
-        if (before.setting !== now.setting || before.locale !== now.locale) deps.localeChanged?.(now);
+        // Sempre avisa, mesmo de Automático para a mesma língua: nenhum texto muda, mas o seletor de outra janela
+        // precisa da escolha nova.
+        deps.localeChanged?.(appLocale(saved.language, sys));
       }
       if (turnUpdates !== null) deps.about?.checkUpdatesChanged?.(turnUpdates);
       if (turnSemantic === false) {

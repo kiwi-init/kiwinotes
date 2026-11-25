@@ -4,10 +4,13 @@
 // e nos ajustes de reunião.
 import { useState } from "react";
 
+import type { TextKey } from "../../src/shared/i18n/index.ts";
 import {
-  conflictOf, isShortcutFor, SHORTCUTS, shortcutDef, shortcutLabel, type ShortcutDef, type ShortcutId, type Shortcuts,
+  conflictOf, isShortcutFor, SHORTCUTS, shortcutDef, shortcutGroupName, shortcutHint, shortcutLabel, shortcutName, type ShortcutDef, type ShortcutId,
+  type Shortcuts,
 } from "../../src/shared/shortcuts.ts";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Button, Row, Section } from "../src/kit/index.tsx";
 import { useShortcuts } from "../src/useShortcuts.ts";
 import "./shortcuts.css";
@@ -27,6 +30,9 @@ type State =
 const refuses = (id: ShortcutId, other: ShortcutId) => id === "agent" || other === "agent";
 
 export function ShortcutRow({ id, shortcuts, disabled = false }: { id: ShortcutId; shortcuts: Shortcuts; disabled?: boolean }) {
+  const { t, locale } = useT();
+  const keys = (text: string | null) => shortcutLabel(text, locale);
+  const name = (of: ShortcutId) => shortcutName(of, locale);
   const def = shortcutDef(id);
   const [state, setState] = useState<State>({ kind: "idle" });
   const current = shortcuts[id];
@@ -34,7 +40,7 @@ export function ShortcutRow({ id, shortcuts, disabled = false }: { id: ShortcutI
 
   const save = (patch: Partial<Shortcuts>) => {
     setState({ kind: "idle" });
-    api.settings.set({ shortcuts: patch }).catch(() => setState({ kind: "idle", problem: "Não deu para salvar o atalho. Tente de novo." }));
+    api.settings.set({ shortcuts: patch }).catch(() => setState({ kind: "idle", problem: t("shortcuts.saveFailed") }));
   };
 
   /** Salva, ou pergunta antes quando outra ação já usa as mesmas teclas. */
@@ -43,15 +49,15 @@ export function ShortcutRow({ id, shortcuts, disabled = false }: { id: ShortcutI
       setState({
         kind: "idle",
         problem: id === "agent"
-          ? `${shortcutLabel(text)} não serve aqui: segure uma tecla (Control, ⌥ ou ⌘ direito) ou uma combinação, como ⌃⌥Espaço.`
-          : `${shortcutLabel(text)} não serve aqui: com as Notas na frente, só uma combinação, como ⌘K.`,
+          ? t("shortcuts.notHereAgent", { keys: keys(text) })
+          : t("shortcuts.notHereApp", { keys: keys(text) }),
       });
       return;
     }
     const other = conflictOf(shortcuts, id, text);
     if (other && refuses(id, other)) {
-      const where = other === "agent" ? "do Kiwi Cat (Ajustes › Agente)" : `de “${shortcutDef(other).label}” (Ajustes › Atalhos)`;
-      setState({ kind: "idle", problem: `${shortcutLabel(text)} já é ${where}. Escolha outro.` });
+      const problem = other === "agent" ? t("shortcuts.takenByCat", { keys: keys(text) }) : t("shortcuts.takenBy", { keys: keys(text), other: name(other) });
+      setState({ kind: "idle", problem });
     } else if (other) setState({ kind: "conflict", text, other });
     else if (text !== current) save({ [id]: text });
     else setState({ kind: "idle" });
@@ -67,8 +73,8 @@ export function ShortcutRow({ id, shortcuts, disabled = false }: { id: ShortcutI
         setState({
           kind: "idle",
           problem: code === "E_BAD_ARGS"
-            ? "Isso não é um atalho: use ⌃, ⌥ ou ⌘ com uma tecla, uma tecla F, ou o Fn e o ⌥ direito sozinhos."
-            : "Os atalhos estão desligados: falta a permissão de Monitoramento de Entrada.",
+            ? t("shortcuts.notAShortcut")
+            : t("shortcuts.noPermission"),
         });
       },
     );
@@ -77,39 +83,39 @@ export function ShortcutRow({ id, shortcuts, disabled = false }: { id: ShortcutI
   const hint =
     state.kind === "recording"
       ? def.scope === "app"
-        ? "Aperte a combinação. Esc cancela."
+        ? t("shortcuts.recordApp")
         : id === "agent"
-          ? "Aperte a tecla (o ⌃, ⌥ ou ⌘ direito) ou a combinação. Esc cancela; para voltar ao Control, use Voltar ao padrão."
+          ? t("shortcuts.recordAgent")
         : id === "cancel"
-          ? "Aperte a tecla (⌫, ↩…) ou a combinação. Esc cancela; para voltar ao Esc, use Voltar ao padrão."
-        : "Aperte o atalho: uma tecla, duas vezes, uma combinação ou uma sequência. Esc cancela."
+          ? t("shortcuts.recordCancel")
+        : t("shortcuts.record")
       : state.kind === "conflict"
-        ? `${shortcutLabel(state.text)} já é de “${shortcutDef(state.other).label}”. Usar aqui desliga lá.`
-        : state.problem ?? def.hint;
+        ? t("shortcuts.conflict", { keys: keys(state.text), other: name(state.other) })
+        : state.problem ?? shortcutHint(id, locale);
 
   return (
-    <Row label={def.label} hint={hint}>
+    <Row label={name(id)} hint={hint}>
       <div className="kn-shortcut" data-state={state.kind}>
         {state.kind === "conflict" ? (
           <>
-            <Button variant="primary" onClick={() => save({ [id]: state.text, [state.other]: null })}>Usar aqui</Button>
-            <Button onClick={() => setState({ kind: "idle" })}>Cancelar</Button>
+            <Button variant="primary" onClick={() => save({ [id]: state.text, [state.other]: null })}>{t("shortcuts.useHere")}</Button>
+            <Button onClick={() => setState({ kind: "idle" })}>{t("common.cancel")}</Button>
           </>
         ) : state.kind === "recording" ? (
           <>
-            <kbd className="kn-kbd kn-shortcut-key" data-recording="true" aria-live="polite">Aperte o atalho…</kbd>
-            <Button onClick={() => void api.shortcuts.cancelRecord().catch(() => setState({ kind: "idle" }))}>Cancelar</Button>
+            <kbd className="kn-kbd kn-shortcut-key" data-recording="true" aria-live="polite">{t("shortcuts.pressKeys")}</kbd>
+            <Button onClick={() => void api.shortcuts.cancelRecord().catch(() => setState({ kind: "idle" }))}>{t("common.cancel")}</Button>
           </>
         ) : (
           <>
             {current !== def.default ? (
-              <Button className="kn-button kn-shortcut-reset" onClick={() => choose(def.default)} title={`Voltar ao padrão (${shortcutLabel(def.default)})`}>
-                Voltar ao padrão
+              <Button className="kn-button kn-shortcut-reset" onClick={() => choose(def.default)} title={t("shortcuts.resetTo", { keys: keys(def.default) })}>
+                {t("shortcuts.reset")}
               </Button>
             ) : null}
             {/* O Kiwi Cat se desliga pelo interruptor dele (spec #12946), não pelo atalho. */}
             {current !== null && id !== "agent" ? (
-              <Button className="kn-button kn-shortcut-off" onClick={() => save({ [id]: null })}>Desligar</Button>
+              <Button className="kn-button kn-shortcut-off" onClick={() => save({ [id]: null })}>{t("shortcuts.turnOff")}</Button>
             ) : null}
             <button
               type="button"
@@ -117,10 +123,10 @@ export function ShortcutRow({ id, shortcuts, disabled = false }: { id: ShortcutI
               data-off={current === null || undefined}
               disabled={!canRecord || disabled}
               onClick={record}
-              aria-label={`${def.label}: ${shortcutLabel(current)}. Trocar o atalho`}
-              title={canRecord ? "Trocar o atalho" : "Trocar o atalho precisa do Kiwi aberto, com o atalho ativo"}
+              aria-label={t("shortcuts.changeAria", { name: name(id), keys: keys(current) })}
+              title={canRecord ? t("shortcuts.change") : t("shortcuts.changeNeedsApp")}
             >
-              {shortcutLabel(current)}
+              {keys(current)}
             </button>
           </>
         )}
@@ -134,6 +140,7 @@ export function ShortcutRow({ id, shortcuts, disabled = false }: { id: ShortcutI
  * (cada assunto de Ajustes mostra os dele, spec #11966); sem ele, todos e as teclas da barra lateral.
  */
 export function ShortcutsSection({ group: only }: { group?: ShortcutDef["group"] } = {}) {
+  const { t, locale } = useT();
   const shortcuts = useShortcuts();
   // Um engine de antes do T5349: a seção não aparece.
   if (!shortcuts) return null;
@@ -142,7 +149,7 @@ export function ShortcutsSection({ group: only }: { group?: ShortcutDef["group"]
   return (
     <>
       {groups.map((group) => (
-        <Section key={group} title={`Atalhos · ${group}`}>
+        <Section key={group} title={t("shortcuts.section", { group: shortcutGroupName(group, locale) })}>
           {SHORTCUTS.filter((s) => s.group === group).map((s) => (
             <ShortcutRow key={s.id} id={s.id} shortcuts={shortcuts} />
           ))}
@@ -157,20 +164,21 @@ export function ShortcutsSection({ group: only }: { group?: ShortcutDef["group"]
  * As teclas da barra lateral das Notas (spec #10211): fixas, só para ler. Elas valem com o foco na barra; com o foco no
  * editor, as mesmas teclas fazem o que já faziam.
  */
-export const SIDEBAR_KEYS: readonly { keys: string; label: string }[] = [
-  { keys: "↓", label: "Do campo “Ir para uma nota ou pasta” para a árvore" },
-  { keys: "↑ ↓", label: "Andar entre as pastas e as notas" },
-  { keys: "→ ←", label: "Abrir e fechar a pasta" },
-  { keys: "↩", label: "Abrir a nota" },
-  { keys: "⇧F10", label: "O menu da pasta ou da nota (ou a tecla de menu)" },
-  { keys: "esc", label: "Fechar o menu e voltar para a linha" },
+export const SIDEBAR_KEYS: readonly { keys: string; textKey: TextKey }[] = [
+  { keys: "↓", textKey: "sidebarKeys.toTree" },
+  { keys: "↑ ↓", textKey: "sidebarKeys.move" },
+  { keys: "→ ←", textKey: "sidebarKeys.fold" },
+  { keys: "↩", textKey: "sidebarKeys.open" },
+  { keys: "⇧F10", textKey: "sidebarKeys.menu" },
+  { keys: "esc", textKey: "sidebarKeys.close" },
 ];
 
 export function SidebarKeysSection() {
+  const { t } = useT();
   return (
-    <Section title="Atalhos · Barra lateral das Notas">
+    <Section title={t("sidebarKeys.section")}>
       {SIDEBAR_KEYS.map((k) => (
-        <Row key={k.keys} label={k.label}>
+        <Row key={k.keys} label={t(k.textKey)}>
           <kbd className="kn-kbd kn-shortcut-key" data-fixed="true">
             {k.keys}
           </kbd>

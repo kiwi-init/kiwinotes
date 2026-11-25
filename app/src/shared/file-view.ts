@@ -2,6 +2,7 @@
 // do `files.read`. Acima deles, o Kiwi avisa e oferece o app padrão do Mac, em vez de carregar o arquivo na memória.
 
 import { PACKAGE_MARKS } from "./attachments.ts";
+import { type Locale, translate } from "./i18n/index.ts";
 
 /** O maior arquivo lido em binário (pdf, docx, xlsx, imagem): 25 MB, como o maior anexo. */
 export const MAX_VIEW_BYTES = 25 * 1024 * 1024;
@@ -27,9 +28,9 @@ export function cellRef(cell: string): { line: number; col: number } | null {
 }
 
 /** O lugar curto, para a lista: "linha 3", "pág. 2", "§4", "Aba!B7". */
-export function fileAtLabel(at: FileAt): string {
-  if ("line" in at) return `linha ${at.line}`;
-  if ("page" in at) return `pág. ${at.page}`;
+export function fileAtLabel(at: FileAt, locale: Locale = "pt"): string {
+  if ("line" in at) return translate(locale, "notes.at.line", { line: at.line });
+  if ("page" in at) return translate(locale, "notes.at.page", { page: at.page });
   if ("paragraph" in at) return `§${at.paragraph}`;
   return `${at.sheet}!${at.cell}`;
 }
@@ -66,8 +67,8 @@ export const hasVersions = (name: string): boolean => hasTextVersions(name) || /
 
 export const viewLimit = (as: FileReadAs): number => (as === "text" ? MAX_VIEW_TEXT_BYTES : MAX_VIEW_BYTES);
 
-/** "1,2 MB", "340 KB", "12 B": o tamanho como o Finder diz. */
-export function fileSize(bytes: number): string {
+/** "1,2 MB", "340 KB", "12 B": o tamanho como o Finder diz, com a vírgula ou o ponto da língua ("1.2 MB" em inglês). */
+export function fileSize(bytes: number, locale: "pt" | "en" = "pt"): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB"];
   let value = bytes / 1024;
@@ -76,7 +77,7 @@ export function fileSize(bytes: number): string {
     value /= 1024;
     unit++;
   }
-  return `${value >= 100 ? Math.round(value) : value.toFixed(1).replace(".", ",").replace(/,0$/, "")} ${units[unit]}`;
+  return `${value >= 100 ? Math.round(value) : (locale === "en" ? value.toFixed(1) : value.toFixed(1).replace(".", ",")).replace(/[.,]0$/, "")} ${units[unit]}`;
 }
 
 /** O áudio e o vídeo que tocam nas Notas (T19315): o tipo MIME de cada um fica em `ui/notes/files/media.ts`. */

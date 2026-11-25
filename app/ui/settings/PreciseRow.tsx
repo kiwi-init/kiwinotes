@@ -5,29 +5,32 @@ import { useEffect, useState } from "react";
 
 import type { PreciseStatus } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
+import { t, useT } from "../src/i18n.ts";
 import { Row, Switch } from "../src/kit/index.tsx";
 
 const MB = (bytes: number) => Math.round(bytes / 1e6);
 
+/** A dica na língua de agora (o `t()` de fora do React; a linha redesenha pelo `useT()`). */
 export function preciseHint(s: PreciseStatus, failed: boolean): string {
-  if (failed) return "Não deu para salvar. Tente de novo.";
+  if (failed) return t("common.saveFailed");
   const size = MB(s.size);
-  if (!s.enabled) return `Erra menos termos técnicos, com o seu dicionário. Leva ~0,3 s a mais por ditado. Ligar baixa o modelo (${size} MB) uma vez.`;
+  if (!s.enabled) return t("precise.off", { size });
   if (s.phase === "downloading") {
     const pct = s.total ? Math.floor(((s.done ?? 0) / s.total) * 100) : 0;
-    return `Baixando o modelo: ${pct}% de ${size} MB, uma vez só. Até terminar, o ditado sai como sempre.`;
+    return t("precise.downloading", { pct, size });
   }
-  if (s.phase === "loading") return "Carregando o modelo…";
-  if (s.phase === "waiting") return "O modelo já está aqui. Ele entra quando o ditado estiver pronto.";
-  if (s.phase === "error" && s.error === "download") return "Não deu para baixar o modelo agora. Desligue e ligue para tentar de novo.";
-  if (s.phase === "error") return "Não deu para abrir o modelo. O ditado continua como sempre.";
-  if (s.phase === "ready") return "Ligado. Roda neste Mac: o áudio e o texto não saem daqui.";
+  if (s.phase === "loading") return t("common.loadingModel");
+  if (s.phase === "waiting") return t("precise.waiting");
+  if (s.phase === "error" && s.error === "download") return t("precise.downloadFailed");
+  if (s.phase === "error") return t("precise.openFailed");
+  if (s.phase === "ready") return t("precise.ready");
   return "";
 }
 
 const settled = (s: PreciseStatus | null) => !s || !s.enabled || s.phase === "ready" || s.phase === "error";
 
 export function PreciseRow() {
+  useT(); // redesenha quando a língua muda; o texto sai do `t()`, como na dica
   const [status, setStatus] = useState<PreciseStatus | null>(null);
   const [failed, setFailed] = useState(false);
   /** Muda depois que a configuração salvou: só aí a leitura recomeça, para uma resposta de antes não desfazer o clique. */
@@ -70,8 +73,8 @@ export function PreciseRow() {
   };
 
   return (
-    <Row label="Modo preciso" hint={preciseHint(status, failed)}>
-      <Switch label="Modo preciso" checked={status.enabled} onChange={change} />
+    <Row label={t("precise.label")} hint={preciseHint(status, failed)}>
+      <Switch label={t("precise.label")} checked={status.enabled} onChange={change} />
     </Row>
   );
 }

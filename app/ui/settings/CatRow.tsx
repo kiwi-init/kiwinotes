@@ -5,8 +5,14 @@ import type { AppSettings } from "../../src/shared/ui-contract";
 import { api } from "../src/api";
 import previewCatUrl from "../kiwicat/assets/preview-cutout.webp";
 import { CAT_POSITIONS, CAT_SIZE, type CatPosition, catPreviewRect, catSize, catSizeLabel, PREVIEW_BARS } from "../../src/shared/kiwicat-place";
+import { useT } from "../src/i18n";
 import { Row, Select, Swatches, Switch } from "../src/kit/index";
+import type { TextKey } from "../../src/shared/i18n/index.ts";
+
+const posKey = (id: CatPosition) => `agent.cat.pos.${id}` as TextKey;
+const colorKey = (id: string) => `agent.cat.color.${id}` as TextKey;
 export function CatRow() {
+  const { t } = useT();
   const [show, setShow] = useState<boolean | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -16,8 +22,8 @@ export function CatRow() {
     return () => { alive = false; off(); };
   }, []);
   if (show === null) return null;
-  return <Row label="Mostrar o Kiwi Cat" hint={failed ? "Não deu para salvar. Tente de novo." : "O gato mostra o que o agente está fazendo no canto da janela."}>
-    <Switch label="Mostrar o Kiwi Cat" checked={show} onChange={next => {
+  return <Row label={t("agent.cat.show")} hint={failed ? t("agent.saveFailed") : t("agent.cat.show.hint")}>
+    <Switch label={t("agent.cat.show")} checked={show} onChange={next => {
       setFailed(false);
       void api.settings.set({ kiwicat: { show: next } }).then(s => setShow(s.kiwicat.show), () => setFailed(true));
     }} />
@@ -29,6 +35,7 @@ export function CatRow() {
  * enquanto o agente trabalha. Separado do gato do canto.
  */
 export function OverlayCatRow() {
+  const { t } = useT();
   const [on, setOn] = useState<boolean | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -38,8 +45,8 @@ export function OverlayCatRow() {
     return () => { alive = false; off(); };
   }, []);
   if (on === null) return null;
-  const label = "Mostrar o Kiwi Cat por cima dos outros apps";
-  return <Row label={label} hint={failed ? "Não deu para salvar. Tente de novo." : "Quando o Kiwi não está na frente, o gato aparece na tela enquanto o agente trabalha, no lugar escolhido abaixo. Ele não pega o clique nem o foco."}>
+  const label = t("agent.cat.overlay");
+  return <Row label={label} hint={failed ? t("agent.saveFailed") : t("agent.cat.overlay.hint")}>
     <Switch label={label} checked={on} onChange={next => {
       setFailed(false);
       void api.settings.set({ kiwicat: { overlay: next } }).then(s => setOn(s.kiwicat.overlay), () => setFailed(true));
@@ -54,6 +61,7 @@ export function OverlayCatRow() {
  * os controles, sem o título e a frase da linha (o passo já diz).
  */
 export function CatPlaceRow({ bare = false }: { bare?: boolean }) {
+  const { t, locale } = useT();
   const [cat, setCat] = useState<AppSettings["kiwicat"] | null>(null);
   const [failed, setFailed] = useState(false);
   const seq = useRef(0);
@@ -76,25 +84,25 @@ export function CatPlaceRow({ bare = false }: { bare?: boolean }) {
       .then(s => { if (mine === seq.current) setCat(s.kiwicat); }, () => { if (mine === seq.current) { setCat(cat); setFailed(true); } })
       .finally(() => { pending.current--; });
   };
-  const hint = failed ? "Não deu para salvar. Tente de novo."
-    : cat.overlay ? "Onde o gato aparece e o tamanho dele."
-    : "Vale quando o gato por cima dos apps estiver ligado.";
+  const hint = failed ? t("agent.saveFailed")
+    : cat.overlay ? t("agent.cat.place.hint")
+    : t("agent.cat.place.offHint");
   const body = <div className="kn-cat-place" data-bare={bare || undefined}>
     <CatPlacePreview posicao={cat.posicao} tamanho={cat.tamanho} cor={catPalette(cat.cor).accentColor} />
     <div className="kn-cat-place-controls">
       <div className="kn-cat-place-field">
-        <span className="kn-cat-place-label">Posição</span>
-        <Select<CatPosition> label="Posição do Kiwi Cat" value={cat.posicao} options={CAT_POSITIONS.map(p => ({ value: p.id, label: p.label }))}
+        <span className="kn-cat-place-label">{t("agent.cat.position")}</span>
+        <Select<CatPosition> label={t("agent.cat.position.select")} value={cat.posicao} options={CAT_POSITIONS.map(p => ({ value: p.id, label: t(posKey(p.id)) }))}
           onChange={posicao => posicao !== cat.posicao && save({ posicao })} />
       </div>
       <label className="kn-cat-place-field">
-        <span className="kn-cat-place-label">Tamanho</span>
+        <span className="kn-cat-place-label">{t("agent.cat.size")}</span>
         <span className="kn-cat-size">
-          <input type="range" aria-label="Tamanho do Kiwi Cat" min={CAT_SIZE.min} max={CAT_SIZE.max} step={CAT_SIZE.step} value={cat.tamanho}
+          <input type="range" aria-label={t("agent.cat.size.input")} min={CAT_SIZE.min} max={CAT_SIZE.max} step={CAT_SIZE.step} value={cat.tamanho}
             onChange={e => setCat({ ...cat, tamanho: catSize(Number(e.target.value)) })}
             onPointerUp={e => save({ tamanho: catSize(Number((e.target as HTMLInputElement).value)) })}
             onKeyUp={e => save({ tamanho: catSize(Number((e.target as HTMLInputElement).value)) })} />
-          <span className="kn-cat-size-value">{catSizeLabel(cat.tamanho)}</span>
+          <span className="kn-cat-size-value">{catSizeLabel(cat.tamanho, locale)}</span>
         </span>
       </label>
       {bare && failed ? <p className="kn-row-hint" role="alert">{hint}</p> : null}
@@ -105,7 +113,7 @@ export function CatPlaceRow({ bare = false }: { bare?: boolean }) {
   // estreita do Row, o texto quebrava em seis linhas.
   return <div className="kn-row kn-row-stacked">
     <div className="kn-row-text">
-      <div className="kn-row-label">Posição e tamanho do Kiwi Cat</div>
+      <div className="kn-row-label">{t("agent.cat.place")}</div>
       <div className="kn-row-hint">{hint}</div>
     </div>
     {body}
@@ -117,8 +125,9 @@ export function CatPlaceRow({ bare = false }: { bare?: boolean }) {
  * lugar e no tamanho escolhidos, pela conta do helper.
  */
 export function CatPlacePreview({ posicao, tamanho, cor }: { posicao: CatPosition; tamanho: number; cor: string }) {
+  const { t, locale } = useT();
   const r = catPreviewRect(posicao, tamanho);
-  return <div className="kn-cat-screen" role="img" aria-label={`Prévia: o Kiwi Cat em ${CAT_POSITIONS.find(p => p.id === posicao)?.label.toLowerCase()}, ${catSizeLabel(tamanho)}`}>
+  return <div className="kn-cat-screen" role="img" aria-label={t("agent.cat.preview", { where: t(posKey(posicao)).toLowerCase(), size: catSizeLabel(tamanho, locale) })}>
     <span className="kn-cat-screen-menu" style={{ height: `${PREVIEW_BARS.menu}%` }} />
     <span className="kn-cat-screen-dock" style={{ height: `${PREVIEW_BARS.dock * 0.6}%` }} />
     <img className="kn-cat-screen-cat" src={previewCatUrl} alt="" draggable={false} data-posicao={posicao}
@@ -136,6 +145,7 @@ type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
  */
 /** `preview: false`: sem o gatinho da linha (o onboarding já mostra o gato grande, spec #11955). */
 export function CatColorRow({ agentEnabled, preview = true }: { agentEnabled: boolean; preview?: boolean }) {
+  const { t } = useT();
   const [cat, setCat] = useState<AppSettings["kiwicat"] | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -146,13 +156,13 @@ export function CatColorRow({ agentEnabled, preview = true }: { agentEnabled: bo
   }, []);
   if (!cat) return null;
   const on = agentEnabled && cat.show;
-  const label = "Cor do Kiwi Cat";
+  const label = t("agent.cat.color");
   const current = catPalette(cat.cor);
-  const hint = failed ? "Não deu para salvar. Tente de novo."
-    : !agentEnabled ? "Ligue o agente para escolher a cor do gato."
-    : !cat.show ? "Mostre o Kiwi Cat para escolher a cor dele."
-    : `${current.name}: a névoa em volta do gato e os detalhes dele.`;
-  const options = catColorOptions().map(o => ({ value: o.id, label: o.label, color: catSwatchCss(o.prismStops) }));
+  const hint = failed ? t("agent.saveFailed")
+    : !agentEnabled ? t("agent.cat.color.needsAgent")
+    : !cat.show ? t("agent.cat.color.needsCat")
+    : t("agent.cat.color.hint", { name: t(colorKey(current.id)) });
+  const options = catColorOptions().map(o => ({ value: o.id, label: t(colorKey(o.id)), color: catSwatchCss(o.prismStops) }));
   return <Row label={label} hint={hint} oneLine>
     <div className="kn-cat-color">
       {on && preview ? <CatPreview cor={cat.cor} /> : null}

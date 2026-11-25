@@ -2,6 +2,7 @@
 // editor; o clique no caminho e o teclado continuam dando acesso à busca e à árvore.
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./tree-popover.css";
+import { useT } from "../src/i18n.ts";
 
 const LAYERS = ".kn-menu, .kn-palette-scrim, .kn-toast";
 /**
@@ -19,6 +20,7 @@ export function TreePopover({ open, onOpenChange, anchor, busy, children }: {
   busy: boolean;
   children: ReactNode;
 }) {
+  const { t } = useT();
   const panel = useRef<HTMLDivElement>(null);
   const overAnchor = useRef(false);
   const overPanel = useRef(false);
@@ -192,7 +194,7 @@ export function TreePopover({ open, onOpenChange, anchor, busy, children }: {
       ref={panel}
       className="kn-pop kn-tree-pop kn-tree-hover"
       role="dialog"
-      aria-label="Pastas e notas"
+      aria-label={t("notes.tree")}
       data-open={open || undefined}
       inert={!open}
       aria-hidden={!open}

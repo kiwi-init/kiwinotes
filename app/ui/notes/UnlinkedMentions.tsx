@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 
 import type { ExtrasApi, Mention } from "./types.ts";
+import { useT } from "../src/i18n.ts";
 
 export function UnlinkedMentions({
   extras,
@@ -17,6 +18,7 @@ export function UnlinkedMentions({
   version: number;
   onOpen(path: string): void;
 }) {
+  const { t } = useT();
   const [mentions, setMentions] = useState<Mention[]>([]);
   useEffect(() => {
     let live = true;
@@ -31,7 +33,7 @@ export function UnlinkedMentions({
   if (!mentions.length) return null;
   return (
     <>
-      <div className="kn-right-h kn-right-h2">Mencionada sem link</div>
+      <div className="kn-right-h kn-right-h2">{t("notes.mentions")}</div>
       {mentions.map((m) => (
         <div className="kn-back kn-mention" key={m.path}>
           <button type="button" className="kn-mention-open" onClick={() => onOpen(m.path)}>
@@ -43,7 +45,7 @@ export function UnlinkedMentions({
             className="kn-bt kn-mention-link"
             onClick={() => void extras.linkMentions(m.path, path).then(() => setMentions((all) => all.filter((x) => x.path !== m.path)))}
           >
-            Linkar
+            {t("notes.mentions.link")}
           </button>
         </div>
       ))}

@@ -7,6 +7,7 @@
 // centenas de páginas não vira centenas de canvases. A busca usa o texto de cada página (`pdfSearch.ts`) e marca os
 // achados por cima do canvas.
 
+import { useT } from "../../src/i18n.ts";
 import type { PageViewport, PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -39,6 +40,7 @@ interface Size {
 type Problem = "password" | "error";
 
 export function PdfViewer({ path, file, at }: FileViewerProps) {
+  const { t } = useT();
   const base64 = "base64" in file ? file.base64 : "";
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [sizes, setSizes] = useState<Size[]>([]);
@@ -214,37 +216,37 @@ export function PdfViewer({ path, file, at }: FileViewerProps) {
   if (problem) {
     return (
       <div className="kn-file-notice" role="status">
-        <p>{problem === "password" ? "Este pdf tem senha. Para ler, abra no app padrão." : "Não deu para abrir este pdf."}</p>
+        <p>{problem === "password" ? t("files.pdf.password") : t("files.pdf.failed")}</p>
       </div>
     );
   }
 
-  const count = matches === null ? "" : searching ? "" : matches.length ? `${current + 1} de ${matches.length.toLocaleString("pt-BR")}` : "Nada encontrado";
+  const count = matches === null ? "" : searching ? "" : matches.length ? t("notes.find.count", { at: current + 1, total: matches.length }) : t("notes.find.none");
 
   return (
     <div className="kn-file-pdf" aria-busy={doc ? undefined : "true"}>
-      <div className="kn-file-pdf-bar" role="toolbar" aria-label="Pdf">
+      <div className="kn-file-pdf-bar" role="toolbar" aria-label={t("files.pdf")}>
         <span className="kn-file-pdf-group">
-          <button type="button" className="kn-bt" aria-label="Diminuir o zoom" disabled={!doc} onClick={() => zoomTo(stepZoom(scale, -1))}>
+          <button type="button" className="kn-bt" aria-label={t("files.zoomOut")} disabled={!doc} onClick={() => zoomTo(stepZoom(scale, -1))}>
             −
           </button>
           <span className="kn-file-pdf-zoom" aria-live="polite">{`${Math.round(scale * 100)}%`}</span>
-          <button type="button" className="kn-bt" aria-label="Aumentar o zoom" disabled={!doc} onClick={() => zoomTo(stepZoom(scale, 1))}>
+          <button type="button" className="kn-bt" aria-label={t("files.zoomIn")} disabled={!doc} onClick={() => zoomTo(stepZoom(scale, 1))}>
             +
           </button>
           <button type="button" className="kn-bt" disabled={!doc || zoom === null} onClick={() => zoomTo(null)}>
-            Ajustar à largura
+            {t("files.fitWidth")}
           </button>
         </span>
         <span className="kn-file-pdf-page" aria-live="polite">
-          {doc ? `Página ${page} de ${doc.numPages}` : ""}
+          {doc ? t("files.pdf.page", { page, total: doc.numPages }) : ""}
         </span>
         <span className="kn-file-pdf-group kn-file-pdf-find">
           <input
             className="kn-file-pdf-query"
             type="search"
-            placeholder="Buscar no pdf"
-            aria-label="Buscar no pdf"
+            placeholder={t("files.pdf.find")}
+            aria-label={t("files.pdf.find")}
             value={query}
             disabled={!doc}
             {...NO_TEXT_ASSIST}
@@ -260,10 +262,10 @@ export function PdfViewer({ path, file, at }: FileViewerProps) {
           <span className="kn-file-pdf-count" aria-live="polite">
             {count}
           </span>
-          <button type="button" className="kn-bt" aria-label="Achado anterior" disabled={!matches?.length} onClick={() => step(-1)}>
+          <button type="button" className="kn-bt" aria-label={t("notes.find.prev")} disabled={!matches?.length} onClick={() => step(-1)}>
             ↑
           </button>
-          <button type="button" className="kn-bt" aria-label="Próximo achado" disabled={!matches?.length} onClick={() => step(1)}>
+          <button type="button" className="kn-bt" aria-label={t("notes.find.next")} disabled={!matches?.length} onClick={() => step(1)}>
             ↓
           </button>
         </span>
@@ -290,6 +292,7 @@ interface PageProps {
 
 /** Uma página: o lugar dela sempre, e o canvas só quando está perto da tela. */
 function PdfPage({ doc, number, size, scale, root, marks }: PageProps) {
+  const { t } = useT();
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [near, setNear] = useState(false);
@@ -342,7 +345,7 @@ function PdfPage({ doc, number, size, scale, root, marks }: PageProps) {
       className="kn-file-pdf-sheet"
       data-page={number}
       style={{ width: Math.floor(size.width * scale), height: Math.floor(size.height * scale) }}
-      aria-label={`Página ${number}`}
+      aria-label={t("files.pdf.pageN", { n: number })}
     >
       {near ? <canvas ref={canvas} className="kn-file-pdf-canvas" /> : null}
       {viewport && marks

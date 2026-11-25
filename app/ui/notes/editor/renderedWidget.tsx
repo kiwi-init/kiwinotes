@@ -4,6 +4,7 @@
 // O parser (md4c em WASM) vem embutido na lib como base64: nada é baixado.
 
 // Antes da lib: o `__DEV__` que ela lê.
+import { useT } from "../../src/i18n.ts";
 import { CalloutIcon } from "./calloutIcons.tsx";
 import "./enrichedEnv.ts";
 import katex from "katex";
@@ -294,6 +295,7 @@ interface BlockProps {
 
 /** O Copiar no canto do bloco de código desenhado (T6379): aparece com o mouse em cima, e diz "Copiado" por um instante. */
 function CodeCopyButton({ text, copy }: { text: string; copy(text: string): Promise<unknown> }) {
+  const { t: tr } = useT();
   const [state, setState] = useState<"done" | "failed" | null>(null);
   useEffect(() => {
     if (!state) return;
@@ -304,7 +306,7 @@ function CodeCopyButton({ text, copy }: { text: string; copy(text: string): Prom
     <button
       type="button"
       className="kn-code-copy"
-      title="Copiar o código"
+      title={tr("editor.copyTitle")}
       data-state={state ?? undefined}
       // Nem o cursor nem o foco saem do lugar: só copia.
       onMouseDown={(e) => e.preventDefault()}
@@ -313,7 +315,7 @@ function CodeCopyButton({ text, copy }: { text: string; copy(text: string): Prom
         void copy(text).then(() => setState("done"), () => setState("failed"));
       }}
     >
-      {state === "done" ? "Copiado" : state === "failed" ? "Não copiou" : "Copiar"}
+      {state === "done" ? tr("editor.copied") : state === "failed" ? tr("editor.copyFailed") : tr("editor.copy")}
     </button>
   );
 }

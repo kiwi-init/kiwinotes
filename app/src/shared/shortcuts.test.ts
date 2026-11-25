@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   canonicalShortcut, checkShortcutsPatch, conflictOf, DEFAULT_SHORTCUTS, isShortcutFor, matchesKeyEvent, parseShortcut,
-  sanitizeShortcuts, SHORTCUTS, shortcutLabel, shortcutsConflict,
+  sanitizeShortcuts, SHORTCUTS, shortcutGroupName, shortcutHint, shortcutLabel, shortcutName, shortcutsConflict,
 } from "./shortcuts.ts";
 
 describe("o texto dos atalhos (T5349), o mesmo do Shortcut.swift", () => {
@@ -162,5 +162,27 @@ describe("o atalho do Kiwi Cat (spec #12946)", () => {
     expect(checkShortcutsPatch(before, { agent: "control" })).toMatchObject({ ok: false });
     // Trocar o ditado para o Fn também resolve.
     expect(checkShortcutsPatch(before, { dictation: "fn" })).toEqual({ ok: true, patch: { dictation: "fn" } });
+  });
+});
+
+// O app em inglês (T28297, spec #28171): o nome e a dica de cada atalho saem do catálogo; os do `SHORTCUTS` são os
+// mesmos em português (o main e os scripts ainda leem de lá), e as teclas com nome mudam de língua.
+describe("na língua do app", () => {
+  test("o nome, a dica e o grupo do catálogo em português são os do SHORTCUTS", () => {
+    for (const s of SHORTCUTS) {
+      expect({ id: s.id, name: shortcutName(s.id, "pt"), hint: shortcutHint(s.id, "pt"), group: shortcutGroupName(s.group, "pt") }).toEqual({ id: s.id, name: s.label, hint: s.hint, group: s.group });
+    }
+  });
+
+  test("em inglês, o nome e as teclas com nome", () => {
+    expect(shortcutName("dictation", "en")).toBe("Dictate");
+    expect(shortcutGroupName("Reuniões", "en")).toBe("Meetings");
+    expect(shortcutLabel(null, "en")).toBe("Off");
+    expect(shortcutLabel("rightOption", "en")).toBe("right ⌥");
+    expect(shortcutLabel("double:rightCommand", "en")).toBe("right ⌘ twice");
+    expect(shortcutLabel("f5 f5", "en")).toBe("F5 twice");
+    expect(shortcutLabel("control+option+space", "en")).toBe("⌃⌥ Space");
+    expect(shortcutLabel("control+option+space")).toBe("⌃⌥ Espaço");
+    expect(shortcutLabel("fn", "en")).toBe("Fn 🌐");
   });
 });

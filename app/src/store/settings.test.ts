@@ -365,3 +365,8 @@ test("Buscar atualizações (T25110): ligado por padrão; só um false guardado 
   expect(sanitizeSettings({ checkUpdates: "false" }).checkUpdates).toBe(true);
   expect(DEFAULT_SETTINGS.checkUpdates).toBe(true);
 });
+
+test("um idioma que o app não tem volta ao Automático; os que ele tem ficam (T28297, revisão do #360)", () => {
+  for (const bad of ["es", "", 3, null, "PT", "pt-BR"]) expect(sanitizeSettings({ language: bad }).language).toBe("auto");
+  for (const ok of ["auto", "pt", "en"] as const) expect(sanitizeSettings({ language: ok }).language).toBe(ok);
+});

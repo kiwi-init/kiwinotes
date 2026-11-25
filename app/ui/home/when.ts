@@ -1,4 +1,8 @@
-// As datas das telas da aba Início (T15875), em português e no dia local de quem usa.
+// As datas das telas da aba Início (T15875), no dia local de quem usa, em português ou em inglês (spec #28171).
+
+import { appLocale, t } from "../src/i18n.ts";
+
+const en = () => appLocale().locale === "en";
 
 const WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 const MONTH = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -11,9 +15,10 @@ const fromDate = (date: string) => {
 
 /** O rótulo do dia na linha do tempo: "Hoje", "Ontem", "sex 13". `i` é quantos dias antes de hoje. */
 export function dayLabel(date: string, i: number): string {
-  if (i === 0) return "Hoje";
-  if (i === 1) return "Ontem";
+  if (i === 0) return t("home.day.today");
+  if (i === 1) return t("home.day.yesterday");
   const d = fromDate(date);
+  if (en()) return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.getDate()}`;
   return `${WEEKDAY[d.getDay()]} ${d.getDate()}`;
 }
 
@@ -21,6 +26,7 @@ export function dayLabel(date: string, i: number): string {
 export function weekRange(first: string, last: string): string {
   const a = fromDate(first);
   const b = fromDate(last);
+  if (en()) return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", ...(a.getFullYear() !== b.getFullYear() ? { year: "numeric" } : {}) }).formatRange(a, b);
   if (a.getFullYear() !== b.getFullYear())
     return `De ${a.getDate()} de ${MONTH[a.getMonth()]} de ${a.getFullYear()} a ${b.getDate()} de ${MONTH[b.getMonth()]} de ${b.getFullYear()}`;
   if (a.getMonth() !== b.getMonth()) return `De ${a.getDate()} de ${MONTH[a.getMonth()]} a ${b.getDate()} de ${MONTH[b.getMonth()]}`;
@@ -35,5 +41,5 @@ export function hours(min: number): string {
   return m ? `${h} h ${String(m).padStart(2, "0")}` : `${h} h`;
 }
 
-/** "2 140": o milhar com espaço fino, como no resto do app. */
-export const thousands = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+/** "2 140": o milhar com espaço fino, como no resto do app; em inglês, "2,140". */
+export const thousands = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, en() ? "," : " ");

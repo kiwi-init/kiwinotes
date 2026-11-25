@@ -7,7 +7,9 @@
 //
 // O que conta: o texto entre as tags (`<p>Salvar</p>`) e as aspas dos atributos que aparecem (`label`, `hint`, `title`,
 // `aria-label`, `placeholder`, `alt`), também num `{"…"}`, e as mesmas chaves num objeto (`{ label: "…" }`, as opções).
-// Um texto sem letra (`·`, `›`, `%`) não conta. Ainda não conta: os textos dos `.ts` ao lado (`agentText.ts`).
+// Um texto sem letra (`·`, `›`, `%`) não conta, nem a linha com `// i18n-ok: <motivo>` (um nome próprio). Dos `.ts` ao
+// lado, só os do editor (`MIGRATED_EDITOR`, T29842), pela régua do main; os outros (`agentText.ts`) ainda não contam.
+// Uma chave do catálogo (`"editor.menu.cut"`) não é texto.
 //
 // O main e o helper (T28192) também: no main (`src/bun`, a notificação do agente), o texto de um item de menu, de um
 // diálogo (`label`, `title`, `message`, `detail`, `buttons`) e toda frase com acento, fora dos logs e dos erros; no
@@ -19,11 +21,121 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 
-const ROOT = path.resolve(import.meta.dir, "..");
+import { pt } from "../src/shared/i18n/pt.ts";
+
+// `KIWI_I18N_ROOT`: só o teste, que roda o check numa árvore falsa para provar o `exit 1`.
+const ROOT = process.env.KIWI_I18N_ROOT ?? path.resolve(import.meta.dir, "..");
 const UI = path.join(ROOT, "ui");
 
 /** As telas já no catálogo: um texto fixo aqui quebra o CI. Cada parte migrada entra na lista. */
-export const MIGRATED = ["ui/settings/LanguageSection.tsx"];
+export const MIGRATED = [
+  "ui/settings/LanguageSection.tsx",
+  // A casca das Notas (T29244).
+  "ui/notes/NotesApp.tsx",
+  "ui/notes/Sidebar.tsx",
+  "ui/notes/FindBar.tsx",
+  "ui/notes/FolderPicker.tsx",
+  "ui/notes/MeetingSpeakerDialog.tsx",
+  "ui/notes/NoteEditor.tsx",
+  "ui/notes/NoteWidth.tsx",
+  "ui/notes/Palette.tsx",
+  "ui/notes/Properties.tsx",
+  "ui/notes/RefactorDialog.tsx",
+  "ui/notes/TrashView.tsx",
+  "ui/notes/TreePopover.tsx",
+  "ui/notes/UndoToast.tsx",
+  "ui/notes/UnlinkedMentions.tsx",
+  "ui/notes/VersionsDialog.tsx",
+  // Os Ajustes (T28297).
+  "ui/settings/Settings.tsx",
+  "ui/settings/Appearance.tsx",
+  "ui/settings/Shortcuts.tsx",
+  "ui/settings/Microphone.tsx",
+  "ui/settings/CuesRow.tsx",
+  "ui/settings/PreciseRow.tsx",
+  "ui/settings/SemanticRow.tsx",
+  "ui/settings/OcrRow.tsx",
+  "ui/settings/ExtensionsRow.tsx",
+  "ui/settings/Dictionary.tsx",
+  "ui/settings/Snippets.tsx",
+  "ui/settings/topicIcons.tsx",
+  "ui/notes/NotesFolder.tsx",
+  "ui/src/kit/editable.tsx",
+  // Ajustes de Reuniões (T29273).
+  "ui/settings/AgentMeetings.tsx",
+  "ui/settings/MeetingsRows.tsx",
+  // Ajustes › Agente (T29271).
+  "ui/settings/Agent.tsx",
+  "ui/settings/CatRow.tsx",
+  "ui/settings/CatSpeaksRow.tsx",
+  "ui/settings/ControlRow.tsx",
+  "ui/settings/ModelRows.tsx",
+  "ui/settings/NoteModel.tsx",
+  "ui/settings/NoticeRow.tsx",
+  "ui/settings/Placar.tsx",
+  "ui/settings/UsageMeter.tsx",
+  // Reuniões e Histórico (T29247).
+  "ui/meetings/Meetings.tsx",
+  "ui/meetings/MeetingSettings.tsx",
+  "ui/history/History.tsx",
+  // O Hub, os balões, o Sobre, a abertura, o Início e a faixa da aparência nova (T28191).
+  "ui/hub/About.tsx",
+  "ui/hub/bubbleMd.tsx",
+  "ui/hub/BubblePresence.tsx",
+  "ui/hub/BubbleTail.tsx",
+  "ui/hub/CatAsk.tsx",
+  "ui/hub/CatBubble.tsx",
+  "ui/hub/DoubtCard.tsx",
+  "ui/hub/Goo.tsx",
+  "ui/hub/KiwiCat.tsx",
+  "ui/hub/main.tsx",
+  "ui/hub/MemoryBubble.tsx",
+  "ui/hub/ProposalBubble.tsx",
+  "ui/hub/RoutineBubble.tsx",
+  "ui/hub/onboarding/FirstRunSetup.tsx",
+  "ui/hub/onboarding/KiwiShowcase.tsx",
+  "ui/hub/onboarding/Onboarding.tsx",
+  "ui/hub/onboarding/Welcome.tsx",
+  "ui/home/Home.tsx",
+  "ui/home/icons.tsx",
+  "ui/home/InicioMenu.tsx",
+  "ui/home/Pendencias.tsx",
+  "ui/home/Semana.tsx",
+  "ui/src/kit/index.tsx",
+  // A memória, as rotinas, as propostas, o placar, as trilhas, as respostas e a Atividade do agente (T29272).
+  "ui/settings/memoryText.ts",
+  "ui/settings/MemoryRows.tsx",
+  "ui/settings/trailsText.ts",
+  "ui/settings/Trails.tsx",
+  "ui/settings/placarText.ts",
+  "ui/settings/Placar.tsx",
+  "ui/settings/routinesText.ts",
+  "ui/settings/RoutinesRows.tsx",
+  "ui/settings/RoutineEditor.tsx",
+  "ui/settings/proposalText.ts",
+  "ui/settings/Proposals.tsx",
+  "ui/settings/activityText.ts",
+  "ui/settings/AgentActivity.tsx",
+  "ui/settings/DoubtAnswers.tsx",
+  // Os visualizadores das Notas (T29245).
+  "ui/notes/NoteFacts.tsx",
+  "ui/notes/canvas/CanvasView.tsx",
+  "ui/notes/editor/embeds.tsx",
+  "ui/notes/editor/mermaid.tsx",
+  "ui/notes/editor/renderedWidget.tsx",
+  "ui/notes/files/DocxFormatBar.tsx",
+  "ui/notes/files/DocxViewer.tsx",
+  "ui/notes/files/DrawioViewer.tsx",
+  "ui/notes/files/FileView.tsx",
+  "ui/notes/files/ImageViewer.tsx",
+  "ui/notes/files/MediaViewer.tsx",
+  "ui/notes/files/PdfViewer.tsx",
+  "ui/notes/files/SheetPane.tsx",
+  "ui/notes/files/TableGrid.tsx",
+  "ui/notes/files/TableViewer.tsx",
+  "ui/notes/files/TextViewer.tsx",
+  "ui/notes/files/XlsxViewer.tsx",
+];
 
 /** O main e a notificação já no catálogo (T28192): menu, bandeja, status, diálogo do link, pílula e notificação. */
 export const MIGRATED_MAIN = [
@@ -40,6 +152,24 @@ export const MIGRATED_MAIN = [
   "scripts/info-plist.ts",
   "scripts/app-plist.ts",
   "scripts/usage-strings.ts",
+];
+/**
+ * O editor das Notas (T29842): os menus e os textos que o CodeMirror desenha saem de `.ts`, pela mesma régua do main (a
+ * chave visível e a frase com acento). Barra em todos.
+ */
+export const MIGRATED_EDITOR = [
+  "ui/notes/editor/attachments.ts",
+  "ui/notes/editor/callouts.ts",
+  "ui/notes/editor/code-copy.ts",
+  "ui/notes/editor/context-menu.ts",
+  "ui/notes/editor/footnotes.ts",
+  "ui/notes/editor/index.ts",
+  "ui/notes/editor/livePreview.ts",
+  "ui/notes/editor/search-fold.ts",
+  "ui/notes/editor/slash.ts",
+  "ui/notes/editor/spelling.ts",
+  "ui/notes/editor/table.ts",
+  "ui/notes/editor/tools.ts",
 ];
 /** Todo o Swift do helper barra: as telas dele são poucas e já estão no `Localizable.xcstrings`. */
 export const SWIFT_DIRS = ["../native/Sources/kiwi-helper", "../native/Sources/KiwiHelperCore"];
@@ -60,7 +190,12 @@ export function fixedTexts(file: string, source: string): FixedText[] {
     const t = text.replace(/\s+/g, " ").trim();
     if (t && hasLetter(t)) out.push({ line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1, text: t });
   };
-  const visit = (node: ts.Node) => {
+  visit(sf);
+  // Um nome próprio (a fonte "Inter", um tema) leva `// i18n-ok: <motivo>` na mesma linha, como no main.
+  const ok = new Set(source.split("\n").flatMap((l, i) => (/\/\/\s*i18n-ok:/.test(l) ? [i + 1] : [])));
+  return out.filter((t) => !ok.has(t.line));
+
+  function visit(node: ts.Node) {
     if (ts.isJsxText(node)) add(node, node.text);
     else if (ts.isJsxAttribute(node) && VISIBLE_ATTRS.has(node.name.getText(sf)) && node.initializer) {
       const init = node.initializer;
@@ -77,9 +212,7 @@ export function fixedTexts(file: string, source: string): FixedText[] {
       if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) add(e, e.text);
     }
     ts.forEachChild(node, visit);
-  };
-  visit(sf);
-  return out;
+  }
 }
 
 
@@ -112,7 +245,7 @@ export function mainFixedTexts(file: string, source: string): FixedText[] {
     let text: string | null = null;
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) text = node.text;
     else if (ts.isTemplateExpression(node)) text = [node.head.text, ...node.templateSpans.map((s) => s.literal.text)].join(" ");
-    if (text !== null && hasLetter(text) && !(ts.isPropertyAssignment(node.parent) && node.parent.name === node)) {
+    if (text !== null && hasLetter(text) && !(ts.isPropertyAssignment(node.parent) && node.parent.name === node) && !Object.hasOwn(pt, text)) {
       const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
       const fixed = (ACCENT.test(text) || visibleProp(node)) && !inLog(node) && !/i18n-ok:/.test(lines[line - 1] ?? "");
       if (fixed) out.push({ line, text: text.replace(/\s+/g, " ").trim() });
@@ -202,7 +335,9 @@ if (import.meta.main) {
   const swift = SWIFT_DIRS.flatMap((d) => filesUnder(path.join(ROOT, d), ".swift"))
     .map((f) => ({ file: path.relative(ROOT, f), texts: swiftFixedTexts(readFileSync(f, "utf8")) }))
     .filter((r) => r.texts.length > 0);
-  const failures = [...broken, ...main.filter((r) => MIGRATED_MAIN.includes(r.file)), ...swift];
+  // O editor (T29842): barra em todos.
+  const editor = MIGRATED_EDITOR.map((f) => ({ file: f, texts: mainFixedTexts(f, readFileSync(path.join(ROOT, f), "utf8")) })).filter((r) => r.texts.length > 0);
+  const failures = [...broken, ...main.filter((r) => MIGRATED_MAIN.includes(r.file)), ...swift, ...editor];
   if (failures.length) {
     for (const r of failures) for (const t of r.texts) console.error(`✗ ${r.file}:${t.line} já está no catálogo e tem um texto fixo: ${t.text}`);
     process.exit(1);

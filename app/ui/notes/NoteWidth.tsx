@@ -8,6 +8,7 @@
 import { type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useRef, useState } from "react";
 
 import { NOTE_WIDTH } from "../../src/shared/note-width.ts";
+import { useT } from "../src/i18n.ts";
 
 const STEP = 20;
 
@@ -28,6 +29,7 @@ export function NoteWidthHandles({ width, onChange, onCommit, zoom = 1 }: {
   onChange(px: number): void;
   onCommit(px: number): void;
 }) {
+  const { t } = useT();
   /** O arrasto em curso; `px` é a última largura calculada, que o soltar grava (o render dela pode não ter chegado). */
   const drag = useRef<{ x: number; start: number; side: 1 | -1; max: number; px?: number } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -91,12 +93,12 @@ export function NoteWidthHandles({ width, onChange, onCommit, zoom = 1 }: {
           data-dragging={(dragging && shown === name) || undefined}
           role="separator"
           aria-orientation="vertical"
-          aria-label="Largura da nota"
+          aria-label={t("notes.width")}
           aria-valuemin={NOTE_WIDTH.min}
           aria-valuemax={NOTE_WIDTH.max}
           aria-valuenow={width}
           tabIndex={0}
-          title="Arraste para mudar a largura da nota (duplo clique volta ao padrão)"
+          title={t("notes.width.hint")}
           onPointerEnter={() => setShown(name)}
           onPointerLeave={() => {
             if (!drag.current) setShown(null);

@@ -17,10 +17,12 @@
 import type { AgentTurnEvent, BubbleLink } from "../../src/shared/ui-contract";
 import { linkLabel } from "../../src/shared/bubble-links";
 import { plainMarkdown } from "../src/bubbleMarkdown";
+import type { Locale } from "../../src/shared/i18n";
 import { limitBubble } from "../settings/usageText";
+import { t } from "../src/i18n";
 
 /** O que o balão diz enquanto o agente está na web (spec #11908). */
-export const WEB_LINE = "Pesquisando na web…";
+export const webLine = (): string => t("hub.bubble.web");
 
 /**
  * Quanto a resposta fica na tela antes de dar lugar a um balão com ação (a memória, a rotina, a proposta; T28350): o
@@ -218,6 +220,8 @@ export class BubbleFeed {
     _reduced = false,
     /** O relógio de parede, para dizer a hora de volta do limite (spec #11084). */
     private readonly wall: () => number = Date.now,
+    /** A língua do app, lida na hora do aviso (T29063): o aviso de limite sai nela. */
+    private readonly locale: () => Locale = () => "pt",
   ) {}
 
   /** O balão não anima mais o texto (spec #27881); a tela ainda avisa quando o movimento reduzido muda. */
@@ -268,7 +272,7 @@ export class BubbleFeed {
       this.closedLen = this.said.length;
       if (this.dismissed) return;
       // A web (spec #11908): o balão diz que o agente saiu do cofre, até a próxima ferramenta ou a resposta.
-      this.put("tool" in e && e.tool === "web" ? this.line(WEB_LINE) : null, now);
+      this.put("tool" in e && e.tool === "web" ? this.line(webLine()) : null, now);
     } else if (e.type === "done") {
       this.finish(e.id);
       let base = this.closedLen;
@@ -285,7 +289,7 @@ export class BubbleFeed {
       // O limite (spec #11084): o aviso do agente entra como a linha de estado, até a resposta; o limite acabado troca a
       // mensagem do erro que vem em seguida pela hora de volta, se o agente disse. A hora de volta se lê no relógio de
       // parede: o `now` daqui é o do balão (o `performance.now()` da tela).
-      const line = limitBubble(e.status, e.percent, e.resetsAt, this.wall());
+      const line = limitBubble(e.status, e.percent, e.resetsAt, this.wall(), this.locale());
       if (e.status === "out") this.outLine = line;
       else if (!this.dismissed) {
         this.head = this.line(line);

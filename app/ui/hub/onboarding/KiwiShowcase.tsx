@@ -11,25 +11,17 @@ import { DEFAULT_CAT_COLOR } from "../../../src/shared/kiwicat-colors.ts";
 import { Button } from "../../src/kit/index.tsx";
 import type { createKiwiCat } from "../../kiwicat/cat.ts";
 import type { FogState } from "../../kiwicat/visual.ts";
+import { useT } from "../../src/i18n.ts";
 import {
   catState,
   dotLabel,
-  EXAMPLES,
   exampleMs,
-  FOLDER,
-  FOUND,
-  MEETING,
-  MESSY_NOTE,
   nextIndex,
-  PROPOSAL,
   type Scene,
   sceneAt,
-  SHEET,
-  SHOWCASE_HINT,
-  SHOWCASE_STAGED,
-  SHOWCASE_TITLE,
+  SHOWCASE,
+  type ShowcaseContent,
   stillScene,
-  TIDY_NOTE,
 } from "./showcaseText.ts";
 
 type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
@@ -78,22 +70,23 @@ function SmallCat({ estado, cor, reduced }: { estado: FogState; cor: string; red
 }
 
 /** O resultado de cada exemplo, na fase em que a cena está. */
-function Result({ scene }: { scene: Scene }) {
+function Result({ scene, c }: { scene: Scene; c: ShowcaseContent }) {
   const done = scene.phase === "resultado";
-  switch (EXAMPLES[scene.index]!.id) {
+  const { folder: FOLDER, found: FOUND, meeting: MEETING, proposal: PROPOSAL, sheet: SHEET } = c;
+  switch (c.examples[scene.index]!.id) {
     case "organizar":
       return (
         <div className="kn-show-note" data-done={done}>
-          <div className="kn-show-note-bar">Anotações da semana</div>
+          <div className="kn-show-note-bar">{c.noteTitle}</div>
           {done ? (
             <div className="kn-show-note-body kn-show-in">
-              {TIDY_NOTE.map((l, i) =>
+              {c.tidy.map((l, i) =>
                 l.kind === "h" ? <h3 key={i}>{l.text}</h3> : <p key={i} data-kind={l.kind}>{l.kind === "todo" ? <i aria-hidden="true" /> : null}{l.text}</p>,
               )}
             </div>
           ) : (
             <div className="kn-show-note-body kn-show-messy">
-              {MESSY_NOTE.map((l, i) => <p key={i} style={{ "--n": i } as never}>{l}</p>)}
+              {c.messy.map((l, i) => <p key={i} style={{ "--n": i } as never}>{l}</p>)}
             </div>
           )}
         </div>
@@ -126,14 +119,14 @@ function Result({ scene }: { scene: Scene }) {
         <div className="kn-show-meeting">
           <div className="kn-show-meeting-bar">
             <span className="kn-show-dot" aria-hidden="true" />
-            {MEETING.title} · {MEETING.length} · terminou
+            {MEETING.title} · {MEETING.length} · {MEETING.ended}
           </div>
           {done ? (
             <div className="kn-show-proposal kn-show-in">
-              <div className="kn-show-proposal-to">Para a nota <strong>{PROPOSAL.note}</strong></div>
-              <h3>Resumo</h3>
+              <div className="kn-show-proposal-to">{PROPOSAL.to} <strong>{PROPOSAL.note}</strong></div>
+              <h3>{PROPOSAL.summaryTitle}</h3>
               {PROPOSAL.summary.map((s) => <p key={s}>{s}</p>)}
-              <h3>Tarefas</h3>
+              <h3>{PROPOSAL.todosTitle}</h3>
               {PROPOSAL.todos.map((s) => <p key={s} data-kind="todo"><i aria-hidden="true" />{s}</p>)}
               {/* Encenado: os botões só mostram como a proposta chega; não fazem nada. */}
               <div className="kn-show-fake-actions" aria-hidden="true">
@@ -156,12 +149,12 @@ function Result({ scene }: { scene: Scene }) {
                 <p>{FOUND.before}<mark>{FOUND.hit}</mark>{FOUND.after}</p>
               </div>
               <div className="kn-show-also kn-show-in">
-                <span>Também fala do prazo:</span>
+                <span>{FOUND.alsoTitle}</span>
                 {FOUND.also.map((n) => <div key={n}>{n}</div>)}
               </div>
             </>
           ) : (
-            <div className="kn-show-search" aria-hidden="true">{["Projeto X › Ideias", "Projeto X › Cronograma", "Projeto X › Reuniões"].map((n) => <div key={n}>{n}</div>)}</div>
+            <div className="kn-show-search" aria-hidden="true">{FOUND.searching.map((n) => <div key={n}>{n}</div>)}</div>
           )}
         </div>
       );
@@ -179,6 +172,9 @@ export function KiwiShowcase({
   cor?: string;
   reduced?: boolean;
 }) {
+  const { t, locale } = useT();
+  const c = SHOWCASE[locale];
+  const EXAMPLES = c.examples;
   const reduced = appReduced || osReduced();
   const [index, setIndex] = useState(0);
   const [ms, setMs] = useState(0);
@@ -212,8 +208,8 @@ export function KiwiShowcase({
   return (
     <div className="kn-onb kn-show" role="dialog" aria-modal="true" aria-labelledby="kn-show-title" data-motion={reduced ? "reduced" : "full"}>
       <section className="kn-onb-step kn-show-step">
-        <h1 id="kn-show-title" className="kn-onb-title" tabIndex={-1} ref={title}>{SHOWCASE_TITLE}</h1>
-        <p className="kn-onb-hint">{SHOWCASE_HINT}</p>
+        <h1 id="kn-show-title" className="kn-onb-title" tabIndex={-1} ref={title}>{c.title}</h1>
+        <p className="kn-onb-hint">{c.hint}</p>
         <div className="kn-show-stage" data-example={example.id} data-phase={scene.phase} aria-live="polite" aria-label={example.label}>
           <div className="kn-show-chat">
             {scene.ask !== null ? (
@@ -225,16 +221,16 @@ export function KiwiShowcase({
             <div className="kn-show-kiwi">
               <SmallCat estado={catState(scene.phase)} cor={cor} reduced={reduced} />
               <p className="kn-show-line" data-phase={scene.phase}>
-                <strong>Kiwi</strong>
-                <span>{kiwiLine ?? (example.ask ? "Ouvindo…" : "A reunião terminou.")}</span>
+                <strong>{t("hub.cat.name")}</strong>
+                <span>{kiwiLine ?? (example.ask ? c.listening : c.meetingEnded)}</span>
               </p>
             </div>
           </div>
           <div className="kn-show-result" key={example.id}>
-            <Result scene={scene} />
+            <Result scene={scene} c={c} />
           </div>
         </div>
-        <ol className="kn-show-dots" aria-label="Exemplos">
+        <ol className="kn-show-dots" aria-label={c.dots}>
           {EXAMPLES.map((e, i) => (
             <li key={e.id}>
               <button type="button" aria-label={dotLabel(i)} aria-current={i === index ? "step" : undefined} data-on={i === index}
@@ -244,11 +240,11 @@ export function KiwiShowcase({
             </li>
           ))}
         </ol>
-        <p className="kn-onb-soon">{SHOWCASE_STAGED}</p>
+        <p className="kn-onb-soon">{c.staged}</p>
       </section>
       <footer className="kn-onb-actions">
-        <Button onClick={onSkip}>Pular</Button>
-        <Button variant="primary" onClick={onContinue}>Continuar</Button>
+        <Button onClick={onSkip}>{t("common.skip")}</Button>
+        <Button variant="primary" onClick={onContinue}>{t("common.continue")}</Button>
       </footer>
     </div>
   );

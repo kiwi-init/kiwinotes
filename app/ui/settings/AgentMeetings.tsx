@@ -5,13 +5,13 @@ import { useEffect, useState } from "react";
 
 import type { AgentStatus } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Row, Section } from "../src/kit/index.tsx";
 import { MeetingsRows } from "./MeetingsRows.tsx";
 
-export const AGENT_MEETINGS_TITLE = "Suas reuniões";
-export const AGENT_MEETINGS_OFF = "O resumo das reuniões é do agente. Ligue o agente em Ajustes › Agente para escolher quando ele propõe e onde salva.";
-
 export function AgentMeetingsSection() {
+  const { t } = useT();
+  const title = t("settings.meetings.title");
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -20,7 +20,7 @@ export function AgentMeetingsSection() {
     let alive = true;
     api.agent.status().then(
       (s) => alive && setStatus(s),
-      () => alive && setFailure("Não deu para ler o estado do agente."),
+      () => alive && setFailure(t("settings.meetings.readFailed")),
     );
     const off = api.agent.onStatus((s) => alive && setStatus(s));
     return () => {
@@ -29,7 +29,7 @@ export function AgentMeetingsSection() {
     };
   }, []);
 
-  if (!status) return failure ? <Section title={AGENT_MEETINGS_TITLE}><Row label={AGENT_MEETINGS_TITLE} hint={failure} /></Section> : null;
+  if (!status) return failure ? <Section title={title}><Row label={title} hint={failure} /></Section> : null;
 
   /** A mesma chamada da seção do Agente: o estado que volta vale, e o erro aparece aqui. */
   const run = async (call: () => Promise<unknown>) => {
@@ -43,9 +43,9 @@ export function AgentMeetingsSection() {
   };
 
   return (
-    <Section title={AGENT_MEETINGS_TITLE}>
-      {status.enabled && status.meetings ? <MeetingsRows status={status} run={run} /> : <Row label={AGENT_MEETINGS_TITLE} hint={AGENT_MEETINGS_OFF} />}
-      {failure ? <Row label="Não deu certo" hint={failure} /> : null}
+    <Section title={title}>
+      {status.enabled && status.meetings ? <MeetingsRows status={status} run={run} /> : <Row label={title} hint={t("settings.meetings.off")} />}
+      {failure ? <Row label={t("settings.meetings.failed")} hint={failure} /> : null}
     </Section>
   );
 }

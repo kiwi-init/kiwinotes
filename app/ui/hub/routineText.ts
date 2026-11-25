@@ -1,35 +1,35 @@
 // Os textos do balão das rotinas (spec #12150, T12190): o resultado com [Ver] [Manter] [Descartar], e por que a rotina
 // não rodou. Puros, para o teste.
 
+import type { TextKey } from "../../src/shared/i18n/index.ts";
 import type { AgentRoutineEvent, RoutineKind } from "../../src/shared/ui-contract.ts";
+import { appLocale, t } from "../src/i18n.ts";
+import { formatTime } from "../../src/shared/i18n/index.ts";
 
-export const ROUTINE_NAMES: Record<RoutineKind, string> = { daily: "O resumo do dia", weekly: "Os pendentes da semana" };
-
-/** A hora `HH:MM` de um ISO, no relógio do Mac. */
-const hour = (iso: string) => {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-};
+/** A hora de um ISO, no relógio do Mac e no costume da língua (`18:40` / `6:40 PM`). */
+const hour = (iso: string) => formatTime(appLocale().locale, new Date(iso));
 
 /** O nome da nota, sem a pasta e sem o `.md`. */
 export const noteName = (path: string) => path.replace(/^.*\//, "").replace(/\.md$/i, "");
 
-/** A concordância de cada rotina: o resumo (singular) e os pendentes (plural). */
-const VERBS: Record<RoutineKind | "custom", { ready: string; ended: string; notRun: string; again: string }> = {
-  daily: { ready: "está pronto", ended: "terminou", notRun: "não rodou", again: "Ele roda" },
-  weekly: { ready: "estão prontos", ended: "terminaram", notRun: "não rodaram", again: "Eles rodam" },
-  // Uma rotina nova (spec #12944): "A rotina “Resumo das reuniões” está pronta".
-  custom: { ready: "está pronta", ended: "terminou", notRun: "não rodou", again: "Ela roda" },
+/**
+ * As frases de cada rotina, no catálogo (spec #28171): a concordância muda com ela, o resumo (singular), os pendentes
+ * (plural) e uma rotina nova (spec #12944, "A rotina “Resumo das reuniões” está pronta").
+ */
+const LINES: Record<RoutineKind | "custom", { ready: TextKey; noNote: TextKey; limit: TextKey }> = {
+  daily: { ready: "hub.routine.daily.ready", noNote: "hub.routine.daily.noNote", limit: "hub.routine.daily.limit" },
+  weekly: { ready: "hub.routine.weekly.ready", noNote: "hub.routine.weekly.noNote", limit: "hub.routine.weekly.limit" },
+  custom: { ready: "hub.routine.custom.ready", noNote: "hub.routine.custom.noNote", limit: "hub.routine.custom.limit" },
 };
 
 /** A frase do balão, ou null quando não há o que mostrar ("Agora não" foi a própria pessoa que disse). */
 export function routineLine(e: AgentRoutineEvent): string | null {
-  const name = e.kind === "custom" ? `A rotina “${e.name}”` : ROUTINE_NAMES[e.kind];
-  const v = VERBS[e.kind];
-  if (e.phase === "done") return e.note ? `${name} ${v.ready}: ${noteName(e.note)}.` : `${name} ${v.ended}, mas o agente não criou a nota. A resposta está na Atividade.`;
-  if (e.reason === "limit") return `${name} ${v.notRun}: o limite do seu plano acabou${e.resetsAt ? ` e volta às ${hour(e.resetsAt)}` : ""}. ${v.again} de novo no próximo horário.`;
+  const keys = LINES[e.kind];
+  const name = e.kind === "custom" ? e.name ?? "" : "";
+  if (e.phase === "done") return e.note ? t(keys.ready, { name, note: noteName(e.note) }) : t(keys.noNote, { name });
+  if (e.reason === "limit") return t(keys.limit, { name, back: e.resetsAt ? t("hub.routine.back", { time: hour(e.resetsAt) }) : "" });
   return null;
 }
 
 /** O que o [Descartar] diz depois de desfazer. */
-export const ROUTINE_DISCARDED = "Descartado: a nota foi para a Lixeira.";
+export const routineDiscarded = (): string => t("hub.routine.discarded");

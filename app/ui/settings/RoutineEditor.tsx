@@ -7,17 +7,20 @@ import { useState } from "react";
 import type { CustomRoutineInput } from "../../src/shared/ui-contract.ts";
 import { ROUTINE_NAME_MAX, ROUTINE_PROMPT_MAX } from "../../src/shared/agent-routines.ts";
 import { Button, Select } from "../src/kit/index.tsx";
+import { useT } from "../src/i18n.ts";
 import {
-  DAYS_OPTIONS,
   daysChoice,
-  ROUTINE_NAME_LABEL,
-  ROUTINE_PROMPT_LABEL,
-  ROUTINE_PROMPT_PLACEHOLDER,
+  daysOptions,
+  routineNameLabel,
+  routinePromptLabel,
+  routinePromptPlaceholder,
   timeOptions,
-  WEEKDAY_SHORT,
-  WEEKDAYS,
+  weekday,
+  weekdayShort,
   type DaysChoice,
 } from "./routinesText.ts";
+
+const DAYS = [0, 1, 2, 3, 4, 5, 6];
 
 export function RoutineEditor({
   title,
@@ -38,6 +41,7 @@ export function RoutineEditor({
   onSubmit: (r: CustomRoutineInput) => Promise<unknown>;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
   const [time, setTime] = useState(initial.time);
@@ -68,32 +72,32 @@ export function RoutineEditor({
     <section className="kn-routine-card kn-routine-editor" aria-label={title}>
       <h3 className="kn-routine-editor-title">{title}</h3>
       <label className="kn-routine-editor-field">
-        <span>{ROUTINE_NAME_LABEL}</span>
-        <input className="kn-input" value={name} maxLength={ROUTINE_NAME_MAX} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Resumo das reuniões" autoFocus />
+        <span>{routineNameLabel()}</span>
+        <input className="kn-input" value={name} maxLength={ROUTINE_NAME_MAX} onChange={(e) => setName(e.target.value)} placeholder={t("routines.namePlaceholder")} autoFocus />
       </label>
       <label className="kn-routine-editor-field">
-        <span>{ROUTINE_PROMPT_LABEL}</span>
-        <textarea className="kn-input kn-routine-prompt" value={prompt} maxLength={ROUTINE_PROMPT_MAX} rows={3} onChange={(e) => setPrompt(e.target.value)} placeholder={ROUTINE_PROMPT_PLACEHOLDER} />
+        <span>{routinePromptLabel()}</span>
+        <textarea className="kn-input kn-routine-prompt" value={prompt} maxLength={ROUTINE_PROMPT_MAX} rows={3} onChange={(e) => setPrompt(e.target.value)} placeholder={routinePromptPlaceholder()} />
       </label>
       <div className="kn-routine-fields">
         <label className="kn-routine-field">
-          <span>Hora</span>
-          <Select label={`${title}: a hora`} value={time} options={timeOptions(time)} onChange={setTime} />
+          <span>{t("routines.time")}</span>
+          <Select label={t("routines.timeAria", { title })} value={time} options={timeOptions(time)} onChange={setTime} />
         </label>
         <label className="kn-routine-field">
-          <span>Dias</span>
-          <Select label={`${title}: os dias`} value={choice} options={DAYS_OPTIONS} onChange={(v) => setChoice(v as DaysChoice)} />
+          <span>{t("routines.daysLabel")}</span>
+          <Select label={t("routines.daysAria", { title })} value={choice} options={daysOptions()} onChange={(v) => setChoice(v as DaysChoice)} />
         </label>
         <label className="kn-routine-field">
-          <span>Pasta</span>
-          <Select label={`${title}: a pasta`} value={folder} options={folderOptions} onChange={setFolder} />
+          <span>{t("routines.folder")}</span>
+          <Select label={t("routines.folderAria", { title })} value={folder} options={folderOptions} onChange={setFolder} />
         </label>
       </div>
       {choice === "chosen" ? (
-        <div className="kn-routine-days" role="group" aria-label="Os dias da rotina">
-          {WEEKDAY_SHORT.map((d, i) => (
-            <button key={d} type="button" className="kn-routine-day" aria-pressed={chosen.includes(i)} aria-label={WEEKDAYS[i]} onClick={() => toggle(i)}>
-              {d}
+        <div className="kn-routine-days" role="group" aria-label={t("routines.daysGroup")}>
+          {DAYS.map((i) => (
+            <button key={i} type="button" className="kn-routine-day" aria-pressed={chosen.includes(i)} aria-label={weekday(i)} onClick={() => toggle(i)}>
+              {weekdayShort(i)}
             </button>
           ))}
         </div>
@@ -107,10 +111,10 @@ export function RoutineEditor({
         <span className="kn-routine-last">{note ?? ""}</span>
         <span className="kn-routine-actions">
           <Button onClick={onCancel} disabled={busy}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button variant="primary" onClick={() => void save()} disabled={busy || !ready}>
-            {busy ? "Salvando…" : submit}
+            {busy ? t("common.saving") : submit}
           </Button>
         </span>
       </div>

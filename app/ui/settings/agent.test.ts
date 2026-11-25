@@ -5,6 +5,7 @@ import { DEFAULT_AGENT_ROUTINES } from "../../src/shared/agent-routines.ts";
 import { DEFAULT_SUMMARY_SETTINGS } from "../../src/shared/summary-settings.ts";
 import { describe, expect, test } from "bun:test";
 
+import { translate } from "../../src/shared/i18n/index.ts";
 import type { AgentStatus, AgentTurnEvent } from "../../src/shared/ui-contract.ts";
 import { DEFAULT_AGENT_MEETING_SETTINGS } from "../../src/store/settings.ts";
 import {
@@ -31,7 +32,6 @@ import {
   modelHint,
   modelOptions,
   noticeHint,
-  PRIVACY_RULE,
   switchHint,
   TEST_HINT,
   type TestState,
@@ -440,13 +440,15 @@ describe("a tela de aviso e a regra de privacidade (ADR 0011)", () => {
     for (const line of [...t.goes, ...t.never, ...t.who]) expect(adr).toContain(fromAdr(line));
   });
 
+  // A regra vive no catálogo desde o spec #28171 (T28297): `privacy.rule`, nas duas línguas.
   test("a regra nova nos Ajustes e no Sobre", async () => {
-    expect(PRIVACY_RULE).toBe("Tudo é local, menos o agente que você escolher");
+    expect(translate("pt", "privacy.rule")).toBe("Tudo é local, menos o agente que você escolher");
+    expect(translate("en", "privacy.rule")).toBe("Everything is local, except the agent you choose");
     const settings = await Bun.file(new URL("./Settings.tsx", import.meta.url)).text();
     const about = await Bun.file(new URL("../hub/About.tsx", import.meta.url)).text();
     expect(settings).not.toContain("100% local");
-    expect(settings).toContain("PRIVACY_RULE");
-    expect(about).toContain("PRIVACY_RULE");
+    expect(settings).toContain(`"privacy.rule"`);
+    expect(about).toContain(`"privacy.rule"`);
   });
 });
 

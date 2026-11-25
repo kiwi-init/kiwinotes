@@ -12,13 +12,10 @@ import { useEffect, useState } from "react";
 import type { AgentDoubtCard } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button } from "../src/kit/index.tsx";
+import { useT } from "../src/i18n.ts";
 
-/** "Projetos/Kiwi" (sem o `.md`), ou "o seu pedido". */
-const whereOf = (p: string) => (p ? p.replace(/\.md$/i, "") : "o seu pedido");
-const hourOf = (iso: string) => {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-};
+/** "Projetos/Kiwi" (sem o `.md`); o pedido, `null` (a tela diz "o seu pedido" na língua). */
+const whereOf = (p: string) => (p ? p.replace(/\.md$/i, "") : null);
 
 /** O texto em volta, com o trecho marcado. */
 function Context({ context, value }: { context: string; value: string }) {
@@ -34,6 +31,9 @@ function Context({ context, value }: { context: string; value: string }) {
 }
 
 export function DoubtCard() {
+  const { t, time } = useT();
+  /** A hora do prazo, no costume da língua (`18:40` / `6:40 PM`). */
+  const hourOf = (iso: string) => time(new Date(iso));
   const [card, setCard] = useState<AgentDoubtCard | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -70,22 +70,22 @@ export function DoubtCard() {
   return (
     <section className="kn-doubt" role="dialog" aria-modal="false" aria-labelledby="kn-doubt-title">
       <h2 id="kn-doubt-title" className="kn-doubt-title">
-        {doubts.length ? "O Kiwi ficou em dúvida" : "O agente pede a sua confirmação"}
+        {doubts.length ? t("hub.doubt.title") : t("hub.doubt.confirmTitle")}
       </h2>
       {confirms.length ? (
         <ul className="kn-doubt-list">
           {confirms.map((i) => (
             <li key={i.fingerprint} className="kn-doubt-item kn-confirm-item" data-answer={i.answer}>
               <p className="kn-confirm-question">{i.value}</p>
-              <p className="kn-doubt-hint">Sem resposta até as {hourOf(card.deadline)}, o agente não muda nada.</p>
+              <p className="kn-doubt-hint">{t("hub.doubt.confirmHint", { time: hourOf(card.deadline) })}</p>
               <div className="kn-doubt-buttons">
                 {i.answer ? (
-                  <span className="kn-doubt-answered">{i.answer === "send" ? "Pode organizar." : "Não organiza."}</span>
+                  <span className="kn-doubt-answered">{i.answer === "send" ? t("hub.doubt.confirmSent") : t("hub.doubt.confirmHeld")}</span>
                 ) : (
                   <>
-                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "hold" })}>Agora não</Button>
+                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "hold" })}>{t("hub.doubt.notNow")}</Button>
                     {/* Os dois com o mesmo peso, sem principal: a pessoa escolhe. */}
-                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "send" })}>Organizar</Button>
+                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "send" })}>{t("hub.doubt.organize")}</Button>
                   </>
                 )}
               </div>
@@ -96,25 +96,23 @@ export function DoubtCard() {
       {doubts.length ? (
         <>
         <p className="kn-doubt-hint">
-          {doubts.length === 1 ? "Isto pode ser uma senha ou um token." : "Estes trechos podem ser senhas ou tokens."} O agente espera a sua resposta;
-          sem ela até as {hourOf(card.deadline)}, o Kiwi segura e você responde depois, na Atividade do agente.
+          {t("hub.doubt.hint", { n: doubts.length, time: hourOf(card.deadline) })}
         </p>
         <ul className="kn-doubt-list">
           {doubts.map((i) => (
             <li key={i.fingerprint} className="kn-doubt-item" data-answer={i.answer}>
               <div className="kn-doubt-where">
-                em {whereOf(i.path)}
-                {i.path ? `, linha ${i.line}` : ""}
+                {i.path ? t("hub.doubt.whereLine", { where: whereOf(i.path) ?? "", line: String(i.line) }) : t("hub.doubt.whereRequest")}
               </div>
               <Context context={i.context} value={i.value} />
               <div className="kn-doubt-buttons">
                 {i.answer ? (
-                  <span className="kn-doubt-answered">{i.answer === "send" ? "Vai para o agente." : "Fica de fora."}</span>
+                  <span className="kn-doubt-answered">{i.answer === "send" ? t("hub.doubt.sent") : t("hub.doubt.held")}</span>
                 ) : (
                   <>
-                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "hold" })}>É segredo</Button>
+                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "hold" })}>{t("hub.doubt.secret")}</Button>
                     {/* Os dois com o mesmo peso, sem principal e sem Enter padrão: a pessoa escolhe (#10168). */}
-                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "send" })}>Pode mandar</Button>
+                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "send" })}>{t("hub.doubt.send")}</Button>
                   </>
                 )}
               </div>
@@ -125,7 +123,7 @@ export function DoubtCard() {
       ) : null}
       {open > 1 ? (
         <div className="kn-doubt-all">
-          <Button onClick={() => void answer({ card: card.id, all: "hold" })}>É tudo segredo</Button>
+          <Button onClick={() => void answer({ card: card.id, all: "hold" })}>{t("hub.doubt.allSecret")}</Button>
         </div>
       ) : null}
       {failure ? (

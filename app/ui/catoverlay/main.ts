@@ -21,6 +21,8 @@ import { plainMarkdown, renderMarkdown } from "../src/bubbleMarkdown";
 import { bubblePlain, summaryOf } from "../hub/bubble-state";
 import { EXIT_MS, exitStyle, HIDDEN_STYLE, shownStyle, type CatTransitionStyle } from "./transition";
 import type { FogState } from "../kiwicat/visual";
+import { ptCatOverlay } from "../../src/shared/i18n/catoverlay.pt";
+import { enCatOverlay } from "../../src/shared/i18n/catoverlay.en";
 
 const STATES: readonly string[] = ["repouso", "acordou", "ouvindo", "thinking", "agindo", "pronto", "erro"];
 
@@ -51,17 +53,41 @@ interface OverlayStats {
   catHover: boolean;
   /** A voz do gato (T26829): o nível que chegou por último, ou `null` sem voz. */
   fala: number | null;
+  /** A língua dos textos da página (T29351): a do helper, na URL (`lang=`) e depois por `set({lang})`. */
+  lang: Lang;
 }
+
+/**
+ * Os textos da página (T29351, spec #28171): só o catálogo do overlay, não o do app inteiro. A língua é a do app, que o
+ * helper recebe no `app.locale` e passa aqui; uma que não é `en` fica em português, como a página era antes.
+ */
+type Lang = "pt" | "en";
+const TEXTS = { pt: ptCatOverlay, en: enCatOverlay } as const;
+const langOf = (v: unknown): Lang => (v === "en" ? "en" : "pt");
+const t = (key: keyof typeof ptCatOverlay) => TEXTS[stats.lang][key];
 
 const stats: OverlayStats = {
   ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "", bubble: null,
   bubbleMore: false, bubbleOpen: false, sala: 112, largura: 280, bubbleAsk: false, catHover: false, fala: null,
+  lang: langOf(new URLSearchParams(location.search).get("lang")),
 };
 const bubbleEl = document.getElementById("bubble")!;
 const bubbleText = document.getElementById("bubble-text")!;
 const moreButton = document.getElementById("bubble-more") as HTMLButtonElement;
 const bubbleSr = document.getElementById("bubble-sr")!;
 const catClose = document.getElementById("cat-close") as HTMLButtonElement;
+const bubbleAskEl = document.getElementById("bubble-ask")!;
+const bubbleClose = document.getElementById("bubble-close")!;
+
+/** Os textos fixos na língua de agora: o "Ver mais"/"Ver menos", a pergunta, os dois × e o `lang` do documento. */
+function paintTexts() {
+  document.documentElement.lang = stats.lang === "en" ? "en" : "pt-BR";
+  moreButton.textContent = t(stats.bubbleOpen ? "catOverlay.less" : "catOverlay.more");
+  bubbleAskEl.textContent = t("catOverlay.ask");
+  bubbleClose.setAttribute("aria-label", t("catOverlay.closeBubble"));
+  catClose.setAttribute("aria-label", t("catOverlay.closeCat"));
+}
+paintTexts();
 type KiwiCatMessage = { bubble?: unknown; open?: boolean; close?: unknown; touch?: true; closed?: true; link?: string; openPath?: string };
 const post = (m: KiwiCatMessage) =>
   (window as { webkit?: { messageHandlers?: { kiwiCat?: { postMessage(m: unknown): void } } } }).webkit?.messageHandlers?.kiwiCat?.postMessage(m);
@@ -104,7 +130,7 @@ bubbleText.addEventListener("click", (e) => {
   post({ link: a.dataset.href });
 });
 /** O × do balão e o da cabeça: o gato sai na hora. */
-for (const x of [document.getElementById("bubble-close")!, catClose]) {
+for (const x of [bubbleClose, catClose]) {
   x.addEventListener("click", (e) => {
     e.stopPropagation();
     post({ closed: true });
@@ -150,7 +176,7 @@ bubbleText.addEventListener("scroll", fades, { passive: true });
 function setOpen(open: boolean) {
   stats.bubbleOpen = open;
   bubbleEl.dataset.open = String(open);
-  moreButton.textContent = open ? "Ver menos" : "Ver mais";
+  moreButton.textContent = t(open ? "catOverlay.less" : "catOverlay.more");
   moreButton.setAttribute("aria-expanded", String(open));
   if (stats.bubble) {
     if (open) showFull(stats.bubble.text, stats.bubble.links);
@@ -177,7 +203,7 @@ moreButton.addEventListener("click", (e) => {
 function setAsk(on: boolean) {
   stats.bubbleAsk = on;
   bubbleEl.dataset.ask = String(on);
-  bubbleSr.textContent = stats.bubble ? `${plainMarkdown(stats.bubble.text)}${on ? ` Precisa de mais alguma coisa?` : ""}` : "";
+  bubbleSr.textContent = stats.bubble ? `${plainMarkdown(stats.bubble.text)}${on ? ` ${t("catOverlay.ask")}` : ""}` : "";
 }
 
 /**
@@ -288,8 +314,15 @@ function measureFirstFrame(start: number) {
 const api = {
   set(input: {
     estado?: string; visible?: boolean; voz?: number | null; fala?: number | null; cor?: string; sala?: number; largura?: number; catHover?: boolean;
+    lang?: string;
     bubble?: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown; summary?: unknown } | null;
   }) {
+    // A língua do app (T29351): o helper manda a de agora ao carregar e a cada troca. Muda os textos, não o balão.
+    if (input.lang !== undefined && langOf(input.lang) !== stats.lang) {
+      stats.lang = langOf(input.lang);
+      paintTexts();
+      setAsk(stats.bubbleAsk);
+    }
     // O mouse sobre o gato (spec #13380): o × da cabeça aparece, e o helper passa a deixar o clique nele.
     if (typeof input.catHover === "boolean" && input.catHover !== stats.catHover) {
       stats.catHover = input.catHover;

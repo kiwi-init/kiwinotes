@@ -1,10 +1,11 @@
 // T5561: original Kiwi code. Pure text operations and a create-first split that never discards text on failure.
 import { EditorSelection, type EditorState, type TransactionSpec } from "@codemirror/state";
 import { isolateHistory } from "@codemirror/commands";
+import { localized } from "../../src/i18n.ts";
 export type TextTool = "sort" | "deduplicate" | "uppercase" | "lowercase";
 export const TEXT_TOOLS: { id: TextTool; label: string }[] = [
-  { id: "sort", label: "Ordenar linhas" }, { id: "deduplicate", label: "Tirar linhas duplicadas" },
-  { id: "uppercase", label: "MAIÚSCULAS" }, { id: "lowercase", label: "minúsculas" },
+  localized({ id: "sort" }, { label: "editor.tool.sort" }), localized({ id: "deduplicate" }, { label: "editor.tool.deduplicate" }),
+  localized({ id: "uppercase" }, { label: "editor.tool.uppercase" }), localized({ id: "lowercase" }, { label: "editor.tool.lowercase" }),
 ];
 export function textTool(state: EditorState, id: TextTool): TransactionSpec | null {
   if (state.selection.ranges.length !== 1) return null;

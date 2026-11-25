@@ -2,7 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { MeetingNotes, type MeetingSegment } from "./meetings.ts";
+import { MEETINGS_FOLDER, MeetingNotes, type MeetingSegment } from "./meetings.ts";
+import { MEETINGS_FOLDER_LABEL } from "../shared/meetings.ts";
 import { Vault } from "./vault.ts";
 import { rebaseMeetingEdit, setMeetingField } from "../shared/meeting-note.ts";
 import { MeetingNoteSession } from "../bun/meeting-notes.ts";
@@ -482,4 +483,8 @@ test("meeting: a nota recriada (T7723) avisa uma vez, segue recebendo a fala, e 
   expect(fresh).toContain("Primeira depois.");
   expect(fresh).toContain("Segunda depois.");
   expect((await vault.get(n.path)).content).toBe(old);
+});
+
+test("a pasta que a aba Reuniões mostra é a do disco (T29247)", () => {
+  expect(MEETINGS_FOLDER_LABEL).toBe(MEETINGS_FOLDER);
 });

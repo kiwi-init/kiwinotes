@@ -3,6 +3,7 @@
 // espaços como estavam). Só a linha editada é escrita de novo.
 
 import { decodeText, type Delimiter, detectDelimiter } from "../../../ui/notes/files/csv.ts";
+import { why, WhyError } from "./why.ts";
 
 export type Encoding = "utf-8" | "utf-16le" | "utf-16be" | "windows-1252";
 
@@ -21,7 +22,8 @@ export interface DelimitedFormat {
 }
 
 /** Um texto que a codificação do arquivo não tem (um emoji num csv em windows-1252): a tela diz qual. */
-export class DelimitedError extends Error {}
+/** Um texto que o arquivo não guarda; `why` para a tela traduzir (T29245). */
+export class DelimitedError extends WhyError {}
 
 const SEP_HINT = /^sep=([,;\t])$/i;
 
@@ -133,7 +135,7 @@ function encode(text: string, encoding: Encoding): Uint8Array {
     let n = 0;
     for (const ch of text) {
       const b = cp1252.get(ch);
-      if (b === undefined) throw new DelimitedError(`“${ch}” não cabe na codificação do arquivo (Windows-1252)`);
+      if (b === undefined) throw new DelimitedError(why("files.sheet.why.csvEncoding", { ch: ch }));
       out[n++] = b;
     }
     return out.subarray(0, n);

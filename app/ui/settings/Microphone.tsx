@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AudioInputs, MicrophoneChoice } from "../../src/shared/microphone.ts";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Row, Select } from "../src/kit/index.tsx";
 import { micHint, micOptions } from "./microphone.ts";
 
 export function MicrophoneRow() {
+  const { t } = useT();
   const [choice, setChoice] = useState<MicrophoneChoice | null>(null);
   const [inputs, setInputs] = useState<AudioInputs | null>(null);
   const [failed, setFailed] = useState(false);
@@ -65,8 +67,8 @@ export function MicrophoneRow() {
   };
 
   return (
-    <Row label="Microfone" hint={failed ? "Não deu para salvar. Tente de novo." : micHint(choice, inputs)}>
-      <Select label="Microfone" value={choice} onChange={change} onOpen={() => list()} options={micOptions(choice, inputs)} />
+    <Row label={t("mic.label")} hint={failed ? t("common.saveFailed") : micHint(choice, inputs)}>
+      <Select label={t("mic.label")} value={choice} onChange={change} onOpen={() => list()} options={micOptions(choice, inputs)} />
     </Row>
   );
 }

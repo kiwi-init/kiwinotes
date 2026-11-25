@@ -9,31 +9,41 @@ import {
   durationLabel,
   elapsedLabel,
   type MeetingLive,
+  MEETINGS_FOLDER_LABEL,
   type MeetingNote,
   NOT_RECORDING,
   participantsLabel,
 } from "../../src/shared/meetings.ts";
+import { INTL_TAG, type Locale, translate } from "../../src/shared/i18n/index.ts";
 import { api, has } from "../src/api.ts";
+import { useT, withStrong } from "../src/i18n.ts";
 import { Button, Empty, Window } from "../src/kit/index.tsx";
 import { TrashIcon } from "../src/kit/editable.tsx";
 import { MeetingSettingsSection } from "./MeetingSettings.tsx";
 
 type Load = "loading" | "ready" | "error";
 
-function dayLabel(day: string, now = new Date()): string {
+/** O atalho padrão de gravar, como o vazio mostra. */
+const MEETING_SHORTCUT = "⌃⌥R";
+
+/** "Hoje", "Ontem" ou "quinta-feira, 6 de novembro" ("Thursday, November 6"), na língua das telas (T29247). */
+export function dayLabel(day: string, now = new Date(), locale: Locale = "pt"): string {
   const [y, m, d] = day.split("-").map(Number);
   const date = new Date(y!, m! - 1, d!);
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === now.toDateString()) return "Hoje";
-  if (date.toDateString() === yesterday.toDateString()) return "Ontem";
-  return date.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  if (date.toDateString() === now.toDateString()) return translate(locale, "meetings.today");
+  if (date.toDateString() === yesterday.toDateString()) return translate(locale, "meetings.yesterday");
+  return date.toLocaleDateString(INTL_TAG[locale], { weekday: "long", day: "numeric", month: "long" });
 }
 
-const clock = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+/** "09:05" em português, "9:05 AM" em inglês. */
+export const clock = (iso: string, locale: Locale = "pt") =>
+  new Date(iso).toLocaleTimeString(INTL_TAG[locale], { hour: locale === "pt" ? "2-digit" : "numeric", minute: "2-digit" });
 
 /** `onOpen`: abrir a nota nas Notas (o hub troca de seção). */
 export function Meetings({ onOpen }: { onOpen(path: string): void }) {
+  const { t, locale } = useT();
   const [meetings, setMeetings] = useState<MeetingNote[]>([]);
   const [load, setLoad] = useState<Load>("loading");
   const [live, setLive] = useState<MeetingLive>(NOT_RECORDING);
@@ -90,7 +100,7 @@ export function Meetings({ onOpen }: { onOpen(path: string): void }) {
       setMeetings((list) => list.filter((x) => x.path !== m.path));
       setTrashed(m);
     } catch {
-      setProblem(`Não deu para apagar “${m.title}”.`);
+      setProblem(t("meetings.deleteFailed", { title: m.title }));
     }
   };
 
@@ -102,7 +112,7 @@ export function Meetings({ onOpen }: { onOpen(path: string): void }) {
       await api.meetings.restore(m.path);
       refresh();
     } catch {
-      setProblem(`Não deu para trazer “${m.title}” de volta. Ela está na Lixeira das Notas.`);
+      setProblem(t("meetings.restoreFailed", { title: m.title }));
     }
   };
 
@@ -117,7 +127,7 @@ export function Meetings({ onOpen }: { onOpen(path: string): void }) {
       refresh();
     } catch (e) {
       const code = (e as { code?: string }).code;
-      setProblem(code === "E_EXISTS" ? `Já existe uma nota “${name}” nessa pasta.` : `Não deu para renomear “${m.title}”.`);
+      setProblem(code === "E_EXISTS" ? t("meetings.renameExists", { name }) : t("meetings.renameFailed", { title: m.title }));
     }
   };
 
@@ -128,12 +138,12 @@ export function Meetings({ onOpen }: { onOpen(path: string): void }) {
   }
 
   return (
-    <Window title="Reuniões">
+    <Window title={t("meetings.title")}>
       {live.recording ? <LiveCard live={live} /> : null}
       {trashed ? (
         <div className="kn-meet-notice" role="status">
-          <span>“{trashed.title}” foi para a Lixeira.</span>
-          <Button onClick={undo}>Desfazer</Button>
+          <span>{t("meetings.trashed", { title: trashed.title })}</span>
+          <Button onClick={undo}>{t("meetings.undo")}</Button>
         </div>
       ) : null}
       {problem ? (
@@ -142,18 +152,17 @@ export function Meetings({ onOpen }: { onOpen(path: string): void }) {
         </div>
       ) : null}
       {load === "error" ? (
-        <Empty title="Não deu para ler as reuniões">
-          <Button onClick={refresh}>Tentar de novo</Button>
+        <Empty title={t("meetings.loadFailed")}>
+          <Button onClick={refresh}>{t("meetings.retry")}</Button>
         </Empty>
       ) : load === "ready" && meetings.length === 0 ? (
-        <Empty icon={<MeetingIcon />} title="Nenhuma reunião ainda">
-          Quando o Teams, o Zoom ou o Meet pegar o microfone, o Kiwi pergunta se quer gravar. Ou use o atalho de reunião (<strong>⌃⌥R</strong>, nos
-          ajustes abaixo) a qualquer momento. A transcrição vira uma nota em Reuniões/, e o áudio é apagado.
+        <Empty icon={<MeetingIcon />} title={t("meetings.empty")}>
+          {withStrong((shortcut) => t("meetings.emptyHint", { shortcut, folder: MEETINGS_FOLDER_LABEL }), MEETING_SHORTCUT)}
         </Empty>
       ) : (
         groups.map((g) => (
           <section key={g.day} className="kn-meet-day">
-            <h2 className="kn-day">{dayLabel(g.day)}</h2>
+            <h2 className="kn-day">{dayLabel(g.day, undefined, locale)}</h2>
             <div className="kn-card">
               {g.items.map((m) => (
                 <MeetingRow
@@ -178,7 +187,7 @@ export function Meetings({ onOpen }: { onOpen(path: string): void }) {
   );
 }
 
-function MeetingRow({
+export function MeetingRow({
   meeting: m,
   renaming,
   onOpen,
@@ -195,19 +204,26 @@ function MeetingRow({
   onCancelRename(): void;
   onDelete(): void;
 }) {
+  const { t, locale } = useT();
   const meta = [
-    m.start ? clock(m.start) : null,
+    m.start ? clock(m.start, locale) : null,
     // Sem `end` e sem gravação (o helper ou o app caiu antes do T7938): o `duration: 0` não é a duração dela.
-    m.live ? "gravando" : m.start && m.end === null ? "interrompida" : m.duration !== null ? durationLabel(m.duration) : null,
+    m.live
+      ? t("meetings.row.recording")
+      : m.start && m.end === null
+        ? t("meetings.row.interrupted")
+        : m.duration !== null
+          ? durationLabel(m.duration, locale)
+          : null,
     m.app,
   ].filter(Boolean);
-  const people = participantsLabel(m.participants);
+  const people = participantsLabel(m.participants, locale);
   return (
     <article className="kn-meet-row" data-live={m.live}>
       {renaming ? (
         <RenameField title={m.title} onDone={onRenamed} onCancel={onCancelRename} />
       ) : (
-        <button type="button" className="kn-meet-open" onClick={onOpen} aria-label={`Abrir ${m.title} nas Notas`}>
+        <button type="button" className="kn-meet-open" onClick={onOpen} aria-label={t("meetings.row.open", { title: m.title })}>
           <span className="kn-meet-title">{m.title}</span>
           <span className="kn-meet-meta">
             {meta.map((part, i) => (
@@ -218,10 +234,10 @@ function MeetingRow({
         </button>
       )}
       <span className="kn-entry-actions kn-meet-actions">
-        <button type="button" className="kn-icon-button" aria-label={`Renomear ${m.title}`} onClick={onRename}>
+        <button type="button" className="kn-icon-button" aria-label={t("meetings.row.rename", { title: m.title })} onClick={onRename}>
           <PencilIcon />
         </button>
-        <button type="button" className="kn-icon-button" data-tone="danger" aria-label={`Apagar ${m.title}`} onClick={onDelete}>
+        <button type="button" className="kn-icon-button" data-tone="danger" aria-label={t("meetings.row.delete", { title: m.title })} onClick={onDelete}>
           <TrashIcon />
         </button>
       </span>
@@ -230,6 +246,7 @@ function MeetingRow({
 }
 
 function RenameField({ title, onDone, onCancel }: { title: string; onDone(title: string): void; onCancel(): void }) {
+  const { t } = useT();
   const [value, setValue] = useState(title);
   const ref = useRef<HTMLInputElement>(null);
   // O Enter e o blur que vem logo depois (o campo sai da tela) não renomeiam duas vezes.
@@ -250,7 +267,7 @@ function RenameField({ title, onDone, onCancel }: { title: string; onDone(title:
       <input
         ref={ref}
         className="kn-input"
-        aria-label="Novo nome da reunião"
+        aria-label={t("meetings.row.newName")}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && finish(null)}
@@ -261,7 +278,8 @@ function RenameField({ title, onDone, onCancel }: { title: string; onDone(title:
 }
 
 /** O card ao vivo: o app, o tempo, "pausar meu mic" e parar. Os botões só agem no clique da pessoa. */
-function LiveCard({ live }: { live: Extract<MeetingLive, { recording: true }> }) {
+export function LiveCard({ live }: { live: Extract<MeetingLive, { recording: true }> }) {
+  const { t } = useT();
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -282,32 +300,32 @@ function LiveCard({ live }: { live: Extract<MeetingLive, { recording: true }> })
   };
   const elapsed = elapsedLabel((now - Date.parse(live.since)) / 1000);
   return (
-    <section className="kn-meet-live" aria-label="Gravando agora">
+    <section className="kn-meet-live" aria-label={t("meetings.live.label")}>
       <span className="kn-meet-dot" aria-hidden="true" />
       <div className="kn-meet-live-text">
-        <div className="kn-meet-live-title">Gravando{live.app ? ` · ${live.app}` : ""}</div>
+        <div className="kn-meet-live-title">{live.app ? t("meetings.live.titleApp", { app: live.app }) : t("meetings.live.title")}</div>
         <div className="kn-meet-live-hint">
           <span className="kn-meet-clock">{elapsed}</span>
-          {live.minePaused ? <span> · seu mic está pausado</span> : null}
+          {live.minePaused ? <span> · {t("meetings.live.minePaused")}</span> : null}
         </div>
         {live.warning === "system_audio_silent" ? (
-          <div className="kn-meet-live-error">Não estamos ouvindo o áudio da reunião. Confira a Gravação de áudio do sistema em Ajustes do Sistema › Privacidade.</div>
+          <div className="kn-meet-live-error">{t("meetings.live.silent")}</div>
         ) : live.warning === "transcription_unavailable" ? (
-          <div className="kn-meet-live-error">A transcrição não subiu. O áudio fica guardado e é transcrito depois.</div>
+          <div className="kn-meet-live-error">{t("meetings.live.noTranscription")}</div>
         ) : live.warning === "note_recreated" ? (
-          <div className="kn-meet-live-error">A nota desta reunião foi apagada ou mudada. A transcrição segue numa nota nova, em Reuniões.</div>
+          <div className="kn-meet-live-error">{t("meetings.live.noteRecreated", { folder: MEETINGS_FOLDER_LABEL })}</div>
         ) : null}
         {error ? <div className="kn-meet-live-error">{error}</div> : null}
       </div>
       <Button
         disabled={busy}
         aria-pressed={live.minePaused}
-        onClick={() => act(() => api.meetings.pauseMine(!live.minePaused), "Não deu para mudar o seu mic.")}
+        onClick={() => act(() => api.meetings.pauseMine(!live.minePaused), t("meetings.live.pauseFailed"))}
       >
-        {live.minePaused ? "Voltar meu mic" : "Pausar meu mic"}
+        {live.minePaused ? t("meetings.live.resumeMine") : t("meetings.live.pauseMine")}
       </Button>
-      <Button variant="primary" disabled={busy} onClick={() => act(() => api.meetings.stop(), "Não deu para parar. Tente o atalho.")}>
-        Parar
+      <Button variant="primary" disabled={busy} onClick={() => act(() => api.meetings.stop(), t("meetings.live.stopFailed"))}>
+        {t("meetings.live.stop")}
       </Button>
     </section>
   );

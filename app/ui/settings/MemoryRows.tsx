@@ -7,22 +7,23 @@ import { useEffect, useState } from "react";
 import type { AgentMemoryView, AgentStatus } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button, Row } from "../src/kit/index.tsx";
+import { useT } from "../src/i18n.ts";
 import {
   clearQuestion,
   countLine,
   dropFact,
-  EDIT_GONE,
+  editGone,
   factCount,
   outsideLine,
   skippedLine,
   skippedReason,
-  INSTRUCTIONS_HINT,
+  instructionsHint,
   INSTRUCTIONS_MAX,
-  INSTRUCTIONS_TITLE,
+  instructionsTitle,
   instructionsCount,
-  MEMORY_EMPTY,
-  MEMORY_HINT,
-  MEMORY_TITLE,
+  memoryEmpty,
+  memoryHint,
+  memoryTitle,
   replaceFact,
 } from "./memoryText.ts";
 
@@ -30,6 +31,8 @@ import {
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e)).replace(/^agent\.[a-zA-Z]+:\s*/, "");
 
 export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: () => Promise<unknown>) => Promise<void> }) {
+  // A língua: a tela redesenha quando ela muda (os textos vêm do catálogo pelo `t()` de cada função).
+  const { t } = useT();
   const [view, setView] = useState<AgentMemoryView | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   // O fato em edição pelo texto de origem (`from`), não pela posição: a lista muda ao vivo (revisão do T11668).
@@ -60,11 +63,11 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
   useEffect(() => {
     if (editing && view && !view.facts.includes(editing.from)) {
       setEditing(null);
-      setFailure(EDIT_GONE);
+      setFailure(editGone());
     }
   }, [view, editing]);
 
-  if (!view) return failure ? <Row label={MEMORY_TITLE} hint={failure} /> : null;
+  if (!view) return failure ? <Row label={memoryTitle()} hint={failure} /> : null;
   const skipped = view.skipped ?? [];
   const save = (facts: string[], skipped?: string[]) =>
     void api.agent.memorySet(facts, skipped).then(
@@ -78,12 +81,12 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
     );
 
   return (
-    <div className="kn-agent-memory" role="group" aria-label={MEMORY_TITLE}>
-      <Row label={MEMORY_TITLE} hint={MEMORY_HINT} />
+    <div className="kn-agent-memory" role="group" aria-label={memoryTitle()}>
+      <Row label={memoryTitle()} hint={memoryHint()} />
       <div className="kn-memory-box">
-        <p className="kn-row-hint">{view.facts.length ? countLine(view.facts.length, view.max) : MEMORY_EMPTY}</p>
+        <p className="kn-row-hint">{view.facts.length ? countLine(view.facts.length, view.max) : memoryEmpty()}</p>
         {view.facts.length ? (
-          <ul className="kn-memory-facts" aria-label="Os fatos da memória">
+          <ul className="kn-memory-facts" aria-label={t("mem.factsAria")}>
             {view.facts.map((f, i) => (
               <li key={`${i}:${f}`} className="kn-memory-fact">
                 {editing?.from === f ? (
@@ -95,13 +98,13 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
                       if (next) save(next);
                       else {
                         setEditing(null);
-                        setFailure(EDIT_GONE);
+                        setFailure(editGone());
                       }
                     }}
                   >
-                    <input className="kn-input" aria-label="O fato" value={editing.text} maxLength={300} onChange={(e) => setEditing({ from: f, text: e.target.value })} autoFocus />
+                    <input className="kn-input" aria-label={t("mem.factAria")} value={editing.text} maxLength={300} onChange={(e) => setEditing({ from: f, text: e.target.value })} autoFocus />
                     <Button variant="primary" type="submit" disabled={!editing.text.trim()}>
-                      Salvar
+                      {t("common.save")}
                     </Button>
                     <Button
                       onClick={() => {
@@ -109,7 +112,7 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
                         setFailure(null);
                       }}
                     >
-                      Cancelar
+                      {t("common.cancel")}
                     </Button>
                   </form>
                 ) : (
@@ -122,7 +125,7 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
                           setFailure(null);
                         }}
                       >
-                        Editar
+                        {t("common.edit")}
                       </Button>
                       <Button
                         onClick={() => {
@@ -130,7 +133,7 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
                           if (next) save(next);
                         }}
                       >
-                        Apagar
+                        {t("common.delete")}
                       </Button>
                     </span>
                   </>
@@ -140,7 +143,7 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
           </ul>
         ) : null}
         {skipped.length ? (
-          <div className="kn-memory-skipped" role="group" aria-label="Os fatos que ficam de fora">
+          <div className="kn-memory-skipped" role="group" aria-label={t("mem.skippedAria")}>
             <p className="kn-memory-warning">{skippedLine(skipped.length)}</p>
             <ul className="kn-memory-facts">
               {skipped.map((x, i) => (
@@ -154,11 +157,11 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
                         save([...view.facts, fixing.text], skipped.filter((_, j) => j !== i).map((y) => y.text));
                       }}
                     >
-                      <input className="kn-input" aria-label="O fato" value={fixing.text} onChange={(e) => setFixing({ at: i, text: e.target.value })} autoFocus />
+                      <input className="kn-input" aria-label={t("mem.factAria")} value={fixing.text} onChange={(e) => setFixing({ at: i, text: e.target.value })} autoFocus />
                       <Button variant="primary" type="submit" disabled={!fixing.text.trim() || fixing.text.trim().length > 300}>
-                        Salvar
+                        {t("common.save")}
                       </Button>
-                      <Button onClick={() => setFixing(null)}>Cancelar</Button>
+                      <Button onClick={() => setFixing(null)}>{t("common.cancel")}</Button>
                     </form>
                   ) : (
                     <>
@@ -173,9 +176,9 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
                             setFailure(null);
                           }}
                         >
-                          {x.reason === "long" ? "Encurtar" : "Editar"}
+                          {x.reason === "long" ? t("mem.shorten") : t("common.edit")}
                         </Button>
-                        <Button onClick={() => save(view.facts, skipped.filter((_, j) => j !== i).map((y) => y.text))}>Apagar</Button>
+                        <Button onClick={() => save(view.facts, skipped.filter((_, j) => j !== i).map((y) => y.text))}>{t("common.delete")}</Button>
                       </span>
                     </>
                   )}
@@ -208,21 +211,21 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
                     )
                   }
                 >
-                  Apagar tudo
+                  {t("mem.clearAll")}
                 </Button>
-                <Button onClick={() => setConfirmClear(false)}>Cancelar</Button>
+                <Button onClick={() => setConfirmClear(false)}>{t("common.cancel")}</Button>
               </>
             ) : (
-              <Button onClick={() => setConfirmClear(true)}>Apagar tudo</Button>
+              <Button onClick={() => setConfirmClear(true)}>{t("mem.clearAll")}</Button>
             )}
           </div>
         ) : null}
       </div>
-      <Row label={INSTRUCTIONS_TITLE} hint={INSTRUCTIONS_HINT} />
+      <Row label={instructionsTitle()} hint={instructionsHint()} />
       <div className="kn-memory-box">
         <textarea
           className="kn-input kn-memory-instructions"
-          aria-label={INSTRUCTIONS_TITLE}
+          aria-label={instructionsTitle()}
           value={draft}
           maxLength={INSTRUCTIONS_MAX}
           rows={4}
@@ -231,7 +234,7 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
         <div className="kn-memory-clear">
           <span className="kn-row-hint">{instructionsCount(draft.length)}</span>
           <Button variant="primary" disabled={draft === saved} onClick={() => void run(() => api.agent.configure({ instructions: draft }))}>
-            Salvar
+            {t("common.save")}
           </Button>
         </div>
       </div>
