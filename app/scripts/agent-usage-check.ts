@@ -23,7 +23,7 @@ const packages = join(data, "packages.json");
 writeFileSync(packages, JSON.stringify(registry.pinned));
 async function cli(args: string[]) {
   const p = Bun.spawn([process.execPath, join(app, "scripts/cli.ts"), ...args, "--data", data], {
-    cwd: app, stdout: "pipe", stderr: "pipe", env: { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages },
+    cwd: app, stdout: "pipe", stderr: "pipe", env: { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages, KIWI_FAKE_AGENT_WARNING_MS: "3000" },
   });
   const text = await new Response(p.stdout).text();
   assert.equal(await p.exited, 0, text + (await new Response(p.stderr).text()));
@@ -172,7 +172,7 @@ try {
   const q = h.page;
   await q.waitForSelector('.kn-kiwicat[data-ready="true"]', { timeout: 15000 });
   await invoke("agent.ask", { text: "/aviso" });
-  // O trecho do aviso inteiro e já digitado.
+  // O aviso inteiro e já digitado: desde o #348 ele é a linha de estado até a resposta (o falso espera 3 s nele, T28584).
   await q.waitForFunction(
     () => {
       const ghost = document.querySelector(".kn-bubble-ghost")?.textContent ?? "";

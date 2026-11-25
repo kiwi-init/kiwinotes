@@ -33,6 +33,8 @@
 //   KIWI_FAKE_AGENT_USAGE_DELAY_MS o `/usage` demora isso antes de responder, e respeita o cancelar (T16712)
 //   KIWI_FAKE_AGENT_THINK_MS  uma pausa depois do "pensando…", como o agente de verdade antes da 1ª palavra: um print
 //                            pega o que o balão mostra enquanto ele pensa (T26063)
+//   KIWI_FAKE_AGENT_WARNING_MS uma pausa depois do aviso de limite do `/aviso`: desde o #348 o aviso é a linha de estado
+//                            só até a resposta, e um print precisa dele no balão (T28584)
 //   KIWI_FAKE_AGENT_NO_MCP   "1": não anuncia o HTTP do MCP (`mcpCapabilities`), e o host não manda as ferramentas
 //   KIWI_FAKE_AGENT_FLAVOR   "gemini": ele se apresenta como o Gemini CLI 0.70.0 (spec #24666), aberto pelo `fake/gemini.ts`:
 //                            o `initialize` dele (os quatro jeitos de logar, o `loadSession` e sem `session/resume`), o
@@ -687,6 +689,8 @@ const app = agent({ name: "kiwi-fake-agent" })
       await think(client, sessionId);
       await say(client, sessionId, "Começando. ");
       await rateLimit(client, sessionId, { status: "allowed_warning", rateLimitType: "five_hour", utilization: 0.82, resetsAt: Math.floor(Date.now() / 1000) + 2 * 3600 });
+      const warned = Number(process.env.KIWI_FAKE_AGENT_WARNING_MS ?? 0);
+      if (warned > 0) await Bun.sleep(warned);
       await say(client, sessionId, "E terminando.");
       return { stopReason: "end_turn" };
     }
