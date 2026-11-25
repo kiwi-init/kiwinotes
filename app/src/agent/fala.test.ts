@@ -75,6 +75,10 @@ describe("textoParaFala (T26709)", () => {
     // Siglas e símbolos.
     ["O PDF e o CSV.", "O pê dê efe e o cê esse vê."],
     ["A ONU e o PIX.", "A ONU e o pix."],
+    // Lidas como palavra, não soletradas (T27958): "ongue", não "ó ene gê".
+    ["A ONG doou.", "A ong doou."],
+    ["Duas ONGs e o SUS.", "Duas ongs e o sus."],
+    ["O MEC e o CPF.", "O mec e o cê pê efe."],
     ["ATENÇÃO aqui.", "atenção aqui."],
     ["Faça HOJE, é a META.", "Faça hoje, é a meta."],
     ["O HTML e a IA.", "O agá tê eme ele e a i a."],
