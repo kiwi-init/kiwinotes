@@ -13,6 +13,9 @@ import {
   preparedTar,
   requirement,
   updateMenuLabel,
+  offReasonText,
+  swapFailedMessage,
+  updateMessageText,
   updatesOff,
   updatesView,
   verifyUpdateTar,
@@ -366,10 +369,28 @@ describe("a última checagem, para a seção Sobre (T2386)", () => {
       expect(u.lastCheck()).toMatchObject({ result: "error", message: "Sem internet: não deu para falar com o GitHub." });
     }));
 
+  test("T29006: o erro guardado sai na língua de quem lê, também depois da troca", () =>
+    withDir(async (appData) => {
+      const { updater } = fakeUpdater({ appData });
+      updater.checkForUpdate = async () => {
+        throw new Error("getaddrinfo ENOTFOUND github.com");
+      };
+      const u = new AppUpdates({ updater, now, log: () => {} });
+      await u.check();
+      expect(u.lastCheck("en")).toMatchObject({ result: "error", message: "No internet: couldn't reach GitHub." });
+      expect(u.lastCheck("pt")).toMatchObject({ result: "error", message: "Sem internet: não deu para falar com o GitHub." });
+      expect(updateMessageText(swapFailedMessage("0.2.0"), "en")).toBe(
+        "Version 0.2.0 was downloaded, but the app couldn't be replaced. Try again; if it keeps failing, install from the release .dmg.",
+      );
+      expect(updatesView({ kind: "off", reason: "channel dev" }, null, "en")).toMatchObject({ state: "off", reason: "development build" });
+      // O desligado pelos Ajustes é o valor do contrato, que o Sobre compara: não traduz.
+      expect(offReasonText(OFF_BY_SETTING, "en")).toBe(UPDATES_OFF_BY_SETTING);
+    }));
+
   test("as mensagens de erro e o canal", () => {
-    expect(checkErrorMessage("HTTP 503")).toBe("O servidor das atualizações não respondeu. Tente de novo mais tarde.");
-    expect(checkErrorMessage("request timed out")).toBe("O servidor das atualizações não respondeu. Tente de novo mais tarde.");
-    expect(checkErrorMessage("algo estranho")).toBe("Não deu para verificar agora. Tente de novo mais tarde.");
+    expect(updateMessageText(checkErrorMessage("HTTP 503"))).toBe("O servidor das atualizações não respondeu. Tente de novo mais tarde.");
+    expect(updateMessageText(checkErrorMessage("request timed out"))).toBe("O servidor das atualizações não respondeu. Tente de novo mais tarde.");
+    expect(updateMessageText(checkErrorMessage("algo estranho"))).toBe("Não deu para verificar agora. Tente de novo mais tarde.");
     expect(channelOf("stable")).toBe("stable");
     expect(channelOf("canary")).toBe("stable");
     expect(channelOf("dev")).toBe("dev");

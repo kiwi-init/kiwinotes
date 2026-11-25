@@ -27,14 +27,14 @@ import path from "node:path";
 
 import { identityKeys } from "./bundle-identity.ts";
 import { resealBundles, signAdHoc } from "./signing.ts";
+import { DEVELOPMENT_REGION, usageDescriptions, writeUsageStrings } from "./usage-strings.ts";
 
 /** No Info.plist do wrapper: o ambiente que o LaunchServices passa ao extractor (T951). */
 const WRAPPER_ENVIRONMENT = { ELECTROBUN_INSTALLER_UI_AUTOCLOSE: "1" };
 
-const USAGE: Record<string, string> = {
-  NSAudioCaptureUsageDescription: "O Kiwi Notes captura o áudio da reunião só quando você pede. A transcrição acontece no Mac e o áudio é apagado depois de transcrito.",
-  NSMicrophoneUsageDescription: "O Kiwi Notes usa o microfone quando você dita ou pede para gravar uma reunião, e transcreve tudo no seu Mac.",
-};
+// As frases do pedido de permissão (T29006): as do Info.plist são as da língua de reserva, e cada língua do app vai no
+// `InfoPlist.strings` do `.lproj` dela (`usage-strings.ts`), que o macOS escolhe pela língua do Mac.
+const USAGE: Record<string, string> = { ...usageDescriptions(DEVELOPMENT_REGION), CFBundleDevelopmentRegion: DEVELOPMENT_REGION };
 
 /** Os Info.plist de todos os .app dentro de `dir` (o app e, no release, o wrapper). */
 function infoPlists(dir: string, depth = 4): string[] {
@@ -84,6 +84,8 @@ function setKeys(plist: string): void {
   for (const p of plists) {
     setKeys(p);
     console.log(`info-plist: usage descriptions, display name and short version in ${p}`);
+    // Antes da assinatura, que sela os recursos.
+    for (const f of writeUsageStrings(path.dirname(path.dirname(p)))) console.log(`info-plist: ${path.relative(path.dirname(path.dirname(p)), f)}`);
   }
   if (wrapper) {
     const plist = path.join(wrapper, "Contents", "Info.plist");

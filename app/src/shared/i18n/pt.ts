@@ -88,4 +88,19 @@ export const pt = {
   "pill.pasteFailed": "Não deu para colar o texto",
   "pill.modelUnavailable": "O modelo de voz não está pronto",
   "pill.sttFailed": "Não deu para transcrever",
+  // As atualizações no Sobre (T29006): os erros e o motivo de estarem desligadas, que o main escreve.
+  "update.swapFailed": "A {version} foi baixada, mas não deu para trocar o app. Tente de novo; se continuar, instale pelo .dmg do release.",
+  "update.offline": "Sem internet: não deu para falar com o GitHub.",
+  "update.serverDown": "O servidor das atualizações não respondeu. Tente de novo mais tarde.",
+  "update.checkFailed": "Não deu para verificar agora. Tente de novo mais tarde.",
+  "update.downloadFailed": "O download da {version} falhou. Tente de novo.",
+  "update.refused": "A {version} foi recusada: a assinatura não confere.",
+  "update.off.agents": "modo de teste dos agentes",
+  "update.off.dev": "build de desenvolvimento",
+  "update.off.channel": "build fora dos canais de release",
+  "update.off.noUrl": "build local, sem o endereço das atualizações",
+  "update.off.badUrl": "o endereço das atualizações deste build não é válido",
+  // O porquê no pedido de permissão do macOS (T29006): vai ao InfoPlist.strings do .app e segue a língua do Mac.
+  "system.micUsage": "O Kiwi Notes usa o microfone quando você dita ou pede para gravar uma reunião, e transcreve tudo no seu Mac.",
+  "system.audioCaptureUsage": "O Kiwi Notes captura o áudio da reunião só quando você pede. A transcrição acontece no Mac e o áudio é apagado depois de transcrito.",
 } as const;
