@@ -439,6 +439,23 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Feito.", error: false }]);
   });
 
+  test("com o app em English, a resposta sem texto sai em inglês (T29351)", () => {
+    mainLocale.set("en");
+    try {
+      const r = rig();
+      talk(r);
+      r.cat.turn(status("running"));
+      r.cat.turn(doneWith(""));
+      expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Done.", error: false }]);
+      const q = rig();
+      talk(q);
+      q.cat.turn(doneWith(""));
+      expect(bubbles(q.take())).toEqual([{ type: "catOverlay.bubble", text: "All set.", error: false }]);
+    } finally {
+      mainLocale.set("pt");
+    }
+  });
+
   // Spec #13378: o balão trocava as frases sozinho, um trecho de 108 caracteres a cada tempo de leitura. Agora vai a
   // resposta inteira, de uma vez; a página mostra o começo e o "ver mais".
   test("uma resposta longa vai inteira ao balão, de uma vez, e nada troca sozinho", () => {

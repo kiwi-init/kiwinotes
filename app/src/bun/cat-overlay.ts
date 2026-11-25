@@ -297,7 +297,7 @@ export class CatOverlay {
     // O balão único (spec #27881, T28010): o aberto tem a resposta inteira, com o que veio entre as ferramentas; o
     // fechado, o resumo, que sai da fala do `cat_speak` ou da resposta final (a página corta em frase).
     const text = plainBubbleText(said) ? said.trim() : "";
-    if (!text) return this.speechText ? { text: this.speechText } : { text: this.usedTool ? "Feito." : "Pronto." };
+    if (!text) return this.speechText ? { text: this.speechText } : { text: mainLocale.t(this.usedTool ? "catOverlay.didIt" : "catOverlay.ready") };
     const summary = this.speechText || (plainBubbleText(tail) ? tail : text);
     // Sem a resposta inteira (o `done` veio diferente do que foi falado), as posições não valem: vai sem links.
     const shown = fromFull ? shiftLinks(links, said.length - said.trimStart().length, text) : [];
