@@ -146,8 +146,13 @@ export function saidaHelper(
  * T26830: a mídia dos outros apps durante a fala do gato, pelo helper. `abaixar` antes do 1º pedaço e `devolver` no fim,
  * no corte ou no erro (o `FalaPlayer` chama). Um erro do helper só vai ao log: a voz toca do mesmo jeito.
  */
+/** O que a mídia usa do helper. */
+export interface MidiaHelper {
+  request(command: { type: "speech.duck" | "speech.unduck" }): Promise<unknown>;
+}
+
 export function midiaHelper(
-  helper: { request(command: { type: "speech.duck" | "speech.unduck" }): Promise<unknown> },
+  helper: MidiaHelper,
   log?: (msg: string) => void,
 ): MidiaFala {
   const pedir = (type: "speech.duck" | "speech.unduck") =>

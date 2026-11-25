@@ -41,9 +41,8 @@ import { readNoteModel } from "../agent/note-model.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { HomeChanges } from "./home.ts";
-import { ligarVozDoGato } from "./cat-voice-output.ts";
+import { ligarVozDoGatoNoApp } from "./cat-voice-output.ts";
 import { CatVoicePreview, createCatVoicePreview } from "./cat-voice-preview.ts";
-import { midiaHelper, saidaHelper } from "./speech-output.ts";
 import { hubFrame, type IntroLayout, introWindow, parseHubFrame, type Rect } from "../shared/intro-layout.ts";
 import { systemLanguages } from "./system-language.ts";
 import { mainLocale } from "./locale.ts";
@@ -163,38 +162,26 @@ const catVoicePreview = {
 export function startCatVoiceOutput(sidecar: Sidecar): void {
   catVoiceOutput?.stop();
   const log = (m: string) => console.log(`[cat-voice] ${m}`);
-  const saida = saidaHelper(
-    {
-      request: (c) => sidecar.request(c),
-      send: (c) => sidecar.send(c),
-      on: (t, fn) => sidecar.on(t, fn),
-      onClose: (fn) => sidecar.onClose(fn),
-    },
-    { log },
-  );
-  const voz = ligarVozDoGato({
+  // A ligação inteira fica no `ligarVozDoGatoNoApp` (T29234), que os testes provam; aqui só o que é do app.
+  const voz = ligarVozDoGatoNoApp({
     sintese: catVoice.voice,
-    saida,
-    // T26830 (#28538): enquanto o gato fala, os outros apps descem à metade e a voz dele sobe ×2 no helper.
-    midia: midiaHelper({ request: (c) => sidecar.request(c) }, log),
     agent: stores.agent,
-    helper: { on: (t, fn) => sidecar.on(t, fn) },
-    // A boca do gato (T28675): o nível vai às janelas e ao gato do overlay, como no headless.
-    naTela: (e) => {
-      for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.speech", payload: e });
-      catOverlay?.overlay.speech(e);
+    helper: {
+      saida: {
+        request: (c) => sidecar.request(c),
+        send: (c) => sidecar.send(c),
+        on: (t, fn) => sidecar.on(t, fn),
+        onClose: (fn) => sidecar.onClose(fn),
+      },
+      midia: { request: (c) => sidecar.request(c) },
+      eventos: { on: (t, fn) => sidecar.on(t, fn) },
     },
-    previa: (falaDoGato) => createCatVoicePreview(catVoice, { saida, falaDoGato, log }),
+    janelas: () => rpcs.values(),
+    overlay: () => catOverlay?.overlay,
+    previa: (saida, falaDoGato) => createCatVoicePreview(catVoice, { saida, falaDoGato, log }),
     log,
   });
-  const p = voz.previa!;
-  catVoiceOutput = {
-    preview: p,
-    stop: () => {
-      voz.stop();
-      saida.dispose();
-    },
-  };
+  catVoiceOutput = { preview: voz.previa!, stop: voz.stop };
 }
 // O motivo do Sobre sem atualizador (um build de dev). Vai ao log e ao agente; a tela não mostra.
 const UPDATER_OFF = "o atualizador ainda não subiu"; // i18n-ok: diagnóstico

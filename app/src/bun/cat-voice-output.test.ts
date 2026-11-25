@@ -2,7 +2,7 @@
 // recebe o nível enquanto a voz toca e o `null` no fim. Síntese e saída falsas: nada toca.
 import { expect, test } from "bun:test";
 import type { FalaNaTela, Pcm, SaidaFala, SinteseFala } from "../agent/fala-player.ts";
-import { ligarVozDoGato } from "./cat-voice-output.ts";
+import { ligarVozDoGato, ligarVozDoGatoNoApp } from "./cat-voice-output.ts";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const esperar = async (ok: () => boolean) => {
@@ -98,4 +98,115 @@ test("sem a prévia (o headless), a ligação não cria nenhuma", () => {
   const m = montar();
   expect(m.voz.previa).toBeUndefined();
   m.voz.stop();
+});
+
+// T29234: a ligação inteira do app (`ligarVozDoGatoNoApp`, que o `startCatVoiceOutput` chama), com um helper falso
+// que responde como o de verdade: o `speech.play` devolve o volume, e o `speech.played` vem logo depois.
+function montarNoApp() {
+  const ordem: string[] = [];
+  const played = new Set<(e: { seq: number }) => void>();
+  const closes = new Set<() => void>();
+  const eventos = new Map<string, Set<() => void>>();
+  const fala = new Set<(e: { turnId: string; frases: string[] }) => void>();
+  const janelas = [[], []] as FalaNaTela[][];
+  const gato: FalaNaTela[] = [];
+  let overlay: { speech(e: FalaNaTela): void } | undefined;
+  let saidaDaPrevia: SaidaFala | undefined;
+  const voz = ligarVozDoGatoNoApp({
+    sintese: {
+      async *sintetizar() {
+        for (let i = 0; i < 3; i++) yield tom(480, 8000);
+      },
+    },
+    agent: {
+      onSpeech: (fn) => {
+        fala.add(fn);
+        return () => fala.delete(fn);
+      },
+    },
+    helper: {
+      saida: {
+        async request(c) {
+          ordem.push(`play:${c.seq}`);
+          setTimeout(() => {
+            for (const fn of played) fn({ seq: c.seq });
+          }, 0);
+          return { data: { volume: 0.5 } };
+        },
+        async send() {
+          ordem.push("stop");
+        },
+        on: (_t, fn) => {
+          played.add(fn);
+          return () => played.delete(fn);
+        },
+        onClose: (fn) => {
+          closes.add(fn);
+          return () => closes.delete(fn);
+        },
+      },
+      midia: {
+        async request(c) {
+          ordem.push(c.type);
+          return {};
+        },
+      },
+      eventos: {
+        on: (t, fn) => {
+          const s = eventos.get(t) ?? new Set();
+          eventos.set(t, s);
+          s.add(fn);
+          return () => s.delete(fn);
+        },
+      },
+    },
+    janelas: () => janelas.map((caixa) => ({ send: { event: (e: { name: "agent.speech"; payload: FalaNaTela }) => void caixa.push(e.payload) } })),
+    overlay: () => overlay,
+    previa: (saida) => {
+      saidaDaPrevia = saida;
+      return { parar() {} };
+    },
+  });
+  return {
+    voz,
+    ordem,
+    janelas,
+    gato,
+    saidaDaPrevia: () => saidaDaPrevia,
+    subirOverlay: () => (overlay = { speech: (e) => void gato.push(e) }),
+    falar: async (turnId: string) => {
+      for (const fn of fala) fn({ turnId, frases: ["Oi."] });
+      await esperar(() => janelas[0]!.some((e) => e.turnId === turnId && e.nivel === null));
+    },
+    ouvintes: () => played.size + closes.size + fala.size + [...eventos.values()].reduce((n, s) => n + s.size, 0),
+  };
+}
+
+test("no app, a fala abaixa a mídia antes do 1º pedaço e devolve depois do último", async () => {
+  const m = montarNoApp();
+  await m.falar("t1");
+  await esperar(() => m.ordem.includes("speech.unduck"));
+  expect(m.ordem).toEqual(["speech.duck", "play:1", "play:2", "play:3", "speech.unduck"]);
+  m.voz.stop();
+});
+
+test("no app, a boca vai a todas as janelas abertas, e ao gato do overlay quando ele sobe", async () => {
+  const m = montarNoApp();
+  await m.falar("t1");
+  const boca = (es: FalaNaTela[]) => es.map((e) => (e.nivel === null ? null : e.nivel > 0 ? "abre" : 0));
+  for (const j of m.janelas) expect(boca(j)).toEqual(["abre", "abre", "abre", 0, null]);
+  expect(m.gato).toEqual([]); // o overlay ainda não tinha subido
+  m.subirOverlay();
+  await m.falar("t2");
+  expect(boca(m.gato)).toEqual(["abre", "abre", "abre", 0, null]);
+  expect(m.gato.every((e) => e.turnId === "t2")).toBe(true);
+  m.voz.stop();
+});
+
+test("no app, a prévia recebe a mesma saída, e desligar solta o helper e o agente", async () => {
+  const m = montarNoApp();
+  expect(m.saidaDaPrevia()).toBeDefined();
+  expect(m.ouvintes()).toBeGreaterThan(0);
+  m.voz.stop();
+  expect(m.ouvintes()).toBe(0); // o `saida.dispose()` também tira o speech.played e o fechar do helper
 });
