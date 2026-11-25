@@ -27,9 +27,10 @@ on:
 permissions:
   contents: read
 
+# O tag e o ensaio rodam até o fim. O `helper-cache` (o push na `main`) tem um grupo próprio, que cancela o anterior.
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+  group: release-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
 jobs:
   mac:
@@ -185,7 +186,8 @@ jobs:
 
   # Compila só o helper e a voz num push na `main` e guarda o app/.helper e o app/.voice no cache da `main`, de onde o
   # run do tag restaura (#1805). Assim o cache que o release assina só nasce de código que já está na main: sem secret, sem `bun install`
-  # (nenhum script de dependência roda aqui), sem `pull_request`.
+  # (nenhum script de dependência roda aqui), sem `pull_request`. Um Mac por vez (spec #29579): um push novo em `native/`
+  # cancela o build do anterior, e o novo guarda o cache. Um tag que sai antes dele acabar compila o helper no próprio run.
   helper-cache:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
