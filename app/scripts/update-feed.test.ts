@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { feedUrl, isReleaseTag, nextTag, releaseName, tagVersion, updateManifest } from "./update-feed.ts";
+import { feedUrl, isReleaseTag, nextTag, releaseName, stampVersion, tagVersion, updateManifest } from "./update-feed.ts";
 
 describe("update-feed (T1969)", () => {
   test("o tag de um release é vANO.MÊS.N (spec #13879); rc e semver não são mais", () => {
@@ -35,6 +38,27 @@ describe("update-feed (T1969)", () => {
     expect(nextTag("2026-12", ["v2026.11.21"])).toBe("v2026.12.1");
     expect(nextTag("2027-01", ["v2026.12.4"])).toBe("v2027.1.1");
     expect(() => nextTag("2026-13", [])).toThrow("isn't AAAA-MM");
+  });
+
+  test("o build do tag escreve a versão dele no package.json (spec #29579): só o campo version muda", async () => {
+    const pkg = '{\n  "name": "exemplo",\n  "version": "2026.11.3",\n  "scripts": { "version": "echo nao" }\n}\n';
+    const out = stampVersion(pkg, "v2026.12.1");
+    expect(JSON.parse(out).version).toBe("2026.12.1");
+    expect(JSON.parse(out).scripts.version).toBe("echo nao");
+    expect(out).toBe(pkg.replace('"version": "2026.11.3"', '"version": "2026.12.1"'));
+    // O package.json de verdade do app: o carimbo pega, e a versão do tag passa a ser a do app.
+    const real = await Bun.file(new URL("../package.json", import.meta.url)).text();
+    expect(JSON.parse(stampVersion(real, "v2027.1.1")).version).toBe("2027.1.1");
+    expect(() => stampVersion(pkg, "v0.1.0-rc19")).toThrow("isn't vANO.MÊS.N");
+    expect(() => stampVersion('{ "name": "exemplo" }', "v2026.12.1")).toThrow('no "version"');
+  });
+
+  test("a CLI stamp grava o package.json", async () => {
+    const file = join(mkdtempSync(join(tmpdir(), "stamp-")), "package.json");
+    await Bun.write(file, '{\n  "name": "exemplo",\n  "version": "2026.11.3"\n}\n');
+    const r = Bun.spawnSync(["bun", new URL("./update-feed.ts", import.meta.url).pathname, "stamp", "v2026.11.4", file]);
+    expect(r.exitCode).toBe(0);
+    expect(JSON.parse(await Bun.file(file).text()).version).toBe("2026.11.4");
   });
 
   const built = {

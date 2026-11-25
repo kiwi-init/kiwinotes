@@ -4,6 +4,8 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+Desde a 2026.11.15 (spec #29579), o release sai do tag direto, sem o PR da versão, e a lista de cada versão fica só nas notas dela em [Releases](https://github.com/kiwi-init/kiwinotes/releases). As seções abaixo são as das versões até a 2026.11.14.
+
 ## [2026.11.14](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.14) (2026-11-25)
 
 - **Esconder o Idioma do app nesta release: o app fica em português (T29319)** ([#380](https://github.com/kiwi-init/kiwinotes/pull/380))
