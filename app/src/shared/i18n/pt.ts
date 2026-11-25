@@ -1,6 +1,8 @@
 // O catálogo em português (spec #28171): a fonte dos textos. Cada chave nova entra aqui e em `en.ts`.
 // A chave diz onde o texto aparece (`settings.…` em Ajustes); o plural vai como `{ one, other }`, com o parâmetro `n`.
 
+import { ptNotes } from "./notes.pt.ts";
+
 export const pt = {
   // As línguas, pelo nome delas mesmas (o seletor mostra "English" também com o app em português).
   "language.pt": "Português",
@@ -103,4 +105,7 @@ export const pt = {
   // O porquê no pedido de permissão do macOS (T29006): vai ao InfoPlist.strings do .app e segue a língua do Mac.
   "system.micUsage": "O Kiwi Notes usa o microfone quando você dita ou pede para gravar uma reunião, e transcreve tudo no seu Mac.",
   "system.audioCaptureUsage": "O Kiwi Notes captura o áudio da reunião só quando você pede. A transcrição acontece no Mac e o áudio é apagado depois de transcrito.",
+
+  // A casca das Notas (T29244): `notes.pt.ts`.
+  ...ptNotes,
 } as const;

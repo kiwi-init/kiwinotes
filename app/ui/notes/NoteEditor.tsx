@@ -23,6 +23,7 @@ import { titleCompartment, titleHeading } from "./editor/titleHeading.ts";
 import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
 } from "./editor/index.ts";
 import { type KiwiEdit, type KiwiWriteHandle, playKiwiWrite, runningKiwiWrite } from "./editor/kiwi-writing.ts";
+import { useT } from "../src/i18n.ts";
 
 const externalUpdates = new WeakSet<EditorView>();
 /** O Sumário se refaz depois disto sem tecla (T7876). */
@@ -70,6 +71,7 @@ export interface NoteEditorProps {
 export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, embed, onError, createSplit, onSplitDone, onRenameHeading,
   focus = false, typewriter = false, viewModes, onAddProperty, readOnly = false, title = null,
 }: NoteEditorProps) {
+  const { t: tr } = useT();
   const modes = useRef({ focus, typewriter, readOnly, title });
   modes.current = { focus, typewriter, readOnly, title };
   const withModes = (base: Extension[]): Extension[] => [
@@ -228,21 +230,21 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
       void splitNote(v, tail => latest.current.createSplit!(tail)).then(result => {
         if (!result) return;
         if (result.moved) latest.current.onSplitDone?.(result.path);
-        else latest.current.onError?.(`A nota mudou. A continuação foi copiada para ${result.path}; o original foi mantido.`);
-      }).catch(() => latest.current.onError?.("Não foi possível criar a continuação. O texto original foi mantido."))
+        else latest.current.onError?.(tr("notes.split.moved", { path: result.path }));
+      }).catch(() => latest.current.onError?.(tr("notes.split.failed")))
         .finally(() => { splitting.current = false; });
     } : undefined, latest.current.onRenameHeading, cellPos === undefined ? {} : { tablePos: cellPos }), ...viewModeItems()] });
   };
   const viewModeItems = (): MenuItem[] => {
     const m = modeMenu.current;
-    const property: MenuItem[] = m.onAddProperty ? [{ kind: "separator" }, { label: "Adicionar propriedade", onSelect: m.onAddProperty }] : [];
+    const property: MenuItem[] = m.onAddProperty ? [{ kind: "separator" }, { label: tr("notes.cmd.addProperty"), onSelect: m.onAddProperty }] : [];
     if (!m.viewModes) return property;
     const { toggleFocus, toggleTypewriter, focusKey, typewriterKey } = m.viewModes;
     return [
       ...property,
       { kind: "separator" },
-      { label: "Modo foco", hint: focusKey, checked: m.focus, onSelect: toggleFocus },
-      { label: "Máquina de escrever", hint: typewriterKey, checked: m.typewriter, onSelect: toggleTypewriter },
+      { label: tr("notes.cmd.focus"), hint: focusKey, checked: m.focus, onSelect: toggleFocus },
+      { label: tr("notes.cmd.typewriter"), hint: typewriterKey, checked: m.typewriter, onSelect: toggleTypewriter },
     ];
   };
   const headings = useMemo(() => markdownStructure(editorDoc).headings, [editorDoc]);
@@ -264,11 +266,11 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   };
   return <>
     {headings.length ? <details className="kn-outline">
-      <summary>Sumário</summary>
+      <summary>{tr("notes.outline")}</summary>
       <ol>{headings.map((heading) => <li key={heading.from} style={{ paddingInlineStart: `${(heading.level - 1) * 12}px` }}>
-        <button type="button" className="kn-outline-title" onClick={() => goToHeading(heading.from)}>{heading.title || "Sem título"}</button>
-        <button type="button" aria-label={`Mover ${heading.title} para cima`} onClick={() => reorder(heading.from, "up")}>↑</button>
-        <button type="button" aria-label={`Mover ${heading.title} para baixo`} onClick={() => reorder(heading.from, "down")}>↓</button>
+        <button type="button" className="kn-outline-title" onClick={() => goToHeading(heading.from)}>{heading.title || tr("notes.untitled")}</button>
+        <button type="button" aria-label={tr("notes.outline.up", { title: heading.title })} onClick={() => reorder(heading.from, "up")}>↑</button>
+        <button type="button" aria-label={tr("notes.outline.down", { title: heading.title })} onClick={() => reorder(heading.from, "down")}>↓</button>
       </li>)}</ol>
     </details> : null}
     <div className="kn-note-editor" ref={host} data-context-menu-open={menu ? true : undefined}

@@ -1,6 +1,7 @@
 // O ⌘F do quadro branco e do diagrama (T22217, item 3 da régua): o que tem o texto procurado, na ordem de leitura.
 
 import { fold } from "../../src/store/text.ts";
+import { formatNumber, type Locale, translate } from "../../src/shared/i18n/index.ts";
 
 export interface Findable {
   id: string;
@@ -34,8 +35,8 @@ export function stepFind(index: number, total: number, dir: 1 | -1): number {
 }
 
 /** "2 de 5", "Nada encontrado", ou nada com a busca vazia. */
-export function findCount(query: string, index: number, total: number): string {
+export function findCount(query: string, index: number, total: number, locale: Locale = "pt"): string {
   if (!query.trim()) return "";
-  if (!total) return "Nada encontrado";
-  return `${index < 0 ? 0 : index + 1} de ${total.toLocaleString("pt-BR")}`;
+  if (!total) return translate(locale, "notes.find.none");
+  return translate(locale, "notes.find.count", { at: index < 0 ? 0 : index + 1, total: formatNumber(locale, total) });
 }

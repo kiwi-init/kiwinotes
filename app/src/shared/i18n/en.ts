@@ -2,6 +2,7 @@
 // A missing or extra key breaks `tsc`; the i18n test also checks that both ask for the same `{params}`.
 
 import type { Catalog } from "./index.ts";
+import { enNotes } from "./notes.en.ts";
 
 export const en: Catalog = {
   "language.pt": "Português",
@@ -99,4 +100,7 @@ export const en: Catalog = {
   "update.off.badUrl": "this build's update address isn't valid",
   "system.micUsage": "Kiwi Notes uses the microphone when you dictate or ask it to record a meeting, and transcribes everything on your Mac.",
   "system.audioCaptureUsage": "Kiwi Notes captures meeting audio only when you ask. Transcription happens on your Mac and the audio is deleted once it's transcribed.",
+
+  // A casca das Notas (T29244): `notes.pt.ts`.
+  ...enNotes,
 };

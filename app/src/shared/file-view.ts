@@ -2,6 +2,7 @@
 // do `files.read`. Acima deles, o Kiwi avisa e oferece o app padrão do Mac, em vez de carregar o arquivo na memória.
 
 import { PACKAGE_MARKS } from "./attachments.ts";
+import { type Locale, translate } from "./i18n/index.ts";
 
 /** O maior arquivo lido em binário (pdf, docx, xlsx, imagem): 25 MB, como o maior anexo. */
 export const MAX_VIEW_BYTES = 25 * 1024 * 1024;
@@ -27,9 +28,9 @@ export function cellRef(cell: string): { line: number; col: number } | null {
 }
 
 /** O lugar curto, para a lista: "linha 3", "pág. 2", "§4", "Aba!B7". */
-export function fileAtLabel(at: FileAt): string {
-  if ("line" in at) return `linha ${at.line}`;
-  if ("page" in at) return `pág. ${at.page}`;
+export function fileAtLabel(at: FileAt, locale: Locale = "pt"): string {
+  if ("line" in at) return translate(locale, "notes.at.line", { line: at.line });
+  if ("page" in at) return translate(locale, "notes.at.page", { page: at.page });
   if ("paragraph" in at) return `§${at.paragraph}`;
   return `${at.sheet}!${at.cell}`;
 }

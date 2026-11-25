@@ -4,6 +4,7 @@
 import { type RefObject, useEffect, useRef } from "react";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import { findCount } from "./find.ts";
+import { useT } from "../src/i18n.ts";
 import "./find-bar.css";
 
 /**
@@ -38,6 +39,7 @@ export function FindBar({ label, query, index, total, inputRef, onQuery, onStep,
   onStep: (dir: 1 | -1) => void;
   onClose: () => void;
 }) {
+  const { t, locale } = useT();
   return (
     <div className="kn-findbar" role="search">
       <input
@@ -46,7 +48,7 @@ export function FindBar({ label, query, index, total, inputRef, onQuery, onStep,
         type="search"
         {...NO_TEXT_ASSIST}
         aria-label={label}
-        placeholder="Procurar"
+        placeholder={t("notes.find.placeholder")}
         value={query}
         autoFocus
         onChange={(e) => onQuery(e.target.value)}
@@ -65,15 +67,15 @@ export function FindBar({ label, query, index, total, inputRef, onQuery, onStep,
         }}
       />
       <span className="kn-findbar-count" aria-live="polite">
-        {findCount(query, index, total)}
+        {findCount(query, index, total, locale)}
       </span>
-      <button type="button" className="kn-bt" aria-label="Achado anterior" disabled={!total} onClick={() => onStep(-1)}>
+      <button type="button" className="kn-bt" aria-label={t("notes.find.prev")} disabled={!total} onClick={() => onStep(-1)}>
         ↑
       </button>
-      <button type="button" className="kn-bt" aria-label="Próximo achado" disabled={!total} onClick={() => onStep(1)}>
+      <button type="button" className="kn-bt" aria-label={t("notes.find.next")} disabled={!total} onClick={() => onStep(1)}>
         ↓
       </button>
-      <button type="button" className="kn-bt" aria-label="Fechar a busca" onClick={onClose}>
+      <button type="button" className="kn-bt" aria-label={t("notes.find.close")} onClick={onClose}>
         ×
       </button>
     </div>

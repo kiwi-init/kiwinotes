@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
+import { useT } from "../src/i18n.ts";
 
 export function MeetingSpeakerDialog({
   speakers,
@@ -10,6 +11,7 @@ export function MeetingSpeakerDialog({
   onRename(from: string, to: string): Promise<void>;
   onClose(): void;
 }) {
+  const { t } = useT();
   const [from, setFrom] = useState(speakers[0] ?? "");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -22,9 +24,7 @@ export function MeetingSpeakerDialog({
       await onRename(from, name.trim());
       onClose();
     } catch {
-      setError(
-        "Não deu para renomear. Confira se o nome já está em uso e tente de novo.",
-      );
+      setError(t("notes.speaker.failed"));
     } finally {
       setBusy(false);
     }
@@ -38,18 +38,18 @@ export function MeetingSpeakerDialog({
       <form
         className="kn-palette kn-meeting-speaker"
         role="dialog"
-        aria-label="Renomear falante"
+        aria-label={t("notes.speaker.title")}
         onMouseDown={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
           void save();
         }}
       >
-        <h2>Renomear falante</h2>
+        <h2>{t("notes.speaker.title")}</h2>
         <label>
-          Falante
+          {t("notes.speaker.speaker")}
           <select
-            aria-label="Falante"
+            aria-label={t("notes.speaker.speaker")}
             value={from}
             onChange={(e) => setFrom(e.target.value)}
           >
@@ -59,10 +59,10 @@ export function MeetingSpeakerDialog({
           </select>
         </label>
         <label>
-          Novo nome
+          {t("notes.side.newName")}
           <input
             autoFocus
-            aria-label="Novo nome"
+            aria-label={t("notes.side.newName")}
             {...NO_TEXT_ASSIST}
             maxLength={100}
             value={name}
@@ -70,7 +70,7 @@ export function MeetingSpeakerDialog({
           />
         </label>
         <p className="kn-faint">
-          O nome muda nesta transcrição e nas próximas falas desta reunião.
+          {t("notes.speaker.hint")}
         </p>
         {error ? <p role="alert">{error}</p> : null}
         <div className="kn-meeting-speaker-actions">
@@ -80,14 +80,14 @@ export function MeetingSpeakerDialog({
             onClick={onClose}
             disabled={busy}
           >
-            Cancelar
+            {t("notes.cancel")}
           </button>
           <button
             className="kn-bt kn-bt-acc"
             type="submit"
             disabled={!name.trim() || !from || busy}
           >
-            Renomear
+            {t("notes.menu.rename")}
           </button>
         </div>
       </form>

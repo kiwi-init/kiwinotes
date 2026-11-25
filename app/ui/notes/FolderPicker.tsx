@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { fold } from "./palette.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
+import { useT } from "../src/i18n.ts";
 
 export interface PickItem {
   value: string;
@@ -65,6 +66,7 @@ export function ListPicker({ title, items, emptyText, onPick, onClose }: { title
 
 /** `folders` já vem com a raiz ("") quando ela é um destino; a lista não põe a raiz por conta própria. */
 export function FolderPicker({ title, folders, onPick, onClose }: { title: string; folders: string[]; onPick(folder: string): void; onClose(): void }) {
-  const items = folders.map((f) => ({ value: f, label: f ? f.replace(/\//g, " / ") : "Raiz do vault" }));
-  return <ListPicker title={title} items={items} emptyText="Nenhuma pasta com esse nome" onPick={onPick} onClose={onClose} />;
+  const { t } = useT();
+  const items = folders.map((f) => ({ value: f, label: f ? f.replace(/\//g, " / ") : t("notes.picker.root") }));
+  return <ListPicker title={title} items={items} emptyText={t("notes.picker.none")} onPick={onPick} onClose={onClose} />;
 }

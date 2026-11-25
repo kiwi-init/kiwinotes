@@ -6,6 +6,7 @@
 import { type KeyboardEvent, type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 
 import { Switch } from "../src/kit/index.tsx";
+import { useT } from "../src/i18n.ts";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import {
   convertValue,
@@ -56,7 +57,7 @@ const ICONS: Record<PropertyType | "tags", ReactElement> = {
   link: <path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.6.6M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.6-.6" />,
 };
 
-const label = (t: PropertyType) => PROPERTY_TYPES.find((p) => p.type === t)!.label;
+const labelKey = (t: PropertyType) => PROPERTY_TYPES.find((p) => p.type === t)!.label;
 
 /** O texto do campo ao editar, e o valor que ele vira ao gravar (`undefined`: o texto não serve para o tipo). */
 function draftOf(type: PropertyType, value: PropertyValue): string {
@@ -114,6 +115,8 @@ export interface PropertiesProps {
 type Editing = { key: string; part: "key" | "value"; text: string; invalid?: boolean };
 
 export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink, renaming, onRenamingDone }: PropertiesProps) {
+  const { t, locale } = useT();
+  const label = (type: PropertyType) => t(labelKey(type));
   const props = useMemo(() => readProperties(frontmatter), [frontmatter]);
   const [open, setOpen] = useState(initiallyOpen);
   const [types, setTypes] = useState<Record<string, PropertyType>>({});
@@ -131,8 +134,8 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
 
   if (props === null)
     return (
-      <section className="kn-props" aria-label="Propriedades">
-        <div className="kn-props-bad">O frontmatter desta nota não é YAML válido. Ele fica como está no arquivo.</div>
+      <section className="kn-props" aria-label={t("notes.props")}>
+        <div className="kn-props-bad">{t("notes.props.badYaml")}</div>
       </section>
     );
   if (!props.length) return null;
@@ -185,16 +188,16 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
     setEditing({ key: p.key, part: "value", text: draftOf(typeOf(p), p.value) });
   };
   const menuItems = (p: Property): MenuItem[] => [
-    { kind: "title", label: "Tipo" },
+    { kind: "title", label: t("notes.props.type") },
     ...PROPERTY_TYPES.map(({ type, label: name }): MenuItem => ({
-      label: name,
+      label: t(name),
       checked: typeOf(p) === type,
       disabled: p.raw !== undefined,
       onSelect: () => changeType(p, type),
     })),
     { kind: "separator" },
-    { label: "Renomear", onSelect: () => setEditing({ key: p.key, part: "key", text: p.key }) },
-    { label: "Remover", danger: true, onSelect: () => onChange(removeProperty(latest.current, p.key)) },
+    { label: t("notes.menu.rename"), onSelect: () => setEditing({ key: p.key, part: "key", text: p.key }) },
+    { label: t("notes.props.remove"), danger: true, onSelect: () => onChange(removeProperty(latest.current, p.key)) },
   ];
 
   const value = (p: Property) => {
@@ -204,11 +207,11 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
         <input
           className="kn-prop-input"
           autoFocus
-          aria-label={`Valor de ${p.key}`}
+          aria-label={t("notes.props.valueOf", { key: p.key })}
           aria-invalid={editing.invalid || undefined}
           type={INPUT[type] ?? "text"}
           inputMode={type === "number" ? "decimal" : undefined}
-          placeholder={type === "list" ? "itens separados por vírgula" : undefined}
+          placeholder={type === "list" ? t("notes.props.listHint") : undefined}
           value={editing.text}
           spellCheck={false}
           onChange={(e) => setEditing({ ...editing, text: e.target.value, invalid: false })}
@@ -218,7 +221,7 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
       );
     if (p.raw !== undefined)
       return (
-        <code className="kn-prop-raw" title="Um valor aninhado: o painel só mostra">
+        <code className="kn-prop-raw" title={t("notes.props.nested")}>
           {p.raw}
         </code>
       );
@@ -229,7 +232,7 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
         <div className="kn-prop-list" role="group" aria-label={p.key}>
           {items.map((item, i) =>
             p.key === "tags" ? (
-              <button type="button" key={`${item}:${i}`} className="kn-prop-pill" data-tag="" title={`Notas com #${item}`} onClick={() => onOpenTag(item)}>
+              <button type="button" key={`${item}:${i}`} className="kn-prop-pill" data-tag="" title={t("notes.withTag", { tag: item })} onClick={() => onOpenTag(item)}>
                 #{item}
               </button>
             ) : /^\[\[[^\]]+\]\]$/.test(item) ? (
@@ -242,8 +245,8 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
               </span>
             ),
           )}
-          <button type="button" className="kn-prop-more" aria-label={`Editar ${p.key}`} onClick={() => edit(p)}>
-            {items.length ? "editar" : "Vazio"}
+          <button type="button" className="kn-prop-more" aria-label={t("notes.props.editKey", { key: p.key })} onClick={() => edit(p)}>
+            {items.length ? t("notes.props.edit") : t("notes.props.empty")}
           </button>
         </div>
       );
@@ -254,8 +257,8 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
           <button type="button" className="kn-prop-link" onClick={() => onOpenLink(linkTarget(p.value as string))}>
             {linkLabel(p.value)}
           </button>
-          <button type="button" className="kn-prop-more" aria-label={`Editar ${p.key}`} onClick={() => edit(p)}>
-            editar
+          <button type="button" className="kn-prop-more" aria-label={t("notes.props.editKey", { key: p.key })} onClick={() => edit(p)}>
+            {t("notes.props.edit")}
           </button>
         </div>
       );
@@ -263,7 +266,7 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
       p.value === null || p.value === ""
         ? null
         : (type === "date" || type === "datetime") && typeof p.value === "string"
-          ? formatDate(p.value)
+          ? formatDate(p.value, locale)
           : String(p.value);
     return (
       <button
@@ -271,19 +274,19 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
         className="kn-prop-val"
         data-mono={type === "number" || type === "date" || type === "datetime" || undefined}
         data-empty={shown === null || undefined}
-        aria-label={`${p.key}: ${shown ?? "vazio"}. Editar`}
+        aria-label={t("notes.props.valueLabel", { key: p.key, value: shown ?? t("notes.props.emptyLower") })}
         onClick={() => edit(p)}
       >
-        {shown ?? "Vazio"}
+        {shown ?? t("notes.props.empty")}
       </button>
     );
   };
 
   return (
-    <section className="kn-props" aria-label="Propriedades">
+    <section className="kn-props" aria-label={t("notes.props")}>
       <button type="button" className="kn-props-head" aria-expanded={open} onClick={toggle}>
         <Twisty open={open} />
-        Propriedades {props.length}
+        {t("notes.props.count", { count: props.length })}
       </button>
       {open ? (
         <>
@@ -294,7 +297,7 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
                 <button
                   type="button"
                   className="kn-prop-icon"
-                  aria-label={`${label(type)}. Opções de ${p.key}`}
+                  aria-label={t("notes.props.options", { type: label(type), key: p.key })}
                   aria-haspopup="menu"
                   aria-expanded={menu?.key === p.key}
                   onClick={(e) => {
@@ -310,9 +313,9 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
                   <input
                     className="kn-prop-input kn-prop-key"
                     autoFocus
-                    aria-label="Nome da propriedade"
+                    aria-label={t("notes.props.name")}
                     aria-invalid={editing.invalid || undefined}
-                    title={editing.invalid ? "Já existe uma propriedade com esse nome" : undefined}
+                    title={editing.invalid ? t("notes.props.nameTaken") : undefined}
                     value={editing.text}
                     spellCheck={false}
                     onFocus={(e) => e.currentTarget.select()}
@@ -330,7 +333,7 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
             );
           })}
           <button type="button" className="kn-props-add" onClick={onAdd}>
-            + Adicionar propriedade
+            + {t("notes.cmd.addProperty")}
           </button>
         </>
       ) : null}

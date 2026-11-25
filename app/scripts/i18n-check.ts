@@ -23,7 +23,25 @@ const ROOT = path.resolve(import.meta.dir, "..");
 const UI = path.join(ROOT, "ui");
 
 /** As telas já no catálogo: um texto fixo aqui quebra o CI. Cada parte migrada entra na lista. */
-export const MIGRATED = ["ui/settings/LanguageSection.tsx"];
+export const MIGRATED = [
+  "ui/settings/LanguageSection.tsx",
+  // A casca das Notas (T29244).
+  "ui/notes/NotesApp.tsx",
+  "ui/notes/Sidebar.tsx",
+  "ui/notes/FindBar.tsx",
+  "ui/notes/FolderPicker.tsx",
+  "ui/notes/MeetingSpeakerDialog.tsx",
+  "ui/notes/NoteEditor.tsx",
+  "ui/notes/NoteWidth.tsx",
+  "ui/notes/Palette.tsx",
+  "ui/notes/Properties.tsx",
+  "ui/notes/RefactorDialog.tsx",
+  "ui/notes/TrashView.tsx",
+  "ui/notes/TreePopover.tsx",
+  "ui/notes/UndoToast.tsx",
+  "ui/notes/UnlinkedMentions.tsx",
+  "ui/notes/VersionsDialog.tsx",
+];
 
 /** O main e a notificação já no catálogo (T28192): menu, bandeja, status, diálogo do link, pílula e notificação. */
 export const MIGRATED_MAIN = [

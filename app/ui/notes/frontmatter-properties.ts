@@ -1,3 +1,4 @@
+import type { Locale, TextKey } from "../../src/shared/i18n/index.ts";
 import { Document, isMap, isScalar, isSeq, parseDocument, stringify, type Pair, type Scalar, type YAMLMap } from "yaml";
 
 export type PropertyType = "text" | "list" | "number" | "checkbox" | "date" | "datetime" | "link";
@@ -10,14 +11,15 @@ export interface Property {
   raw?: string;
 }
 
-export const PROPERTY_TYPES: { type: PropertyType; label: string }[] = [
-  { type: "text", label: "Texto" },
-  { type: "list", label: "Lista" },
-  { type: "number", label: "Número" },
-  { type: "checkbox", label: "Caixa de seleção" },
-  { type: "date", label: "Data" },
-  { type: "datetime", label: "Data e hora" },
-  { type: "link", label: "Link" },
+/** Os tipos, com a chave do nome no catálogo (T29244): a tela passa pelo `t()`. */
+export const PROPERTY_TYPES: { type: PropertyType; label: TextKey }[] = [
+  { type: "text", label: "notes.prop.text" },
+  { type: "list", label: "notes.prop.list" },
+  { type: "number", label: "notes.prop.number" },
+  { type: "checkbox", label: "notes.prop.checkbox" },
+  { type: "date", label: "notes.prop.date" },
+  { type: "datetime", label: "notes.prop.datetime" },
+  { type: "link", label: "notes.prop.link" },
 ];
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -196,15 +198,19 @@ export function convertValue(value: PropertyValue, to: PropertyType): PropertyVa
   }
 }
 
-const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const MONTHS: Record<Locale, string[]> = {
+  pt: ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"],
+  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+};
 
-/** `2026-11-06` → "6 nov 2026"; com hora, "6 nov 2026, 14:30". O que não é data volta como está. */
-export function formatDate(value: string): string {
+/** `2026-11-06` → "6 nov 2026" ("Nov 6, 2026" em inglês, T29244); com hora, "6 nov 2026, 14:30". O que não é data
+ * volta como está. A hora fica em 24 h nas duas línguas: é o que está escrito no arquivo. */
+export function formatDate(value: string, locale: Locale = "pt"): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(value);
   if (!m) return value;
-  const month = MONTHS[Number(m[2]) - 1];
+  const month = MONTHS[locale][Number(m[2]) - 1];
   if (!month) return value;
-  const day = `${Number(m[3])} ${month} ${m[1]}`;
+  const day = locale === "en" ? `${month} ${Number(m[3])}, ${m[1]}` : `${Number(m[3])} ${month} ${m[1]}`;
   return m[4] ? `${day}, ${m[4]}:${m[5]}` : day;
 }
 

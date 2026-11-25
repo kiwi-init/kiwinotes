@@ -261,7 +261,8 @@ describe("o ⌘K lista os arquivos de texto (T21240, spec #21165)", () => {
     const hit = { path: "Dados/loja.xlsx", title: "loja.xlsx", snippet: "carambola", score: 1, file: { format: "xlsx", size: 10, mtime: "" }, at };
     const [item] = paletteItems([], "carambola", [hit], [], false, []).filter((i) => i.kind === "note");
     expect(item).toMatchObject({ path: "Dados/loja.xlsx", format: "xlsx", at });
-    expect([{ line: 3 }, { page: 2 }, { paragraph: 4 }, at].map(fileAtLabel)).toEqual(["linha 3", "pág. 2", "§4", "Contagem!B7"]);
+    expect([{ line: 3 }, { page: 2 }, { paragraph: 4 }, at].map((a) => fileAtLabel(a))).toEqual(["linha 3", "pág. 2", "§4", "Contagem!B7"]);
+    expect([{ line: 3 }, { page: 2 }].map((a) => fileAtLabel(a, "en"))).toEqual(["line 3", "p. 2"]);
     expect(cellRef("IV3")).toEqual({ line: 3, col: 255 });
     expect(cellRef("b7")).toEqual({ line: 7, col: 1 });
     expect(cellRef("7B")).toBeNull();
