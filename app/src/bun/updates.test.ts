@@ -10,7 +10,7 @@ import {
   checkErrorMessage,
   compareVersions,
   OFF_BY_SETTING,
-  preparedTar,
+  preparedUpdate,
   requirement,
   updateMenuLabel,
   offReasonText,
@@ -18,6 +18,7 @@ import {
   updateMessageText,
   updatesOff,
   updatesView,
+  verifyPrepared,
   verifyUpdateTar,
   type LocalInfo,
   type UpdateCheck,
@@ -47,8 +48,39 @@ describe("updatesOff (T1969)", () => {
   });
 });
 
+/**
+ * O registro 2 do Electrobun 2026.11.5, no formato que ele mesmo escreve: copiado do `PreparedUpdateV2` e da fixture do
+ * `UpdaterStreaming.test.ts` dele (`staged`), com o `staging_path` em `<app>.prepared-<hash>` e a receita na
+ * `self-extraction`. Sem `retained_tar_path`: é isso que a 2026.11.13 não sabia ler (#29720).
+ */
+function v2Record(appData: string, hash: string) {
+  const appBundlePath = path.join(appData, "Kiwi Notes.app");
+  return {
+    schema_version: 2,
+    identifier: "app.kiwinotes.desktop",
+    channel: "stable",
+    platform: "macos",
+    arch: "arm64",
+    version: "0.1.1",
+    hash,
+    staging_path: `${appBundlePath}.prepared-${hash}`,
+    recipe_path: path.join(appData, "self-extraction", `${hash}.recipe.json`),
+    recipe_sha256: "b".repeat(64),
+    artifact_file: "stable-macos-arm64-KiwiNotes.app.tar.zst",
+  };
+}
+
 /** Um Updater de mentira: o que o check acha, se o download dá certo, e o registro do Electrobun no disco. */
-function fakeUpdater(opts: { found?: Partial<UpdateCheck>; downloadOk?: boolean; appData: string; applyExits?: boolean }) {
+function fakeUpdater(opts: {
+  found?: Partial<UpdateCheck>;
+  downloadOk?: boolean;
+  appData: string;
+  applyExits?: boolean;
+  /** O registro do Electrobun: o 1 (o .tar, até a 2026.10) ou o 2 (a pasta preparada, desde a 2026.11.5). */
+  record?: 1 | 2;
+  /** Monta o app de verdade na pasta preparada (o registro 2), para a conferência real rodar. */
+  stage?: (dir: string) => void;
+}) {
   const calls: string[] = [];
   let info: UpdateCheck = { version: "0.1.0", hash: "aaaa", updateAvailable: false, updateReady: false, error: "" };
   const updater: UpdaterApi = {
@@ -66,9 +98,17 @@ function fakeUpdater(opts: { found?: Partial<UpdateCheck>; downloadOk?: boolean;
       }
       const dir = path.join(opts.appData, "self-extraction");
       mkdirSync(dir, { recursive: true });
-      const tar = path.join(dir, `${info.hash}.tar`);
-      writeFileSync(tar, "tar");
-      writeFileSync(path.join(dir, ".electrobun-prepared-update.json"), JSON.stringify({ hash: info.hash, retained_tar_path: tar }));
+      if (opts.record === 2) {
+        const staged = v2Record(opts.appData, info.hash);
+        if (opts.stage) opts.stage(staged.staging_path);
+        else mkdirSync(staged.staging_path, { recursive: true });
+        writeFileSync(staged.recipe_path, "archive recipe");
+        writeFileSync(path.join(dir, ".electrobun-prepared-update.json"), JSON.stringify(staged));
+      } else {
+        const tar = path.join(dir, `${info.hash}.tar`);
+        writeFileSync(tar, "tar");
+        writeFileSync(path.join(dir, ".electrobun-prepared-update.json"), JSON.stringify({ hash: info.hash, retained_tar_path: tar }));
+      }
       info = { ...info, updateReady: true };
     },
     applyUpdate: async () => {
@@ -128,6 +168,50 @@ describe("AppUpdates (T1969)", () => {
       expect(await u.check()).toEqual({ kind: "idle" });
       expect(existsSync(path.join(appData, "self-extraction", "bbbb.tar"))).toBe(false);
       expect(logs.at(-1)).toContain("refused update 0.1.1 (bbbb)");
+    }));
+
+  test("o registro 2 (Electrobun 2026.11.5): confere a pasta preparada e oferece (#29720)", () =>
+    withDir(async (appData) => {
+      const { updater } = fakeUpdater({ appData, record: 2, found: { version: "0.1.1", hash: "bbbb", updateAvailable: true } });
+      const seen: string[] = [];
+      const u = new AppUpdates({
+        updater,
+        env: {},
+        log: () => {},
+        verify: (prepared, expected) => {
+          seen.push(`${path.basename(prepared)} ${expected.hash}`);
+          return null;
+        },
+      });
+      expect(await u.check()).toEqual({ kind: "ready", version: "0.1.1", hash: "bbbb" });
+      expect(seen).toEqual(["Kiwi Notes.app.prepared-bbbb bbbb"]);
+    }));
+
+  test("o registro 2 que não confere: não vira oferta, e a pasta preparada é apagada", () =>
+    withDir(async (appData) => {
+      const { updater } = fakeUpdater({ appData, record: 2, found: { version: "0.1.1", hash: "bbbb", updateAvailable: true } });
+      const logs: string[] = [];
+      const u = new AppUpdates({ updater, env: {}, log: (m) => logs.push(m), verify: () => "the update isn't signed by the Kiwi Init Developer ID" });
+      expect(await u.check()).toEqual({ kind: "idle" });
+      expect(existsSync(path.join(appData, "Kiwi Notes.app.prepared-bbbb"))).toBe(false);
+      expect(logs.at(-1)).toContain("refused update 0.1.1 (bbbb): the update isn't signed");
+    }));
+
+  test("o registro 2 com a conferência de verdade: o motivo é a assinatura, nunca 'não achou' (#29720)", () =>
+    withDir(async (appData) => {
+      const app = makeApp(path.join(appData, "src"), { hash: "bbbb" }).replace(/bbbb\.tar$/, "stage/Kiwi Notes.app");
+      const { updater } = fakeUpdater({
+        appData,
+        record: 2,
+        found: { version: "0.1.1", hash: "bbbb", updateAvailable: true },
+        stage: (dir) => spawnSync("ditto", [app, dir]),
+      });
+      const logs: string[] = [];
+      const u = new AppUpdates({ updater, env: {}, log: (m) => logs.push(m) });
+      expect(await u.check()).toEqual({ kind: "idle" });
+      // Ad hoc: chega até o codesign e é barrado pelo Developer ID. Antes, parava em "the downloaded update wasn't found".
+      expect(logs.at(-1)).toContain("isn't signed by the Kiwi Init Developer ID");
+      expect(logs.at(-1)).not.toContain("wasn't found");
     }));
 
   test("o check ou o download que falha fica parado e loga, sem lançar", () =>
@@ -220,14 +304,36 @@ describe("AppUpdates (T1969)", () => {
     }));
 });
 
-describe("preparedTar e updateMenuLabel", () => {
-  test("o tar só vale se o registro é do mesmo hash", () =>
+describe("preparedUpdate e updateMenuLabel", () => {
+  const record = (dir: string, rec: unknown) =>
+    writeFileSync(path.join(dir, "self-extraction", ".electrobun-prepared-update.json"), JSON.stringify(rec));
+
+  test("o registro 1: o tar só vale se o registro é do mesmo hash", () =>
     withDir(async (dir) => {
-      expect(preparedTar(dir, "bbbb")).toBeNull();
+      expect(preparedUpdate(dir, "bbbb")).toBeNull();
       mkdirSync(path.join(dir, "self-extraction"));
-      writeFileSync(path.join(dir, "self-extraction", ".electrobun-prepared-update.json"), JSON.stringify({ hash: "bbbb", retained_tar_path: "/x/bbbb.tar" }));
-      expect(preparedTar(dir, "bbbb")).toBe("/x/bbbb.tar");
-      expect(preparedTar(dir, "cccc")).toBeNull();
+      record(dir, { hash: "bbbb", retained_tar_path: "/x/bbbb.tar" });
+      expect(preparedUpdate(dir, "bbbb")).toBe("/x/bbbb.tar");
+      expect(preparedUpdate(dir, "cccc")).toBeNull();
+      record(dir, { schema_version: 1, hash: "bbbb", retained_tar_path: "" });
+      expect(preparedUpdate(dir, "bbbb")).toBeNull();
+    }));
+
+  test("o registro 2 (Electrobun 2026.11.5): a pasta preparada, do mesmo hash (#29720)", () =>
+    withDir(async (dir) => {
+      mkdirSync(path.join(dir, "self-extraction"));
+      const v2 = v2Record(dir, "bbbb");
+      record(dir, v2);
+      expect(preparedUpdate(dir, "bbbb")).toBe(path.join(dir, "Kiwi Notes.app.prepared-bbbb"));
+      expect(preparedUpdate(dir, "cccc")).toBeNull();
+      // Uma pasta que não é a do hash, um caminho relativo ou sem o campo: nada.
+      record(dir, { ...v2, staging_path: path.join(dir, "Kiwi Notes.app.prepared-cccc") });
+      expect(preparedUpdate(dir, "bbbb")).toBeNull();
+      record(dir, { ...v2, staging_path: "Kiwi Notes.app.prepared-bbbb" });
+      expect(preparedUpdate(dir, "bbbb")).toBeNull();
+      const { staging_path: _, ...semPasta } = v2;
+      record(dir, semPasta);
+      expect(preparedUpdate(dir, "bbbb")).toBeNull();
     }));
 
   test("o menu", () => {
@@ -583,5 +689,40 @@ describe("Buscar atualizações desligado em Ajustes (T25110)", () => {
       u.settingChanged(false);
       expect(await u.check()).toEqual({ kind: "ready", version: "0.1.1", hash: "bbbb" });
       expect(calls).toEqual(["check", "download"]);
+    }));
+});
+
+describe("verifyPrepared: a pasta preparada do Electrobun 2026.11.5 ou o tar (#29720)", () => {
+  /** O codesign com o requisito de um ad hoc (só o identificador), como no teste do tar. */
+  const adHoc = (cmd: string, args: string[]) => {
+    const swapped = args.map((a) => (a.startsWith("=anchor") ? '=identifier "app.kiwinotes.desktop"' : a));
+    const r = spawnSync(cmd, swapped, { encoding: "utf8" });
+    return { code: r.status ?? 1, out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim() };
+  };
+  /** O app de `makeApp` copiado para `<app>.prepared-bbbb`, como o Electrobun deixa. */
+  const staged = (dir: string) => {
+    makeApp(dir);
+    const stage = path.join(dir, "Kiwi Notes.app.prepared-bbbb");
+    spawnSync("ditto", [path.join(dir, "stage", "Kiwi Notes.app"), stage]);
+    return stage;
+  };
+
+  test("a pasta preparada passa pelas mesmas conferências do app", () =>
+    withDir(async (dir) => {
+      const stage = staged(dir);
+      expect(verifyPrepared(stage, { hash: "bbbb" }, adHoc)).toBeNull();
+      // Sem trocar o requisito: o ad hoc é barrado pelo Developer ID, não por não achar o app.
+      expect(verifyPrepared(stage, { hash: "bbbb" })).toContain("isn't signed by the Kiwi Init Developer ID");
+      expect(verifyPrepared(stage, { hash: "cccc" }, adHoc)).toBe("the update's hash is bbbb, the manifest said cccc");
+      expect(verifyPrepared(stage, { hash: "bbbb", identifier: "com.outro.app" }, adHoc)).toBe("the update is app.kiwinotes.desktop, not com.outro.app");
+    }));
+
+  test("o tar segue pelo caminho de antes, e o que não existe é dito", () =>
+    withDir(async (dir) => {
+      const tar = makeApp(dir);
+      expect(verifyPrepared(tar, { hash: "bbbb" }, adHoc)).toBeNull();
+      expect(verifyPrepared(path.join(dir, "nada.prepared-bbbb"), { hash: "bbbb" })).toContain("isn't at");
+      mkdirSync(path.join(dir, "vazia.prepared-bbbb"));
+      expect(verifyPrepared(path.join(dir, "vazia.prepared-bbbb"), { hash: "bbbb" })).toBe("the update has no readable version.json");
     }));
 });
