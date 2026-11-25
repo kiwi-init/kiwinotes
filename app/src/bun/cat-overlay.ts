@@ -22,6 +22,9 @@
 //   entrada e com o balão onde estava; só depois que ele sai, o Control começa de novo, com a entrada.
 
 import { CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
+import { type Locale, translate } from "../shared/i18n/index.ts";
+import { mainLocale } from "./locale.ts";
+import { ptCatOverlay } from "../shared/i18n/catoverlay.pt.ts";
 import type { Command } from "../shared/ipc.ts";
 import { CAT_SIZE, type CatPosition, DEFAULT_CAT_POSITION } from "../shared/kiwicat-place.ts";
 import type { AgentSpeechUi, AgentStatus, AgentTurnEvent, AgentVoiceUi, AppSettings, BubbleLink } from "../shared/ui-contract.ts";
@@ -76,11 +79,12 @@ export function shiftLinks(links: readonly BubbleLink[] | undefined, start: numb
     .filter((l) => l.from >= 0 && l.to <= text.length && text.slice(l.from, l.to) === l.text);
 }
 
-/** A pergunta antes de sair (spec #13380). */
-export const ASK_LINE = "Precisa de mais alguma coisa?";
+/** A pergunta antes de sair (spec #13380). A página a mostra na língua do app (T29351); esta é a do catálogo em pt. */
+export const ASK_LINE = ptCatOverlay["catOverlay.ask"];
 
-/** O balão do erro: o que a pessoa lê quando a fala não virou resposta. */
-export const voiceErrorLine = (message: string) => `Não consegui falar com o agente: ${message.trim() || "erro desconhecido"}`;
+/** O balão do erro: o que a pessoa lê quando a fala não virou resposta, na língua do app (T29351). */
+export const voiceErrorLine = (message: string, locale: Locale = mainLocale.get()) =>
+  translate(locale, "catOverlay.voiceError", { message: message.trim() || translate(locale, "catOverlay.unknownError") });
 
 /** O que o app manda ao helper (os comandos `catOverlay.*` do IPC). */
 export type CatOverlayCommand =
@@ -293,7 +297,7 @@ export class CatOverlay {
     // O balão único (spec #27881, T28010): o aberto tem a resposta inteira, com o que veio entre as ferramentas; o
     // fechado, o resumo, que sai da fala do `cat_speak` ou da resposta final (a página corta em frase).
     const text = plainBubbleText(said) ? said.trim() : "";
-    if (!text) return this.speechText ? { text: this.speechText } : { text: this.usedTool ? "Feito." : "Pronto." };
+    if (!text) return this.speechText ? { text: this.speechText } : { text: mainLocale.t(this.usedTool ? "catOverlay.didIt" : "catOverlay.ready") };
     const summary = this.speechText || (plainBubbleText(tail) ? tail : text);
     // Sem a resposta inteira (o `done` veio diferente do que foi falado), as posições não valem: vai sem links.
     const shown = fromFull ? shiftLinks(links, said.length - said.trimStart().length, text) : [];

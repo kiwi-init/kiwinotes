@@ -1,6 +1,7 @@
 // The English catalog (spec #28171): the same keys as `pt.ts`, written by the team (no cloud translation).
 // A missing or extra key breaks `tsc`; the i18n test also checks that both ask for the same `{params}`.
 
+import { enCatOverlay } from "./catoverlay.en.ts";
 import { enCommon } from "./common.en.ts";
 import type { Catalog, Entry } from "./index.ts";
 import { enMeetingsSettings } from "./meetings-settings.en.ts";
@@ -110,6 +111,7 @@ export const EN_PARTS = {
   notes: enNotes,
   settings: enSettings,
   meetingsSettings: enMeetingsSettings,
+  catOverlay: enCatOverlay,
 } as const;
 
 export const en: Catalog = {
@@ -118,4 +120,5 @@ export const en: Catalog = {
   ...enNotes,
   ...enSettings,
   ...enMeetingsSettings,
+  ...enCatOverlay,
 };

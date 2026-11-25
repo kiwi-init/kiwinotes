@@ -1096,6 +1096,9 @@ final class Helper {
             guard let locale = message.string("locale"), HelperLocale.set(locale) else {
                 return reply(id, ok: false, error: "invalid_value")
             }
+            // O gato no overlay também (T29351), se a página dele estiver aberta.
+            let cat = catOverlay
+            MainActor.assumeIsolated { cat.localeChanged() }
             reply(id, ok: true)
         case "overlay.state":
             guard let name = message.string("state"), let phase = OverlayPhase(rawValue: name) else {
