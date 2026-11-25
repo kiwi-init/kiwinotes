@@ -1147,6 +1147,12 @@ final class Helper {
         case "speech.stop":
             speech.stop()
             reply(id, ok: true)
+        case "catOverlay.fala":
+            // A voz do gato (T26829): o nível do que tocou; sem número (null), o gato volta ao estado de antes.
+            let nivel = message.double("nivel")
+            let cat = catOverlay
+            MainActor.assumeIsolated { cat.speech(nivel) }
+            reply(id, ok: true)
         case "catOverlay.unload":
             catOverlayLoaded = false
             let cat = catOverlay

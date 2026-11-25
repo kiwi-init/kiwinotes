@@ -28,6 +28,12 @@ export interface FogInputs {
   /** A voz de 0 a 1 (o Control); `null` sem voz. */
   voz?: number | null;
   /**
+   * A fala do gato (T26829): o nível do que a voz dele tocou, de 0 a 1 (o `nivel` do `FalaPlayer`). Com um número, o
+   * gato mostra o `respondendo` com a boca e o corpo nesse nível; `null` volta ao estado que ele tem agora (o `estado`
+   * segue correndo por baixo: o `pronto`, o erro e o sono).
+   */
+  fala?: number | null;
+  /**
    * A paleta (spec #14963): o id de uma das 5 (`kiwi-neon`…); outra coisa desenha a `prisma-original`. Dela o gato lê os
    * `prismStops` (a névoa e o anel), o `accentColor` (os detalhes) e o `eyeColor` (os olhos); o resto é o `CAT_CONFIG`.
    */
@@ -120,6 +126,11 @@ function releaseFog() {
   sharedFog = null;
 }
 
+/** Um nível de 0 a 1; outra coisa (`null`, NaN) é sem som. */
+function level(v: number | null | undefined): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null;
+}
+
 export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
   const width = options.width ?? 240, height = options.height ?? 240;
   const size = Math.max(24, Math.min(width, height));
@@ -139,7 +150,10 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
   let lastInput = performance.now();
   /** Até quando uma troca de estado anima, mesmo no descanso. */
   let awakeUntil = 0;
-  const lookNow = (): CatLook => options.look ?? visual.look;
+  /** A fala do gato (T26829): o look `respondendo` enquanto a voz toca, por cima do estado. */
+  const FALANDO: CatLook = { estado: "respondendo", emote: "auto" };
+  const falando = () => typeof inputs.fala === "number" && Number.isFinite(inputs.fala);
+  const lookNow = (): CatLook => options.look ?? (falando() ? FALANDO : visual.look);
   const visual = new CatVisual(inputs.estado, 0, { random, sleepSeconds: options.sleepSeconds });
   visual.update(inputs.estado, 0, inputs.limite);
   let motion = new CatMotion(lookNow().estado, random);
@@ -184,7 +198,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
 
   function catInput() {
     const look = lookNow();
-    const voz = typeof inputs.voz === "number" && Number.isFinite(inputs.voz) ? Math.max(0, Math.min(1, inputs.voz)) : null;
+    const voz = falando() ? level(inputs.fala) : level(inputs.voz);
     return { state: look.estado, emote: look.emote, audio: voz };
   }
 
@@ -256,6 +270,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
     emoteGroup.setAttribute("transform", `translate(${f.emoteX.toFixed(2)}, ${f.emoteY.toFixed(2)}) scale(${f.emoteScale.toFixed(4)})`);
     root.dataset.estado = f.state;
     root.dataset.emote = f.emote;
+    root.dataset.falando = String(falando());
   }
 
   /** O quadro parado do reduzir movimento: o gato já assentado no estado, sem piscar. */
@@ -422,12 +437,15 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
     },
     /** O estado de hoje que o gato mostra agora (dos 8). */
     get visualState(): FogState { return visual.state; },
+    /** Se a voz do gato está tocando (T26829). */
+    get falando(): boolean { return falando(); },
     get frame(): CatFrame { return frame; },
     update(input: Partial<FogInputs>) {
       if (disposed) return;
       syncClock();
-      const before = visual.state, wasReduced = stats.reduced, corBefore = inputs.cor;
+      const before = visual.state, wasReduced = stats.reduced, corBefore = inputs.cor, falaBefore = falando();
       if (input.voz !== undefined) inputs.voz = input.voz;
+      if (input.fala !== undefined) inputs.fala = input.fala;
       if (input.cor !== undefined) inputs.cor = input.cor;
       if (input.parado !== undefined) inputs.parado = input.parado;
       if (input.limite !== undefined) inputs.limite = input.limite;
@@ -436,8 +454,9 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
         visual.update(input.estado, elapsed, input.limite ?? inputs.limite ?? false);
       }
       stats.reduced = stillMode();
-      if (before !== visual.state) awakeUntil = performance.now() + REST_WAKE_S * 1000;
-      if (before !== visual.state || wasReduced !== stats.reduced) { if (stats.resting) previousStamp = performance.now(); restart(); }
+      const lookChanged = before !== visual.state || falaBefore !== falando();
+      if (lookChanged) awakeUntil = performance.now() + REST_WAKE_S * 1000;
+      if (lookChanged || wasReduced !== stats.reduced) { if (stats.resting) previousStamp = performance.now(); restart(); }
       // A paleta nova: animando, sai no próximo quadro; parado (reduzir movimento, a prova, o descanso), um quadro agora.
       else if (inputs.cor !== corBefore && !stats.hidden && (stats.reduced || stats.resting || options.mode === "capture")) paint(stats.reduced ? still() : frame);
     },

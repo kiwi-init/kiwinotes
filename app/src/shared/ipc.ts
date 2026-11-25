@@ -174,6 +174,8 @@ export type Command =
    * palavras (`error`). `text: null` tira o balão. O helper o guarda para quando o gato aparecer e o tira quando ele sai.
    */
   | { type: "catOverlay.bubble"; text: string | null; error?: boolean; ask?: boolean; links?: BubbleLink[]; summary?: string }
+  /** A voz do gato (T26829): o nível do que ela tocou, de 0 a 1, para a boca do `falando`; `null` volta ao estado. */
+  | { type: "catOverlay.fala"; nivel: number | null }
   /**
    * A voz do gato no alto-falante (T27825): um pedaço de PCM Int16 mono a 24 kHz, em base64, que entra na fila da
    * saída. O `speech.played` com o mesmo `seq` diz que ele acabou (ou foi limpo). `speech.stop` corta na hora.
@@ -277,6 +279,7 @@ export interface CommandResults {
   /** O volume com que a voz sai (0 a 1): a boca do gato acompanha. */
   "speech.play": { volume: number };
   "speech.stop": Record<string, never>;
+  "catOverlay.fala": Record<string, never>;
   /**
    * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
    * `no_focus` (nenhum app na frente) ou `no_accessibility` (falta a permissão). Com um app na frente o ⌘V vai sempre,

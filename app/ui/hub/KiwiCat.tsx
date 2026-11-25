@@ -99,6 +99,8 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
   useEffect(() => {
     const el = root.current!;
     let gone = false, loading = false, cat: Cat | undefined;
+    // A voz do gato (T26829): o nível de agora, para o gato que nasce no meio da fala.
+    let fala: number | null = null;
     const activity = activityRef.current!;
     const state = () => { if (cat) { cat.update({ estado: activity.state, limite: activity.limited }); el.dataset.state = cat.visualState; } };
     applyRef.current = state;
@@ -111,7 +113,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
         const next = await createKiwiCat(el, { mode: "runtime", width: 96, height: 120, cutout: true, background: symbolBackground(),
           // Trabalhando, 30 fps como no overlay (#14840): a 60, o hub gastava 32 % de CPU (T14977, #15128).
           activeFPS: 30,
-          inputs: { estado: activity.state, cor: corRef.current, voz: null, parado: reducedRef.current } });
+          inputs: { estado: activity.state, cor: corRef.current, voz: null, fala, parado: reducedRef.current } });
         if (gone) { await next.dispose(); return; }
         cat = next; handle.current = cat; cat.update({ parado: reducedRef.current, cor: corRef.current }); cat.setBackground(symbolBackground()); cat.visibility(hidden()); state(); el.dataset.ready = "true";
       } catch { el.replaceChildren(); }
@@ -143,6 +145,12 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
         if (activity.state !== before) state();
       }
     });
+    // A voz do gato (T26829): o `falando`, com a boca no nível do que tocou; `null` volta ao estado de antes.
+    const offSpeech = api.agent.onSpeech(e => {
+      fala = typeof e.nivel === "number" && Number.isFinite(e.nivel) ? e.nivel : null;
+      cat?.update({ fala });
+      el.dataset.falando = String(fala !== null);
+    });
     const hidden = () => document.hidden || awayRef.current;
     const visibility = () => {
       el.dataset.away = String(awayRef.current);
@@ -158,7 +166,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     void create();
     return () => {
-      gone = true; off(); offVoice(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility); refresh.current = () => {};
+      gone = true; off(); offVoice(); offSpeech(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility); refresh.current = () => {};
       handle.current = undefined;
       if (cat) void cat.dispose();
     };

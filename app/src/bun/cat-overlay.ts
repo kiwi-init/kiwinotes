@@ -24,7 +24,7 @@
 import { CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
 import type { Command } from "../shared/ipc.ts";
 import { CAT_SIZE, type CatPosition, DEFAULT_CAT_POSITION } from "../shared/kiwicat-place.ts";
-import type { AgentStatus, AgentTurnEvent, AgentVoiceUi, AppSettings, BubbleLink } from "../shared/ui-contract.ts";
+import type { AgentSpeechUi, AgentStatus, AgentTurnEvent, AgentVoiceUi, AppSettings, BubbleLink } from "../shared/ui-contract.ts";
 
 /** Os tempos do roteiro, em ms. */
 export const OVERLAY_TIMES = {
@@ -94,7 +94,9 @@ export type CatOverlayCommand =
   /** `links` (spec #17683): as notas e os arquivos citados, nas posições de `text` (não da resposta inteira). */
   // `summary` (spec #27881, T28010): de onde a página tira o resumo do fechado (a fala do `cat_speak` ou a resposta
   // final), quando não é o `text` inteiro do aberto.
-  | { type: "catOverlay.bubble"; text: string | null; error?: boolean; ask?: boolean; links?: BubbleLink[]; summary?: string };
+  | { type: "catOverlay.bubble"; text: string | null; error?: boolean; ask?: boolean; links?: BubbleLink[]; summary?: string }
+  /** A voz do gato (T26829): o nível do que ela tocou, de 0 a 1; `null` quando para. */
+  | { type: "catOverlay.fala"; nivel: number | null };
 
 export interface CatOverlayHost {
   /** Manda um comando ao helper. */
@@ -137,6 +139,10 @@ export class CatOverlay {
   private posicao: CatPosition = DEFAULT_CAT_POSITION;
   private escala: number = CAT_SIZE.default;
   private overlayShown = false;
+  /** A voz do gato tocando (T26829). */
+  private speaking = false;
+  /** A espera sem balão (`linger`): com a voz tocando, ela só começa quando a voz para. */
+  private lingerTimes: { stay: number; exit: number } | null = null;
   /** O balão está no overlay (spec #12938). */
   private bubbleShown = false;
   /** O texto que está no balão agora: volta a ele depois de uma recarga (revisão do #522). */
@@ -158,7 +164,7 @@ export class CatOverlay {
   private closedLen = 0;
   private usedTool = false;
   /** A fala do `cat_speak` neste pedido (spec #27881): o resumo do balão fechado. */
-  private speech = "";
+  private speechText = "";
 
   constructor(
     private readonly host: CatOverlayHost,
@@ -264,12 +270,12 @@ export class CatOverlay {
       this.said = "";
       this.closedLen = 0;
       this.usedTool = false;
-      this.speech = "";
+      this.speechText = "";
       return;
     }
     if (e.id !== this.turnId) return;
     if (e.type === "text") this.said += e.text;
-    else if (e.type === "speech") this.speech = e.text.trim();
+    else if (e.type === "speech") this.speechText = e.text.trim();
     else if (e.type === "status" && e.status === "running") {
       this.closedLen = this.said.length;
       this.usedTool = true;
@@ -287,8 +293,8 @@ export class CatOverlay {
     // O balão único (spec #27881, T28010): o aberto tem a resposta inteira, com o que veio entre as ferramentas; o
     // fechado, o resumo, que sai da fala do `cat_speak` ou da resposta final (a página corta em frase).
     const text = plainBubbleText(said) ? said.trim() : "";
-    if (!text) return this.speech ? { text: this.speech } : { text: this.usedTool ? "Feito." : "Pronto." };
-    const summary = this.speech || (plainBubbleText(tail) ? tail : text);
+    if (!text) return this.speechText ? { text: this.speechText } : { text: this.usedTool ? "Feito." : "Pronto." };
+    const summary = this.speechText || (plainBubbleText(tail) ? tail : text);
     // Sem a resposta inteira (o `done` veio diferente do que foi falado), as posições não valem: vai sem links.
     const shown = fromFull ? shiftLinks(links, said.length - said.trimStart().length, text) : [];
     return { text, ...(shown.length ? { links: shown } : {}), ...(summary !== text ? { summary } : {}) };
@@ -314,7 +320,8 @@ export class CatOverlay {
   /** A espera depois da resposta: `idleAsk` até a pergunta, `askLeave` até sair. Com a pessoa no balão, nada corre. */
   private waitIdle(): void {
     this.cancelTimer();
-    if (this.held || this.phase !== "lingering" || !this.bubbleShown) return;
+    // Falando (T26829), a espera só começa quando a voz para.
+    if (this.held || this.speaking || this.phase !== "lingering" || !this.bubbleShown) return;
     this.timer = this.clock.setTimeout(() => {
       this.timer = null;
       if (this.phase !== "lingering" || !this.bubbleNow) return;
@@ -362,6 +369,28 @@ export class CatOverlay {
    */
   shownPath(path: string): boolean {
     return this.phase === "lingering" && this.bubbleShown && !!this.bubbleNow?.links?.some((l) => l.path === path);
+  }
+
+  /**
+   * A voz do gato (T26829): o nível vai à página, e o gato fica no `falando` com a boca nele; `null` (o fim, o corte, o
+   * erro) volta ao estado de antes. Enquanto ela toca, o gato não sai do overlay: a espera da resposta recomeça no fim.
+   */
+  speech(e: AgentSpeechUi): void {
+    if (!this.enabled) return;
+    const nivel = typeof e.nivel === "number" && Number.isFinite(e.nivel) ? Math.max(0, Math.min(1, e.nivel)) : null;
+    if (nivel === null) {
+      if (!this.speaking) return;
+      this.speaking = false;
+      if (this.overlayShown) this.host.send({ type: "catOverlay.fala", nivel: null });
+      if (this.phase === "lingering" && this.bubbleShown) this.waitIdle();
+      else if (this.phase === "lingering" && this.lingerTimes) this.linger(this.lingerTimes.stay, this.lingerTimes.exit);
+      return;
+    }
+    if (!this.speaking) {
+      this.speaking = true;
+      if (this.phase === "lingering") this.cancelTimer();
+    }
+    if (this.overlayShown) this.host.send({ type: "catOverlay.fala", nivel: Math.round(nivel * 1000) / 1000 });
   }
 
   /** O × do balão ou da cabeça (spec #13380, o `catOverlay.close`): o gato sai na hora. */
@@ -492,6 +521,9 @@ export class CatOverlay {
   private linger(stay: number, exit: number): void {
     this.phase = "lingering";
     this.cancelTimer();
+    this.lingerTimes = { stay, exit };
+    // A voz tocando segura o gato (T26829): a espera começa inteira quando ela para (o `speech(null)`).
+    if (this.speaking) return;
     this.timer = this.clock.setTimeout(() => {
       this.timer = null;
       if (this.phase !== "lingering") return;

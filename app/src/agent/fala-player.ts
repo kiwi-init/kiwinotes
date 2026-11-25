@@ -232,6 +232,28 @@ export class FalaPlayer {
   }
 }
 
+/** A voz do gato na tela (T26829): o nível do que tocou, e `null` quando ela para. */
+export interface FalaNaTela { turnId: string; nivel: number | null }
+
+/**
+ * Traduz os eventos do player para o gato: o `nivel` vira o nível, e o `terminou` (o fim, o corte, o erro) vira `null`.
+ * O `nivel` 0 que o player manda ao encerrar só passa se a voz chegou a tocar: um turno cortado antes do 1º pedaço não
+ * faz o gato abrir a boca.
+ */
+export function falaNaTela(enviar: (e: FalaNaTela) => void): (e: FalaEvento) => void {
+  const tocando = new Set<string>();
+  return (e) => {
+    if (e.tipo === "nivel") {
+      if (!tocando.has(e.turnId) && e.nivel <= 0) return;
+      tocando.add(e.turnId);
+      enviar({ turnId: e.turnId, nivel: e.nivel });
+    } else if (e.tipo === "terminou") {
+      if (!tocando.delete(e.turnId)) return;
+      enviar({ turnId: e.turnId, nivel: null });
+    }
+  };
+}
+
 /** O que liga o player ao app: a fala do agente, o atalho, o × do gato e as reuniões. */
 export interface FalaPlayerWiring {
   agent: { onSpeech(fn: (e: { turnId: string; frases: string[] }) => void): () => void };

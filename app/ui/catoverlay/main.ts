@@ -49,11 +49,13 @@ interface OverlayStats {
   bubbleAsk: boolean;
   /** O mouse sobre o gato: o × da cabeça aparece (o helper manda: `set({catHover})`). */
   catHover: boolean;
+  /** A voz do gato (T26829): o nível que chegou por último, ou `null` sem voz. */
+  fala: number | null;
 }
 
 const stats: OverlayStats = {
   ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "", bubble: null,
-  bubbleMore: false, bubbleOpen: false, sala: 112, largura: 280, bubbleAsk: false, catHover: false,
+  bubbleMore: false, bubbleOpen: false, sala: 112, largura: 280, bubbleAsk: false, catHover: false, fala: null,
 };
 const bubbleEl = document.getElementById("bubble")!;
 const bubbleText = document.getElementById("bubble-text")!;
@@ -285,7 +287,7 @@ function measureFirstFrame(start: number) {
 
 const api = {
   set(input: {
-    estado?: string; visible?: boolean; voz?: number | null; cor?: string; sala?: number; largura?: number; catHover?: boolean;
+    estado?: string; visible?: boolean; voz?: number | null; fala?: number | null; cor?: string; sala?: number; largura?: number; catHover?: boolean;
     bubble?: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown; summary?: unknown } | null;
   }) {
     // O mouse sobre o gato (spec #13380): o × da cabeça aparece, e o helper passa a deixar o clique nele.
@@ -320,6 +322,11 @@ const api = {
     }
     // A fala pelo Control (spec #9876): o nível do mic, que o helper manda direto; null tira as ondas.
     if (input.voz !== undefined) cat.update({ voz: input.voz });
+    // A voz do gato (T26829): o `falando`, com a boca no nível do que tocou; null volta ao estado de antes.
+    if (input.fala !== undefined) {
+      stats.fala = typeof input.fala === "number" && Number.isFinite(input.fala) ? input.fala : null;
+      cat.update({ fala: stats.fala });
+    }
     if (input.estado && STATES.includes(input.estado) && input.estado !== stats.estado) {
       stats.estado = input.estado;
       cat.update({ estado: input.estado as FogState });
@@ -337,6 +344,9 @@ const api = {
       measureFirstFrame(start);
     } else if (input.visible === false && stats.visible) {
       stats.visible = false;
+      // A voz que ainda tocava não segue para a próxima entrada (T26829): o helper não passa o `null` à página escondida.
+      stats.fala = null;
+      cat.update({ fala: null });
       const reduced = reducedMotion.matches;
       setTransition(exitStyle(reduced));
       // O desenho para quando a saída acaba.

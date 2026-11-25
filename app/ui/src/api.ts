@@ -180,6 +180,8 @@ export const api = {
     onCatWhere: (fn: (e: UiEvents["kiwicat.where"]) => void) => on("kiwicat.where", fn),
     /** A fala ao agente pelo Control (1.55.0, spec #9876): o `ouvindo` com as ondas e o texto no balão. */
     onVoice: (fn: (e: UiEvents["agent.voice"]) => void) => on("agent.voice", fn),
+    /** A voz do gato (1.105.0, T26829): o nível do que ela tocou; `null` quando para. */
+    onSpeech: (fn: (e: UiEvents["agent.speech"]) => void) => on("agent.speech", fn),
     /** A tela "Atividade do agente" (1.44.0–1.46.0, spec #9480): o registro, o [Ver] e o [Desfazer]. */
     activity: (limit?: number) => invoke("agent.activity", limit ? { limit } : {}),
     change: (request: string, change: number) => invoke("agent.change", { request, change }),

@@ -399,6 +399,22 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     log: (m) => console.log(m),
   });
   offs.push(() => agentVoice?.stop());
+  // A voz do gato de mentira (T26829): `KIWI_FAKE_SPEECH=1` liga o player com a síntese e a saída falsas (nada toca),
+  // e o gato das janelas e do overlay segue o nível, como no app.
+  if (process.env.KIWI_FAKE_SPEECH === "1") {
+    const { FalaPlayer, falaNaTela, ligarFalaPlayer } = await import("../agent/fala-player.ts");
+    const { saidaFalsa, sinteseFalsa } = await import("./fake-speech.ts");
+    const naTela = falaNaTela((e) => {
+      event("agent.speech", e);
+      catOverlay?.overlay.speech(e);
+    });
+    const player = new FalaPlayer({ sintese: sinteseFalsa(), saida: saidaFalsa(), evento: naTela, log: (m) => console.log(m) });
+    offs.push(ligarFalaPlayer(player, {
+      agent: stores.agent,
+      ...(session ? { helper: { on: (type, fn) => session.sidecar.on(type, () => fn()) } } : {}),
+      log: (m) => console.log(m),
+    }));
+  }
   if (session) {
     offs.push(session.onStatus((s) => event("status", s)));
     offs.push(session.sidecar.on("*", (e) => (e.type === "audio.level" ? undefined : event("helper.event", e))));
@@ -445,6 +461,17 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
         if (typeof msg.view !== "boolean") return { id, ok: false, code: "E_BAD_ARGS", message: "view must be a boolean" };
         catOverlay?.setHubInView(msg.view);
         return { id, ok: true, value: { view: msg.view } };
+      }
+      case "agentAsk": {
+        // Um pedido como se viesse pela fala (T26829), sem o helper nem o STT: só com a voz de mentira, para a prova do
+        // gato falando com o agente falso.
+        if (process.env.KIWI_FAKE_SPEECH !== "1") return { id, ok: false, code: "E_NO_FAKE_SPEECH", message: "start with KIWI_FAKE_SPEECH=1" };
+        if (typeof msg.text !== "string") return { id, ok: false, code: "E_BAD_ARGS", message: "text must be a string" };
+        try {
+          return { id, ok: true, value: await stores.agent.ask(msg.text, { voz: true }) };
+        } catch (e) {
+          return { id, ok: false, code: (e as { code?: string }).code ?? "E_AGENT", message: (e as Error).message };
+        }
       }
       case "agentTalk": {
         // O atalho Control (spec #9876) sem o mic nem a tecla: o helper toca o WAV (`say`) como uma fala ao agente, com
