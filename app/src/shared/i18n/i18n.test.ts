@@ -67,6 +67,7 @@ describe("catálogo", () => {
     "agent.adapter.mb": "unidade",
     "meetings.duration.minutes": "unidade",
     "home.minutes": "unidade",
+    "files.image.size": "só os parâmetros e a unidade (px)",
     "agent.usage.tokens": "palavra igual nas duas",
     "agent.placar.tokens": "palavra igual nas duas",
     "agent.placar.col.tokens": "palavra igual nas duas",
