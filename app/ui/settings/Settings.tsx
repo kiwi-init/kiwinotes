@@ -15,11 +15,10 @@ import { Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
 import { AgentSection } from "./Agent.tsx";
 import { AgentActivitySection } from "./AgentActivity.tsx";
 import { AgentMeetingsSection } from "./AgentMeetings.tsx";
-import { PRIVACY_HINT, PRIVACY_RULE } from "./agentText.ts";
 import { AppearanceSection } from "./Appearance.tsx";
 import { CuesRow } from "./CuesRow.tsx";
 import { LanguageSection } from "./LanguageSection.tsx";
-import { useT } from "../src/i18n.ts";
+import { t as translateNow, useT } from "../src/i18n.ts";
 import { DictionarySection } from "./Dictionary.tsx";
 import { DoubtAnswersSection } from "./DoubtAnswers.tsx";
 import { ExtensionsRow } from "./ExtensionsRow.tsx";
@@ -36,33 +35,37 @@ import { UsageMeter } from "./UsageMeter.tsx";
 
 /** A Transcrição de antes: o idioma e o "Guardar o áudio" ainda só guardam estado local. */
 function TranscriptionSection() {
+  const { t } = useT();
   const [lang, setLang] = useState<"auto" | "pt" | "en">("auto");
   const [keepAudio, setKeepAudio] = useState(false);
   return (
-    <Section title="Transcrição">
+    <Section title={t("transcription.section")}>
       <MicrophoneRow />
       <CuesRow />
       <PreciseRow />
-      <Row label="Idioma" hint="Automático aceita português e inglês na mesma frase.">
+      <Row label={t("transcription.language")} hint={t("transcription.language.hint")}>
         <Segmented
-          label="Idioma"
+          label={t("transcription.language")}
           value={lang}
           onChange={setLang}
           options={[
-            { value: "auto", label: "Automático" },
-            { value: "pt", label: "Português" },
-            { value: "en", label: "Inglês" },
+            { value: "auto", label: t("transcription.language.auto") },
+            { value: "pt", label: t("transcription.language.pt") },
+            { value: "en", label: t("transcription.language.en") },
           ]}
         />
       </Row>
-      <Row label="Guardar o áudio no histórico" hint="Fica só neste Mac.">
-        <Switch label="Guardar o áudio no histórico" checked={keepAudio} onChange={setKeepAudio} />
+      <Row label={t("transcription.keepAudio")} hint={t("transcription.keepAudio.hint")}>
+        <Switch label={t("transcription.keepAudio")} checked={keepAudio} onChange={setKeepAudio} />
       </Row>
     </Section>
   );
 }
 
-/** Cada bloco de Ajustes, como era antes do spec. O `Record` obriga todo bloco de `topics.ts` a ter o seu. */
+/**
+ * Cada bloco de Ajustes, como era antes do spec. O `Record` obriga todo bloco de `topics.ts` a ter o seu. Eles rodam no
+ * render de `Settings`, que redesenha pelo `useT()` quando a língua muda: o `translateNow()` daqui já lê a nova.
+ */
 const BLOCKS: Record<SettingsBlock, () => ReactNode> = {
   // O idioma do app (T28190, spec #28171).
   language: () => <LanguageSection />,
@@ -73,7 +76,7 @@ const BLOCKS: Record<SettingsBlock, () => ReactNode> = {
   dictionary: () => <DictionarySection />,
   snippets: () => <SnippetsSection />,
   notes: () => (
-    <Section title="Notas">
+    <Section title={translateNow("notesSettings.section")}>
       <NotesFolderRow />
       <ExtensionsRow />
       <OcrRow />
@@ -94,8 +97,8 @@ const BLOCKS: Record<SettingsBlock, () => ReactNode> = {
   // A atividade do agente (spec #9480): também com o agente desligado (o desfazer não precisa dele).
   activity: () => <AgentActivitySection />,
   privacy: () => (
-    <Section title="Privacidade">
-      <Row label={PRIVACY_RULE} hint={PRIVACY_HINT} />
+    <Section title={translateNow("privacy.section")}>
+      <Row label={translateNow("privacy.rule")} hint={translateNow("privacy.hint")} />
     </Section>
   ),
   // A antiga aba Sobre do topo (#11969).

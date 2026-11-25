@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Row, Switch } from "../src/kit/index.tsx";
 
 export function ExtensionsRow() {
+  const { t } = useT();
   const [on, setOn] = useState<boolean | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -33,8 +35,8 @@ export function ExtensionsRow() {
   };
 
   return (
-    <Row label="Mostrar extensão dos arquivos" hint={failed ? "Não deu para salvar. Tente de novo." : "Na árvore das notas, como .md, .pdf e .png depois do nome."}>
-      <Switch label="Mostrar extensão dos arquivos" checked={on} onChange={change} />
+    <Row label={t("extensions.label")} hint={failed ? t("common.saveFailed") : t("extensions.hint")}>
+      <Switch label={t("extensions.label")} checked={on} onChange={change} />
     </Row>
   );
 }

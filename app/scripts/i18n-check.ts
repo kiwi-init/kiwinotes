@@ -7,7 +7,8 @@
 //
 // O que conta: o texto entre as tags (`<p>Salvar</p>`) e as aspas dos atributos que aparecem (`label`, `hint`, `title`,
 // `aria-label`, `placeholder`, `alt`), também num `{"…"}`, e as mesmas chaves num objeto (`{ label: "…" }`, as opções).
-// Um texto sem letra (`·`, `›`, `%`) não conta. Ainda não conta: os textos dos `.ts` ao lado (`agentText.ts`).
+// Um texto sem letra (`·`, `›`, `%`) não conta, nem a linha com `// i18n-ok: <motivo>` (um nome próprio). Ainda não
+// conta: os textos dos `.ts` ao lado (`agentText.ts`).
 //
 // O main e o helper (T28192) também: no main (`src/bun`, a notificação do agente), o texto de um item de menu, de um
 // diálogo (`label`, `title`, `message`, `detail`, `buttons`) e toda frase com acento, fora dos logs e dos erros; no
@@ -42,6 +43,21 @@ export const MIGRATED = [
   "ui/notes/UndoToast.tsx",
   "ui/notes/UnlinkedMentions.tsx",
   "ui/notes/VersionsDialog.tsx",
+  // Os Ajustes (T28297).
+  "ui/settings/Settings.tsx",
+  "ui/settings/Appearance.tsx",
+  "ui/settings/Shortcuts.tsx",
+  "ui/settings/Microphone.tsx",
+  "ui/settings/CuesRow.tsx",
+  "ui/settings/PreciseRow.tsx",
+  "ui/settings/SemanticRow.tsx",
+  "ui/settings/OcrRow.tsx",
+  "ui/settings/ExtensionsRow.tsx",
+  "ui/settings/Dictionary.tsx",
+  "ui/settings/Snippets.tsx",
+  "ui/settings/topicIcons.tsx",
+  "ui/notes/NotesFolder.tsx",
+  "ui/src/kit/editable.tsx",
 ];
 
 /** O main e a notificação já no catálogo (T28192): menu, bandeja, status, diálogo do link, pílula e notificação. */
@@ -79,7 +95,12 @@ export function fixedTexts(file: string, source: string): FixedText[] {
     const t = text.replace(/\s+/g, " ").trim();
     if (t && hasLetter(t)) out.push({ line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1, text: t });
   };
-  const visit = (node: ts.Node) => {
+  visit(sf);
+  // Um nome próprio (a fonte "Inter", um tema) leva `// i18n-ok: <motivo>` na mesma linha, como no main.
+  const ok = new Set(source.split("\n").flatMap((l, i) => (/\/\/\s*i18n-ok:/.test(l) ? [i + 1] : [])));
+  return out.filter((t) => !ok.has(t.line));
+
+  function visit(node: ts.Node) {
     if (ts.isJsxText(node)) add(node, node.text);
     else if (ts.isJsxAttribute(node) && VISIBLE_ATTRS.has(node.name.getText(sf)) && node.initializer) {
       const init = node.initializer;
@@ -96,9 +117,7 @@ export function fixedTexts(file: string, source: string): FixedText[] {
       if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) add(e, e.text);
     }
     ts.forEachChild(node, visit);
-  };
-  visit(sf);
-  return out;
+  }
 }
 
 

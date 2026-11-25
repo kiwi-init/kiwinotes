@@ -361,10 +361,6 @@ export function consentText(name: string, company = "Anthropic", adapter = true)
 export const TEST_HINT =
   "Cada teste gasta um pedido do seu plano. O agente pode procurar, ler e mudar as suas notas, e ler as reuniões, mas não apaga nada nem mexe no Mac. O texto de antes de cada mudança fica nas Versões da nota. As senhas e os tokens que o Kiwi acha ficam de fora, trocados por um marcador; nenhum detector pega 100%.";
 
-/** A regra de privacidade, nos Ajustes e no Sobre (ADR 0011). */
-export const PRIVACY_RULE = "Tudo é local, menos o agente que você escolher";
-export const PRIVACY_HINT = "Áudio, transcrição e notas ficam neste Mac. Só o agente que você ligar recebe o que você pedir a ele, e ele vem desligado.";
-
 /** O status do pedido que espera a resposta da dúvida (spec #9873): "Esperando você: dúvida em Projetos/Kiwi". */
 export function waitingStatus(target?: string): string {
   if (target === undefined || target === "") return "Esperando você: dúvida no seu pedido.";

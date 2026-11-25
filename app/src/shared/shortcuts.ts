@@ -12,6 +12,8 @@
 // não recebe a tecla (com Acessibilidade). Os do app (a paleta, a nota nova, a nota do dia) só valem com uma janela do
 // Kiwi na frente, e só podem ser uma combinação.
 
+import { type Locale, type TextKey, translate } from "./i18n/index.ts";
+
 export type ShortcutId = "dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause" | "palette" | "newNote" | "dailyNote" | "focusMode" | "typewriter" | "agent";
 
 export type ShortcutScope = "global" | "app";
@@ -172,36 +174,52 @@ export function isShortcutFor(id: ShortcutId, text: unknown): boolean {
 // Como aparece
 
 const MODIFIER_SYMBOLS: Record<Modifier, string> = { control: "⌃", option: "⌥", shift: "⇧", command: "⌘" };
-const MODIFIER_KEY_LABELS: Record<ModifierKey, string> = { fn: "Fn 🌐", rightOption: "⌥ direito", rightCommand: "⌘ direito", rightControl: "⌃ direito", control: "Control" };
+// As teclas com nome (spec #28171): o "Espaço", o "direito" e o "duas vezes" saem do catálogo, na língua pedida.
+function modifierKeyLabel(key: ModifierKey, locale: Locale): string {
+  if (key === "fn") return "Fn 🌐";
+  if (key === "control") return "Control";
+  const symbol = { rightOption: "⌥", rightCommand: "⌘", rightControl: "⌃" }[key];
+  return translate(locale, "key.right", { key: symbol });
+}
 const KEY_LABELS: Record<string, string> = {
-  space: "Espaço", escape: "Esc", return: "↩", tab: "⇥", delete: "⌫", left: "←", right: "→", down: "↓", up: "↑",
+  escape: "Esc", return: "↩", tab: "⇥", delete: "⌫", left: "←", right: "→", down: "↓", up: "↑",
 };
 
-function keyLabel(key: string): string {
+function keyLabel(key: string, locale: Locale): string {
+  if (key === "space") return translate(locale, "key.space");
   return KEY_LABELS[key] ?? key.toUpperCase();
 }
 
-function stepLabel(s: Step): string {
+function stepLabel(s: Step, locale: Locale): string {
   const mods = s.modifiers.map((m) => MODIFIER_SYMBOLS[m]).join("");
-  const key = keyLabel(s.key);
+  const key = keyLabel(s.key, locale);
   return mods && key.length > 1 && !key.startsWith("F") && !/^[←→↑↓↩⇥⌫]$/.test(key) ? `${mods} ${key}` : `${mods}${key}`;
 }
 
-/** Como o atalho aparece nas Configurações e nas dicas: "⌃⌥R", "Fn 🌐", "⌥ direito duas vezes", "⌃K, R, R", "Esc". */
-export function shortcutLabel(text: string | null): string {
-  if (text === null) return "Desligado";
+/**
+ * Como o atalho aparece nas Configurações e nas dicas: "⌃⌥R", "Fn 🌐", "⌥ direito duas vezes", "⌃K, R, R", "Esc". Em
+ * português, a não ser que a tela peça outra língua (`locale`, spec #28171).
+ */
+export function shortcutLabel(text: string | null, locale: Locale = "pt"): string {
+  if (text === null) return translate(locale, "key.off");
   const p = parseShortcut(text, { bareKey: true });
   if (!p) return text;
+  const step = (s: Step) => stepLabel(s, locale);
   switch (p.kind) {
-    case "key": return MODIFIER_KEY_LABELS[p.key];
-    case "double": return `${MODIFIER_KEY_LABELS[p.key]} duas vezes`;
-    case "combo": return stepLabel(p.step);
+    case "key": return modifierKeyLabel(p.key, locale);
+    case "double": return translate(locale, "key.twice", { key: modifierKeyLabel(p.key, locale) });
+    case "combo": return step(p.step);
     case "sequence":
       return p.steps.length === 2 && p.steps[0]!.modifiers.length === 0 && stepText(p.steps[0]!) === stepText(p.steps[1]!)
-        ? `${stepLabel(p.steps[0]!)} duas vezes`
-        : p.steps.map(stepLabel).join(", ");
+        ? translate(locale, "key.twice", { key: step(p.steps[0]!) })
+        : p.steps.map(step).join(", ");
   }
 }
+
+/** O nome e a dica da ação na língua (spec #28171). O `label` e o `hint` do `SHORTCUTS` são os em português. */
+export const shortcutName = (id: ShortcutId, locale: Locale): string => translate(locale, `shortcut.${id}` as TextKey);
+export const shortcutHint = (id: ShortcutId, locale: Locale): string => translate(locale, `shortcut.${id}.hint` as TextKey);
+export const shortcutGroupName = (group: ShortcutDef["group"], locale: Locale): string => translate(locale, `shortcuts.group.${group}` as TextKey);
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Conflitos: dois atalhos do Kiwi nas mesmas teclas

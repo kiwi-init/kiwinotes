@@ -18,6 +18,7 @@ test("acha o texto entre as tags, os atributos visíveis e as opções; ignora o
       </Row>
     );
     const y = { id: "codigo", title: "Título" };
+    const z = [{ value: "inter", label: "Inter" }]; // i18n-ok: o nome da fonte
   `;
   expect(fixedTexts("x.tsx", src).map((t) => t.text)).toEqual(["Rótulo", "Dica", "Olá, Ana", "Solto", "Opção A", "Busca", "Título"]);
   expect(fixedTexts("x.tsx", src)[0]!.line).toBe(3);
