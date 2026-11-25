@@ -402,18 +402,21 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   // A voz do gato de mentira (T26829): `KIWI_FAKE_SPEECH=1` liga o player com a síntese e a saída falsas (nada toca),
   // e o gato das janelas e do overlay segue o nível, como no app.
   if (process.env.KIWI_FAKE_SPEECH === "1") {
-    const { FalaPlayer, falaNaTela, ligarFalaPlayer } = await import("../agent/fala-player.ts");
+    // A mesma ligação do app (`ligarVozDoGato`, T28675), sem a prévia.
+    const { ligarVozDoGato } = await import("../bun/cat-voice-output.ts");
     const { saidaFalsa, sinteseFalsa } = await import("./fake-speech.ts");
-    const naTela = falaNaTela((e) => {
-      event("agent.speech", e);
-      catOverlay?.overlay.speech(e);
-    });
-    const player = new FalaPlayer({ sintese: sinteseFalsa(), saida: saidaFalsa(), evento: naTela, log: (m) => console.log(m) });
-    offs.push(ligarFalaPlayer(player, {
+    const voz = ligarVozDoGato({
+      sintese: sinteseFalsa(),
+      saida: saidaFalsa(),
       agent: stores.agent,
       ...(session ? { helper: { on: (type, fn) => session.sidecar.on(type, () => fn()) } } : {}),
+      naTela: (e) => {
+        event("agent.speech", e);
+        catOverlay?.overlay.speech(e);
+      },
       log: (m) => console.log(m),
-    }));
+    });
+    offs.push(() => voz.stop());
   }
   if (session) {
     offs.push(session.onStatus((s) => event("status", s)));

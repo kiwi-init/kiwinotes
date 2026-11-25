@@ -1,6 +1,7 @@
 // T27825: a saída de verdade da voz do gato, contra um helper falso. Nada sai no alto-falante.
 import { describe, expect, test } from "bun:test";
-import { FalaPlayer, type FalaEvento } from "../agent/fala-player.ts";
+import { FalaPlayer, type FalaEvento, type FalaNaTela } from "../agent/fala-player.ts";
+import { ligarVozDoGato } from "./cat-voice-output.ts";
 import { pcmBase64, saidaHelper, type SpeechHelper } from "./speech-output.ts";
 import { CatVoicePreview } from "./cat-voice-preview.ts";
 
@@ -184,32 +185,34 @@ describe("saidaHelper (T27825)", () => {
   describe("a fala do gato e o Ouvir dividem a saída (#28376)", () => {
     const GATO = pcmBase64(pcm(1920, 2222));
     const PREVIA = pcmBase64(pcm(1920, 1111));
-    /** Ligados como no app (`startCatVoiceOutput`, src/bun/windows.ts). */
+    /** Ligados pela mesma função do app (`ligarVozDoGato`, que o `startCatVoiceOutput` chama). */
     function montar() {
       const f = fakeHelper();
       const saida = saidaHelper(f.helper);
-      const eventos: FalaEvento[] = [];
-      let previa: CatVoicePreview | undefined;
-      const player = new FalaPlayer({
+      const eventos: FalaNaTela[] = [];
+      const voz = ligarVozDoGato({
         sintese: {
           async *sintetizar() {
             for (let i = 0; i < 3; i++) yield pcm(1920, 2222);
           },
         },
         saida,
-        antesDeFalar: () => previa?.parar(),
-        evento: (e) => eventos.push(e),
+        agent: { onSpeech: () => () => {} },
+        naTela: (e) => eventos.push(e),
+        previa: (falaDoGato) =>
+          new CatVoicePreview({
+            sintese: () => ({
+              async *sintetizar(_frase, signal) {
+                for (let i = 0; i < 6 && !signal.aborted; i++) yield pcm(1920, 1111);
+              },
+            }),
+            frases: () => ["Olá."],
+            saida,
+            falaDoGato,
+          }),
       });
-      previa = new CatVoicePreview({
-        sintese: () => ({
-          async *sintetizar(_frase, signal) {
-            for (let i = 0; i < 6 && !signal.aborted; i++) yield pcm(1920, 1111);
-          },
-        }),
-        frases: () => ["Olá."],
-        saida,
-        falaDoGato: () => player.falaAtual,
-      });
+      const { player } = voz;
+      const previa = voz.previa!;
       const quem = (seq: number) => (f.plays.find((p) => p.seq === seq)?.pcm === GATO ? "gato" : "previa");
       return { f, saida, player, previa, eventos, quem };
     }
@@ -238,7 +241,11 @@ describe("saidaHelper (T27825)", () => {
         await esperar(() => acabou);
       }
       expect(acabou).toBe(true);
-      expect(eventos.at(-1)).toEqual({ tipo: "terminou", turnId: "t1", motivo: "fim" });
+      // A boca: o nível enquanto a voz tocou, e o `null` no fim (falaNaTela).
+      expect(eventos.length).toBeGreaterThan(1);
+      expect(eventos.slice(0, -1).every((e) => e.turnId === "t1" && typeof e.nivel === "number" && e.nivel >= 0)).toBe(true);
+      expect(eventos.some((e) => (e.nivel ?? 0) > 0)).toBe(true);
+      expect(eventos.at(-1)).toEqual({ turnId: "t1", nivel: null });
       expect(f.plays.filter((p) => p.pcm === GATO).length).toBe(3);
       expect(f.plays.filter((p) => p.pcm === PREVIA).length).toBe(2); // nenhum pedaço da prévia depois do gato
       saida.dispose();
