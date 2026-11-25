@@ -127,7 +127,8 @@ await step("nota nova: um clique duplo manda uma vez só, e o aviso diz onde fic
 await step("nota que existe: a busca acha, e o trecho vai para o fim dela", async () => {
   await entry(1).hover();
   await entry(1).getByRole("button", { name: "Enviar para nota…" }).click();
-  await page.fill(".kn-tonote .kn-search", "silo");
+  // Uma palavra do título (T30142): a busca falsa só olha o título, e o "silo" de antes não estava em nenhum.
+  await page.fill(".kn-tonote .kn-search", "escritório");
   await page.waitForTimeout(300);
   const items = await page.$$eval(".kn-tonote-item > span", (els) => els.map((e) => e.textContent));
   if (JSON.stringify(items) !== JSON.stringify(["＋ Nota nova", "Mudança do Escritório Central"])) throw new Error(JSON.stringify(items));
