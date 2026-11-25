@@ -17,6 +17,10 @@ import path from "node:path";
 
 import { cleanupTempDirs, setInTest } from "./tmp.ts";
 
+// O idioma do app (T29319): escondido no app de release até o fim do spec #28171, mas os testes de antes provam o inglês
+// pelo `settings.set`. Os que provam o escondido passam `choice` à mão ou `KIWI_LANGUAGE_CHOICE=0` ao processo.
+process.env.KIWI_LANGUAGE_CHOICE ??= "1";
+
 const system = realpathSync(tmpdir());
 // Curto de propósito: os sockets unix dos testes ficam dentro dela, e o caminho de um socket tem limite (104 bytes).
 /** A marca da pasta da rodada: o pid de quem a criou. */

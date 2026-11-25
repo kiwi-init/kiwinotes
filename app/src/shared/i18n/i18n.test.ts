@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { AUTO_FOLLOWS_SYSTEM, appLocale, CATALOGS, formatDate, formatDateTime, formatNumber, formatTime, isLanguageSetting, localeFromSystem, LOCALES, placeholders, resolveLocale, type TextKey, translate } from "./index.ts";
+import { AUTO_FOLLOWS_SYSTEM, appLocale, LANGUAGE_CHOICE, languageChoice, CATALOGS, formatDate, formatDateTime, formatNumber, formatTime, isLanguageSetting, localeFromSystem, LOCALES, placeholders, resolveLocale, type TextKey, translate } from "./index.ts";
 
 describe("catálogo", () => {
   test("todas as línguas têm exatamente as chaves do português", () => {
@@ -77,6 +77,16 @@ describe("a língua do app", () => {
     // O English, à mão, já vale.
     expect(appLocale("en", ["pt-BR"])).toEqual({ setting: "en", locale: "en", system: "pt" });
     expect(appLocale("auto", ["en-US"], true)).toEqual({ setting: "auto", locale: "en", system: "en" });
+  });
+
+  test("T29319 (harry #29314): sem a escolha, o app fica em português, também com English salvo de um build de antes", () => {
+    expect(LANGUAGE_CHOICE).toBe(false);
+    for (const setting of ["en", "pt", "auto"] as const) {
+      expect(resolveLocale(setting, ["en-US"], true, false)).toBe("pt");
+      expect(appLocale(setting, ["en-US"], true, false)).toEqual({ setting, locale: "pt", system: "en" });
+    }
+    // O `bun test` liga a escolha pelo ambiente (o preload), para os testes do inglês.
+    expect(languageChoice()).toBe(process.env.KIWI_LANGUAGE_CHOICE === "1");
   });
 
   test("só auto, pt e en são escolhas válidas", () => {

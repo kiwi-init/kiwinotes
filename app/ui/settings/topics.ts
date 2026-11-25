@@ -2,13 +2,22 @@
 // Ajustes que ele mostra. Os blocos são as seções de antes do spec, só mudadas de lugar: nenhuma linha muda por dentro.
 // Toda linha está em exatamente um assunto (o teste confere a lista).
 
-import type { TextKey } from "../../src/shared/i18n/index.ts";
+import { LANGUAGE_CHOICE, type TextKey } from "../../src/shared/i18n/index.ts";
 import { SHORTCUTS, type ShortcutDef } from "../../src/shared/shortcuts.ts";
 
 // "Geral" (T28190, spec #28171) é o primeiro, como nos Ajustes do macOS: o idioma do app.
 export const SETTINGS_TOPICS = ["general", "appearance", "dictation", "notes", "meetings", "agent", "activity", "privacy", "about"] as const;
 export type SettingsTopic = (typeof SETTINGS_TOPICS)[number];
-export const isSettingsTopic = (v: unknown): v is SettingsTopic => (SETTINGS_TOPICS as readonly unknown[]).includes(v);
+
+/**
+ * Os assuntos que a lista mostra. O Geral só tem o Idioma do app, que fica escondido enquanto a `LANGUAGE_CHOICE` está
+ * desligada (T29319, harry #29314): sem ele, o assunto some da lista, do `?topic=` e do último aberto.
+ */
+export function shownTopics(choice = LANGUAGE_CHOICE): readonly SettingsTopic[] {
+  return choice ? SETTINGS_TOPICS : SETTINGS_TOPICS.filter((t) => t !== "general");
+}
+export const SHOWN_TOPICS = shownTopics();
+export const isSettingsTopic = (v: unknown): v is SettingsTopic => (SHOWN_TOPICS as readonly unknown[]).includes(v);
 
 /** O nome de cada assunto no catálogo (spec #28171): a tela mostra `t(TOPIC_LABEL_KEYS[t])`. */
 export const TOPIC_LABEL_KEYS: Record<SettingsTopic, TextKey> = {
@@ -93,9 +102,9 @@ export function topicOf(block: SettingsBlock): SettingsTopic {
 }
 
 /** ↑ e ↓ na lista: para no primeiro e no último, como a barra lateral do Channels. */
-export function stepTopic(current: SettingsTopic, dir: 1 | -1): SettingsTopic {
-  const i = SETTINGS_TOPICS.indexOf(current);
-  return SETTINGS_TOPICS[Math.max(0, Math.min(SETTINGS_TOPICS.length - 1, i + dir))]!;
+export function stepTopic(current: SettingsTopic, dir: 1 | -1, topics: readonly SettingsTopic[] = SHOWN_TOPICS): SettingsTopic {
+  const i = topics.indexOf(current);
+  return topics[Math.max(0, Math.min(topics.length - 1, i + dir))]!;
 }
 
 /** O último assunto aberto fica no `localStorage` da janela (só neste Mac). */
