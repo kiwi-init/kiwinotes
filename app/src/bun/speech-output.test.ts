@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { FalaPlayer, type FalaEvento, type FalaNaTela } from "../agent/fala-player.ts";
 import { ligarVozDoGato } from "./cat-voice-output.ts";
-import { pcmBase64, saidaHelper, type SpeechHelper } from "./speech-output.ts";
+import { midiaHelper, pcmBase64, saidaHelper, type SpeechHelper } from "./speech-output.ts";
 import { CatVoicePreview } from "./cat-voice-preview.ts";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -267,4 +267,24 @@ describe("saidaHelper (T27825)", () => {
       saida.dispose();
     });
   });
+});
+
+test("T26830: a mídia pede ao helper para abaixar e devolver, e um erro só vai ao log", async () => {
+  const pedidos: string[] = [];
+  const log: string[] = [];
+  const midia = midiaHelper(
+    {
+      request: async (c) => {
+        pedidos.push(c.type);
+        if (c.type === "speech.unduck") throw new Error("helper fora");
+        return {};
+      },
+    },
+    (m) => log.push(m),
+  );
+  midia.abaixar();
+  midia.devolver();
+  await new Promise((r) => setTimeout(r, 0));
+  expect(pedidos).toEqual(["speech.duck", "speech.unduck"]);
+  expect(log).toEqual(["speech: speech.unduck falhou: helper fora"]);
 });

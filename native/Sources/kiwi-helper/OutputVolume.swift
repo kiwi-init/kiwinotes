@@ -2,7 +2,7 @@ import CoreAudio
 import Foundation
 import KiwiHelperCore
 
-/// Only public Core Audio scalar-volume properties. No audio playback, AppleScript, Automation or permissions.
+/// Only public Core Audio volume properties (the scalar, and its dB conversion for T26830). No audio playback, AppleScript, Automation or permissions.
 /// Constructing this adapter does nothing; headless/debug never constructs or invokes it.
 final class OutputVolume: MediaVolumeControl {
     func targets() -> [MediaVolumeTarget] {
@@ -29,6 +29,21 @@ final class OutputVolume: MediaVolumeControl {
         guard value.isFinite, value >= 0, value <= 1, let device = deviceID(for: target) else { return false }
         var property = address(target), scalar = Float32(value)
         return AudioObjectSetPropertyData(device, &property, 0, nil, UInt32(MemoryLayout<Float32>.size), &scalar) == noErr
+    }
+    /// T26830: the device's own scale between scalar and dB. Core Audio converts in place, in the same Float32.
+    func decibels(fromScalar value: Float, on target: MediaVolumeTarget) -> Float? {
+        convert(value, kAudioDevicePropertyVolumeScalarToDecibels, target)
+    }
+    func scalar(fromDecibels value: Float, on target: MediaVolumeTarget) -> Float? {
+        convert(value, kAudioDevicePropertyVolumeDecibelsToScalar, target)
+    }
+    private func convert(_ value: Float, _ selector: AudioObjectPropertySelector, _ target: MediaVolumeTarget) -> Float? {
+        guard value.isFinite, let device = deviceID(for: target) else { return nil }
+        var property = AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeOutput, mElement: target.channel)
+        guard AudioObjectHasProperty(device, &property) else { return nil }
+        var inout32 = Float32(value), size = UInt32(MemoryLayout<Float32>.size)
+        guard AudioObjectGetPropertyData(device, &property, 0, nil, &size, &inout32) == noErr, inout32.isFinite else { return nil }
+        return inout32
     }
     private func deviceID(for target: MediaVolumeTarget) -> AudioDeviceID? {
         if AudioDevices.info(target.device)?.uid == target.uid { return target.device }

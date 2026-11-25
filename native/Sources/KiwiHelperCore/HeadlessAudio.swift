@@ -85,4 +85,13 @@ public final class LoggedVolume: MediaVolumeControl {
         value = new
         return true
     }
+
+    /// A escala em dB falsa (T26830): de −60 dB (0) a 0 dB (1) em linha reta, como um alto-falante.
+    public func decibels(fromScalar value: Float, on target: MediaVolumeTarget) -> Float? {
+        target == Self.target ? 60 * (value - 1) : nil
+    }
+
+    public func scalar(fromDecibels value: Float, on target: MediaVolumeTarget) -> Float? {
+        target == Self.target ? max(0, min(1, 1 + value / 60)) : nil
+    }
 }
