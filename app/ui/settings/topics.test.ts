@@ -2,11 +2,17 @@
 
 import { expect, test } from "bun:test";
 
+import { translate } from "../../src/shared/i18n/index.ts";
 import { HUB_SECTIONS } from "../../src/shared/ui-contract.ts";
-import { LAST_TOPIC_KEY, readLastTopic, saveLastTopic, SETTINGS_BLOCKS, SETTINGS_TOPICS, shortcutBlock, shortcutGroups, stepTopic, TOPIC_BLOCKS, TOPIC_LABELS, topicOf } from "./topics.ts";
+import { LAST_TOPIC_KEY, readLastTopic, saveLastTopic, SETTINGS_BLOCKS, SETTINGS_TOPICS, shortcutBlock, shortcutGroups, stepTopic, TOPIC_BLOCKS, TOPIC_LABEL_KEYS, TOPIC_LABELS, topicOf } from "./topics.ts";
 
-test("os 8 assuntos do spec, na ordem, cada um com nome", () => {
-  expect(SETTINGS_TOPICS.map((t) => TOPIC_LABELS[t])).toEqual(["Aparência", "Ditado", "Notas", "Reuniões", "Agente", "Atividade do agente", "Privacidade", "Sobre"]);
+test("os 9 assuntos, na ordem, cada um com nome (o Geral do T28190 na frente)", () => {
+  expect(SETTINGS_TOPICS.map((t) => TOPIC_LABELS[t])).toEqual(["Geral", "Aparência", "Ditado", "Notas", "Reuniões", "Agente", "Atividade do agente", "Privacidade", "Sobre"]);
+});
+
+test("o nome de cada assunto no catálogo é o mesmo em português, e tem o seu em inglês (T28190)", () => {
+  for (const t of SETTINGS_TOPICS) expect(translate("pt", TOPIC_LABEL_KEYS[t])).toBe(TOPIC_LABELS[t]);
+  expect(SETTINGS_TOPICS.map((t) => translate("en", TOPIC_LABEL_KEYS[t]))).toEqual(["General", "Appearance", "Dictation", "Notes", "Meetings", "Agent", "Agent activity", "Privacy", "About"]);
 });
 
 test("toda seção de Ajustes está em exatamente um assunto", () => {
@@ -37,7 +43,8 @@ test("o que mudou de lugar: o Sobre virou assunto, e Suas reuniões foi para Reu
 });
 
 test("↑ e ↓ param no primeiro e no último assunto", () => {
-  expect(stepTopic("appearance", -1)).toBe("appearance");
+  expect(stepTopic("general", -1)).toBe("general");
+  expect(stepTopic("general", 1)).toBe("appearance");
   expect(stepTopic("appearance", 1)).toBe("dictation");
   expect(stepTopic("about", 1)).toBe("about");
   expect(stepTopic("about", -1)).toBe("privacy");

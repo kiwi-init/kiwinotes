@@ -132,6 +132,9 @@ export const api = {
   /** A seção Sobre (T2386): a versão, o canal e as atualizações. */
   app: {
     about: () => invoke("app.about", {}),
+    /** O idioma do app (1.104.0, spec #28171): a escolha, a língua de agora e a do macOS. */
+    locale: () => invoke("app.locale", {}),
+    onLocaleChanged: (fn: (e: UiEvents["app.localeChanged"]) => void) => on("app.localeChanged", fn),
   },
   /** "Salvar diagnóstico" (T5350): o .txt sem texto nem áudio; no app, em ~/Downloads e no Finder. */
   diagnostics: {

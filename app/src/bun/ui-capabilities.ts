@@ -62,6 +62,7 @@ import { type AgentService, AgentServiceError } from "../agent/service.ts";
 import { ACTIVITY_LIST_MAX } from "../agent/activity.ts";
 import { AGENT_KINDS, isAgentKind, type AgentKind } from "../agent/kinds.ts";
 import { isAgentChoice } from "../store/settings.ts";
+import { type AppLocale, appLocale, isLanguageSetting, type LanguageSetting } from "../shared/i18n/index.ts";
 import type { IntroLayout } from "../shared/intro-layout.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
@@ -135,6 +136,13 @@ export interface CapabilityDeps {
    * A seção Sobre (T2386): a versão do app, o canal e as atualizações. Sem isto (o headless, os testes), o `app.about`
    * diz "dev" e as atualizações respondem `off`, sem ir à rede.
    */
+  /**
+   * As línguas do macOS (spec #28171), para o Automático do idioma do app. Sem isto (os testes), nenhuma, e o Automático
+   * fica em português.
+   */
+  systemLanguages?(): readonly string[];
+  /** O idioma do app mudou (1.104.0): o `app.localeChanged` para todas as janelas. Sem isto (testes), nada. */
+  localeChanged?(locale: AppLocale): void;
   /** "Salvar diagnóstico" (T5350). Sem isto (testes), o `diagnostics.save` dá E_NO_DIAGNOSTICS. */
   diagnostics?: { save(): Promise<{ path: string; bytes: number }> };
   /** Um quadro travado que a tela contou (spec #12918): vai para o log local. Sem isto (testes), só responde. */
@@ -743,6 +751,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       const patch: SettingsPatch = {};
       let turnSemantic: boolean | null = null;
       let turnUpdates: boolean | null = null;
+      let languageBefore: LanguageSetting | null = null;
       // Os atalhos (1.24.0, T5349), também os que vêm nos campos de antes: conferidos juntos no fim, sem conflito.
       const shortcutPatch: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(a)) {
@@ -825,6 +834,11 @@ export function uiCapabilities(deps: CapabilityDeps,
           if (typeof value !== "boolean") throw bad("checkUpdates must be true or false");
           patch.checkUpdates = value;
           turnUpdates = value;
+        } else if (key === "language") {
+          // O idioma do app (1.104.0, spec #28171): as janelas trocam pelo `app.localeChanged`.
+          if (!isLanguageSetting(value)) throw bad('language must be "auto", "pt" or "en"');
+          patch.language = value;
+          languageBefore = (await deps.settings.load()).language;
         } else if (key === "attachmentsFolder") {
           // A pasta dos anexos (1.11.0, T2594): relativa ao vault, sem sair dele.
           try {
@@ -872,6 +886,13 @@ export function uiCapabilities(deps: CapabilityDeps,
       }
       const saved = await deps.settings.save(patch);
       deps.settingsChanged?.(saved);
+      if (languageBefore !== null && languageBefore !== saved.language) {
+        const sys = deps.systemLanguages?.() ?? [];
+        const before = appLocale(languageBefore, sys);
+        const now = appLocale(saved.language, sys);
+        // Automático ↔ a mesma língua não troca texto nenhum, mas o seletor de outra janela precisa da escolha nova.
+        if (before.setting !== now.setting || before.locale !== now.locale) deps.localeChanged?.(now);
+      }
       if (turnUpdates !== null) deps.about?.checkUpdatesChanged?.(turnUpdates);
       if (turnSemantic === false) {
         await deps.semanticEngine?.disable();
@@ -893,6 +914,10 @@ export function uiCapabilities(deps: CapabilityDeps,
       const ui = deps.appearance ? { ui: deps.appearance.about() } : {};
       if (!deps.about) return { version: "dev", channel: "dev", releaseUrl: null, updates: UPDATES_OFF, ...ui } satisfies AppAbout;
       return { ...deps.about.info(), updates: deps.about.view(), ...ui } satisfies AppAbout;
+    },
+    "app.locale": async (args) => {
+      noArgs(args, "app.locale");
+      return appLocale((await deps.settings.load()).language, deps.systemLanguages?.() ?? []);
     },
     "diagnostics.save": async (args) => {
       noArgs(args, "diagnostics.save");

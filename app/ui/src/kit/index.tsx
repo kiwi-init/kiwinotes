@@ -18,6 +18,7 @@ import { createRoot } from "react-dom/client";
 import { api, engineReady, has, reportError } from "../api.ts";
 import { TopBar, useInHub } from "../topbar.tsx";
 import { startAppearance } from "../styles/appearance.ts";
+import { startLocale } from "../i18n.ts";
 import { startScrollbars } from "../scrollbar.ts";
 
 declare global {
@@ -89,7 +90,8 @@ export function mount(node: ReactNode): void {
   // A Aparência antes do primeiro render: a janela já pinta no tema escolhido (T2503). Espera o engine no máximo
   // 300 ms; se ele demorar, pinta com a cópia local (ou o padrão) e troca quando a resposta chegar.
   startScrollbars();
-  const appearance = Promise.race([startAppearance(), new Promise<void>((r) => setTimeout(r, 300))]);
+  // A língua (spec #28171) vai junto: a primeira tela já sai nela.
+  const appearance = Promise.race([Promise.all([startAppearance(), startLocale()]), new Promise<void>((r) => setTimeout(r, 300))]);
   void appearance.then(() => createRoot(root).render(<Booted>{node}</Booted>));
 }
 

@@ -42,6 +42,7 @@ import { writerFromCapabilities } from "../agent/tools/writer.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { HomeChanges } from "./home.ts";
 import { hubFrame, type IntroLayout, introWindow, parseHubFrame, type Rect } from "../shared/intro-layout.ts";
+import { systemLanguages } from "./system-language.ts";
 
 export type WindowName = UiWindow;
 
@@ -165,6 +166,11 @@ const capabilities = uiCapabilities({
     agentVoice?.settingsChanged(settings);
     // A Aparência vale para todas as janelas abertas (T2503).
     for (const rpc of rpcs.values()) rpc.send.event({ name: "settings.changed", payload: settings });
+  },
+  // O idioma do app (spec #28171): a língua do macOS para o Automático, e a troca vai a todas as janelas.
+  systemLanguages,
+  localeChanged: (locale) => {
+    for (const rpc of rpcs.values()) rpc.send.event({ name: "app.localeChanged", payload: locale });
   },
   // Os projetos (spec #9847): a barra lateral das Notas relê quando mudam por outro lugar.
   projectsChangedIn: (folderId) => {

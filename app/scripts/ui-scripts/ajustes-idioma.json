@@ -1,0 +1,22 @@
+{
+  "window": "hub",
+  "steps": [
+    { "invoke": "settings.set", "args": { "language": "pt" }, "name": "começa em português" },
+    { "waitFor": ".kn-tab", "name": "o hub abre" },
+    { "click": "[role='tab'][data-section='settings']", "name": "vai para as Configurações" },
+    { "click": ".kn-prefs-item[data-topic=general]", "name": "o assunto Geral, o primeiro da lista (T28190)" },
+    { "expectText": ".kn-prefs-topic[data-topic=general] .kn-prefs-title", "text": "Geral", "name": "o título em português" },
+    { "expectText": ".kn-prefs-topic[data-topic=general] .kn-row-label", "text": "Idioma do app", "name": "a linha Idioma do app" },
+    { "click": ".kn-prefs-topic[data-topic=general] .kn-segmented button:has-text('English')", "name": "escolhe English" },
+    { "expectText": ".kn-prefs-topic[data-topic=general] .kn-prefs-title", "text": "General", "name": "troca na hora, sem recarregar" },
+    { "expectText": ".kn-prefs-item[data-topic=appearance]", "text": "Appearance", "name": "a lista dos assuntos em inglês" },
+    { "expectText": ".kn-prefs-topic[data-topic=general] .kn-row-label", "text": "App language", "name": "a linha em inglês" },
+    { "waitFor": "html[lang='en']", "name": "o lang do documento" },
+    { "invoke": "settings.set", "args": { "language": "pt" }, "name": "outra janela volta para português (o engine avisa todas)" },
+    { "expectText": ".kn-prefs-topic[data-topic=general] .kn-prefs-title", "text": "Geral", "name": "esta troca pelo app.localeChanged" },
+    { "screenshot": "1-portugues.png" },
+    { "click": ".kn-prefs-topic[data-topic=general] .kn-segmented button:has-text('English')", "name": "English de novo, para o print" },
+    { "expectText": ".kn-prefs-topic[data-topic=general] .kn-prefs-title", "text": "General" },
+    { "screenshot": "2-english.png" }
+  ]
+}

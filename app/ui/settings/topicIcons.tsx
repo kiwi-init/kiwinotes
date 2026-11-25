@@ -6,6 +6,13 @@ import type { ReactElement } from "react";
 import type { SettingsTopic } from "./topics.ts";
 
 const PATHS: Record<SettingsTopic, ReactElement> = {
+  // Geral: o globo (o idioma do app é a primeira coisa dele).
+  general: (
+    <>
+      <circle cx="8" cy="8" r="5.6" />
+      <path d="M2.4 8h11.2M8 2.4c1.6 1.6 2.4 3.5 2.4 5.6S9.6 12 8 13.6C6.4 12 5.6 10.1 5.6 8S6.4 4 8 2.4z" />
+    </>
+  ),
   // A paleta de pintor (pedido do harry, #12472): o contorno com o furo do polegar e quatro pontos de tinta.
   appearance: (
     <>

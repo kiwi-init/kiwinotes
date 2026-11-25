@@ -1,4 +1,4 @@
-// Configurações por assunto (spec #11966, T12115): à esquerda, a lista dos 8 assuntos; ao clicar num, o painel do centro
+// Configurações por assunto (spec #11966, T12115): à esquerda, a lista dos 9 assuntos; ao clicar num, o painel do centro
 // mostra só as configurações dele. As seções são as de antes, só mudadas de lugar (`topics.ts` diz qual vai em qual).
 // O app lembra o último assunto; um link de dentro do hub abre direto num assunto e rola até a linha. Abaixo de 720 px,
 // a lista abre o assunto em tela cheia, com "‹ Voltar".
@@ -18,6 +18,8 @@ import { AgentMeetingsSection } from "./AgentMeetings.tsx";
 import { PRIVACY_HINT, PRIVACY_RULE } from "./agentText.ts";
 import { AppearanceSection } from "./Appearance.tsx";
 import { CuesRow } from "./CuesRow.tsx";
+import { LanguageSection } from "./LanguageSection.tsx";
+import { useT } from "../src/i18n.ts";
 import { DictionarySection } from "./Dictionary.tsx";
 import { DoubtAnswersSection } from "./DoubtAnswers.tsx";
 import { ExtensionsRow } from "./ExtensionsRow.tsx";
@@ -29,7 +31,7 @@ import { ShortcutsSection, SidebarKeysSection } from "./Shortcuts.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
 import { TopicIcon } from "./topicIcons.tsx";
 import { TrailsSection } from "./Trails.tsx";
-import { isSettingsTopic, NARROW_PX, readLastTopic, saveLastTopic, SETTINGS_TOPICS, type SettingsBlock, type SettingsTopic, stepTopic, TOPIC_BLOCKS, TOPIC_LABELS } from "./topics.ts";
+import { isSettingsTopic, NARROW_PX, readLastTopic, saveLastTopic, SETTINGS_TOPICS, type SettingsBlock, type SettingsTopic, stepTopic, TOPIC_BLOCKS, TOPIC_LABEL_KEYS } from "./topics.ts";
 import { UsageMeter } from "./UsageMeter.tsx";
 
 /** A Transcrição de antes: o idioma e o "Guardar o áudio" ainda só guardam estado local. */
@@ -62,6 +64,8 @@ function TranscriptionSection() {
 
 /** Cada bloco de Ajustes, como era antes do spec. O `Record` obriga todo bloco de `topics.ts` a ter o seu. */
 const BLOCKS: Record<SettingsBlock, () => ReactNode> = {
+  // O idioma do app (T28190, spec #28171).
+  language: () => <LanguageSection />,
   appearance: () => <AppearanceSection />,
   // Todos os atalhos, configuráveis (T5349), cada grupo no assunto dele.
   "shortcuts:Ditado": () => <ShortcutsSection group="Ditado" />,
@@ -127,6 +131,8 @@ function reveal(panel: HTMLElement, row: string): () => void {
 }
 
 export function Settings({ request = null }: { request?: SettingsRequest | null } = {}) {
+  const { t: tr } = useT();
+  const label = (t: SettingsTopic) => tr(TOPIC_LABEL_KEYS[t]);
   const [topic, setTopic] = useState<SettingsTopic>(() => request?.topic ?? initialTopic());
   /** Os assuntos já abertos ficam montados (só escondidos): a edição no Dicionário e nos Snippets não se perde. */
   const [visited, setVisited] = useState<Set<SettingsTopic>>(() => new Set([topic]));
@@ -196,10 +202,10 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
   const showPanel = !narrow || narrowOpen;
 
   return (
-    <Window title="Configurações">
+    <Window title={tr("settings.window.title")}>
       <div className="kn-prefs" ref={root} data-narrow={narrow || undefined}>
         {showList ? (
-          <nav className="kn-prefs-side" aria-label="Assuntos de Ajustes" ref={list} onKeyDown={onListKey}>
+          <nav className="kn-prefs-side" aria-label={tr("settings.topics.aria")} ref={list} onKeyDown={onListKey}>
             {SETTINGS_TOPICS.map((t) => (
               <button
                 type="button"
@@ -212,7 +218,7 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
                 onClick={() => open(t)}
               >
                 <TopicIcon topic={t} />
-                <span>{TOPIC_LABELS[t]}</span>
+                <span>{label(t)}</span>
                 {narrow ? <span className="kn-prefs-chevron" aria-hidden="true">›</span> : null}
               </button>
             ))}
@@ -225,7 +231,7 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
                 key={t}
                 className="kn-prefs-topic"
                 role="region"
-                aria-label={TOPIC_LABELS[t]}
+                aria-label={label(t)}
                 data-topic={t}
                 data-single={TOPIC_BLOCKS[t].length === 1 || undefined}
                 hidden={t !== topic}
@@ -242,10 +248,10 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
                       requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-topic="${t}"]`)?.focus());
                     }}
                   >
-                    ‹ Voltar
+                    {tr("settings.back")}
                   </button>
                 ) : null}
-                <h1 className="kn-prefs-title">{TOPIC_LABELS[t]}</h1>
+                <h1 className="kn-prefs-title">{label(t)}</h1>
                 {TOPIC_BLOCKS[t].map((b) => (
                   <div key={b} className="kn-prefs-block" data-block={b}>
                     {BLOCKS[b]()}

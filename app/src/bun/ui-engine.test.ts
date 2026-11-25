@@ -104,7 +104,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: "prisma-original", posicao: "center", tamanho: 1, voz: "en-a" }, firstRun: "done" };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, language: "auto", savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: "prisma-original", posicao: "center", tamanho: 1, voz: "en-a" }, firstRun: "done" };
   let t = 0;
   return {
     calls,
@@ -297,6 +297,37 @@ describe("contrato 1.0.0 (T1192)", () => {
     }
     expect(await call("settings.set", { noteWidth: 980.6 })).toMatchObject({ ok: true, value: { noteWidth: 981 } });
     expect(f.calls.filter((c) => c.startsWith("settings.save"))).toEqual(['settings.save:{"noteWidth":981}']);
+  });
+
+  test("settings: o idioma do app, o app.locale e o app.localeChanged só quando a língua ou a escolha mudam (T28190)", async () => {
+    const f = fakeDeps();
+    const changes: unknown[] = [];
+    let system = ["en-US", "pt-BR"];
+    const caps = uiCapabilities({ ...f.deps, systemLanguages: () => system, localeChanged: (l) => void changes.push(l) });
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+    for (const bad of ["es", "", null, 1, "AUTO"]) expect(await call("settings.set", { language: bad })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    // O Automático fica em português até o fim do spec #28171 (`AUTO_FOLLOWS_SYSTEM`), mesmo com o macOS em inglês.
+    expect(await call("app.locale", {})).toEqual({ ok: true, value: { setting: "auto", locale: "pt", system: "en" } });
+    expect(await call("app.locale", { x: 1 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    // Outro ajuste não avisa a língua.
+    await call("settings.set", { cues: false });
+    expect(changes).toEqual([]);
+    expect(await call("settings.set", { language: "en" })).toMatchObject({ ok: true, value: { language: "en" } });
+    expect(changes).toEqual([{ setting: "en", locale: "en", system: "en" }]);
+    expect(await call("app.locale", {})).toEqual({ ok: true, value: { setting: "en", locale: "en", system: "en" } });
+    // A mesma escolha de novo: nada.
+    await call("settings.set", { language: "en" });
+    expect(changes).toHaveLength(1);
+    // De English para Português: a língua muda.
+    await call("settings.set", { language: "pt" });
+    expect(changes.at(-1)).toEqual({ setting: "pt", locale: "pt", system: "en" });
+    // De Português para Automático: a língua não muda, mas a escolha sim (o seletor das outras janelas).
+    system = ["pt-BR"];
+    await call("settings.set", { language: "auto" });
+    expect(changes).toHaveLength(3);
+    expect(changes.at(-1)).toEqual({ setting: "auto", locale: "pt", system: "pt" });
+    // Sem a língua do macOS (os testes, o headless sem KIWI_SYSTEM_LANG): o Automático fica em português.
+    expect(await directInvoke(uiCapabilities(f.deps), "app.locale", {})).toEqual({ ok: true, value: { setting: "auto", locale: "pt", system: "pt" } });
   });
 
   test("settings: o modo preciso do ditado, e o estado dele com e sem a sessão do helper (T6602)", async () => {
