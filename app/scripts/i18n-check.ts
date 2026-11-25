@@ -19,7 +19,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 
-const ROOT = path.resolve(import.meta.dir, "..");
+// `KIWI_I18N_ROOT`: só o teste, que roda o check numa árvore falsa para provar o `exit 1`.
+const ROOT = process.env.KIWI_I18N_ROOT ?? path.resolve(import.meta.dir, "..");
 const UI = path.join(ROOT, "ui");
 
 /** As telas já no catálogo: um texto fixo aqui quebra o CI. Cada parte migrada entra na lista. */
