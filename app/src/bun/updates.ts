@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { type AppChannel, type UpdatesLastCheck, UPDATES_OFF_BY_SETTING, type UpdatesView } from "../shared/ui-contract.ts";
-import { type Locale, translate } from "../shared/i18n/index.ts";
+import { type Locale, type Params, type TextKey, translate } from "../shared/i18n/index.ts";
 
 export const IDENTIFIER = "app.kiwinotes.desktop";
 /** O time do Developer ID que assina o Kiwi Notes (Jonatas Walker, T1349). */
@@ -191,18 +191,29 @@ export type UpdateState =
  */
 export type LastCheck = UpdatesLastCheck;
 
+/**
+ * Uma mensagem para a pessoa, guardada como chave do catálogo (T29006): o Sobre a lê na língua de agora, também
+ * depois de uma troca de língua.
+ */
+export type UpdateMessage = { key: TextKey; params?: Params };
+
 /** A troca que falhou (o "Atualizar e reiniciar" que voltou para a versão de antes), dita para a pessoa. */
-export const swapFailedMessage = (version: string) =>
-  `A ${version} foi baixada, mas não deu para trocar o app. Tente de novo; se continuar, instale pelo .dmg do release.`;
+export const swapFailedMessage = (version: string): UpdateMessage => ({ key: "update.swapFailed", params: { version } });
 
 /** O erro da checagem, dito para a pessoa: sem internet, o servidor que não respondeu ou outro. */
-export function checkErrorMessage(error: string): string {
+export function checkErrorMessage(error: string): UpdateMessage {
   if (/offline|network|internet|ENOTFOUND|ENETUNREACH|EAI_AGAIN|ECONNREFUSED|Unable to connect|could not resolve|getaddrinfo/i.test(error)) {
-    return "Sem internet: não deu para falar com o GitHub.";
+    return { key: "update.offline" };
   }
-  if (/timed? ?out|ETIMEDOUT|\b5\d\d\b|\b4\d\d\b|status/i.test(error)) return "O servidor das atualizações não respondeu. Tente de novo mais tarde.";
-  return "Não deu para verificar agora. Tente de novo mais tarde.";
+  if (/timed? ?out|ETIMEDOUT|\b5\d\d\b|\b4\d\d\b|status/i.test(error)) return { key: "update.serverDown" };
+  return { key: "update.checkFailed" };
 }
+
+/** O texto de uma `UpdateMessage` numa língua. */
+export const updateMessageText = (m: UpdateMessage, locale: Locale = "pt"): string => translate(locale, m.key, m.params);
+
+/** A última checagem por dentro: a mensagem do erro ainda como chave. */
+type StoredCheck = Exclude<LastCheck, { result: "error" }> | { at: string; result: "error"; message: UpdateMessage };
 
 export interface UpdatesDeps {
   updater: UpdaterApi;
@@ -224,7 +235,7 @@ export const OFF_BY_SETTING = "turned off in Settings";
 /** A atualização do app: checa, baixa, confere e oferece. Quem mostra a oferta é o menu (`onChange`). */
 export class AppUpdates {
   private state: UpdateState = { kind: "idle" };
-  private last: LastCheck | null = null;
+  private last: StoredCheck | null = null;
   /** A troca que falhou antes deste processo já foi registrada (vale uma vez: o Updater só reconcilia uma vez). */
   private swapNoted = false;
   /** Já houve uma checagem neste processo: daí em diante, um erro no `updateInfo()` é dela (um download), não da troca. */
@@ -246,18 +257,19 @@ export class AppUpdates {
     return this.state;
   }
 
-  /** A última checagem que terminou, ou null antes da 1ª. */
-  lastCheck(): LastCheck | null {
-    return this.last;
+  /** A última checagem que terminou, ou null antes da 1ª, com a mensagem na língua pedida. */
+  lastCheck(locale: Locale = "pt"): LastCheck | null {
+    const l = this.last;
+    return l?.result === "error" ? { ...l, message: updateMessageText(l.message, locale) } : l;
   }
 
-  private finish(result: LastCheck["result"], extra: { version?: string; message?: string } = {}): UpdateState {
+  private finish(result: LastCheck["result"], extra: { version?: string; message?: UpdateMessage } = {}): UpdateState {
     const at = (this.deps.now?.() ?? new Date()).toISOString();
     this.last =
       result === "available"
         ? { at, result, version: extra.version ?? "" }
         : result === "error"
-          ? { at, result, message: extra.message ?? "" }
+          ? { at, result, message: extra.message ?? { key: "update.checkFailed" } }
           : { at, result };
     return this.state;
   }
@@ -393,7 +405,7 @@ export class AppUpdates {
       const after = u.updateInfo();
       if (!after.updateReady || after.error) {
         this.log(`download failed: ${after.error || "not ready"}`);
-        this.finish("error", { message: `O download da ${found.version} falhou. Tente de novo.` });
+        this.finish("error", { message: { key: "update.downloadFailed", params: { version: found.version } } });
         this.set({ kind: "idle" });
         return this.state;
       }
@@ -403,7 +415,7 @@ export class AppUpdates {
         // Não oferece e apaga: um tar que não é nosso não fica esperando um clique.
         this.log(`refused update ${after.version} (${after.hash}): ${why}`);
         if (tar) rmSync(tar, { force: true });
-        this.finish("error", { message: `A ${after.version} foi recusada: a assinatura não confere.` });
+        this.finish("error", { message: { key: "update.refused", params: { version: after.version } } });
         this.set({ kind: "idle" });
         return this.state;
       }
@@ -456,21 +468,22 @@ export function updateMenuLabel(s: UpdateState, currentVersion: string, locale: 
 }
 
 /** O motivo de estar desligado, para a pessoa (o do `updatesOff` é técnico e vai para o log). */
-export function offReasonText(reason: string): string {
+// O desligado pelos Ajustes segue o valor do contrato (`UPDATES_OFF_BY_SETTING`): o Sobre o compara, e ele não traduz.
+export function offReasonText(reason: string, locale: Locale = "pt"): string {
   if (reason === OFF_BY_SETTING) return UPDATES_OFF_BY_SETTING;
-  if (reason.startsWith("KIWI_DEBUG")) return "modo de teste dos agentes";
-  if (reason.startsWith("channel dev")) return "build de desenvolvimento";
-  if (reason.startsWith("channel")) return "build fora dos canais de release";
-  if (reason.startsWith("no release.baseUrl")) return "build local, sem o endereço das atualizações";
-  return "o endereço das atualizações deste build não é válido";
+  if (reason.startsWith("KIWI_DEBUG")) return translate(locale, "update.off.agents");
+  if (reason.startsWith("channel dev")) return translate(locale, "update.off.dev");
+  if (reason.startsWith("channel")) return translate(locale, "update.off.channel");
+  if (reason.startsWith("no release.baseUrl")) return translate(locale, "update.off.noUrl");
+  return translate(locale, "update.off.badUrl");
 }
 
 /** O que a seção Sobre mostra das atualizações (o `UpdatesView` do contrato, T2386). */
-export function updatesView(state: UpdateState, last: LastCheck | null): UpdatesView {
+export function updatesView(state: UpdateState, last: LastCheck | null, locale: Locale = "pt"): UpdatesView {
   const base = { lastCheck: last };
   switch (state.kind) {
     case "off":
-      return { ...base, state: "off", reason: offReasonText(state.reason) };
+      return { ...base, state: "off", reason: offReasonText(state.reason, locale) };
     case "downloading":
       return {
         ...base,

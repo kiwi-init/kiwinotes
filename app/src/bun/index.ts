@@ -121,7 +121,7 @@ void Updater.getLocalInfo().then((i) => {
 
 // A seção Sobre do hub (T2386): a versão, o canal, as notas da versão e o "Verificar atualizações", que roda a mesma
 // checagem do menu (com a conferência da assinatura). O hub aberto acompanha cada mudança pelo `updates.status`.
-const updatesNow = () => updatesView(updates.status(), updates.lastCheck());
+const updatesNow = () => updatesView(updates.status(), updates.lastCheck(mainLocale.get()), mainLocale.get());
 provideAbout({
   info: () => ({ version: appVersion, channel: appChannel, releaseUrl: appChannel === "dev" ? null : releaseNotesUrl(appVersion) }),
   view: updatesNow,
@@ -177,6 +177,8 @@ updates.onChange(() => setMenu(dictation.status()));
 mainLocale.onChange(() => {
   setAppMenu();
   setMenu(dictation.status());
+  // O Sobre aberto lê o erro e o motivo das atualizações de novo, na língua nova (T29006).
+  void sendToWindow("hub", "updates.status", updatesNow());
 });
 void stores.settings.load().then(
   (s) => mainLocale.set(appLocale(s.language, systemLanguages()).locale),

@@ -35,6 +35,11 @@ export const MIGRATED_MAIN = [
   "src/bun/windows.ts",
   "src/bun/index.ts",
   "src/agent/notice.ts",
+  // T29006: os erros e o motivo das atualizações no Sobre, e as frases do pedido de permissão do macOS.
+  "src/bun/updates.ts",
+  "scripts/info-plist.ts",
+  "scripts/app-plist.ts",
+  "scripts/usage-strings.ts",
 ];
 /** Todo o Swift do helper barra: as telas dele são poucas e já estão no `Localizable.xcstrings`. */
 export const SWIFT_DIRS = ["../native/Sources/kiwi-helper", "../native/Sources/KiwiHelperCore"];
@@ -188,7 +193,7 @@ if (import.meta.main) {
   if (counts.length > 15) console.log(`  … e mais ${counts.length - 15} telas. Um arquivo: bun scripts/i18n-check.ts --list <arquivo>`);
   if (process.env.GITHUB_ACTIONS) console.log(`::warning title=i18n::${total} textos fixos em ${counts.length} telas, fora do catálogo (spec #28171)`);
   // O main (T28192): avisa no resto de `src/bun`, barra nos migrados.
-  const main = [...filesUnder(path.join(ROOT, "src/bun"), ".ts"), path.join(ROOT, "src/agent/notice.ts")]
+  const main = [...filesUnder(path.join(ROOT, "src/bun"), ".ts"), ...["src/agent/notice.ts", "scripts/info-plist.ts", "scripts/app-plist.ts", "scripts/usage-strings.ts"].map((f) => path.join(ROOT, f))]
     .map((f) => ({ file: path.relative(ROOT, f), texts: mainFixedTexts(f, readFileSync(f, "utf8")) }))
     .filter((r) => r.texts.length > 0);
   const mainTotal = main.reduce((n, r) => n + r.texts.length, 0);

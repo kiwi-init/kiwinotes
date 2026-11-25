@@ -10,6 +10,7 @@ import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { appsIn, verifyApp, verifyBundle, withDmg } from "./signing.ts";
+import { assertUsageStrings } from "./usage-strings.ts";
 
 function files(dir: string | undefined, ext: string): string[] {
   if (!dir || !existsSync(dir)) return [];
@@ -31,12 +32,14 @@ function checkApps(dir: string, where: string): number {
   let count = 0;
   for (const app of appsIn(dir)) {
     verifyApp(app);
-    console.log(`verify-signature: ok ${where}: ${path.basename(app)}`);
+    // O pedido do mic em cada língua (T29006): sem os `.lproj`, ele volta a ser só em português, calado.
+    assertUsageStrings(app);
+    console.log(`verify-signature: ok ${where}: ${path.basename(app)} (signature, mic text in every language)`);
     count++;
     const inner = files(path.join(app, "Contents", "Resources"), ".tar.zst");
     if (inner.length) checkAutoclose(app, where);
     for (const tar of inner) {
-      for (const inner of verifyBundle(tar)) console.log(`verify-signature: ok ${where}: ${inner} inside ${path.basename(tar)}`);
+      for (const inner of verifyBundle(tar, assertUsageStrings)) console.log(`verify-signature: ok ${where}: ${inner} inside ${path.basename(tar)}`);
       count++;
     }
   }
@@ -56,7 +59,7 @@ function checkApps(dir: string, where: string): number {
   const artifacts = wrapped ? files(artifactDir, ".tar.zst").filter((f) => path.basename(f).startsWith(`${env}-`)) : [];
   if (wrapped && !artifacts.length) throw new Error(`verify-signature: no ${env}-*.tar.zst in ${artifactDir}`);
   for (const tar of [...files(buildDir, ".tar.zst"), ...artifacts]) {
-    for (const inner of verifyBundle(tar)) console.log(`verify-signature: ok ${path.basename(tar)}: ${inner}`);
+    for (const inner of verifyBundle(tar, assertUsageStrings)) console.log(`verify-signature: ok ${path.basename(tar)}: ${inner}`);
     count++;
   }
   const dmgs = wrapped ? [...files(buildDir, ".dmg"), ...files(artifactDir, ".dmg")] : [];
