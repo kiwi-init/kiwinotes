@@ -19,6 +19,21 @@ final class HelperLocaleTests: XCTestCase {
         return strings.keys.sorted()
     }
 
+    /// The CI's toolchain copies the `.xcstrings` instead of compiling it (#372): the helper reads the JSON then. Read
+    /// here from the source file, it has to give the same texts as the lookup the helper uses on this machine.
+    func testTheRawCatalogGivesTheSameTexts() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/KiwiHelperCore/Localizable.xcstrings")
+        let raw = try HelperLocale.parseCatalog(Data(contentsOf: url))
+        XCTAssertEqual(raw.keys.sorted(), try catalogKeys())
+        for (key, byLocale) in raw {
+            for locale in HelperLocale.supported {
+                XCTAssertEqual(byLocale[locale], HelperLocale.text(key, locale: locale), "\(key) in \(locale)")
+            }
+        }
+    }
+
     func testTheBuiltBundleHasEveryKeyInBothLanguages() throws {
         XCTAssertNotNil(HelperLocale.resources, "the resource bundle should sit next to the tests")
         let keys = try catalogKeys()

@@ -6,6 +6,9 @@ import Foundation
 ///
 /// The texts live in `Localizable.xcstrings` (this target's resources), by key. A key missing in a language falls back
 /// to Portuguese, and a missing resource bundle (a broken build) falls back to the key: the helper never stops for it.
+///
+/// Not every toolchain compiles the catalog: Swift 6.4 turns it into `pt.lproj`/`en.lproj`, but the CI's (Xcode 26.6,
+/// Swift 6.3) only copies the `.xcstrings` into the bundle. Without the `.lproj`, the helper reads that JSON itself.
 public enum HelperLocale {
     public static let supported = ["pt", "en"]
     public static let fallback = "pt"
@@ -39,9 +42,29 @@ public enum HelperLocale {
     public static func has(_ key: String, locale: String) -> Bool { lookup(key, locale) != nil }
 
     private static func lookup(_ key: String, _ locale: String) -> String? {
-        guard let bundle = lproj(locale) else { return nil }
-        let value = String(localized: String.LocalizationValue(key), table: "Localizable", bundle: bundle)
-        return value == key ? nil : value
+        if let bundle = lproj(locale) {
+            let value = String(localized: String.LocalizationValue(key), table: "Localizable", bundle: bundle)
+            return value == key ? nil : value
+        }
+        return rawCatalog?[key]?[locale]
+    }
+
+    /// The `.xcstrings` as it is, key → language → text, when the build copied it instead of compiling it.
+    static let rawCatalog: [String: [String: String]]? = {
+        guard let url = resources?.url(forResource: "Localizable", withExtension: "xcstrings") else { return nil }
+        return try? parseCatalog(Data(contentsOf: url))
+    }()
+
+    /// Reads a string catalog: `strings.<key>.localizations.<lang>.stringUnit.value`.
+    static func parseCatalog(_ data: Data) throws -> [String: [String: String]] {
+        struct Unit: Decodable { let value: String }
+        struct Localization: Decodable { let stringUnit: Unit? }
+        struct Entry: Decodable { let localizations: [String: Localization]? }
+        struct Catalog: Decodable { let strings: [String: Entry] }
+        let catalog = try JSONDecoder().decode(Catalog.self, from: data)
+        return catalog.strings.mapValues { entry in
+            (entry.localizations ?? [:]).compactMapValues { $0.stringUnit?.value }
+        }
     }
 
     private static func lproj(_ locale: String) -> Bundle? {
