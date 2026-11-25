@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { EN_PARTS } from "./en.ts";
-import { AUTO_FOLLOWS_SYSTEM, appLocale, LANGUAGE_CHOICE, languageChoice, CATALOGS, formatDate, formatDateTime, formatNumber, formatTime, isLanguageSetting, localeFromSystem, LOCALES, placeholders, resolveLocale, type TextKey, translate } from "./index.ts";
+import { AUTO_FOLLOWS_SYSTEM, appLocale, LANGUAGE_CHOICE, languageChoice, CATALOGS, formatDate, formatDateTime, formatNumber, formatTime, isLanguageSetting, type Entry, localeFromSystem, LOCALES, placeholders, resolveLocale, type TextKey, translate } from "./index.ts";
 import { PT_PARTS } from "./pt.ts";
 
 describe("catálogo", () => {
@@ -86,11 +86,16 @@ describe("catálogo", () => {
   };
 
   test("o inglês igual ao português só passa na lista de propósito (T30218)", () => {
-    const same = Object.keys(CATALOGS.pt).filter((key) => JSON.stringify(CATALOGS.en[key as TextKey]) === JSON.stringify(CATALOGS.pt[key as TextKey]));
+    // No plural, forma por forma: o `other` esquecido com o `one` traduzido também conta (revisão #30448).
+    const forms = (e: Entry) => (typeof e === "string" ? { text: e } : { ...e });
+    const same = (Object.keys(CATALOGS.pt) as TextKey[]).filter((key) => {
+      const pt = forms(CATALOGS.pt[key]), en = forms(CATALOGS.en[key]);
+      return Object.entries(pt).some(([form, text]) => en[form as keyof typeof en] === text);
+    });
     // A tradução esquecida aparece aqui pela chave: traduza no `<área>.en.ts`, ou, se for igual de propósito, ponha na lista.
     expect(same.filter((key) => !(key in SAME_ON_PURPOSE)).sort()).toEqual([]);
     // Uma chave da lista que já não é igual (ou sumiu) sai da lista, para ela não virar um buraco.
-    expect(Object.keys(SAME_ON_PURPOSE).filter((key) => !same.includes(key)).sort()).toEqual([]);
+    expect(Object.keys(SAME_ON_PURPOSE).filter((key) => !same.includes(key as TextKey)).sort()).toEqual([]);
   });
 });
 
