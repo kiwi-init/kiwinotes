@@ -20,6 +20,7 @@ import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { isolateHistory } from "@codemirror/commands";
 import type { MenuItem } from "../ContextMenu.tsx";
 import { isSpellingWord, NO_SPELLING, spellingResult, type SpellingResult } from "../../../src/shared/spelling.ts";
+import { t } from "../../src/i18n.ts";
 
 export const SPELLING_EXCLUDED = ["FencedCode", "CodeBlock", "InlineCode", "URL", "Autolink", "WikiLink"] as const;
 const excluded = new Set<string>(SPELLING_EXCLUDED);
@@ -80,9 +81,9 @@ export function applySpelling(view: SpellingView, target: SpellingTarget, sugges
 }
 export function spellingMenu(view: SpellingView, target: SpellingTarget, result: SpellingResult): MenuItem[] {
   if (!result.available || !result.misspelled) return [];
-  return [{ kind: "title", label: "Ortografia" },
+  return [{ kind: "title", label: t("editor.spelling") },
     ...(result.suggestions.length ? result.suggestions.map((suggestion) => ({ label: suggestion, onSelect: () => { applySpelling(view, target, suggestion); } }))
-      : [{ label: "Sem sugestões", disabled: true, onSelect() {} }]), { kind: "separator" }];
+      : [{ label: t("editor.noSuggestions"), disabled: true, onSelect() {} }]), { kind: "separator" }];
 }
 /** A slow/unavailable checker must not hold the context menu indefinitely. */
 export async function spellingForMenu(word: string, check: () => Promise<SpellingResult>, timeoutMs = 600): Promise<SpellingResult> {

@@ -3,6 +3,8 @@ import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap, ViewPlugin, type KeyBinding } from "@codemirror/view";
 import { foldGutter, foldKeymap, foldService, ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { openSearchPanel, search, searchKeymap, searchPanelOpen } from "@codemirror/search";
+import { t } from "../../src/i18n.ts";
+import type { TextKey } from "../../../src/shared/i18n/index.ts";
 export const SEARCH_KEYS: readonly KeyBinding[] = [
   ...searchKeymap.filter(k => ["Mod-f", "Mod-g", "F3", "Escape"].includes(k.key ?? "")),
   { key: "Mod-Alt-f", scope: "editor search-panel", run(view) {
@@ -11,13 +13,18 @@ export const SEARCH_KEYS: readonly KeyBinding[] = [
     return true;
   } },
 ];
-export const editorPhrases = EditorState.phrases.of({
-  Find: "Buscar", Replace: "Substituir", next: "Próximo", previous: "Anterior", all: "Selecionar todas",
-  "match case": "Diferenciar maiúsculas", regexp: "Expressão regular", "by word": "Palavra inteira",
-  replace: "Substituir", "replace all": "Substituir tudo", close: "Fechar",
-  "Fold line": "Recolher linha", "Unfold line": "Expandir linha", "folded code": "Texto recolhido",
-  "unfold": "Expandir", "current match": "Ocorrência atual", "on line": "na linha",
-});
+/**
+ * As frases da busca e do recolher do CodeMirror (T29842), pelo nome em inglês dele, na língua do app quando o editor
+ * abre. Em inglês, os textos dele mesmo.
+ */
+const PHRASES = {
+  Find: "editor.search.find", Replace: "editor.search.replace", next: "editor.search.next", previous: "editor.search.previous",
+  all: "editor.search.all", "match case": "editor.search.matchCase", regexp: "editor.search.regexp", "by word": "editor.search.byWord",
+  replace: "editor.search.replace", "replace all": "editor.search.replaceAll", close: "editor.search.close",
+  "Fold line": "editor.search.foldLine", "Unfold line": "editor.search.unfoldLine", "folded code": "editor.search.folded",
+  unfold: "editor.search.unfold", "current match": "editor.search.currentMatch", "on line": "editor.search.onLine",
+} as const satisfies Record<string, TextKey>;
+export const editorPhrases = (): Extension => EditorState.phrases.of(Object.fromEntries(Object.entries(PHRASES).map(([en, key]) => [en, t(key)])));
 export const listFolding = foldService.of((state, start, end) => {
   const tree = ensureSyntaxTree(state, end, 50) ?? syntaxTree(state);
   for (let n = tree.resolveInner(end, -1); n; n = n.parent!) {
@@ -48,8 +55,8 @@ const searchTheme = EditorView.theme({
     '.cm-searchMatch-selected': { backgroundColor: 'var(--accent-soft)', outline: '1px solid var(--accent)' },
 });
 /** Buscar e trocar (⌘F, ⌘⌥F) sem a dobra: o editor dos textos e do código (T19312). */
-export const searchOnly: Extension = [editorPhrases, search({ top: true }), keymap.of(SEARCH_KEYS), searchTheme];
-export const searchAndFold = [editorPhrases, search({ top: true }), listFolding, foldGutter({ domEventHandlers: { mousedown(view, _line, event) { event.preventDefault(); view.focus(); return false; } } }), keymap.of([...SEARCH_KEYS, ...foldKeymap]),
+export const searchOnly = (): Extension => [editorPhrases(), search({ top: true }), keymap.of(SEARCH_KEYS), searchTheme];
+export const searchAndFold = (): Extension => [editorPhrases(), search({ top: true }), listFolding, foldGutter({ domEventHandlers: { mousedown(view, _line, event) { event.preventDefault(); view.focus(); return false; } } }), keymap.of([...SEARCH_KEYS, ...foldKeymap]),
   searchTheme,
   EditorView.theme({
     // A coluna da dobra fica no recuo da página, fora da coluna do texto (T19388): o editor começa 12 px antes, e o texto

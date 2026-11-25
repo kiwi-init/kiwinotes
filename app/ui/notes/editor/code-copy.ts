@@ -6,6 +6,7 @@
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState, Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
+import { t } from "../../src/i18n.ts";
 
 type Copy = (text: string) => Promise<unknown>;
 
@@ -27,15 +28,15 @@ export function copyButton(className: string, text: () => string, copy: Copy): H
   const button = document.createElement("button");
   button.type = "button";
   button.className = className;
-  button.textContent = "Copiar";
-  button.title = "Copiar o código";
+  button.textContent = t("editor.copy");
+  button.title = t("editor.copyTitle");
   let timer: ReturnType<typeof setTimeout> | undefined;
   const show = (label: string, state: string) => {
     button.textContent = label;
     button.dataset.state = state;
     clearTimeout(timer);
     timer = setTimeout(() => {
-      button.textContent = "Copiar";
+      button.textContent = t("editor.copy");
       delete button.dataset.state;
     }, COPIED_MS);
   };
@@ -45,8 +46,8 @@ export function copyButton(className: string, text: () => string, copy: Copy): H
     e.preventDefault();
     e.stopPropagation();
     void copy(text()).then(
-      () => show("Copiado", "done"),
-      () => show("Não copiou", "failed"),
+      () => show(t("editor.copied"), "done"),
+      () => show(t("editor.copyFailed"), "failed"),
     );
   });
   return button;

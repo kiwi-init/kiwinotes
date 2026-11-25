@@ -5,6 +5,7 @@
 // ideia; o Zettlr (GPL-3.0) também só como ideia, sem código.
 
 import type { EditorState, Text, TransactionSpec } from "@codemirror/state";
+import { t as tx } from "../../src/i18n.ts";
 
 /** `[^1]` no texto, ou a nota em linha `^[texto]`. `n` é o número que aparece: a ordem da primeira chamada na nota. */
 export type FootnoteMark =
@@ -315,5 +316,5 @@ export function footnoteText(notes: Footnotes, of: { label: string } | { n: numb
     return m && m.kind === "inline" ? { text: m.text, missing: false } : null;
   }
   const def = notes.def(of.label);
-  return def?.text ? { text: def.text, missing: false } : { text: "Esta nota de rodapé ainda não tem texto. Clique para escrever.", missing: true };
+  return def?.text ? { text: def.text, missing: false } : { text: tx("editor.footnoteEmpty"), missing: true };
 }
