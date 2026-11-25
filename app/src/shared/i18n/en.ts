@@ -3,6 +3,7 @@
 
 import { enCommon } from "./common.en.ts";
 import type { Catalog, Entry } from "./index.ts";
+import { enMeetingsSettings } from "./meetings-settings.en.ts";
 import { enNotes } from "./notes.en.ts";
 import type { PT_PARTS } from "./pt.ts";
 import { enSettings } from "./settings.en.ts";
@@ -108,6 +109,7 @@ export const EN_PARTS = {
   common: enCommon,
   notes: enNotes,
   settings: enSettings,
+  meetingsSettings: enMeetingsSettings,
 } as const;
 
 export const en: Catalog = {
@@ -115,4 +117,5 @@ export const en: Catalog = {
   ...enCommon,
   ...enNotes,
   ...enSettings,
+  ...enMeetingsSettings,
 };

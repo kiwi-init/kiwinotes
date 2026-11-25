@@ -1,56 +1,62 @@
-// "Suas reuniões" em Ajustes › Agente (spec #8360, T11294): os textos e a prévia do nome do arquivo.
+// "Suas reuniões" em Ajustes › Agente (spec #8360, T11294): os textos e a prévia do nome do arquivo. Cada função leva a
+// língua no fim (T29273): sem ela, o português de sempre.
 
+import { INTL_TAG, type Locale, type TextKey, translate } from "../../src/shared/i18n/index.ts";
 import { meetingNoteTitle, type MeetingNoteName } from "../../src/shared/meeting-note-name.ts";
 import type { AgentMeetingSettings } from "../../src/store/settings.ts";
 
-export const MEETINGS_TITLE = "Suas reuniões";
-export const MEETINGS_HINT = "Depois de uma reunião gravada, o agente prepara a nota dela para a pasta do projeto. Nada é escrito antes do [Aplicar].";
+export const MEETINGS_TITLE = translate("pt", "settings.meetings.title");
+export const MEETINGS_HINT = translate("pt", "settings.meetings.hint");
 
-export const PROPOSE_OPTIONS: { value: AgentMeetingSettings["propose"]; label: string }[] = [
-  { value: "auto", label: "Propor sozinho" },
-  { value: "on-request", label: "Só quando eu pedir" },
+export const proposeOptions = (locale: Locale = "pt"): { value: AgentMeetingSettings["propose"]; label: string }[] => [
+  { value: "auto", label: translate(locale, "settings.meetings.propose.auto") },
+  { value: "on-request", label: translate(locale, "settings.meetings.propose.onRequest") },
 ];
-export const FOLDER_OPTIONS: { value: AgentMeetingSettings["folder"]["kind"]; label: string }[] = [
-  { value: "project", label: "Na pasta do projeto" },
-  { value: "single", label: "Numa pasta única" },
+export const folderOptions = (locale: Locale = "pt"): { value: AgentMeetingSettings["folder"]["kind"]; label: string }[] => [
+  { value: "project", label: translate(locale, "settings.meetings.folder.project") },
+  { value: "single", label: translate(locale, "settings.meetings.folder.single") },
 ];
-export const NAME_OPTIONS: { value: MeetingNoteName; label: string }[] = [
-  { value: "date-theme", label: "data · tema" },
-  { value: "theme-date", label: "tema · data" },
+export const nameOptions = (locale: Locale = "pt"): { value: MeetingNoteName; label: string }[] => [
+  { value: "date-theme", label: translate(locale, "settings.meetings.name.dateTheme") },
+  { value: "theme-date", label: translate(locale, "settings.meetings.name.themeDate") },
 ];
-export const BLOCKS: { key: keyof AgentMeetingSettings["blocks"]; label: string }[] = [
-  { key: "summary", label: "Resumo" },
-  { key: "decisions", label: "Decisões" },
-  { key: "actions", label: "Ações" },
-  { key: "participants", label: "Participantes" },
-  { key: "nextSteps", label: "Próximos passos" },
+
+const BLOCK_KEYS: { key: keyof AgentMeetingSettings["blocks"]; text: TextKey }[] = [
+  { key: "summary", text: "settings.meetings.block.summary" },
+  { key: "decisions", text: "settings.meetings.block.decisions" },
+  { key: "actions", text: "settings.meetings.block.actions" },
+  { key: "participants", text: "settings.meetings.block.participants" },
+  { key: "nextSteps", text: "settings.meetings.block.nextSteps" },
 ];
+export const blocks = (locale: Locale = "pt"): { key: keyof AgentMeetingSettings["blocks"]; label: string }[] =>
+  BLOCK_KEYS.map((b) => ({ key: b.key, label: translate(locale, b.text) }));
+export const BLOCKS = blocks();
+
+/** "A, B e C" em português, "A, B, and C" em inglês. */
+export const listOf = (items: string[], locale: Locale) => new Intl.ListFormat(INTL_TAG[locale], { type: "conjunction" }).format(items);
 
 /** O que "propor sozinho" quer dizer agora, com o modo econômico. */
-export function proposeHint(propose: AgentMeetingSettings["propose"], economy: boolean): string {
-  if (propose === "on-request") return 'Só quando você pedir, como "atualiza o projeto com a reunião que eu acabei de ter".';
-  return economy
-    ? "Com o modo econômico, o Kiwi pergunta antes, porque cada proposta gasta um pedido do seu plano."
-    : "Cada proposta gasta um pedido do seu plano.";
+export function proposeHint(propose: AgentMeetingSettings["propose"], economy: boolean, locale: Locale = "pt"): string {
+  if (propose === "on-request") return translate(locale, "settings.meetings.propose.hint.onRequest");
+  return translate(locale, economy ? "settings.meetings.propose.hint.economy" : "settings.meetings.propose.hint.auto");
 }
 
 /** A prévia ao vivo do nome do arquivo, com a data de hoje e um tema de exemplo. */
-export function namePreview(name: MeetingNoteName, today: Date): string {
+export function namePreview(name: MeetingNoteName, today: Date, locale: Locale = "pt"): string {
   const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  return `${meetingNoteTitle(date, "Cronograma da mudança", name)}.md`;
+  return `${meetingNoteTitle(date, translate(locale, "settings.meetings.name.example"), name)}.md`;
 }
 
 /** Onde a nota vai, dito por extenso. */
-export function folderHint(folder: AgentMeetingSettings["folder"]): string {
+export function folderHint(folder: AgentMeetingSettings["folder"], locale: Locale = "pt"): string {
   return folder.kind === "single"
-    ? `Todas as notas de reunião vão para ${folder.path}, e a nota principal do projeto ganha o link.`
-    : "Na pasta do projeto da reunião. Sem projeto, na pasta principal.";
+    ? translate(locale, "settings.meetings.folder.hint.single", { path: folder.path })
+    : translate(locale, "settings.meetings.folder.hint.project");
 }
 
 /** "Resumo, Decisões e Ações", ou o aviso de que só fica o link. */
-export function blocksHint(blocks: AgentMeetingSettings["blocks"]): string {
-  const on = BLOCKS.filter((b) => blocks[b.key]).map((b) => b.label);
-  if (!on.length) return "Nenhum bloco: a nota leva só o link para a transcrição.";
-  const list = on.length === 1 ? on[0]! : `${on.slice(0, -1).join(", ")} e ${on.at(-1)}`;
-  return `A nota leva ${list}, e sempre o link para a transcrição.`;
+export function blocksHint(on: AgentMeetingSettings["blocks"], locale: Locale = "pt"): string {
+  const names = blocks(locale).filter((b) => on[b.key]).map((b) => b.label);
+  if (!names.length) return translate(locale, "settings.meetings.blocks.none");
+  return translate(locale, "settings.meetings.blocks.some", { list: listOf(names, locale) });
 }

@@ -1,35 +1,30 @@
 // Os textos do resumo executivo em Ajustes › Agente (spec #11546), na parte das reuniões: os 6 blocos e o período do
-// primeiro resumo. Só texto, para testar sem a tela.
+// primeiro resumo. Só texto, para testar sem a tela. Cada função leva a língua no fim (T29273): sem ela, o português.
 
+import { type Locale, translate } from "../../src/shared/i18n/index.ts";
 import type { SummaryBlock, SummarySettings } from "../../src/shared/summary-settings.ts";
+import { listOf } from "./meetingsText.ts";
 
-export const SUMMARY_SETTINGS_TITLE = "Resumo executivo do projeto";
-export const SUMMARY_SETTINGS_HINT =
-  'Quando você pede "resumo executivo do <projeto>", o agente prepara o resumo no topo da nota principal do projeto, no lugar do anterior (que fica nas Versões). Nada é escrito antes do [Aplicar].';
+export const SUMMARY_SETTINGS_TITLE = translate("pt", "settings.meetings.summary.title");
+export const SUMMARY_SETTINGS_HINT = translate("pt", "settings.meetings.summary.hint");
 
-export const SUMMARY_BLOCK_LABELS: { key: SummaryBlock; label: string }[] = [
-  { key: "situacao", label: "Situação" },
-  { key: "andou", label: "O que andou" },
-  { key: "decisoes", label: "Decisões" },
-  { key: "riscos", label: "Riscos e bloqueios" },
-  { key: "proximos", label: "Próximos passos" },
-  { key: "reunioes", label: "Reuniões recentes" },
-];
+const BLOCK_ORDER: SummaryBlock[] = ["situacao", "andou", "decisoes", "riscos", "proximos", "reunioes"];
+export const summaryBlockLabels = (locale: Locale = "pt"): { key: SummaryBlock; label: string }[] =>
+  BLOCK_ORDER.map((key) => ({ key, label: translate(locale, `settings.meetings.summary.block.${key}`) }));
+export const SUMMARY_BLOCK_LABELS = summaryBlockLabels();
 
-export const FIRST_DAYS_OPTIONS: { value: "7" | "14" | "30"; label: string }[] = [
-  { value: "7", label: "7 dias" },
-  { value: "14", label: "14 dias" },
-  { value: "30", label: "30 dias" },
-];
+export const firstDaysOptions = (locale: Locale = "pt"): { value: "7" | "14" | "30"; label: string }[] =>
+  (["7", "14", "30"] as const).map((value) => ({ value, label: translate(locale, "settings.meetings.summary.days", { n: Number(value) }) }));
+export const FIRST_DAYS_OPTIONS = firstDaysOptions();
 
-export function firstDaysHint(days: SummarySettings["firstDays"]): string {
-  return `Sem um resumo anterior, "O que andou" conta os últimos ${days} dias. Depois, conta desde o último resumo.`;
+export function firstDaysHint(days: SummarySettings["firstDays"], locale: Locale = "pt"): string {
+  return translate(locale, "settings.meetings.summary.first.hint", { n: days });
 }
 
-export function summaryBlocksHint(blocks: SummarySettings["blocks"]): string {
-  const on = SUMMARY_BLOCK_LABELS.filter((b) => blocks[b.key]).map((b) => b.label);
-  if (!on.length) return "Nenhum bloco ligado: o resumo sai vazio. Ligue ao menos um.";
-  if (on.length === SUMMARY_BLOCK_LABELS.length) return "Os 6 blocos, nesta ordem.";
-  const list = on.length === 1 ? on[0]! : `${on.slice(0, -1).join(", ")} e ${on.at(-1)}`;
-  return `O resumo leva ${list}, nesta ordem.`;
+export function summaryBlocksHint(blocks: SummarySettings["blocks"], locale: Locale = "pt"): string {
+  const all = summaryBlockLabels(locale);
+  const on = all.filter((b) => blocks[b.key]).map((b) => b.label);
+  if (!on.length) return translate(locale, "settings.meetings.summary.blocks.none");
+  if (on.length === all.length) return translate(locale, "settings.meetings.summary.blocks.all");
+  return translate(locale, "settings.meetings.summary.blocks.some", { list: listOf(on, locale) });
 }
