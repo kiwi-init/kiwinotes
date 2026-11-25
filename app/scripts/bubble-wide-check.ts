@@ -128,7 +128,7 @@ try {
   ];
   for (const { size, where, curta } of cases) {
     const texto = curta ? CURTA : LONGA;
-      // Uma janela por caso: o balão pequeno só sai sozinho, quando o texto acaba de passar.
+      // Uma janela por caso: o balão pequeno só sai com o clique.
       const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", ...size, motion: false, browser: "webkit", query: {} });
       const p = w.page;
       try {
@@ -140,7 +140,7 @@ try {
         await p.keyboard.press("Escape"); // o clique na aba da Início abre o menu dela
         await invoke("agent.ask", { text: `/diga ${texto}` });
         await p.waitForSelector(`${BUBBLE} .kn-bubble-more`, { timeout: 30_000 });
-        await p.waitForTimeout(2500); // o primeiro trecho acaba de ser digitado
+        await p.waitForTimeout(600); // o resumo entra inteiro (spec #27881)
         await settle(p);
         const small = await box(p, BUBBLE);
         const tag = `${size.width}-${where}${curta ? "-curta" : ""}`;
@@ -153,7 +153,9 @@ try {
         const what = `${size.width}×${size.height}, ${lugar}${curta ? ", resposta curta" : ""}`;
         // A largura certa. Texto longo: min(480, o espaço do lado). Curta: só o que o texto pede, entre o fechado e 480.
         const side = await room(p);
-        const wider = big.width > small.width + 1;
+        // O resumo (spec #27881) pode dar um fechado mais estreito que o mínimo do aberto: compara com o que for maior.
+        const narrow = Math.max(small.width, Math.min(320, side));
+        const wider = big.width > narrow + 1;
         if (curta) {
           // A linha mais longa pede mais que os 320 do fechado e menos que 480: nem o mínimo, nem o máximo.
           assert.ok(big.width > 330 && big.width < 470, `${what}: a curta abriu com ${big.width} px, devia seguir o texto (entre 320 e 480)`);
@@ -168,7 +170,7 @@ try {
         const over = big.x < body.x1 && big.x + big.width > body.x0 && big.y < body.y1 && big.y + big.height > body.y0;
         assert.ok(!over, `${what}: o aberto cobre o gato`);
         // Menos linhas que na largura do fechado.
-        const l = await lines(p, small.width);
+        const l = await lines(p, narrow);
         if (wider && !curta) assert.ok(l.now < l.then, `${what}: ${l.now} linhas aberto, ${l.then} na largura do fechado`);
         await p.screenshot({ path: join(out, `${tag}-aberto.png`) });
         checks.push(`${what}: fechado ${Math.round(small.width)} px → aberto ${Math.round(big.width)} px (o lado tem ${Math.round(side)}), ${l.then} → ${l.now} linhas${wider || curta ? "" : " (o lado não tem mais espaço)"}`);

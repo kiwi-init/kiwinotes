@@ -1,143 +1,175 @@
-// O balão do gato (spec #9495, T10832): a fila, o corte entre palavras, o tempo de leitura, a ferramenta, o erro e o
-// [Ver mais], com o relógio na mão. A medida do balão aqui é por caracteres (a tela mede em pixels).
+// O balão do gato (spec #9495, T10832; um balão só desde o spec #27881): o resumo, a fala do `cat_speak`, a linha de
+// estado, o erro, o [Ver mais] e o pedido novo, com o relógio na mão. A medida do balão aqui é por caracteres (a tela
+// mede em pixels).
 
 import { describe, expect, test } from "bun:test";
 
 import type { AgentTurnEvent, BubbleLink } from "../../src/shared/ui-contract";
-import { ANSWER_HOLD_MS, BubbleFeed, bubblePlain, plainLinks, readingMs, splitChunks, TYPE_MS, WEB_LINE } from "./bubble-state";
+import { ANSWER_HOLD_MS, BubbleFeed, bubblePlain, plainLinks, summaryOf, WEB_LINE } from "./bubble-state";
 
 const fits = (max: number) => (s: string) => [...s].length <= max;
 const ev = (e: Record<string, unknown>) => ({ id: "p1", ...e }) as AgentTurnEvent;
 
-/** Anda o relógio até o balão mudar de verdade, e devolve os trechos completos que passaram por ele. */
-function play(feed: BubbleFeed, from: number, until = from + 120_000): { chunks: string[]; end: number } {
-  const chunks: string[] = [];
-  let now = from;
-  while (now < until) {
-    const v = feed.view(now);
-    if (!v) break;
-    if (v.text === v.full && chunks.at(-1) !== v.full) chunks.push(v.full);
-    const next = feed.nextWake(now);
-    if (!Number.isFinite(next)) break;
-    now = next;
-  }
-  return { chunks, end: now };
+/** Um pedido inteiro: os eventos na ordem, com o relógio parado em 0. */
+function run(f: BubbleFeed, events: Record<string, unknown>[], id = "p1"): BubbleFeed {
+  f.event({ id, type: "started" } as AgentTurnEvent, 0);
+  for (const e of events) f.event({ id, ...e } as AgentTurnEvent, 0);
+  return f;
 }
 
-describe("o corte entre palavras", () => {
-  test("nunca no meio de uma palavra, e a palavra maior que o balão é a única cortada", () => {
-    expect(splitChunks("um dois três quatro cinco", fits(9)).map((c) => c.text)).toEqual(["um dois", "três", "quatro", "cinco"]);
-    expect(splitChunks("ab https://exemplo.com/um/caminho cd", fits(10)).map((c) => c.text)).toEqual(["ab", "https://ex", "emplo.com/", "um/caminho", "cd"]);
-    // As quebras de linha dentro do trecho ficam (a lista continua legível).
-    expect(splitChunks("- um\n- dois\n- três", fits(11)).map((c) => c.text)).toEqual(["- um\n- dois", "- três"]);
-    expect(splitChunks("   ", fits(5))).toEqual([]);
+const LONGA =
+  "Achei três notas sobre o Projeto X. A mais nova é de ontem, com o prazo de sexta. As outras duas falam da reunião com a Ana e do orçamento, que ainda espera a resposta do Bruno.";
+
+describe("o resumo (spec #27881)", () => {
+  test("cabe inteiro: o texto todo; não cabe: as frases do começo que cabem", () => {
+    expect(summaryOf("  Pronto.  ", fits(40))).toBe("Pronto.");
+    expect(summaryOf(LONGA, fits(90))).toBe("Achei três notas sobre o Projeto X. A mais nova é de ontem, com o prazo de sexta.");
+    expect(summaryOf(LONGA, fits(60))).toBe("Achei três notas sobre o Projeto X.");
+    // A interrogação, a exclamação e as reticências também fecham a frase; a quebra de linha também (uma lista).
+    expect(summaryOf("Quer que eu abra? Posso também resumir a nota inteira.", fits(30))).toBe("Quer que eu abra?");
+    expect(summaryOf("Os prazos:\n- Ana, sexta\n- Bruno, segunda e terça", fits(24))).toBe("Os prazos:\n- Ana, sexta");
   });
 
-  test("o tempo de leitura: 1,5 s mais 60 ms por caractere, entre 2 e 8 s", () => {
-    expect(readingMs("oi")).toBe(2000);
-    expect(readingMs("x".repeat(50))).toBe(4500);
-    expect(readingMs("x".repeat(500))).toBe(8000);
+  test("nem a primeira frase cabe: entre palavras, com \"…\"; uma palavra maior que o balão, pelas letras", () => {
+    const s = summaryOf(LONGA, fits(20));
+    expect(s).toBe("Achei três notas…");
+    expect([...s].length).toBeLessThanOrEqual(20);
+    // A vírgula do fim sai antes das reticências.
+    expect(summaryOf("Abri a nota, li as seções e achei o prazo.", fits(14))).toBe("Abri a nota…");
+    expect(summaryOf("https://exemplo.com/um/caminho/longo", fits(10))).toBe("https://e…");
+    expect(summaryOf("   ", fits(10))).toBe("");
   });
 });
 
-describe("o balão", () => {
-  test("a resposta aparece digitada; depois do done fica o tempo de leitura e some", () => {
-    const f = new BubbleFeed(fits(40));
+describe("o balão único", () => {
+  test("uma resposta longa mostra um balão só, com o resumo, que não muda com o relógio andando", () => {
+    const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);
-    expect(f.view(0)).toBeNull();
-    f.event(ev({ type: "text", text: "Olá, " }), 10);
-    expect(f.view(10)).toMatchObject({ text: "", full: "Olá, ", more: false });
-    expect(f.view(10 + 2 * TYPE_MS)!.text).toBe("Ol");
-    f.event(ev({ type: "text", text: "tudo bem?" }), 50);
-    f.event(ev({ type: "done", stopReason: "end_turn", text: "Olá, tudo bem?" }), 60);
-    const typedAt = 10 + "Olá, tudo bem?".length * TYPE_MS;
-    expect(f.view(typedAt)).toMatchObject({ text: "Olá, tudo bem?", more: false });
-    expect(f.view(typedAt + readingMs("Olá, tudo bem?") - 1)).not.toBeNull();
-    expect(f.view(typedAt + readingMs("Olá, tudo bem?"))).toBeNull();
+    // O texto chegando não vai ao balão: o gato pensa.
+    for (const [i, w] of LONGA.split(/(?<= )/).entries()) {
+      f.event(ev({ type: "text", text: w }), i * 10);
+      expect(f.view(i * 10)).toBeNull();
+    }
+    f.event(ev({ type: "done", stopReason: "end_turn", text: LONGA }), 5000);
+    const v = f.view(5000)!;
+    expect(v).toEqual({ text: "Achei três notas sobre o Projeto X.", full: "Achei três notas sobre o Projeto X.", error: false, more: true, key: v.key });
+    // Nada muda sozinho: nem a chave, nem o texto, por mais que o relógio ande.
+    expect(f.nextWake(5000)).toBe(Infinity);
+    for (const t of [5001, 8000, 60_000, 3_600_000]) expect(f.view(t)).toEqual(v);
+    expect(f.all()).toBe(LONGA);
     // O leitor de tela: uma vez, com o texto inteiro.
-    expect(f.takeAnnouncement()).toBe("Olá, tudo bem?");
+    expect(f.takeAnnouncement()).toBe(LONGA);
     expect(f.takeAnnouncement()).toBeNull();
   });
 
-  test("uma resposta longa vira uma fila de trechos, cada um pelo tempo de leitura, e o texto rápido espera a vez", () => {
-    const f = new BubbleFeed(fits(20));
-    const text = "Esta resposta é longa demais para um balão só, então ela vira vários trechos em fila.";
-    f.event(ev({ type: "started" }), 0);
-    // Tudo chega de uma vez: a fila guarda o resto.
-    f.event(ev({ type: "text", text }), 0);
-    f.event(ev({ type: "done", stopReason: "end_turn", text }), 0);
-    expect(f.view(0)!.more).toBe(true);
-    const { chunks, end } = play(f, 0);
-    expect(chunks).toEqual(splitChunks(text, fits(20)).map((c) => c.text));
-    expect(chunks.join(" ")).toBe(text);
-    for (const c of chunks) expect([...c].length).toBeLessThanOrEqual(20);
-    // Cada trecho ficou o tempo de digitar mais o de ler.
-    const total = chunks.reduce((t, c) => t + [...c].length * TYPE_MS + readingMs(c), 0);
-    expect(end).toBe(total);
+  test("com o cat_speak, o resumo é a fala dele (sem Markdown); sem, o começo cortado em frase", () => {
+    const com = run(new BubbleFeed(fits(80)), [
+      { type: "status", status: "running", tool: "cat_speak" },
+      { type: "speech", text: "Achei **três** notas. A mais nova é de ontem." },
+      { type: "status", status: "thinking" },
+      { type: "text", text: LONGA },
+      { type: "done", stopReason: "end_turn", text: LONGA },
+    ]);
+    expect(com.view(0)).toMatchObject({ text: "Achei três notas. A mais nova é de ontem.", more: true });
+    // A fala longa demais para o balão também é cortada, em frase.
+    const longa = run(new BubbleFeed(fits(30)), [
+      { type: "speech", text: "Achei três notas. A mais nova é de ontem, com o prazo." },
+      { type: "done", stopReason: "end_turn", text: LONGA },
+    ]);
+    expect(longa.view(0)!.text).toBe("Achei três notas.");
+    const sem = run(new BubbleFeed(fits(90)), [{ type: "done", stopReason: "end_turn", text: LONGA }]);
+    expect(sem.view(0)!.text).toBe("Achei três notas sobre o Projeto X. A mais nova é de ontem, com o prazo de sexta.");
+    const curto = run(new BubbleFeed(fits(20)), [{ type: "done", stopReason: "end_turn", text: LONGA }]);
+    expect(curto.view(0)!.text).toBe("Achei três notas…");
   });
 
-  test("o último trecho espera o resto enquanto o pedido roda", () => {
-    const f = new BubbleFeed(fits(40));
-    f.event(ev({ type: "started" }), 0);
-    f.event(ev({ type: "text", text: "Primeira parte." }), 0);
-    expect(f.nextWake(10_000)).toBe(Infinity);
-    expect(f.view(60_000)!.text).toBe("Primeira parte.");
-  });
-
-  test("o texto antes de uma ferramenta sai quando ela começa; a resposta final entra num balão novo; o Ver mais tem tudo", () => {
+  test("o texto entre as ferramentas não aparece no balão e está no [Ver mais]", () => {
+    const antes = "Vou procurar nas suas notas.";
+    const depois = "Achei a nota do Projeto X.";
     const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);
-    f.event(ev({ type: "text", text: "Vou ler a nota." }), 0);
-    expect(f.view(1000)!.text).toBe("Vou ler a nota.");
-    f.event(ev({ type: "status", status: "running", tool: "notes_read" }), 1000);
-    expect(f.view(1000)).toBeNull();
-    f.event(ev({ type: "status", status: "thinking" }), 1500);
-    f.event(ev({ type: "text", text: "O prazo é março." }), 2000);
-    f.event(ev({ type: "done", stopReason: "end_turn", text: "Vou ler a nota.O prazo é março." }), 2100);
-    expect(f.view(2000 + 20 * TYPE_MS)).toMatchObject({ full: "O prazo é março.", more: true });
-    expect(f.all()).toBe("Vou ler a nota.O prazo é março.");
+    f.event(ev({ type: "text", text: antes }), 0);
+    expect(f.view(0)).toBeNull();
+    f.event(ev({ type: "status", status: "running", tool: "kiwi" }), 10);
+    expect(f.view(10)).toBeNull();
+    f.event(ev({ type: "status", status: "thinking" }), 20);
+    f.event(ev({ type: "text", text: `\n\n${depois}` }), 30);
+    expect(f.view(30)).toBeNull();
+    f.event(ev({ type: "done", stopReason: "end_turn", text: `${antes}\n\n${depois}` }), 40);
+    // O resumo é a resposta final, a de depois da última ferramenta; o [Ver mais] tem as duas.
+    expect(f.view(40)).toMatchObject({ text: depois, more: true });
+    expect(f.all()).toBe(`${antes}\n\n${depois}`);
+    // Sem nada depois da última ferramenta, o resumo sai do pedido inteiro.
+    const g = run(new BubbleFeed(fits(60)), [
+      { type: "text", text: antes },
+      { type: "status", status: "running", tool: "kiwi" },
+      { type: "done", stopReason: "end_turn", text: antes },
+    ]);
+    expect(g.view(0)).toMatchObject({ text: antes, more: false });
   });
 
   test("o done que traz um texto que não chegou em pedaços entra inteiro", () => {
-    const f = new BubbleFeed(fits(60));
-    f.event(ev({ type: "started" }), 0);
-    f.event(ev({ type: "done", stopReason: "end_turn", text: "Tudo de uma vez." }), 0);
-    expect(f.view(0)).toMatchObject({ full: "Tudo de uma vez." });
+    const f = run(new BubbleFeed(fits(60)), [{ type: "done", stopReason: "end_turn", text: "Tudo de uma vez." }]);
+    expect(f.view(0)).toMatchObject({ text: "Tudo de uma vez.", more: false });
   });
 
-  test("no erro, a mensagem em uma linha, sem digitação", () => {
+  test("o [Ver mais] só quando a resposta inteira é maior que o resumo", () => {
+    const igual = run(new BubbleFeed(fits(60)), [{ type: "done", stopReason: "end_turn", text: "Anotei na **nota**." }]);
+    expect(igual.view(0)).toMatchObject({ text: "Anotei na nota.", more: false });
+    // A fala igual à resposta: nada a mais para ver.
+    const fala = run(new BubbleFeed(fits(60)), [
+      { type: "speech", text: "Anotei na nota." },
+      { type: "done", stopReason: "end_turn", text: "Anotei na nota." },
+    ]);
+    expect(fala.view(0)!.more).toBe(false);
+    const maior = run(new BubbleFeed(fits(60)), [
+      { type: "speech", text: "Anotei na nota." },
+      { type: "done", stopReason: "end_turn", text: "Anotei na nota. Ela ficou na pasta Projeto X." },
+    ]);
+    expect(maior.view(0)!.more).toBe(true);
+  });
+});
+
+describe("o que fica como antes", () => {
+  test("no erro, a mensagem em uma linha, que fica até o clique", () => {
     const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);
     f.event(ev({ type: "text", text: "Começando" }), 0);
     f.event(ev({ type: "error", code: "E_AGENT_EXITED", message: "O agente parou.\ndetalhe técnico" }), 100);
-    expect(f.view(100)).toMatchObject({ text: "O agente parou.", full: "O agente parou.", error: true, more: false });
-    expect(f.view(100 + readingMs("O agente parou."))).toBeNull();
+    const v = f.view(100);
+    expect(v).toMatchObject({ text: "O agente parou.", full: "O agente parou.", error: true, more: false });
+    expect(f.view(60_000)).toEqual(v);
+    f.close();
+    expect(f.view(60_000)).toBeNull();
   });
 
   test("um pedido novo fecha o balão do anterior, e o atrasado do anterior é ignorado", () => {
-    const f = new BubbleFeed(fits(60));
-    f.event(ev({ type: "started" }), 0);
-    f.event(ev({ type: "text", text: "Resposta velha" }), 0);
+    const f = run(new BubbleFeed(fits(60)), [{ type: "done", stopReason: "end_turn", text: "Resposta velha." }]);
     f.event({ id: "p2", type: "started" }, 100);
     // A resposta velha fica no canto até o primeiro balão do novo, ou o ANSWER_HOLD_MS (T15377, mais abaixo).
-    expect(f.view(100)!.full).toBe("Resposta velha");
+    expect(f.view(100)!.full).toBe("Resposta velha.");
     expect(f.view(100 + ANSWER_HOLD_MS)).toBeNull();
     f.event(ev({ type: "text", text: " atrasada" }), 110);
+    f.event(ev({ type: "done", stopReason: "end_turn", text: "Resposta velha. atrasada" }), 110);
     expect(f.view(5000)).toBeNull();
-    f.event({ id: "p2", type: "text", text: "Nova" }, 200);
-    expect(f.view(5000)!.full).toBe("Nova");
+    f.event({ id: "p2", type: "done", stopReason: "end_turn", text: "Nova." }, 200);
+    expect(f.view(5000)!.full).toBe("Nova.");
   });
 
   test("cancelado, o balão fecha; o clique fecha e o resto do pedido não volta", () => {
     const c = new BubbleFeed(fits(60));
     c.event(ev({ type: "started" }), 0);
+    c.event(ev({ type: "status", status: "running", tool: "web" }), 0);
     c.event(ev({ type: "text", text: "meio" }), 0);
     c.event(ev({ type: "done", stopReason: "cancelled", text: "" }), 10);
     expect(c.view(10)).toBeNull();
     const k = new BubbleFeed(fits(60));
     k.event(ev({ type: "started" }), 0);
-    k.event(ev({ type: "text", text: "um texto" }), 0);
+    k.event(ev({ type: "status", status: "running", tool: "web" }), 0);
+    expect(k.view(0)!.text).toBe(WEB_LINE);
     k.close();
+    k.event(ev({ type: "text", text: "um texto" }), 5);
+    k.event(ev({ type: "status", status: "running", tool: "web" }), 8);
     k.event(ev({ type: "text", text: " e mais" }), 10);
     k.event(ev({ type: "done", stopReason: "end_turn", text: "um texto e mais" }), 20);
     expect(k.view(30)).toBeNull();
@@ -146,56 +178,21 @@ describe("o balão", () => {
     expect(k.takeAnnouncement()).toBe("um texto e mais");
     expect(k.takeAnnouncement()).toBeNull();
     expect(c.takeAnnouncement()).toBeNull();
+    // O clique na resposta: fecha, e o relógio não a traz de volta.
+    const r = run(new BubbleFeed(fits(60)), [{ type: "done", stopReason: "end_turn", text: LONGA }]);
+    r.close();
+    expect(r.view(60_000)).toBeNull();
   });
 
-  test("com o Reduzir movimento, cada trecho aparece inteiro pelo mesmo tempo de leitura", () => {
-    const f = new BubbleFeed(fits(60), true);
-    f.event(ev({ type: "started" }), 0);
-    f.event(ev({ type: "text", text: "Inteiro de uma vez." }), 0);
-    expect(f.view(0)!.text).toBe("Inteiro de uma vez.");
-    f.event(ev({ type: "done", stopReason: "end_turn", text: "Inteiro de uma vez." }), 0);
-    expect(f.view(readingMs("Inteiro de uma vez.") - 1)).not.toBeNull();
-    expect(f.view(readingMs("Inteiro de uma vez."))).toBeNull();
-  });
-
-  test("palavras que chegam com o espaço no fim (como o agente manda) também fecham o trecho na tela", () => {
-    const f = new BubbleFeed(fits(12));
-    f.event(ev({ type: "started" }), 0);
-    const words = "um dois três quatro cinco seis sete oito".split(/(?<=\s)/);
-    let now = 0;
-    for (const w of words) {
-      f.event(ev({ type: "text", text: w }), now);
-      now += 40;
-    }
-    f.event(ev({ type: "done", stopReason: "end_turn", text: words.join("") }), now);
-    const { chunks, end } = play(f, now);
-    expect(chunks).toEqual(["um dois três", "quatro cinco", "seis sete", "oito"]);
-    expect(f.view(end)).toBeNull();
-  });
-
-  test("o texto chega aos poucos e os trechos completos entram na fila conforme chegam", () => {
-    const f = new BubbleFeed(fits(12));
-    f.event(ev({ type: "started" }), 0);
-    let all = "";
-    for (const w of "um dois três quatro cinco seis sete oito".split(" ")) {
-      all += (all ? " " : "") + w;
-      f.event(ev({ type: "text", text: (all === w ? "" : " ") + w }), 0);
-    }
-    f.event(ev({ type: "done", stopReason: "end_turn", text: all }), 0);
-    const { chunks } = play(f, 0);
-    expect(chunks).toEqual(["um dois três", "quatro cinco", "seis sete", "oito"]);
-  });
-
-  test("o limite (spec #11084): o aviso do agente entra como um trecho sem parar a resposta; o limite acabado mostra a hora de volta", () => {
-    const f = new BubbleFeed(fits(80), true);
+  test("o limite (spec #11084): o aviso do agente é a linha de estado até a resposta; o limite acabado mostra a hora de volta", () => {
+    const f = new BubbleFeed(fits(80));
     f.event(ev({ type: "started" }), 0);
     f.event(ev({ type: "text", text: "Começando." }), 0);
     f.event(ev({ type: "limit", status: "warning", percent: 82 }), 10);
+    expect(f.view(10)).toMatchObject({ text: "Você já usou 82% do seu limite. Eu sigo, mas vale ir com calma.", more: false });
     f.event(ev({ type: "text", text: " E terminando." }), 20);
     f.event(ev({ type: "done", stopReason: "end_turn", text: "Começando. E terminando." }), 30);
-    const { chunks } = play(f, 30);
-    expect(chunks).toContain("Você já usou 82% do seu limite. Eu sigo, mas vale ir com calma.");
-    expect(chunks.join(" ")).toContain("E terminando.");
+    expect(f.view(30)).toMatchObject({ text: "Começando. E terminando.", more: false });
     // O limite acabado: o erro de limite vem com a hora que o agente informou.
     // O relógio do balão (aqui 0) não é o de parede: a hora de volta se lê no de parede.
     const out = new BubbleFeed(fits(80), false, () => new Date(2026, 10, 13, 14, 0).getTime());
@@ -210,61 +207,63 @@ describe("o balão", () => {
     plain.event(ev({ type: "error", code: "E_AGENT_LIMIT", message: "O Claude Code atingiu o limite de uso da sua conta." }), 0);
     expect(plain.view(0)!.text).toBe("O Claude Code atingiu o limite de uso da sua conta.");
   });
-});
 
-test("a web (spec #11908): o balão diz que o agente está pesquisando, e a resposta vem depois", () => {
-  const f = new BubbleFeed(fits(60));
-  f.event(ev({ type: "started" }), 0);
-  f.event(ev({ type: "status", status: "running", tool: "web" }), 10);
-  expect(f.view(10 + WEB_LINE.length * TYPE_MS)).toMatchObject({ text: WEB_LINE, more: false });
-  // Outra ferramenta não diz isso.
-  const g = new BubbleFeed(fits(60));
-  g.event(ev({ type: "started" }), 0);
-  g.event(ev({ type: "status", status: "running", tool: "notes_read" }), 10);
-  expect(g.view(1000)).toBeNull();
-});
+  test("a web (spec #11908): o balão diz que o agente está pesquisando, até a próxima ferramenta ou a resposta", () => {
+    const f = new BubbleFeed(fits(60));
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "status", status: "running", tool: "web" }), 10);
+    expect(f.view(10)).toMatchObject({ text: WEB_LINE, more: false });
+    // O texto que o agente diz entre a web e a resposta não tira a linha nem entra no balão.
+    f.event(ev({ type: "text", text: "Achei duas páginas." }), 20);
+    expect(f.view(20)!.text).toBe(WEB_LINE);
+    f.event(ev({ type: "status", status: "running", tool: "kiwi" }), 30);
+    expect(f.view(30)).toBeNull();
+    // Outra ferramenta não diz isso.
+    const g = new BubbleFeed(fits(60));
+    g.event(ev({ type: "started" }), 0);
+    g.event(ev({ type: "status", status: "running", tool: "notes_read" }), 10);
+    expect(g.view(1000)).toBeNull();
+  });
 
-describe("a chave de cada balão (spec #11652)", () => {
-  test("muda a cada trecho novo, e não com o texto que chega no mesmo trecho", () => {
-    const fits = (s: string) => s.length <= 40;
-    const f = new BubbleFeed(fits, true);
-    f.event({ type: "started", id: "r1" } as never, 0);
-    f.event({ type: "text", id: "r1", text: "Olá, " } as never, 0);
-    const first = f.view(10)!.key;
-    f.event({ type: "text", id: "r1", text: "tudo bem?" } as never, 20);
-    expect(f.view(30)!.key).toBe(first);
-    // Um texto longo vira uma fila: cada trecho é um balão novo, com outra chave.
-    f.event({ type: "text", id: "r1", text: " Este pedaço é bem mais longo e não cabe no mesmo balão que o primeiro." } as never, 40);
-    f.event({ type: "done", id: "r1", stopReason: "end_turn", text: "" } as never, 50);
-    const keys = new Set<number>();
-    for (let t = 50; t < 60_000; t += 250) {
-      const v = f.view(t);
-      if (v) keys.add(v.key);
-    }
-    expect(keys.size).toBeGreaterThan(1);
-    expect(keys.has(first)).toBe(true);
+  test("a fala entendida (spec #9876) fica até o agente começar a responder", () => {
+    const f = new BubbleFeed(fits(60));
+    f.event(ev({ type: "started" }), 0);
+    f.heard("p1", "resume a nota", 0);
+    expect(f.view(0)).toMatchObject({ text: "“resume a nota”", more: false });
+    f.event(ev({ type: "text", text: "Lendo." }), 10);
+    expect(f.view(10)).toBeNull();
+  });
+
+  test("a chave muda a cada balão novo (spec #11652): a web, depois a resposta", () => {
+    const f = new BubbleFeed(fits(60));
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "status", status: "running", tool: "web" }), 0);
+    const web = f.view(0)!.key;
+    f.event(ev({ type: "done", stopReason: "end_turn", text: "Achei." }), 10);
+    expect(f.view(10)!.key).not.toBe(web);
   });
 });
 
 describe("a resposta de antes espera a nova entrar (T15377)", () => {
-  // O `started` de um pedido novo zerava o balão, e a resposta nova só entrava no primeiro `text`: entre os dois, o canto
-  // ficava vazio, e a troca resposta → resposta virava "some e depois aparece" (o check da troca, #16046).
+  // O `started` de um pedido novo zerava o balão, e a resposta nova só entrava no primeiro balão dela: entre os dois, o
+  // canto ficava vazio, e a troca resposta → resposta virava "some e depois aparece" (o check da troca, #16046).
   const twoRequests = () => {
-    const f = new BubbleFeed(fits(60), true);
-    f.event(ev({ type: "started" }), 0);
-    f.event(ev({ type: "text", text: "Resposta velha" }), 0);
+    const f = run(new BubbleFeed(fits(60)), [{ type: "done", stopReason: "end_turn", text: "Resposta velha." }]);
     const old = f.view(10)!;
     f.event({ id: "p2", type: "started" }, 100);
     return { f, old };
   };
 
-  test("fica no canto, igual, até o primeiro texto do pedido novo, e o novo entra com outra chave", () => {
+  test("fica no canto, igual, até o primeiro balão do pedido novo, e o novo entra com outra chave", () => {
     const { f, old } = twoRequests();
     expect(f.view(100)).toEqual({ ...old, more: false });
     expect(f.view(900)!.key).toBe(old.key);
+    // O texto do pedido novo não é um balão: a resposta velha espera a linha de estado ou a resposta nova.
     f.event({ id: "p2", type: "text", text: "Nova" }, 900);
-    const v = f.view(900)!;
-    expect(v.full).toBe("Nova");
+    expect(f.view(900)!.key).toBe(old.key);
+    f.event({ id: "p2", type: "status", status: "running", tool: "web" }, 950);
+    const v = f.view(950)!;
+    expect(v.full).toBe(WEB_LINE);
     expect(v.key).not.toBe(old.key);
   });
 
@@ -302,21 +301,19 @@ describe("a resposta de antes espera a nova entrar (T15377)", () => {
     f.event({ id: "p3", type: "started" }, 1000);
     expect(f.view(1000)!.key).toBe(old.key);
     expect(f.view(100 + ANSWER_HOLD_MS)).toBeNull();
-    const empty = new BubbleFeed(fits(60), true);
+    const empty = new BubbleFeed(fits(60));
     empty.event(ev({ type: "started" }), 0);
     expect(empty.view(0)).toBeNull();
     expect(empty.nextWake(0)).toBe(Infinity);
   });
 
   test("a pergunta mandada pelo campo fecha a resposta antes do started (o drop do CatBubble): nada fica para esperar", () => {
-    const f = new BubbleFeed(fits(60), true);
-    f.event(ev({ type: "started" }), 0);
-    f.event(ev({ type: "text", text: "Resposta velha" }), 0);
+    const f = run(new BubbleFeed(fits(60)), [{ type: "done", stopReason: "end_turn", text: "Resposta velha." }]);
     f.close();
     f.event({ id: "p2", type: "started" }, 100);
     expect(f.view(100)).toBeNull();
-    f.event({ id: "p2", type: "text", text: "Nova" }, 300);
-    expect(f.view(300)!.full).toBe("Nova");
+    f.event({ id: "p2", type: "done", stopReason: "end_turn", text: "Nova." }, 300);
+    expect(f.view(300)!.full).toBe("Nova.");
   });
 
   test("a fala entendida do pedido novo também toma o lugar", () => {
@@ -337,110 +334,25 @@ describe("o markdown no balão pequeno (spec #17679)", () => {
     "| Ana | sexta | ok |",
     "| Bruno | segunda | `revisar` |",
   ].join("\n");
-  const SIMBOLOS = /[|*#`]/;
 
-  test("pelo done: nenhum trecho com |, **, # ou `", () => {
-    const f = new BubbleFeed(fits(40));
-    f.event(ev({ type: "started" }), 0);
-    f.event(ev({ type: "done", stopReason: "end_turn", text: RESPOSTA }), 0);
-    const { chunks } = play(f, 0);
-    expect(chunks.length).toBeGreaterThan(2);
-    for (const c of chunks) expect(c).not.toMatch(SIMBOLOS);
-    expect(chunks.join(" ")).toContain("Ana · sexta · ok");
-  });
-
-  test("chegando aos pedaços: nenhum trecho, nem o que ainda está chegando, com os símbolos", () => {
-    const f = new BubbleFeed(fits(40));
-    f.event(ev({ type: "started" }), 0);
-    const seen: string[] = [];
-    let now = 0;
-    for (let i = 0; i < RESPOSTA.length; i += 7) {
-      f.event(ev({ type: "text", text: RESPOSTA.slice(i, i + 7) }), now);
-      const v = f.view(now);
-      if (v) seen.push(v.full);
-      now += 50;
+  test("o resumo sai do texto corrido: sem |, **, # nem `, em qualquer tamanho de balão", () => {
+    for (const max of [12, 40, 80, 120]) {
+      const f = run(new BubbleFeed(fits(max)), [{ type: "done", stopReason: "end_turn", text: RESPOSTA }]);
+      const v = f.view(0)!;
+      expect({ max, text: v.text, symbols: /[|*#`]/.test(v.text) }).toEqual({ max, text: v.text, symbols: false });
+      expect([...v.text].length).toBeLessThanOrEqual(max);
+      expect(v.more).toBe(true);
     }
-    f.event(ev({ type: "done", stopReason: "end_turn", text: RESPOSTA }), now);
-    const { chunks } = play(f, now);
-    for (const c of [...seen, ...chunks]) expect(c).not.toMatch(SIMBOLOS);
-    expect(chunks.join(" ")).toContain("Bruno · segunda · revisar");
+    // Cabe inteiro: o balão é a resposta toda, sem o [Ver mais].
+    const all = run(new BubbleFeed(fits(400)), [{ type: "done", stopReason: "end_turn", text: RESPOSTA }]);
+    expect(all.view(0)!.more).toBe(false);
+    const f = run(new BubbleFeed(fits(80)), [{ type: "done", stopReason: "end_turn", text: RESPOSTA }]);
+    expect(f.view(0)!.text).toBe("Resumo: o prazo final do Projeto X fica para sexta-feira e a Ana confirma.");
   });
-});
 
-describe("o texto inteiro no balão pequeno, chegando aos pedaços (spec #17679, T17984)", () => {
-  const TEXTOS = [
-    "Veja [o plano](https://example.com/plano) e `config.json` antes de sexta.",
-    "Texto antes\n| a | b |\n|---|---|\n| 1 | 2 |\nDepois da tabela vem um parágrafo bem comprido para cortar em vários trechos.",
-    [
-      "## Lista da Ana",
-      "",
-      "1. comprar **pão integral** na padaria",
-      "2. levar o `cupom` e o [mapa](https://example.com/mapa)",
-      "",
-      "- [x] café separado",
-      "- [ ] leite, se tiver",
-      "",
-      "| Item | Loja | Preço |",
-      "|:--|:-:|--:|",
-      "| Pão | Padaria | 8 |",
-      "| Café | | 22 |",
-      "",
-      "Depois, o *resto* fica para ~~segunda~~ terça, combinado com o Projeto X.",
-    ].join("\n"),
-    [
-      "# Como rodar",
-      "",
-      "> Antes, confira a pasta do Projeto X",
-      "> e o arquivo de exemplo.",
-      "",
-      "```sh",
-      "bun run exemplo --pasta notas",
-      "",
-      "echo pronto",
-      "```",
-      "",
-      "Mais em https://example.com/guia ou com a Ana, numa linha bem comprida que passa do balão.",
-    ].join("\n"),
-  ];
-  const words = (s: string) => s.split(/\s+/).filter(Boolean);
-
-  for (const [n, texto] of TEXTOS.entries()) {
-    test(`texto ${n + 1}: as palavras de todos os trechos são as do texto corrido, e nenhum símbolo`, () => {
-      const want = words(bubblePlain(texto, true));
-      for (const size of [1, 2, 3, 5, 7, 11, 13, 17, 1000]) {
-        for (const max of [25, 40, 60]) {
-          const f = new BubbleFeed(fits(max), true);
-          f.event(ev({ type: "started" }), 0);
-          // O texto de cada balão (pela chave): o último que ele mostrou é o trecho completo. E nenhum, nem no meio, com símbolo.
-          const byKey = new Map<number, string>();
-          const views: string[] = [];
-          const look = (t: number) => {
-            const v = f.view(t);
-            if (!v) return;
-            byKey.set(v.key, v.full);
-            views.push(v.full);
-          };
-          let now = 0;
-          for (let i = 0; i < texto.length; i += size) {
-            f.event(ev({ type: "text", text: texto.slice(i, i + size) }), now);
-            look(now);
-            now += 10;
-          }
-          f.event(ev({ type: "done", stopReason: "end_turn", text: texto }), now);
-          for (let t = now; t < now + 600_000; ) {
-            look(t);
-            const next = f.nextWake(t);
-            if (!Number.isFinite(next)) break;
-            t = next;
-          }
-          const all = [...byKey.values()];
-          const got = words(all.join(" "));
-          expect({ size, max, got: got.join(" ") }).toEqual({ size, max, got: want.join(" ") });
-          for (const c of views) expect(c).not.toMatch(/[|*#`]/);
-        }
-      }
-    });
-  }
+  test("o corrido mostra o nome da nota, sem os colchetes (#18271)", () => {
+    expect(bubblePlain("Veja [[Plano]], [[Plano|o plano]], [[Plano#Seção]] e ![[img.png]].")).toBe("Veja Plano, o plano, Plano e img.png.");
+  });
 });
 
 describe("as notas e os arquivos no balão pequeno (spec #17683)", () => {
@@ -451,61 +363,47 @@ describe("as notas e os arquivos no balão pequeno (spec #17683)", () => {
     return { text, from, to: from + text.length, path, kind };
   };
   const LINKS = [at("[[Plano|o plano]]", "Plano.md", "note"), at("`Projeto X/relatorio.pdf`", "Projeto X/relatorio.pdf", "file")];
+  const labels = (f: BubbleFeed) => {
+    const v = f.view(0)!;
+    return (v.links ?? []).map((l) => [v.full.slice(l.from, l.to), l.path]);
+  };
 
   test("plainLinks acha o rótulo na menção, na ordem", () => {
-    const plain = bubblePlain(TEXTO, true);
+    const plain = bubblePlain(TEXTO);
     const got = plainLinks(TEXTO, LINKS).map((l) => [plain.slice(l.from, l.to), l.path]);
     expect(got).toEqual([["o plano", "Plano.md"], ["Projeto X/relatorio.pdf", "Projeto X/relatorio.pdf"]]);
     expect(plainLinks(TEXTO, LINKS)[0]!.from).toBe(plain.indexOf("o plano"));
   });
 
-  test("o corrido do balão pequeno mostra o nome da nota, sem os colchetes (#18271)", () => {
-    const raw = "Veja [[Plano]], [[Plano|o plano]], [[Plano#Seção]] e ![[img.png]].";
-    expect(bubblePlain(raw, true)).toBe("Veja Plano, o plano, Plano e img.png.");
-    // Chegando: o `[[` sem o `]]` ainda não sai.
-    expect(bubblePlain("Veja o [[Pla", false)).not.toContain("[");
-  });
-
-  test("os trechos que saem depois do done levam o link, no rótulo certo", () => {
-    for (const [size, max] of [[1000, 40], [3, 40], [7, 25], [1000, 120]] as const) {
-      const f = new BubbleFeed(fits(max), true);
-      f.event(ev({ type: "started" }), 0);
-      // Por caminho, os pedaços de rótulo clicáveis, juntos (um rótulo pode ficar em dois trechos).
-      const byKey = new Map<number, [string, string][]>();
-      const look = (t: number) => {
-        const v = f.view(t);
-        if (v) {
-          // O balão pequeno nunca mostra o `[[…]]` (#18271).
-          expect(v.full).not.toContain("[[");
-          byKey.set(v.key, (v.links ?? []).map((l) => [v.full.slice(l.from, l.to), l.path]));
-        }
-      };
-      let now = 0;
-      // Pedaços pequenos: a resposta só chega até antes do código; o resto vem com o done.
-      const cut = size === 1000 ? 0 : TEXTO.indexOf("salvei");
-      for (let i = 0; i < cut; i += size) {
-        f.event(ev({ type: "text", text: TEXTO.slice(i, Math.min(i + size, cut)) }), now);
-        look(now);
-        now += 10;
-      }
-      f.event(ev({ type: "done", stopReason: "end_turn", text: TEXTO, links: LINKS }), now);
-      for (let t = now; t < now + 600_000; ) {
-        look(t);
-        const next = f.nextWake(t);
-        if (!Number.isFinite(next)) break;
-        t = next;
-      }
-      const linked = new Map<string, string>();
-      for (const pieces of byKey.values()) for (const [label, path] of pieces) linked.set(path, `${linked.get(path) ?? ""} ${label}`.trim());
-      // O pdf sai depois do done sempre. "o plano" leva o link quando o trecho dele ainda não tinha saído (com a
-      // resposta inteira no done, sempre), e só a parte que saiu depois do done quando ele ficou entre dois trechos (o
-      // que já está na tela não muda, #18144); nunca o "Plano" solto do começo.
-      expect({ size, max, pdf: linked.get("Projeto X/relatorio.pdf") }).toEqual({ size, max, pdf: "Projeto X/relatorio.pdf" });
-      if (cut === 0) expect({ size, max, plano: linked.get("Plano.md") }).toEqual({ size, max, plano: "o plano" });
-      const plano = linked.get("Plano.md");
-      if (plano !== undefined) expect({ size, max, plano, part: plano.length > 0 && "o plano".endsWith(plano) }).toEqual({ size, max, plano, part: true });
-      expect([...linked.keys()].every((p) => p === "Plano.md" || p === "Projeto X/relatorio.pdf")).toBe(true);
-      expect(f.links()).toEqual(LINKS);
-    }
+  test("o resumo leva os links do que aparece dele; um rótulo cortado, só o pedaço que aparece", () => {
+    const inteiro = run(new BubbleFeed(fits(200)), [{ type: "done", stopReason: "end_turn", text: TEXTO, links: LINKS }]);
+    expect(labels(inteiro)).toEqual([["o plano", "Plano.md"], ["Projeto X/relatorio.pdf", "Projeto X/relatorio.pdf"]]);
+    // Cortado antes do pdf: só o plano.
+    const curto = run(new BubbleFeed(fits(50)), [{ type: "done", stopReason: "end_turn", text: TEXTO, links: LINKS }]);
+    expect(curto.view(0)!.full).toEndWith("…");
+    expect(labels(curto)).toEqual([["o plano", "Plano.md"]]);
+    // O pdf cortado no meio: o pedaço dele que aparece, sem as reticências.
+    const meio = run(new BubbleFeed(fits(70)), [{ type: "done", stopReason: "end_turn", text: TEXTO, links: LINKS }]);
+    const [, pdf] = labels(meio);
+    expect(pdf![1]).toBe("Projeto X/relatorio.pdf");
+    expect("Projeto X/relatorio.pdf".startsWith(pdf![0]!)).toBe(true);
+    expect(pdf![0]).not.toContain("…");
+    // A resposta final depois de uma ferramenta: os links contam do começo do `done`.
+    const antes = "Vou procurar.\n\n";
+    const depois = run(new BubbleFeed(fits(200)), [
+      { type: "text", text: antes },
+      { type: "status", status: "running", tool: "kiwi" },
+      { type: "text", text: TEXTO },
+      { type: "done", stopReason: "end_turn", text: antes + TEXTO, links: LINKS.map((l) => ({ ...l, from: l.from + antes.length, to: l.to + antes.length })) },
+    ]);
+    expect(depois.view(0)!.full).toBe(bubblePlain(TEXTO));
+    expect(labels(depois)).toEqual([["o plano", "Plano.md"], ["Projeto X/relatorio.pdf", "Projeto X/relatorio.pdf"]]);
+    // A fala do cat_speak não tem a posição no texto do `done`: sem links.
+    const fala = run(new BubbleFeed(fits(200)), [
+      { type: "speech", text: "Criei o plano e salvei o relatório." },
+      { type: "done", stopReason: "end_turn", text: TEXTO, links: LINKS },
+    ]);
+    expect(fala.view(0)!.links).toBeUndefined();
+    expect(fala.links()).toEqual(LINKS);
   });
 });

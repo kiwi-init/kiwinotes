@@ -892,16 +892,19 @@ export class AgentService {
   }
 
   /**
-   * Quem recebe o `kiwi falar` agora: só o pedido em andamento, feito por voz com "O gato fala" ligado. Uma fala por
-   * pedido; a segunda volta como erro, e o resto vai no texto.
+   * Quem recebe o `kiwi falar` agora: o pedido em andamento. A fala vai ao balão, como o resumo (o evento `speech`, spec
+   * #27881), em todo pedido; à voz, só no pedido feito por voz com "O gato fala" ligado. Uma fala por pedido; a segunda
+   * volta como erro, e o resto vai no texto.
    */
   private speechSink(): SpeechSink | undefined {
     const turn = this.turn;
-    if (!turn || turn.cancelled || !turn.fala) return undefined;
+    if (!turn || turn.cancelled) return undefined;
     return {
-      falar: (frases) => {
+      falar: (frases, texto) => {
         if (turn.falou) throw new ToolError("E_ALREADY_SPOKEN", "a fala deste pedido já saiu: o resto vai no texto da resposta");
         turn.falou = true;
+        this.emitTurn({ id: turn.id, type: "speech", text: texto });
+        if (!turn.fala) return;
         for (const fn of this.speechListeners) {
           try {
             fn({ turnId: turn.id, frases });

@@ -101,7 +101,7 @@ export interface KiwiMcpServerConfig {
  * As instruções do servidor, as mesmas em toda sessão (o cache). O que a sessão não pode volta no erro da chamada.
  */
 export const SERVER_INSTRUCTIONS =
-  "As notas e as reuniões da pessoa no Kiwi Notes, pela ferramenta kiwi. Quando o pedido já traz o que o Kiwi achou, use direto. Senão, ache pelo nome (kiwi achar), leia só a seção que precisa (kiwi ler, com opcoes.secao) e, para mudar uma nota, mande só a diferença (kiwi escrever), com a versao do cartão. Nada apaga, renomeia nem move notas, e o texto de antes de cada mudança fica nas Versões da nota.";
+  "As notas e as reuniões da pessoa no Kiwi Notes, pela ferramenta kiwi. Quando o pedido já traz o que o Kiwi achou, use direto. Senão, ache pelo nome (kiwi achar), leia só a seção que precisa (kiwi ler, com opcoes.secao) e, para mudar uma nota, mande só a diferença (kiwi escrever), com a versao do cartão. Nada apaga, renomeia nem move notas, e o texto de antes de cada mudança fica nas Versões da nota. Em toda resposta, antes do texto: kiwi falar, 1 ou 2 frases sem Markdown (o resumo do balão).";
 
 type JsonRpc = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
 

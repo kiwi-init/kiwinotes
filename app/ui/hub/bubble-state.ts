@@ -1,16 +1,17 @@
-// O balão do gato (spec #9495, T10832): o que ele mostra a partir dos eventos do agente (`agent.turn`), sem depender do
-// desenho. TypeScript puro, testado no `bun test`; o tempo entra sempre como argumento (`now`), então o teste anda o
-// relógio sem esperar.
+// O balão do gato (spec #9495, T10832; um balão só desde o spec #27881): o que ele mostra a partir dos eventos do agente
+// (`agent.turn`), sem depender do desenho. TypeScript puro, testado no `bun test`; o tempo entra sempre como argumento
+// (`now`), então o teste anda o relógio sem esperar.
 //
-// - O texto chega em pedaços (`text`) e aparece digitado. O balão tem tamanho máximo (quem mede é a tela, pelo `fits`):
-//   um texto maior vira uma fila de trechos, cortados entre palavras, cada um pelo tempo de leitura.
-// - O texto dito antes de uma ferramenta sai quando ela começa (`status` `running`). A resposta final entra num balão
-//   novo; o [Ver mais] mostra tudo o que o agente disse no pedido.
-// - O `done` traz o texto inteiro do pedido: o trecho final é o que vem depois do que já foi dito antes da última
-//   ferramenta. No erro, o balão mostra a mensagem. Um pedido novo fecha o balão do anterior.
+// - Enquanto o agente trabalha, o balão mostra só a linha de estado ("Pesquisando na web…", o aviso do limite) ou o que
+//   a pessoa falou (spec #9876). O texto que o agente diz entre as ferramentas não vai ao balão: fica no [Ver mais].
+// - Quando a resposta chega (`done`), entra um balão só, com o resumo, de uma vez: ele não troca de trecho, não digita
+//   e não muda com o relógio. O resumo é a fala do `cat_speak` (o evento `speech`), quando o agente mandou; senão, o
+//   começo da resposta final, cortado no fim de uma frase que caiba (`summaryOf`). O [Ver mais] aparece quando a
+//   resposta inteira é maior que o resumo, e mostra tudo o que o agente disse no pedido.
+// - No erro, o balão mostra a mensagem. Um pedido novo fecha o balão do anterior; o clique fecha o balão.
 // - O texto nunca é reescrito: só cortado. Nada aqui interpreta HTML (a tela mostra como texto).
 // - O markdown (spec #17679): o balão pequeno mostra o texto corrido, sem `**`, `#`, `|` nem a crase. O corte é feito
-//   nesse texto, e não no cru: um trecho com a metade de uma tabela ou de um negrito não sai com os símbolos.
+//   nesse texto, e não no cru.
 
 import type { AgentTurnEvent, BubbleLink } from "../../src/shared/ui-contract";
 import { linkLabel } from "../../src/shared/bubble-links";
@@ -23,62 +24,6 @@ export const WEB_LINE = "Pesquisando na web…";
 /** A largura máxima do balão, em pixels, e quantas linhas cabem. */
 export const BUBBLE_WIDTH = 320; // a do balão do pacote do KiwiCat (T14933)
 export const BUBBLE_LINES = 3;
-/** A digitação: um caractere a cada tanto. */
-export const TYPE_MS = 18;
-
-/** O tempo de leitura de um trecho: 1,5 s mais 60 ms por caractere, entre 2 e 8 s. */
-export function readingMs(text: string): number {
-  return Math.min(8000, Math.max(2000, 1500 + 60 * [...text].length));
-}
-
-export interface Chunk {
-  text: string;
-  /** Onde o trecho termina no texto de origem (para o resto continuar dali). */
-  end: number;
-}
-
-/**
- * Corta o texto em trechos que cabem no balão (`fits`), entre palavras. Uma palavra sozinha maior que o balão (um link,
- * um código) é a única coisa cortada no meio, e só porque não há outro jeito. Os espaços e as quebras de linha dentro do
- * trecho ficam como estão; os do começo de cada trecho saem.
- */
-export function splitChunks(text: string, fits: (s: string) => boolean): Chunk[] {
-  const out: Chunk[] = [];
-  const re = /\S+/g;
-  let start = -1; // onde começa o trecho aberto
-  let last = -1; // onde termina a última palavra que coube
-  const flush = () => {
-    if (start >= 0) out.push({ text: text.slice(start, last), end: last });
-    start = last = -1;
-  };
-  for (let m = re.exec(text); m; m = re.exec(text)) {
-    const from = m.index, to = from + m[0].length;
-    if (start >= 0 && fits(text.slice(start, to))) {
-      last = to;
-      continue;
-    }
-    flush();
-    if (fits(m[0])) {
-      start = from;
-      last = to;
-      continue;
-    }
-    // A palavra não cabe sozinha: corta por caractere, o maior pedaço que cabe.
-    let at = from;
-    while (at < to) {
-      let n = 1;
-      while (at + n < to && fits(text.slice(at, at + n + 1))) n++;
-      if (at + n < to) out.push({ text: text.slice(at, at + n), end: at + n });
-      else {
-        start = at;
-        last = to;
-      }
-      at += n;
-    }
-  }
-  flush();
-  return out;
-}
 
 /** O texto corrido, como o balão pequeno mostra: sem `**`, `#`, `|` nem a crase (o que sobra de um negrito aberto também). */
 function plainOf(raw: string): string {
@@ -86,119 +31,71 @@ function plainOf(raw: string): string {
 }
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean);
+const sameWords = (a: string, b: string) => words(a).join(" ") === words(b).join(" ");
 
-/**
- * O que ainda pode chegar e mudar o texto corrido do que já chegou: o fim de um link, de um negrito ou de um código, a
- * linha dos `---` de uma tabela, o fim de um bloco de código.
- */
-const PROBES = ["", ")", "]", "](x)", "*", "**", "_", "__", "`", "~~", ">", "\n", "\n\n", "\n```\n"];
-
-/** Os testes para `raw`: os fixos, e a linha dos `---` com o número de colunas da última linha com `|`. */
-function probes(raw: string): string[] {
-  const line = raw.split("\n").reverse().find((l) => l.includes("|"));
-  if (!line) return PROBES;
-  const cols = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").length;
-  return [...PROBES, `\n${"|---".repeat(cols)}|\n`, `${"|---".repeat(cols)}|\n`];
+/** O texto corrido de uma resposta inteira (spec #17679): o que o balão pequeno corta. */
+export function bubblePlain(raw: string): string {
+  return plainOf(raw);
 }
 
-/** As palavras do corrido de `raw.slice(0, at)` ficam as mesmas, venha o que vier depois de `raw`? */
-function stableAt(raw: string, at: number): boolean {
-  const mine = words(plainOf(raw.slice(0, at)));
-  return probes(raw).every((x) => {
-    const all = words(plainOf(raw + x));
-    return mine.every((w, i) => all[i] === w);
-  });
+/** O fim de cada frase de `text`: depois do `.`, `!`, `?` ou `…` (e das aspas ou parênteses que fecham), ou numa quebra. */
+function sentenceEnds(text: string): number[] {
+  const out: number[] = [];
+  for (const m of text.matchAll(/[.!?…]+["”’')\]]*(?=\s)|\n/g)) out.push(m.index! + (m[0] === "\n" ? 0 : m[0].length));
+  return out;
 }
 
 /**
- * O começo das linhas de tabela do fim que ainda não têm a linha dos `---`: antes dela, elas são um parágrafo com os `|`,
- * e depois uma tabela. Nada delas é estável até a linha chegar. Sem isso, o fim do texto.
+ * O resumo de um texto corrido (spec #27881): ele inteiro, se cabe no balão (`fits`); senão, as frases do começo que
+ * cabem; senão, as palavras do começo que cabem com "…" (e, se nem a primeira palavra cabe, as letras dela).
  */
-function tableHeadStart(raw: string): number {
-  const m = /(?:^|\n)((?:[ \t]*\|[^\n]*(?:\n|$))+)$/.exec(raw);
-  if (!m) return raw.length;
-  // Só uma linha dos `---` inteira (com a quebra depois): um `|-` pela metade ainda não decide.
-  const lines = m[1]!.split("\n").slice(0, -1);
-  const delimiter = lines.some((l) => /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/.test(l));
-  return delimiter ? raw.length : raw.length - m[1]!.length;
-}
-
-/**
- * Até onde o texto cru que está chegando já tem o corrido certo (T17984, revisão 2): o fim de uma palavra que nada que
- * chegue depois muda. O balão só corta até ali; o resto espera. `from` é um ponto já conferido antes (o resultado
- * nunca volta para trás dele).
- */
-export function stableEnd(raw: string, from = 0): number {
-  // Os blocos antes da última linha vazia (fora de um bloco de código) não mudam com o que vem depois: a conferência
-  // lê só dali para a frente, e não o segmento inteiro a cada pedaço que chega.
-  const base = blockStart(raw, from);
-  const tail = raw.slice(base);
-  let tried = 0;
-  for (let at = Math.min(raw.length - 1, tableHeadStart(raw)); at > from && tried < 64; at--) {
-    if (!/\s/.test(raw[at]!) || /\s/.test(raw[at - 1]!)) continue;
-    // Numa linha de tabela, só no fim dela: as colunas que faltam mudam o que a linha é.
-    if (raw[at] !== "\n" && /^[ \t]*\|/.test(raw.slice(raw.lastIndexOf("\n", at - 1) + 1, at))) continue;
-    tried++;
-    if (stableAt(tail, at - base)) return at;
+export function summaryOf(plain: string, fits: (s: string) => boolean): string {
+  const t = plain.trim();
+  if (!t || fits(t)) return t;
+  let best = "";
+  for (const end of sentenceEnds(t)) {
+    const cand = t.slice(0, end).trimEnd();
+    if (!cand) continue;
+    if (!fits(cand)) break;
+    best = cand;
   }
-  return from;
-}
-
-/** A última linha vazia até `upTo` que não está dentro de um bloco de código: dali começa um bloco novo. 0 se não há. */
-function blockStart(raw: string, upTo: number): number {
-  for (let at = raw.lastIndexOf("\n\n", upTo); at > 0; at = raw.lastIndexOf("\n\n", at - 1)) {
-    const fences = raw.slice(0, at).match(/^[ \t]*(```|~~~)/gm)?.length ?? 0;
-    if (fences % 2 === 0) return at + 2;
+  if (best) return best;
+  // Nem a primeira frase cabe: entre palavras, com "…". A vírgula ou os dois-pontos do fim saem antes das reticências.
+  const ell = (s: string) => `${s.replace(/[\s,;:–—-]+$/, "")}…`;
+  for (const m of t.matchAll(/\S+/g)) {
+    const cand = ell(t.slice(0, m.index! + m[0].length));
+    if (!fits(cand)) break;
+    best = cand;
   }
-  return 0;
-}
-
-/**
- * O texto corrido do segmento (spec #17679): o que o balão pequeno mostra. Com `done`, o texto inteiro; chegando, só até
- * o `stableEnd`, o pedaço que não muda mais.
- */
-export function bubblePlain(raw: string, done: boolean): string {
-  return plainOf(done ? raw : raw.slice(0, stableEnd(raw)));
-}
-
-/**
- * Onde, em `plain`, termina o texto `cut` já cortado em trechos: as mesmas letras na mesma ordem, sem contar os espaços
- * e as quebras (o corrido de um pedaço maior pode juntar as linhas de outro jeito). -1 se não bate.
- */
-export function afterCut(plain: string, cut: string): number {
-  let i = 0;
-  for (const ch of cut) {
-    if (/\s/.test(ch)) continue;
-    while (i < plain.length && /\s/.test(plain[i]!)) i++;
-    if (plain[i] !== ch) return -1;
-    i++;
-  }
-  return i;
+  if (best) return best;
+  // Uma palavra sozinha maior que o balão (um link, um código): as letras dela que cabem.
+  const chars = [...t];
+  let n = 1;
+  while (n < chars.length && fits(`${chars.slice(0, n + 1).join("")}…`)) n++;
+  return `${chars.slice(0, n).join("")}…`;
 }
 
 export interface BubbleView {
-  /** O que aparece agora no balão (a parte já digitada). */
+  /** O que aparece no balão. */
   text: string;
-  /** O trecho inteiro, já chegado (para medir o balão e não deixá-lo pular de tamanho durante a digitação). */
+  /** O mesmo texto, inteiro (a tela mede o balão por ele). */
   full: string;
   error: boolean;
-  /** Há mais do que este trecho: o [Ver mais] aparece. */
+  /** A resposta inteira é maior que o balão: o [Ver mais] aparece. */
   more: boolean;
-  /** Muda a cada trecho novo (a troca de um balão para outro, spec #11652); igual enquanto o texto do trecho chega. */
+  /** Muda a cada balão novo (a troca de um balão para outro, spec #11652). */
   key: number;
-  /** As notas e os arquivos do trecho (spec #17683), nas posições do `full`: só nos trechos que saem depois do `done`. */
+  /** As notas e os arquivos do resumo (spec #17683), nas posições do `full`: só no balão da resposta. */
   links?: ChunkLink[];
 }
 
-/** Uma nota ou um arquivo dentro de um trecho do balão pequeno: o rótulo em `full.slice(from, to)`. */
+/** Uma nota ou um arquivo dentro do balão pequeno: o rótulo em `full.slice(from, to)`. */
 export type ChunkLink = { from: number; to: number; path: string };
 
-type Item = { text: string; links?: ChunkLink[] };
-
 /**
- * Onde cada link do `done` cai no texto corrido do segmento (spec #17683). O main dá a posição no texto cru; aqui se
- * acha o rótulo, na ordem, a partir da palavra em que a menção começa (e não o primeiro "Plano" do texto). O que não se
- * acha fica sem link.
+ * Onde cada link do `done` cai no texto corrido de `raw` (spec #17683). O main dá a posição no texto cru, a partir de
+ * `base`; aqui se acha o rótulo, na ordem, a partir da palavra em que a menção começa (e não o primeiro "Plano" do
+ * texto). O que não se acha fica sem link.
  */
 export function plainLinks(raw: string, links: readonly BubbleLink[], base = 0): ChunkLink[] {
   const plain = plainOf(raw);
@@ -221,15 +118,11 @@ export function plainLinks(raw: string, links: readonly BubbleLink[], base = 0):
   return out;
 }
 
+/** O que está no balão: `line` é uma linha de estado (a web, o limite), `heard` o que a pessoa falou. */
 interface Head {
-  /** Um número por balão (spec #11652): muda a cada trecho novo, e não com o texto que chega no mesmo trecho. */
   key: number;
   text: string;
-  complete: boolean;
-  shownAt: number;
-  completeAt: number;
-  /** O texto entendido da fala pelo Control (spec #9876): sai quando a resposta começa a chegar. */
-  heard?: boolean;
+  kind: "line" | "heard" | "answer" | "error";
   links?: ChunkLink[];
 }
 
@@ -242,24 +135,17 @@ export const ANSWER_HOLD_MS = 1500;
 export class BubbleFeed {
   private request: string | null = null;
   private readonly finished = new Set<string>();
-  /** Os trechos completos que esperam a vez. */
-  private queue: Item[] = [];
-  /** O segmento aberto, cru (desde a última ferramenta). */
-  private open = "";
-  /** O texto corrido do segmento aberto que já virou trecho completo (o texto, e não a posição: revisão 2 do T17984). */
-  private cut = "";
-  /** Até onde o segmento aberto, cru, já tem o corrido que não muda (`stableEnd`). */
-  private stable = 0;
   private head: Head | null = null;
   private keys = 0;
   /** Tudo o que o agente disse no pedido (o [Ver mais]). */
   private said = "";
   /** As notas e os arquivos que o `done` achou no `said` (spec #17683): viram link no balão grande. */
   private saidLinks: readonly BubbleLink[] = [];
-  /** O que foi dito antes do segmento aberto (antes da última ferramenta). */
+  /** O que foi dito antes da última ferramenta: a resposta final é o que vem depois. */
   private closedLen = 0;
+  /** A fala do `cat_speak` deste pedido (spec #27881): o resumo do balão. */
+  private speech = "";
   private ended = false;
-  private error = false;
   private dismissed = false;
   private announced: string | null = null;
   /** O limite acabado com a hora de volta (spec #11084): o erro de limite que vem depois mostra esta linha. */
@@ -273,14 +159,14 @@ export class BubbleFeed {
 
   constructor(
     private readonly fits: (s: string) => boolean,
-    private reduced = false,
+    /** Sem digitação desde o spec #27881: fica pela assinatura de quem cria o balão. */
+    _reduced = false,
     /** O relógio de parede, para dizer a hora de volta do limite (spec #11084). */
     private readonly wall: () => number = Date.now,
   ) {}
 
-  setReduced(on: boolean): void {
-    this.reduced = on;
-  }
+  /** O balão não anima mais o texto (spec #27881); a tela ainda avisa quando o movimento reduzido muda. */
+  setReduced(_on: boolean): void {}
 
   /** O texto inteiro do pedido, para o [Ver mais]. */
   all(): string {
@@ -316,151 +202,127 @@ export class BubbleFeed {
       if (this.request !== null) this.finished.add(this.request);
       this.reset(e.id);
     }
-    if (this.dismissed && e.type !== "done" && e.type !== "error") {
-      if (e.type === "text") this.said += e.text;
-      return;
-    }
     if (e.type === "text") {
-      if (this.head?.heard) this.head = null;
+      // O texto vai ao [Ver mais], não ao balão. O que a pessoa falou sai quando o agente começa a responder.
       this.said += e.text;
-      this.open += e.text;
-      this.chunkOpen(now, false);
+      if (this.head?.kind === "heard") this.head = null;
+    } else if (e.type === "speech") {
+      this.speech = plainOf(e.text).trim();
     } else if (e.type === "status" && e.status === "running") {
-      // A ferramenta começou: o que foi dito antes sai do balão.
-      this.queue = [];
-      this.open = "";
-      this.cut = "";
-      this.stable = 0;
-      this.head = null;
+      // A ferramenta começou: o que foi dito antes não é a resposta final.
       this.closedLen = this.said.length;
-      // A web (spec #11908): o balão diz que o agente saiu do cofre, até o próximo texto ou ferramenta.
-      if ("tool" in e && e.tool === "web" && !this.dismissed) {
-        this.queue.push({ text: WEB_LINE });
-        this.next(now);
-      }
+      if (this.dismissed) return;
+      // A web (spec #11908): o balão diz que o agente saiu do cofre, até a próxima ferramenta ou a resposta.
+      this.head = "tool" in e && e.tool === "web" ? this.line(WEB_LINE) : null;
     } else if (e.type === "done") {
       this.finish(e.id);
-      if (e.stopReason !== "end_turn" || this.dismissed) {
-        this.clear();
-        if (e.stopReason === "end_turn") {
-          if (e.text) {
-            this.said = e.text;
-            this.saidLinks = e.links ?? [];
-          }
-          // Fechar o balão é fechar o desenho: o leitor de tela ainda ouve a resposta, uma vez, no fim (revisão #10936).
-          if (this.said.trim()) this.announced = this.said;
-        }
-        return;
-      }
+      let base = this.closedLen;
       if (e.text) {
-        // O `done` traz tudo: o trecho final é o que veio depois da última ferramenta. O que dele já está no balão ou
-        // na fila continua; o resto entra agora. Se o texto não bate com o que chegou em pedaços, fica o que chegou.
-        if (e.text.startsWith(this.said.slice(0, this.closedLen))) this.open = e.text.slice(this.closedLen + this.segmentShown());
+        // O `done` traz tudo; se ele não bate com o que chegou em pedaços, a resposta final é o texto inteiro.
+        if (!e.text.startsWith(this.said.slice(0, this.closedLen))) base = 0;
         this.said = e.text;
         this.saidLinks = e.links ?? [];
       }
-      this.chunkOpen(now, true);
-      if (this.said.trim()) this.announced = this.said;
-      if (!this.head && !this.queue.length) this.clear();
+      this.head = null;
+      // Fechar o balão é fechar o desenho: o leitor de tela ainda ouve a resposta, uma vez, no fim (revisão #10936).
+      if (e.stopReason === "end_turn" && this.said.trim()) this.announced = this.said;
+      if (e.stopReason !== "end_turn" || this.dismissed) return;
+      this.head = this.answer(base);
     } else if (e.type === "limit") {
-      // O limite (spec #11084): o aviso do agente entra como um trecho, logo depois do que está na tela, sem parar a
-      // resposta; o limite acabado troca a mensagem do erro que vem em seguida pela hora de volta, se o agente disse.
-      // A hora de volta se lê no relógio de parede: o `now` daqui é o do balão (o `performance.now()` da tela).
+      // O limite (spec #11084): o aviso do agente entra como a linha de estado, até a resposta; o limite acabado troca a
+      // mensagem do erro que vem em seguida pela hora de volta, se o agente disse. A hora de volta se lê no relógio de
+      // parede: o `now` daqui é o do balão (o `performance.now()` da tela).
       const line = limitBubble(e.status, e.percent, e.resetsAt, this.wall());
       if (e.status === "out") this.outLine = line;
-      else if (!this.dismissed) {
-        this.queue.unshift({ text: line });
-        if (!this.head) this.next(now);
-      }
+      else if (!this.dismissed) this.head = this.line(line);
     } else if (e.type === "error") {
       this.finish(e.id);
-      this.queue = [];
-      this.open = "";
-      this.cut = "";
-      this.stable = 0;
-      this.error = true;
       const line = (e.code === "E_AGENT_LIMIT" && this.outLine ? this.outLine : e.message || e.code).split("\n")[0]!.trim();
-      this.head = { key: ++this.keys, text: line, complete: true, shownAt: now, completeAt: now };
+      this.head = { key: ++this.keys, text: line, kind: "error" };
       this.dismissed = false;
     }
   }
 
   /**
-   * O texto entendido da fala pelo Control (spec #9876): aparece no balão, entre aspas, enquanto o pedido começa. A
-   * resposta do agente, quando chega, toma o lugar dele.
+   * O texto entendido da fala pelo Control (spec #9876): aparece no balão, entre aspas, enquanto o pedido começa. Sai
+   * quando o agente começa a responder.
    */
-  heard(id: string, text: string, now: number): void {
+  heard(id: string, text: string, _now: number): void {
     if (this.finished.has(id) || !text.trim()) return;
     if (this.request !== id) {
       if (this.request) this.finished.add(this.request);
       this.reset(id);
     }
     if (this.said || this.dismissed || this.head) return;
-    this.head = { key: ++this.keys, text: `“${text.trim()}”`, complete: true, shownAt: now, completeAt: now, heard: true };
+    this.head = { key: ++this.keys, text: `“${text.trim()}”`, kind: "heard" };
   }
 
   /** O clique no balão: fecha (o resto deste pedido não aparece mais no balão; o [Ver mais] não abre mais). */
   close(): void {
     this.held = null;
     this.dismissed = true;
-    this.queue = [];
-    this.open = "";
-    this.cut = "";
-    this.stable = 0;
     this.head = null;
   }
 
   /** O que o balão mostra agora; null sem balão. */
   view(now: number): BubbleView | null {
-    this.advance(now);
     if (this.held) {
       if (this.head || this.ended || this.dismissed || now >= this.held.until) this.held = null;
       else return this.held.view;
     }
     const h = this.head;
     if (!h || this.dismissed) return null;
-    const len = [...h.text].length;
-    const typed = this.reduced || this.error ? len : Math.min(len, Math.floor((now - h.shownAt) / TYPE_MS));
-    const text = cutAtCodePoint(h.text, typed);
-    // A linha da web (spec #11908) não é o que o agente disse: ela sozinha não pede o [Ver mais].
-    const more = !this.error && (this.queue.length > 0 || (h.text !== WEB_LINE && bubblePlain(this.said, true).trim() !== h.text.trim()));
-    return { text, full: h.text, error: this.error, more, key: h.key, ...(h.links ? { links: h.links } : {}) };
+    // Só a resposta pede o [Ver mais]: a linha de estado e a fala da pessoa não são o que o agente disse.
+    const more = h.kind === "answer" && !sameWords(plainOf(this.said), h.text);
+    return { text: h.text, full: h.text, error: h.kind === "error", more, key: h.key, ...(h.links ? { links: h.links } : {}) };
   }
 
-  /** Quando o balão muda de novo (a próxima letra ou o fim da leitura); Infinity se nada muda sozinho. */
+  /** Quando o balão muda sozinho de novo: só a resposta de antes, parada no canto; Infinity se nada muda. */
   nextWake(now: number): number {
-    this.advance(now);
     if (this.held && !this.head && !this.ended && !this.dismissed && now < this.held.until) return this.held.until;
-    const h = this.head;
-    if (!h || this.dismissed) return Infinity;
-    if (!this.reduced && !this.error && now < this.typedAt(h)) return now + TYPE_MS;
-    const expire = this.expireAt(h);
-    return Number.isFinite(expire) ? expire : Infinity;
+    return Infinity;
+  }
+
+  private line(text: string): Head {
+    return { key: ++this.keys, text, kind: "line" };
+  }
+
+  /**
+   * O balão da resposta: a fala do `cat_speak`, ou o começo da resposta final (o que veio depois da última ferramenta;
+   * sem nada depois dela, o pedido inteiro), cortado para caber. Os links só no começo cortado, que é o texto do `done`.
+   */
+  private answer(base: number): Head | null {
+    if (this.speech) {
+      const text = summaryOf(this.speech, this.fits);
+      return text ? { key: ++this.keys, text, kind: "answer" } : null;
+    }
+    let raw = this.said.slice(base);
+    if (!plainOf(raw).trim()) [raw, base] = [this.said, 0];
+    const plain = plainOf(raw);
+    const text = summaryOf(plain, this.fits);
+    if (!text) return null;
+    const lead = plain.length - plain.trimStart().length;
+    // O texto cortado com "…" acaba antes delas: um rótulo cortado leva só o pedaço que aparece.
+    const shown = text.endsWith("…") && !plain.trim().startsWith(text) ? text.length - 1 : text.length;
+    const links = this.saidLinks.length
+      ? plainLinks(raw, this.saidLinks, base)
+          .map((l) => ({ from: l.from - lead, to: Math.min(l.to - lead, shown), path: l.path }))
+          .filter((l) => l.from >= 0 && l.from < shown)
+      : [];
+    return { key: ++this.keys, text, kind: "answer", ...(links.length ? { links } : {}) };
   }
 
   private reset(id: string): void {
     this.request = id;
-    this.queue = [];
-    this.open = "";
-    this.cut = "";
-    this.stable = 0;
     this.head = null;
     this.said = "";
     this.saidLinks = [];
     this.closedLen = 0;
+    this.speech = "";
     this.ended = false;
-    this.error = false;
     this.dismissed = false;
     this.announced = null;
     this.outLine = null;
-  }
-
-  private clear(): void {
-    this.queue = [];
-    this.open = "";
-    this.cut = "";
-    this.stable = 0;
-    this.head = null;
   }
 
   private finish(id: string): void {
@@ -468,109 +330,4 @@ export class BubbleFeed {
     this.finished.add(id);
     if (this.finished.size > 64) this.finished.delete(this.finished.values().next().value!);
   }
-
-  /** Quanto do segmento cru ficou para trás do segmento aberto (o `open` guarda o segmento inteiro desde o T17984). */
-  private segmentShown(): number {
-    return this.said.length - this.closedLen - this.open.length;
-  }
-
-  /** O texto corrido do segmento aberto que ainda não virou trecho completo: chegando, só o pedaço que não muda mais. */
-  private openShown(all = false): string {
-    if (!all) this.stable = stableEnd(this.open, this.stable);
-    return this.afterCut(plainOf(all ? this.open : this.open.slice(0, this.stable)));
-  }
-
-  /**
-   * O que o balão mostra do trecho que ainda está chegando: tudo o que chegou, se nada que venha depois muda o que já
-   * aparece (a palavra do fim só cresce); senão, só o pedaço que não muda mais. O espaço do fim fica, como no cru.
-   */
-  private openTyping(): string {
-    const shown = this.openShown();
-    const tail = this.open.slice(this.stable);
-    // O resto, depois do pedaço que não muda mais: só palavras, sem nada que o markdown leia (`[`, `*`, `|`, `#`, um
-    // `-` ou `>` no começo da linha…). Com um desses, ele espera, como o resto do trecho.
-    if (/[[\]*_`~|#<>\\&!]/.test(tail) || /\n[ \t]*([-+=]|\d+[.)])/.test(tail)) return shown;
-    return shown ? shown + tail : tail.trimStart();
-  }
-
-  private afterCut(plain: string): string {
-    const at = afterCut(plain, this.cut);
-    return plain.slice(at < 0 ? Math.min(this.cut.length, plain.length) : at);
-  }
-
-  /** Corta o segmento aberto, no texto corrido: os trechos completos vão para a fila; com `all`, o resto também. */
-  private chunkOpen(now: number, all: boolean): void {
-    const rest = this.openShown(all);
-    const chunks = splitChunks(rest, this.fits);
-    const complete = all ? chunks : chunks.slice(0, -1);
-    // Os links do `done` (spec #17683): só com ele, e só quando o segmento aberto é o fim do texto que o `done` trouxe.
-    const found =
-      all && this.saidLinks.length && this.said.endsWith(this.open)
-        ? plainLinks(this.open, this.saidLinks, this.said.length - this.open.length)
-        : [];
-    const skip = plainOf(this.open).length - rest.length;
-    for (const c of complete) {
-      // Um rótulo cortado entre dois trechos (um caminho com espaço): cada trecho leva o seu pedaço, com o mesmo caminho.
-      const start = skip + c.end - c.text.length;
-      const links = found
-        .filter((l) => l.from < skip + c.end && l.to > start)
-        .map((l) => ({ from: Math.max(l.from, start) - start, to: Math.min(l.to, skip + c.end) - start, path: l.path }));
-      this.queue.push(links.length ? { text: c.text, links } : { text: c.text });
-    }
-    if (all) {
-      this.open = "";
-      this.cut = "";
-      this.stable = 0;
-    } else if (complete.length) this.cut += rest.slice(0, complete.at(-1)!.end);
-    // O trecho na tela que ainda estava chegando: se ele virou o primeiro completo da fila, fica completo.
-    // O trecho na tela que ainda estava chegando é sempre o começo do segmento aberto: se um trecho completo saiu dele,
-    // é esse, e o balão fica com ele (sem o espaço do fim, que é o que separa do próximo).
-    const h = this.head;
-    if (h && !h.complete) {
-      const first = this.queue.shift();
-      if (first !== undefined) {
-        h.text = first.text;
-        if (first.links) h.links = first.links;
-        h.complete = true;
-        h.completeAt = now;
-      } else h.text = this.openTyping().trimStart();
-    }
-    if (!this.head) this.next(now);
-  }
-
-  /** O próximo trecho entra no balão. */
-  private next(at: number): void {
-    const t = this.queue.shift();
-    if (t !== undefined) {
-      this.head = { key: ++this.keys, text: t.text, complete: true, shownAt: at, completeAt: at, ...(t.links ? { links: t.links } : {}) };
-      return;
-    }
-    const open = this.openTyping().trimStart();
-    this.head = open ? { key: ++this.keys, text: open, complete: false, shownAt: at, completeAt: Infinity } : null;
-  }
-
-  private typedAt(h: Head): number {
-    return this.reduced || this.error ? h.shownAt : h.shownAt + [...h.text].length * TYPE_MS;
-  }
-
-  private expireAt(h: Head): number {
-    if (!h.complete) return Infinity;
-    // Sem mais nada na fila e com o pedido ainda rodando, o último trecho espera o resto chegar.
-    if (!this.queue.length && !this.ended && !this.error) return Infinity;
-    return Math.max(h.completeAt, this.typedAt(h)) + readingMs(h.text);
-  }
-
-  private advance(now: number): void {
-    for (let h = this.head; h && !this.dismissed; h = this.head) {
-      const expire = this.expireAt(h);
-      if (now < expire) return;
-      this.next(expire);
-      if (this.head && this.head.shownAt > now) return;
-    }
-  }
-}
-
-function cutAtCodePoint(s: string, n: number): string {
-  if (n >= [...s].length) return s;
-  return [...s].slice(0, n).join("");
 }

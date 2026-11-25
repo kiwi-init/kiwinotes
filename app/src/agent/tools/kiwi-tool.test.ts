@@ -163,7 +163,8 @@ describe("a ferramenta única (T14563)", () => {
   describe("o kiwi falar (T26709)", () => {
     const sink = () => {
       const falas: string[][] = [];
-      return { falas, speech: { falar: (f: string[]) => void falas.push(f) } };
+      const textos: string[] = [];
+      return { falas, textos, speech: { falar: (f: string[], t: string) => void (falas.push(f), textos.push(t)) } };
     };
     const tudo = { writes: true, proposes: true, memory: true };
 
@@ -174,11 +175,11 @@ describe("a ferramenta única (T14563)", () => {
       expect(resolveKiwiCall(kiwiCallFor("cat_speak", { texto: "Oi." }))).toMatchObject({ tool: "cat_speak", args: { texto: "Oi." } });
     });
 
-    test("fora do pedido por voz com \"O gato fala\", volta E_NOT_ALLOWED e nada é falado", async () => {
+    test("fora de um pedido (sem quem receba a fala), volta E_NOT_ALLOWED e nada é falado", async () => {
       const s = sink();
       const e = await runKiwiCall({ speech: s.speech } as unknown as KiwiToolContext, { fazer: "falar", texto: "Oi." }, tudo).catch((x) => x);
       expect(e).toMatchObject({ code: "E_NOT_ALLOWED", tool: "cat_speak" });
-      expect((e as Error).message).toContain("pedido feito por voz");
+      expect((e as Error).message).toContain("só vale dentro de um pedido");
       expect(s.falas).toEqual([]);
     });
 
@@ -186,6 +187,8 @@ describe("a ferramenta única (T14563)", () => {
       const s = sink();
       const r = await runKiwiCall({ speech: s.speech } as unknown as KiwiToolContext, { fazer: "falar", texto: "Anotei na **nota** [Ideias](Ideias.md). A reunião é às 14h30." }, { ...tudo, speech: true });
       expect(s.falas).toEqual([["Anotei na nota Ideias.", "A reunião é às catorze e trinta."]]);
+      // O texto como o agente escreveu vai junto: é o resumo do balão (spec #27881), que o balão limpa do Markdown.
+      expect(s.textos).toEqual(["Anotei na **nota** [Ideias](Ideias.md). A reunião é às 14h30."]);
       expect(r).toMatchObject({ tool: "cat_speak", value: { falado: "Anotei na nota Ideias. A reunião é às catorze e trinta." } });
       expect(r.target).toBeUndefined();
     });
