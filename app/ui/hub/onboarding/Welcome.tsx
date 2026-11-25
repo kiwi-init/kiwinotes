@@ -15,15 +15,13 @@ import { Consent } from "../../settings/Agent.tsx";
 import { kindOf } from "../../settings/agentText.ts";
 import { api, has } from "../../src/api.ts";
 import { Button } from "../../src/kit/index.tsx";
+import { useT } from "../../src/i18n.ts";
 import { FirstRunSetup } from "./FirstRunSetup.tsx";
 import { KiwiShowcase } from "./KiwiShowcase.tsx";
 import { BigCat } from "./Onboarding.tsx";
 import {
   typedLength,
-  WELCOME_NO,
   WELCOME_START,
-  WELCOME_TEXT,
-  WELCOME_YES,
   welcomeNext,
   type WelcomeEvent,
   type WelcomeFlow,
@@ -51,6 +49,8 @@ const offScreen = () => window.__kiwiHeld === true || document.visibilityState =
  * escondida pulava direto para o texto inteiro quando o hub aparecia.
  */
 function TypedBubble({ reduced, onTyped }: { reduced: boolean; onTyped: () => void }) {
+  const { t } = useT();
+  const WELCOME_TEXT = t("welcome.text");
   const [shown, setShown] = useState(() => typedLength(WELCOME_TEXT, 0, reduced));
   const typed = shown >= WELCOME_TEXT.length;
   useEffect(() => {
@@ -89,6 +89,7 @@ function TypedBubble({ reduced, onTyped }: { reduced: boolean; onTyped: () => vo
 }
 
 function Hello({ settings, onChoose }: { settings: AppSettings; onChoose: (e: WelcomeEvent) => void }) {
+  const { t } = useT();
   const reduced = settings.appearance.motion === "reduced" || systemReduced();
   const [typed, setTyped] = useState(reduced);
   const actions = useRef<HTMLElement>(null);
@@ -97,15 +98,15 @@ function Hello({ settings, onChoose }: { settings: AppSettings; onChoose: (e: We
     if (typed) actions.current?.querySelector<HTMLElement>("[data-variant=primary]")?.focus();
   }, [typed]);
   return (
-    <div className="kn-onb kn-welcome" role="dialog" aria-modal="true" aria-label="Boas-vindas" data-motion={reduced ? "reduced" : "full"}>
+    <div className="kn-onb kn-welcome" role="dialog" aria-modal="true" aria-label={t("welcome.aria")} data-motion={reduced ? "reduced" : "full"}>
       <div className="kn-welcome-stage">
         <TypedBubble reduced={reduced} onTyped={() => setTyped(true)} />
         <BigCat cor={settings.kiwicat.cor} reduced={reduced} />
       </div>
       <footer className="kn-welcome-actions" data-shown={typed} ref={actions}>
-        <Button onClick={() => onChoose("no")}>{WELCOME_NO}</Button>
+        <Button onClick={() => onChoose("no")}>{t("welcome.no")}</Button>
         <Button variant="primary" onClick={() => onChoose("yes")}>
-          {WELCOME_YES}
+          {t("welcome.yes")}
         </Button>
       </footer>
     </div>

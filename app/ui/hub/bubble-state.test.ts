@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentTurnEvent, BubbleLink } from "../../src/shared/ui-contract";
-import { ANSWER_HOLD_MS, BubbleFeed, bubblePlain, plainLinks, readingMs, summaryOf, WEB_LINE } from "./bubble-state";
+import { ANSWER_HOLD_MS, BubbleFeed, bubblePlain, plainLinks, readingMs, summaryOf, webLine } from "./bubble-state";
 
 const fits = (max: number) => (s: string) => [...s].length <= max;
 const ev = (e: Record<string, unknown>) => ({ id: "p1", ...e }) as AgentTurnEvent;
@@ -197,7 +197,7 @@ describe("o que fica como antes", () => {
     const k = new BubbleFeed(fits(60));
     k.event(ev({ type: "started" }), 0);
     k.event(ev({ type: "status", status: "running", tool: "web" }), 0);
-    expect(k.view(0)!.text).toBe(WEB_LINE);
+    expect(k.view(0)!.text).toBe(webLine());
     k.close();
     k.event(ev({ type: "text", text: "um texto" }), 5);
     k.event(ev({ type: "status", status: "running", tool: "web" }), 8);
@@ -264,10 +264,10 @@ describe("o que fica como antes", () => {
     const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);
     f.event(ev({ type: "status", status: "running", tool: "web" }), 10);
-    expect(f.view(10)).toMatchObject({ text: WEB_LINE, more: false });
+    expect(f.view(10)).toMatchObject({ text: webLine(), more: false });
     // O texto que o agente diz entre a web e a resposta não tira a linha nem entra no balão.
     f.event(ev({ type: "text", text: "Achei duas páginas." }), 20);
-    expect(f.view(20)!.text).toBe(WEB_LINE);
+    expect(f.view(20)!.text).toBe(webLine());
     f.event(ev({ type: "status", status: "running", tool: "kiwi" }), 30);
     expect(f.view(30)).toBeNull();
     // Outra ferramenta não diz isso.
@@ -315,7 +315,7 @@ describe("a resposta de antes espera a nova entrar (T15377)", () => {
     expect(f.view(900)!.key).toBe(old.key);
     f.event({ id: "p2", type: "status", status: "running", tool: "web" }, 950);
     const v = f.view(950)!;
-    expect(v.full).toBe(WEB_LINE);
+    expect(v.full).toBe(webLine());
     expect(v.key).not.toBe(old.key);
   });
 

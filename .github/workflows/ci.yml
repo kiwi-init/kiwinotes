@@ -155,12 +155,12 @@ jobs:
 
       # A primeira abertura (T23565, specs #20780 e #20828): a boas-vindas (e o balão que espera a intro), o que o Kiwi
       # faz, e o passo das permissões e do modelo. Cada roteiro sobe o próprio headless num tmp, com o agente e as
-      # permissões de mentira. Rodavam só à mão.
+      # permissões de mentira. Rodavam só à mão. O hub-english (T28191) passa as mesmas telas com o app em English.
       - name: onboarding-checks
         if: ${{ !cancelled() && needs.changes.outputs.bun == 'run' && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
         run: |
-          for c in welcome showcase first-run; do
+          for c in welcome showcase first-run hub-english; do
             echo "== $c-check"
             bun scripts/$c-check.ts "$RUNNER_TEMP/$c" || exit 1
           done

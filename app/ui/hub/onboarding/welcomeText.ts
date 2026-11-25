@@ -1,12 +1,12 @@
 // A boas-vindas da primeira abertura (T20795, spec #20780): o texto do balão do Kiwi Cat (harry #20820), o ritmo em que
 // ele se escreve e a ordem das telas depois dos dois botões (lead #20854). Sem React, para os testes.
 
-/** O balão, palavra por palavra como o harry escreveu (#20820). */
-export const WELCOME_TEXT =
-  "Olá, tudo bem? Um prazer ter você aqui! Sou o Kiwi, o agente de IA do Kiwi Notes. Leio, organizo e te ajudo nas tarefas do dia a dia. Suas notas ficam no seu Mac, seguras e protegidas. Vamos lá?";
+import { t } from "../../src/i18n.ts";
 
-export const WELCOME_YES = "Vamos lá";
-export const WELCOME_NO = "Agora não";
+/** O balão, palavra por palavra como o harry escreveu (#20820), na língua do app (spec #28171). */
+export const welcomeText = (): string => t("welcome.text");
+export const welcomeYes = (): string => t("welcome.yes");
+export const welcomeNo = (): string => t("welcome.no");
 
 /** Letras por segundo do balão: o texto inteiro em uns 6,5 s (`typingDuration`). */
 export const TYPE_CPS = 40;

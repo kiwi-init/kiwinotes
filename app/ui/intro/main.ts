@@ -12,6 +12,7 @@
 import type {} from "../src/api.ts";
 import type { IntroLayout } from "../../src/shared/intro-layout.ts";
 import { startAppearance } from "../src/styles/appearance.ts";
+import { startLocale, t } from "../src/i18n.ts";
 import { drawFace, FogRenderer, INTRO_SHAPE } from "../kiwicat-v2/renderer.ts";
 import { evaluateIntroPose, KIWI_INTRO_CONFIG as CFG, type IntroPose } from "../kiwicat-v2/timeline.ts";
 
@@ -143,6 +144,9 @@ const engine = window.engine;
 engine?.ready();
 // O tema do app (o --bg do hub), para a moldura terminar na cor dele.
 void startAppearance();
+// A língua do app (spec #28171): o rótulo do palco para o VoiceOver. A cópia local já vale na hora; o engine confirma.
+stage.setAttribute("aria-label", t("intro.aria"));
+void startLocale().then(() => stage.setAttribute("aria-label", t("intro.aria")));
 
 if (frozenT !== null) {
   renderPose(evaluateIntroPose(frozenT, reduced, null));

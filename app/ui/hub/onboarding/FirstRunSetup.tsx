@@ -10,20 +10,13 @@ import { useEffect, useRef, useState } from "react";
 import { SETUP_PERMISSIONS, type SetupPermission, type SetupStatus } from "../../../src/shared/first-run.ts";
 import { api, has } from "../../src/api.ts";
 import { Button } from "../../src/kit/index.tsx";
-import {
-  continueLabel,
-  MODEL_TITLE,
-  MODEL_WHY,
-  modelLine,
-  PERMISSION_TEXT,
-  permissionButton,
-  SETUP_HINT,
-  SETUP_TITLE,
-} from "./firstRunText.ts";
+import { useT } from "../../src/i18n.ts";
+import { continueLabel, modelLine, modelTitle, modelWhy, permissionButton, permissionText, setupHint, setupTitle } from "./firstRunText.ts";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function FirstRunSetup({ onDone }: { onDone: () => void }) {
+  const { t } = useT();
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [asking, setAsking] = useState<SetupPermission | null>(null);
@@ -78,8 +71,8 @@ export function FirstRunSetup({ onDone }: { onDone: () => void }) {
   return (
     <div className="kn-onb kn-setup" role="dialog" aria-modal="true" aria-labelledby="kn-setup-title">
       <section className="kn-onb-step kn-setup-step">
-        <h1 id="kn-setup-title" className="kn-onb-title" tabIndex={-1} ref={title}>{SETUP_TITLE}</h1>
-        <p className="kn-onb-hint">{SETUP_HINT}</p>
+        <h1 id="kn-setup-title" className="kn-onb-title" tabIndex={-1} ref={title}>{setupTitle()}</h1>
+        <p className="kn-onb-hint">{setupHint()}</p>
         <ul className="kn-setup-list">
           {SETUP_PERMISSIONS.map((p) => {
             const state = status.permissions?.[p];
@@ -87,24 +80,24 @@ export function FirstRunSetup({ onDone }: { onDone: () => void }) {
             return (
               <li key={p} className="kn-setup-row" data-permission={p} data-state={state ?? "unknown"}>
                 <div className="kn-setup-text">
-                  <strong>{PERMISSION_TEXT[p].name}</strong>
-                  <span>{PERMISSION_TEXT[p].why}</span>
+                  <strong>{permissionText(p).name}</strong>
+                  <span>{permissionText(p).why}</span>
                 </div>
                 {label ? (
                   <Button onClick={() => ask(p)} disabled={!status.permissions || asking !== null}>
                     {label}
                   </Button>
                 ) : (
-                  <span className="kn-setup-ok">Permitido</span>
+                  <span className="kn-setup-ok">{t("setup.allowed")}</span>
                 )}
               </li>
             );
           })}
           <li className="kn-setup-row kn-setup-model" data-model={status.model.state}>
             <div className="kn-setup-text">
-              <strong>{MODEL_TITLE}</strong>
-              <span>{MODEL_WHY}</span>
-              <div className="kn-setup-bar" role="progressbar" aria-label={MODEL_TITLE} aria-valuetext={model.text}
+              <strong>{modelTitle()}</strong>
+              <span>{modelWhy()}</span>
+              <div className="kn-setup-bar" role="progressbar" aria-label={modelTitle()} aria-valuetext={model.text}
                 aria-valuemin={0} aria-valuemax={100} {...(model.fraction !== null ? { "aria-valuenow": Math.round(model.fraction * 100) } : {})}
                 data-indeterminate={model.fraction === null && !model.failed}>
                 <i style={{ width: `${(model.fraction ?? 0) * 100}%` }} />

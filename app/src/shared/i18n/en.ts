@@ -5,6 +5,7 @@ import { enCatOverlay } from "./catoverlay.en.ts";
 import { enAgent } from "./agent.en.ts";
 import { enCommon } from "./common.en.ts";
 import { enHistory } from "./history.en.ts";
+import { enHub } from "./hub.en.ts";
 import type { Catalog, Entry } from "./index.ts";
 import { enMeetingsSettings } from "./meetings-settings.en.ts";
 import { enMeetings } from "./meetings.en.ts";
@@ -118,6 +119,7 @@ export const EN_PARTS = {
   agent: enAgent,
   meetings: enMeetings,
   history: enHistory,
+  hub: enHub,
 } as const;
 
 export const en: Catalog = {
@@ -130,4 +132,5 @@ export const en: Catalog = {
   ...enAgent,
   ...enMeetings,
   ...enHistory,
+  ...enHub,
 };

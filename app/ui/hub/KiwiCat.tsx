@@ -9,6 +9,7 @@ import { CatActivity } from "./cat-state";
 import { CatAsk } from "./CatAsk";
 import { BubblePresence } from "./BubblePresence";
 import { CatBubble } from "./CatBubble";
+import { useT } from "../src/i18n.ts";
 import { MemoryBubble } from "./MemoryBubble";
 import { RoutineBubble } from "./RoutineBubble";
 import { ProposalBubble } from "./ProposalBubble";
@@ -22,6 +23,7 @@ type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
 const symbolBackground = (): "light" | "dark" => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
 // Com o gato no overlay (spec #9810), o do canto some e pausa o desenho: nunca dois gatos.
 function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; reduced: boolean; away: boolean; cor: string; voiceHint?: string }) {
+  const { t } = useT();
   const handle = useRef<Cat | undefined>(undefined);
   /** Tira a resposta de antes do canto quando a pergunta sai (o `drop` do CatBubble). */
   const dropAnswer = useRef<(() => void) | null>(null);
@@ -234,7 +236,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
         // Com o tabIndex, o clique do mouse passaria o foco ao gato (e o anel ficaria nele): o mousedown não leva o foco,
         // e ele volta para onde estava quando o campo fecha.
         onMouseDown={(e) => e.preventDefault()}
-        aria-label="Falar com o agente"
+        aria-label={t("hub.ask.aria")}
         aria-haspopup="dialog"
         aria-expanded={asking}
         // `detail === 0`: o clique veio do teclado (Enter ou Espaço no botão), não do mouse.
@@ -289,8 +291,9 @@ export function useAgentCat(): { status: AgentStatus | null; settings: AppSettin
 }
 /** `atHome`: a Início está na frente, e o gato está no meio dela (o hub o leva; aqui só muda a dica do campo). */
 export function KiwiCat({ status, settings, atHome = false }: { status: AgentStatus | null; settings: AppSettings | null; atHome?: boolean }) {
+  const { t } = useT();
   const [away, setAway] = useState(false);
   useEffect(() => api.agent.onCatWhere(e => setAway(e.overlay)), []);
   // No onboarding (spec #11955), o gato grande é o dele: nunca dois gatos.
-  return status?.enabled && settings?.kiwicat?.show === true && status.onboarding?.state !== "open" ? <CatMount busy={status.busy} reduced={settings.appearance.motion === "reduced"} away={away} cor={settings.kiwicat.cor} voiceHint={atHome ? `Ou segure ${shortcutLabel(settings.shortcuts?.agent ?? DEFAULT_SHORTCUTS.agent!)} para falar.` : undefined} /> : null;
+  return status?.enabled && settings?.kiwicat?.show === true && status.onboarding?.state !== "open" ? <CatMount busy={status.busy} reduced={settings.appearance.motion === "reduced"} away={away} cor={settings.kiwicat.cor} voiceHint={atHome ? t("hub.ask.voiceHint", { keys: shortcutLabel(settings.shortcuts?.agent ?? DEFAULT_SHORTCUTS.agent!) }) : undefined} /> : null;
 }

@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 import { webkit } from "playwright-core";
 import { connect, request } from "./cli";
 import { openWindow, type UiContext } from "./ui-page";
-import { EXAMPLES, exampleMs } from "../ui/hub/onboarding/showcaseText.ts";
+import { exampleMs, SHOWCASE } from "../ui/hub/onboarding/showcaseText.ts";
 
 const app = resolve(import.meta.dir, "..");
 const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T20838-showcase"));
@@ -78,7 +78,7 @@ try {
   await pastWelcome(q);
   await q.waitForSelector('.kn-show[data-motion="reduced"] .kn-show-stage[data-example="organizar"][data-phase="resultado"]', { timeout: 15000 });
   // Mais que o exemplo mais longo: com o relógio andando, o exemplo já teria trocado (revisão da T20838).
-  await Bun.sleep(Math.max(...EXAMPLES.map(exampleMs)) + 1000);
+  await Bun.sleep(Math.max(...SHOWCASE.pt.examples.map(exampleMs), ...SHOWCASE.en.examples.map(exampleMs)) + 1000);
   assert.equal(await q.locator(".kn-show-stage").getAttribute("data-example"), "organizar", "com Reduzir movimento, o exemplo não troca sozinho");
   await q.locator(".kn-show-dots button").nth(1).click();
   await q.waitForSelector('.kn-show-stage[data-example="documento"][data-phase="resultado"]', { timeout: 2000 });

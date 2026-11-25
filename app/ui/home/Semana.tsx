@@ -5,32 +5,33 @@ import { api } from "../src/api.ts";
 import { MeetingIcon, MicIcon, NoteIcon } from "./icons.tsx";
 import { dayLabel, hours, thousands, weekRange } from "./when.ts";
 import { useHome } from "./useHome.ts";
-
-const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+import { useT } from "../src/i18n.ts";
 
 export function Semana({ onOpen }: { onOpen(path: string, internal: boolean): void }) {
+  const { t } = useT();
   const load = useHome(api.home.week);
   return (
     <div className="kn-home-v-page" data-view="semana">
-      <h1 className="kn-home-v-title">A sua semana</h1>
-      {load.state === "ready" ? <Week week={load.data} onOpen={onOpen} /> : load.state === "error" ? <p className="kn-home-v-empty">Não deu para ler a semana.</p> : null}
+      <h1 className="kn-home-v-title">{t("home.week.title")}</h1>
+      {load.state === "ready" ? <Week week={load.data} onOpen={onOpen} /> : load.state === "error" ? <p className="kn-home-v-empty">{t("home.week.readFailed")}</p> : null}
     </div>
   );
 }
 
 function Week({ week, onOpen }: { week: HomeWeek; onOpen(path: string, internal: boolean): void }) {
-  const t = week.totals;
+  const { t } = useT();
+  const tot = week.totals;
   const numbers = [
-    { value: t.notes, label: plural(t.notes, "nota editada", "notas editadas") },
-    { value: t.meetings, label: plural(t.meetings, "reunião", "reuniões"), extra: t.meetingMin ? `${hours(t.meetingMin)} gravadas` : null },
-    { value: t.dictations, label: plural(t.dictations, "ditado", "ditados"), extra: t.words ? `${thousands(t.words)} ${plural(t.words, "palavra", "palavras")}` : null },
+    { id: "notes", value: tot.notes, label: t("home.week.notesEdited", { n: tot.notes }) },
+    { id: "meetings", value: tot.meetings, label: t("home.week.meetings", { n: tot.meetings }), extra: tot.meetingMin ? t("home.week.recorded", { time: hours(tot.meetingMin) }) : null },
+    { id: "dictations", value: tot.dictations, label: t("home.week.dictations", { n: tot.dictations }), extra: tot.words ? t("home.week.words", { n: tot.words, count: thousands(tot.words) }) : null },
   ];
   return (
     <>
       <p className="kn-home-v-sub">{weekRange(week.days.at(-1)!.date, week.days[0]!.date)}</p>
       <div className="kn-home-v-numbers">
         {numbers.map((n) => (
-          <div key={n.label} className="kn-home-v-card kn-home-v-number">
+          <div key={n.id} className="kn-home-v-card kn-home-v-number">
             <b>{thousands(n.value)}</b>
             <span>{n.label}</span>
             {n.extra ? <span className="kn-home-v-muted">{n.extra}</span> : null}
@@ -47,6 +48,7 @@ function Week({ week, onOpen }: { week: HomeWeek; onOpen(path: string, internal:
 }
 
 function Day({ d, i, onOpen }: { d: WeekDay; i: number; onOpen(path: string, internal: boolean): void }) {
+  const { t } = useT();
   const empty = !d.notes.length && !d.meetings.length && !d.dictations;
   return (
     <li data-today={i === 0 ? "true" : undefined} data-date={d.date}>
@@ -66,14 +68,14 @@ function Day({ d, i, onOpen }: { d: WeekDay; i: number; onOpen(path: string, int
             {n.title}
           </button>
         ))}
-        {d.moreNotes ? <span className="kn-home-v-chip" data-kind="more">+{d.moreNotes} {plural(d.moreNotes, "nota", "notas")}</span> : null}
+        {d.moreNotes ? <span className="kn-home-v-chip" data-kind="more">{t("home.week.moreNotes", { n: d.moreNotes, count: String(d.moreNotes) })}</span> : null}
         {d.dictations ? (
           <span className="kn-home-v-chip" data-kind="dictation">
             <MicIcon size={13} />
-            {d.dictations} {plural(d.dictations, "ditado", "ditados")}
+            {t("home.week.dayDictations", { n: d.dictations, count: String(d.dictations) })}
           </span>
         ) : null}
-        {empty ? <span className="kn-home-v-muted kn-home-v-quiet">nada</span> : null}
+        {empty ? <span className="kn-home-v-muted kn-home-v-quiet">{t("home.week.nothing")}</span> : null}
       </span>
     </li>
   );

@@ -1,13 +1,17 @@
 // Os textos da seção Sobre (T2386, spec #16837), fora do componente: assim os testes não carregam o CSS nem o ícone.
 
+import { formatNumber, formatTime, type TextKey } from "../../src/shared/i18n/index.ts";
 import { type AppChannel, type UiAppearance, type UiWindow, UPDATES_OFF_BY_SETTING, type UpdatesView } from "../../src/shared/ui-contract.ts";
+import { appLocale, t } from "../src/i18n.ts";
 
-export const CHANNEL: Record<AppChannel, string> = {
-  stable: "estável",
-  dev: "desenvolvimento",
+/** O canal do build, na língua do app (spec #28171). */
+export const CHANNEL: Record<AppChannel, TextKey> = {
+  stable: "about.channel.stable",
+  dev: "about.channel.dev",
 };
 
-const time = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+/** A hora de um ISO, no relógio do Mac e no costume da língua (`12:30` / `12:30 PM`). */
+const time = (iso: string) => formatTime(appLocale().locale, new Date(iso));
 
 /**
  * O progresso do download, se o updater mandar os bytes (parte 1 do spec #16837, T17097). Lido sem depender do tipo:
@@ -21,7 +25,7 @@ export function downloadProgress(v: UpdatesView): { done: number; total: number 
 }
 
 const MB = 1024 * 1024;
-const mb = (bytes: number) => Math.round(bytes / MB).toLocaleString("pt-BR");
+const mb = (bytes: number) => formatNumber(appLocale().locale, Math.round(bytes / MB));
 
 /** O que a faixa da atualização mostra (spec #16837, mockup B): o tom, as duas linhas, a barra e o botão. */
 export interface UpdateBand {
@@ -39,41 +43,42 @@ export interface UpdateBand {
 
 /** A faixa em cada estado das atualizações: parado, procurando, baixando, pronta, aplicando, erro ou desligado. */
 export function updateBand(v: UpdatesView): UpdateBand {
-  const check = (label = "Verificar atualizações") => ({ kind: "check" as const, label });
+  const check = (label = t("about.update.check")) => ({ kind: "check" as const, label });
+  const apply = { kind: "apply" as const, label: t("about.update.apply") };
+  const off = t("about.update.off");
   switch (v.state) {
     case "off":
       // Desligado pela pessoa (T25110): diz o que deixa de acontecer, e o interruptor fica logo abaixo.
       if (v.reason === UPDATES_OFF_BY_SETTING)
-        return { tone: "quiet", title: "Atualizações desligadas", detail: "O Kiwi não procura versão nova nem aparência nova.", bar: null, notesOf: null, action: null };
-      return { tone: "quiet", title: "Atualizações desligadas", detail: `Neste build (${v.reason}).`, bar: null, notesOf: null, action: null };
+        return { tone: "quiet", title: off, detail: t("about.update.offBySetting"), bar: null, notesOf: null, action: null };
+      return { tone: "quiet", title: off, detail: t("about.update.offInBuild", { reason: v.reason }), bar: null, notesOf: null, action: null };
     case "checking":
-      return { tone: "busy", title: "Procurando atualizações…", detail: "Conferindo no GitHub.", bar: null, notesOf: null, action: null };
+      return { tone: "busy", title: t("about.update.checking"), detail: t("about.update.checkingDetail"), bar: null, notesOf: null, action: null };
     case "downloading": {
       const p = downloadProgress(v);
       const pct = p ? Math.floor((p.done / p.total) * 100) : null;
-      const detail = p ? `${mb(p.done)} de ${mb(p.total)} MB · ${pct}%` : "Baixando…";
-      return { tone: "busy", title: `Baixando a versão ${v.version}`, detail, bar: { pct }, notesOf: v.version, action: null };
+      const detail = p ? t("about.update.bytes", { done: mb(p.done), total: mb(p.total), pct: String(pct) }) : t("about.update.downloadingShort");
+      return { tone: "busy", title: t("about.update.downloading", { version: v.version }), detail, bar: { pct }, notesOf: v.version, action: null };
     }
     case "ready":
       // Pronta, mas a troca já falhou uma vez (o "Atualizar e reiniciar" voltou): diz o porquê, e o botão segue lá.
       if (v.lastCheck?.result === "error")
-        return { tone: "error", title: v.lastCheck.message, detail: `A versão ${v.version} segue baixada.`, bar: null, notesOf: v.version, action: { kind: "apply", label: "Atualizar e reiniciar" } };
-      return { tone: "ready", title: `A versão ${v.version} está pronta`, detail: "Baixada e conferida. Reinicia em segundos.", bar: null, notesOf: v.version, action: { kind: "apply", label: "Atualizar e reiniciar" } };
+        return { tone: "error", title: v.lastCheck.message, detail: t("about.update.stillDownloaded", { version: v.version }), bar: null, notesOf: v.version, action: apply };
+      return { tone: "ready", title: t("about.update.ready", { version: v.version }), detail: t("about.update.readyDetail"), bar: null, notesOf: v.version, action: apply };
     case "applying":
-      return { tone: "busy", title: "Reiniciando…", detail: "O Kiwi Notes vai fechar e abrir de novo.", bar: null, notesOf: null, action: null };
+      return { tone: "busy", title: t("about.update.applying"), detail: t("about.update.applyingDetail"), bar: null, notesOf: null, action: null };
     case "idle": {
       const last = v.lastCheck;
-      if (!last) return { tone: "quiet", title: "Ainda não verificado", detail: "", bar: null, notesOf: null, action: check() };
-      if (last.result === "latest")
-        return { tone: "quiet", title: "Você está na última versão", detail: `Verificado às ${time(last.at)}.`, bar: null, notesOf: null, action: check() };
-      if (last.result === "error") return { tone: "error", title: "Não deu para verificar", detail: `${last.message} (às ${time(last.at)})`, bar: null, notesOf: null, action: check("Tentar de novo") };
-      return { tone: "quiet", title: `A versão ${last.version} está disponível`, detail: `Verificado às ${time(last.at)}.`, bar: null, notesOf: null, action: check() };
+      if (!last) return { tone: "quiet", title: t("about.update.never"), detail: "", bar: null, notesOf: null, action: check() };
+      const checked = t("about.update.checkedAt", { time: time(last.at) });
+      if (last.result === "latest") return { tone: "quiet", title: t("about.update.latest"), detail: checked, bar: null, notesOf: null, action: check() };
+      if (last.result === "error")
+        return { tone: "error", title: t("about.update.failed"), detail: t("about.update.failedDetail", { message: last.message, time: time(last.at) }), bar: null, notesOf: null, action: check(t("about.update.retry")) };
+      return { tone: "quiet", title: t("about.update.available", { version: last.version }), detail: checked, bar: null, notesOf: null, action: check() };
     }
   }
 }
 
-/** A dica do "Salvar diagnóstico", no lugar da frase longa de antes. */
-export const DIAG_HINT = "Versões, permissões e o log do app, sem texto nem áudio, para mandar quando algo der errado.";
 
 /**
  * O software de terceiros que vai dentro do app e pede crédito (spec #7079): cada visualizador de arquivo das Notas
@@ -94,6 +99,22 @@ export const CREDITS: readonly { name: string; by: string; license: string; use:
   { name: "Agent Client Protocol SDK", by: "Zed Industries", license: "Apache-2.0", use: "conversar com o agente", pkg: "@agentclientprotocol/sdk" },
 ];
 
+/**
+ * O "Para …" de cada biblioteca nas Licenças, na língua do app (spec #28171). O `use` de cada uma fica em português:
+ * é o texto do arquivo de avisos, que o `bun scripts/third-party-notices.ts` gera.
+ */
+const CREDIT_USE: Record<string, TextKey> = {
+  "pdfjs-dist": "about.credit.pdfjs",
+  mammoth: "about.credit.mammoth",
+  "@docx-editor.dev/core": "about.credit.docxEditor",
+  xlsx: "about.credit.xlsx",
+  "jgraph/drawio": "about.credit.drawio",
+  "pdf-lib": "about.credit.pdfLib",
+  docx: "about.credit.docx",
+  "@agentclientprotocol/sdk": "about.credit.acp",
+};
+export const creditUse = (c: { pkg: string; use: string }): string => (CREDIT_USE[c.pkg] ? t(CREDIT_USE[c.pkg]!) : c.use);
+
 /** O arquivo com o texto de cada licença, que vai no pack das Notas (`ui/notes/public/`, copiado para `dist/notes/`). */
 export const NOTICES_FILE = "THIRD_PARTY_NOTICES.txt";
 
@@ -109,23 +130,17 @@ export function creditsLine(credits = CREDITS): string {
   return `Com ${credits.map((c) => `${c.name}, ${c.by.startsWith("Mozilla") ? "da" : "de"} ${c.by} (${c.license})`).join("; ")}.`;
 }
 
-/** O interruptor do Sobre (T25110): o que ele liga, e que desligado nada vai à rede para isso. */
-export const CHECK_UPDATES_HINT =
-  "Procura no GitHub uma versão nova do app e da aparência das janelas. Desligado, o Kiwi não faz nenhum pedido para isso.";
-
 /** O nome de cada janela na lista "Aparência" do Sobre (spec #25011). */
-export const WINDOW_NAME: Record<UiWindow, string> = {
-  hub: "Kiwi Notes",
-  notes: "Notas",
-  settings: "Ajustes",
-  history: "Histórico",
-  intro: "Abertura",
+export const WINDOW_NAME: Record<UiWindow, TextKey> = {
+  hub: "about.window.hub",
+  notes: "about.window.notes",
+  settings: "about.window.settings",
+  history: "about.window.history",
+  intro: "about.window.intro",
 };
 
 /** Uma linha da lista "Aparência": a janela e a UI dela, a de fábrica ou uma que chegou depois. */
 export function appearanceLine(w: UiAppearance["windows"][number]): { name: string; version: string } {
-  const version = w.builtIn ? `${w.uiVersion} (de fábrica)` : w.uiVersion;
-  return { name: WINDOW_NAME[w.window], version: w.pending ? `${version} · nova pronta: ${w.pending}` : version };
+  const version = w.builtIn ? t("about.ui.builtIn", { version: w.uiVersion }) : w.uiVersion;
+  return { name: t(WINDOW_NAME[w.window]), version: w.pending ? t("about.ui.pending", { version, pending: w.pending }) : version };
 }
-
-export const REVERT_HINT = "Volta cada janela à aparência que ela tinha antes da última que chegou, sem fechar o app.";

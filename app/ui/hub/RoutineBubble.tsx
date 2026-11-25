@@ -11,9 +11,11 @@ import { Button } from "../src/kit/index.tsx";
 import { type View, ViewPanel } from "../settings/AgentActivity.tsx";
 import { BubblePresence } from "./BubblePresence";
 import { BubbleTail } from "./BubbleTail";
-import { ROUTINE_DISCARDED, routineLine } from "./routineText.ts";
+import { routineDiscarded, routineLine } from "./routineText.ts";
+import { useT } from "../src/i18n.ts";
 
 export function RoutineBubble({ hidden, onShown, reduced = false }: { hidden: boolean; onShown?: (shown: boolean) => void; reduced?: boolean }) {
+  const { t } = useT();
   const [event, setEvent] = useState<AgentRoutineEvent | null>(null);
   const [view, setView] = useState<View | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function RoutineBubble({ hidden, onShown, reduced = false }: { hidden: bo
     try {
       await api.agent.undo(done.request);
       setView(null);
-      setOutcome(ROUTINE_DISCARDED);
+      setOutcome(routineDiscarded());
     } catch (e) {
       setOutcome(e instanceof Error ? e.message : String(e));
     }
@@ -60,7 +62,7 @@ export function RoutineBubble({ hidden, onShown, reduced = false }: { hidden: bo
   return (
     <BubblePresence itemKey={showing ? "rotina" : null} reduced={reduced}>
       {showing ? (
-        <div className="kn-bubble-shell kn-bubble kn-routine-bubble" onMouseDown={keepFocus} role="status" aria-label="A rotina do agente">
+        <div className="kn-bubble-shell kn-bubble kn-routine-bubble" onMouseDown={keepFocus} role="status" aria-label={t("hub.routine.aria")}>
           <p className="kn-routine-line">{outcome ?? routineLine(event)}</p>
           {view ? (
             <div className="kn-routine-view">
@@ -70,14 +72,14 @@ export function RoutineBubble({ hidden, onShown, reduced = false }: { hidden: bo
           <div className="kn-routine-actions">
             {done && !outcome ? (
               <>
-                <Button onClick={() => void see()}>{view ? "Fechar" : "Ver"}</Button>
+                <Button onClick={() => void see()}>{view ? t("common.close") : t("common.see")}</Button>
                 <Button variant="primary" onClick={close}>
-                  Manter
+                  {t("common.keep")}
                 </Button>
-                <Button onClick={() => void discard()}>Descartar</Button>
+                <Button onClick={() => void discard()}>{t("common.discard")}</Button>
               </>
             ) : (
-              <Button onClick={close}>Ok</Button>
+              <Button onClick={close}>{t("common.ok")}</Button>
             )}
           </div>
           <BubbleTail />
