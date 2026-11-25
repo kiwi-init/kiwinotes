@@ -2,8 +2,10 @@
 // A missing or extra key breaks `tsc`; the i18n test also checks that both ask for the same `{params}`.
 
 import { enCommon } from "./common.en.ts";
+import { enHistory } from "./history.en.ts";
 import type { Catalog, Entry } from "./index.ts";
 import { enMeetingsSettings } from "./meetings-settings.en.ts";
+import { enMeetings } from "./meetings.en.ts";
 import { enNotes } from "./notes.en.ts";
 import type { PT_PARTS } from "./pt.ts";
 import { enSettings } from "./settings.en.ts";
@@ -110,6 +112,8 @@ export const EN_PARTS = {
   notes: enNotes,
   settings: enSettings,
   meetingsSettings: enMeetingsSettings,
+  meetings: enMeetings,
+  history: enHistory,
 } as const;
 
 export const en: Catalog = {
@@ -118,4 +122,6 @@ export const en: Catalog = {
   ...enNotes,
   ...enSettings,
   ...enMeetingsSettings,
+  ...enMeetings,
+  ...enHistory,
 };

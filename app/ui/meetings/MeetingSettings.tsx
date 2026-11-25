@@ -10,6 +10,7 @@ import {
   type MeetingSettings,
 } from "../../src/shared/meetings.ts";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { RemoveIcon } from "../src/kit/editable.tsx";
 import { Button, Row, Section, Switch } from "../src/kit/index.tsx";
 import { ShortcutRow } from "../settings/Shortcuts.tsx";
@@ -20,6 +21,7 @@ const isDefault = (apps: MeetingAppEntry[]) =>
   apps.length === DEFAULT_MEETING_APPS.length && apps.every((a, i) => a.bundleId === DEFAULT_MEETING_APPS[i]!.bundleId && a.name === DEFAULT_MEETING_APPS[i]!.name);
 
 export function MeetingSettingsSection() {
+  const { t } = useT();
   const [settings, setSettings] = useState<MeetingSettings | null>(null);
   const [failed, setFailed] = useState(false);
   // Os atalhos das reuniões são os de Configurações › Atalhos (T5349): a mesma linha, nos dois lugares.
@@ -35,7 +37,7 @@ export function MeetingSettingsSection() {
   }, []);
 
   // Um engine sem os ajustes de reunião: a seção não aparece.
-  if (!settings) return failed ? <Section title="Ajustes de reunião"><Row label="Não deu para ler os ajustes de reunião." /></Section> : null;
+  if (!settings) return failed ? <Section title={t("meetings.settings.title")}><Row label={t("meetings.settings.loadFailed")} /></Section> : null;
 
   const change = (patch: Partial<MeetingSettings>) => {
     const before = settings;
@@ -51,16 +53,16 @@ export function MeetingSettingsSection() {
   };
 
   return (
-    <Section title="Ajustes de reunião">
-      {failed ? <div className="kn-meet-settings-error" role="alert">Não deu para salvar. Tente de novo.</div> : null}
+    <Section title={t("meetings.settings.title")}>
+      {failed ? <div className="kn-meet-settings-error" role="alert">{t("meetings.settings.saveFailed")}</div> : null}
       {shortcuts ? (
         <>
           <ShortcutRow id="meeting" shortcuts={shortcuts} />
           <ShortcutRow id="meetingPause" shortcuts={shortcuts} />
         </>
       ) : null}
-      <Row label="Perguntar se quer gravar" hint="Quando um app de reunião pega o microfone, uma vez por reunião. Nunca grava sozinho.">
-        <Switch label="Perguntar se quer gravar" checked={settings.suggest} onChange={(suggest) => change({ suggest })} />
+      <Row label={t("meetings.settings.suggest")} hint={t("meetings.settings.suggestHint")}>
+        <Switch label={t("meetings.settings.suggest")} checked={settings.suggest} onChange={(suggest) => change({ suggest })} />
       </Row>
       <AppsRow apps={settings.apps} onChange={(apps) => change({ apps })} />
     </Section>
@@ -68,6 +70,7 @@ export function MeetingSettingsSection() {
 }
 
 function AppsRow({ apps, onChange }: { apps: MeetingAppEntry[]; onChange(apps: MeetingAppEntry[]): void }) {
+  const { t } = useT();
   const [name, setName] = useState("");
   const [bundleId, setBundleId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -79,9 +82,9 @@ function AppsRow({ apps, onChange }: { apps: MeetingAppEntry[]; onChange(apps: M
     e.preventDefault();
     const id = bundleId.trim();
     const label = name.trim();
-    if (!label) return setError("Dê um nome ao app.");
-    if (!isBundleId(id)) return setError("O identificador é como com.empresa.App (no Finder: Mostrar Conteúdo do Pacote › Info.plist).");
-    if (apps.some((a) => a.bundleId.toLowerCase() === id.toLowerCase())) return setError("Esse app já está na lista.");
+    if (!label) return setError(t("meetings.settings.needName"));
+    if (!isBundleId(id)) return setError(t("meetings.settings.badId"));
+    if (apps.some((a) => a.bundleId.toLowerCase() === id.toLowerCase())) return setError(t("meetings.settings.already"));
     setError(null);
     setName("");
     setBundleId("");
@@ -91,36 +94,36 @@ function AppsRow({ apps, onChange }: { apps: MeetingAppEntry[]; onChange(apps: M
   return (
     <div className="kn-row kn-meet-apps">
       <div className="kn-row-text">
-        <div className="kn-row-label">Apps que contam como reunião</div>
-        <div className="kn-row-hint">O Meet conta pelo navegador. O próprio Kiwi nunca conta.</div>
+        <div className="kn-row-label">{t("meetings.settings.apps")}</div>
+        <div className="kn-row-hint">{t("meetings.settings.appsHint")}</div>
       </div>
-      <ul className="kn-meet-app-list" aria-label="Apps que contam como reunião">
+      <ul className="kn-meet-app-list" aria-label={t("meetings.settings.apps")}>
         {[...byName].map(([label, entries]) => (
           <li key={label} className="kn-meet-app" title={entries.map((a) => a.bundleId).join(", ")}>
             <span>{label}</span>
             <button
               type="button"
               className="kn-icon-button"
-              aria-label={`Tirar ${label}`}
+              aria-label={t("meetings.settings.removeApp", { name: label })}
               onClick={() => onChange(apps.filter((a) => a.name !== label))}
             >
               <RemoveIcon />
             </button>
           </li>
         ))}
-        {apps.length === 0 ? <li className="kn-meet-app-none">Nenhum: o Kiwi não pergunta sozinho.</li> : null}
+        {apps.length === 0 ? <li className="kn-meet-app-none">{t("meetings.settings.noApps")}</li> : null}
       </ul>
       <form className="kn-meet-app-add" onSubmit={add}>
-        <input className="kn-input" placeholder="Nome (Discord)" aria-label="Nome do app" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className="kn-input" placeholder={t("meetings.settings.name")} aria-label={t("meetings.settings.nameLabel")} value={name} onChange={(e) => setName(e.target.value)} />
         <input
           className="kn-input"
-          placeholder="Identificador (com.hnc.Discord)"
-          aria-label="Identificador do app"
+          placeholder={t("meetings.settings.id")}
+          aria-label={t("meetings.settings.idLabel")}
           value={bundleId}
           onChange={(e) => setBundleId(e.target.value)}
         />
-        <Button type="submit">Adicionar</Button>
-        {!isDefault(apps) ? <Button onClick={() => onChange([...DEFAULT_MEETING_APPS])}>Restaurar a lista padrão</Button> : null}
+        <Button type="submit">{t("meetings.settings.add")}</Button>
+        {!isDefault(apps) ? <Button onClick={() => onChange([...DEFAULT_MEETING_APPS])}>{t("meetings.settings.restore")}</Button> : null}
       </form>
       {error ? <div className="kn-meet-settings-error" role="alert">{error}</div> : null}
     </div>

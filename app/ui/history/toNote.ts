@@ -1,6 +1,7 @@
 // "Enviar para nota…" no Histórico (T1320): a lista do seletor e o que a tela diz depois. A busca é a mesma do ⌘K da
 // janela Notas (`paletteItems`): sem busca, as notas mais recentes; com busca, título primeiro e depois o texto.
 
+import { type Locale, translate } from "../../src/shared/i18n/index.ts";
 import { paletteItems } from "../notes/palette.ts";
 import type { NoteMeta, SearchHit } from "../notes/types.ts";
 
@@ -23,8 +24,11 @@ export interface ToNoteResult {
   already: boolean;
 }
 
-/** O que aparece embaixo do ditado depois do envio. */
-export function sentText(r: ToNoteResult): string {
-  if (r.already) return `Já estava em “${r.note.title}”`;
-  return r.created ? `Virou a nota “${r.note.title}”, em ${r.note.folder || "Notas"}` : `Foi para o fim de “${r.note.title}”`;
+/** O que aparece embaixo do ditado depois do envio, na língua das telas (T29247). A pasta é a do disco, como está. */
+export function sentText(r: ToNoteResult, locale: Locale = "pt"): string {
+  const title = r.note.title;
+  if (r.already) return translate(locale, "history.sent.already", { title });
+  return r.created
+    ? translate(locale, "history.sent.created", { title, folder: r.note.folder || translate(locale, "history.sent.root") })
+    : translate(locale, "history.sent.appended", { title });
 }

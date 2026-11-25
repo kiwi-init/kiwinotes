@@ -2,7 +2,9 @@
 // área (`<área>.pt.ts` e `<área>.en.ts`), que entra com uma linha só em `PT_PARTS`. Duas partes com a mesma chave
 // quebram o `i18n.test.ts`: no espalhar, a última ganharia calada.
 import { ptCommon } from "./common.pt.ts";
+import { ptHistory } from "./history.pt.ts";
 import { ptMeetingsSettings } from "./meetings-settings.pt.ts";
+import { ptMeetings } from "./meetings.pt.ts";
 import { ptNotes } from "./notes.pt.ts";
 import { ptSettings } from "./settings.pt.ts";
 
@@ -115,6 +117,8 @@ export const PT_PARTS = {
   notes: ptNotes,
   settings: ptSettings,
   meetingsSettings: ptMeetingsSettings,
+  meetings: ptMeetings,
+  history: ptHistory,
 } as const;
 
 export const pt = {
@@ -123,4 +127,6 @@ export const pt = {
   ...ptNotes,
   ...ptSettings,
   ...ptMeetingsSettings,
+  ...ptMeetings,
+  ...ptHistory,
 } as const;

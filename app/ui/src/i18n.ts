@@ -4,7 +4,7 @@
 // Como a Aparência: uma cópia local pinta a primeira tela já na língua certa; o `mount()` espera o engine (até um
 // limite) e troca se a resposta for outra. Um engine sem o `app.locale` (anterior ao 1.104.0) deixa em português.
 
-import { useSyncExternalStore } from "react";
+import { createElement, Fragment, type ReactNode, useSyncExternalStore } from "react";
 
 import { type AppLocale, formatDate, formatDateTime, formatNumber, formatTime, type Locale, LOCALES, type Params, type TextKey, translate } from "../../src/shared/i18n/index.ts";
 
@@ -81,4 +81,14 @@ export function useT() {
     time: (d: Date) => formatTime(locale, d),
     dateTime: (d: Date, now?: Date) => formatDateTime(locale, d, now),
   };
+}
+
+/**
+ * Um texto do catálogo com um pedaço em negrito no lugar de um `{param}` (a tecla, o atalho): `text` recebe a marca e
+ * devolve o texto traduzido com ela, e a marca vira o `<strong>`. A frase fica inteira numa chave só, para a tradução.
+ */
+export function withStrong(text: (mark: string) => string, strong: string): ReactNode {
+  const MARK = "\u0001";
+  const [before = "", after = ""] = text(MARK).split(MARK);
+  return createElement(Fragment, null, before, createElement("strong", null, strong), after);
 }
