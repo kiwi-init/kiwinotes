@@ -18,6 +18,7 @@ import { BUBBLE_LINES, BubbleFeed, type BubbleView, type ChunkLink, readingMs } 
 import { BubblePresence } from "./BubblePresence";
 import { BubbleTail } from "./BubbleTail";
 import { MdView, openMdLink } from "./bubbleMd";
+import { useT } from "../src/i18n.ts";
 
 /**
  * O resumo com as notas e os arquivos (spec #17683) clicáveis; um link cortado pelo "…", só o pedaço que aparece. O
@@ -74,6 +75,7 @@ function measurer(): { fits: (s: string) => boolean; dispose: () => void } {
  * lugar a ele. Com o [Ver mais] aberto, espera fechar.
  */
 export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = false }: { reduced: boolean; hidden?: boolean; onShown?: (shown: boolean) => void; drop?: { current: (() => void) | null }; yieldTo?: boolean }) {
+  const { t } = useT();
   const [view, setView] = useState<BubbleView | null>(null);
   /** O balão grande do [Ver mais], aberto. Ele mostra o texto inteiro do pedido, e acompanha o que ainda chega. */
   const [bigOpen, setBigOpen] = useState(false);
@@ -204,7 +206,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = fa
                   setBigOpen(true);
                 }}
               >
-                Ver mais
+                {t("hub.bubble.more")}
               </button>
             ) : null}
             <BubbleTail />
@@ -216,7 +218,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = fa
           onKeyDown={(e) => {
             if (e.key === "Enter" && openMdLink(e.target)) e.preventDefault();
           }}
-          aria-label="A resposta do agente"
+          aria-label={t("hub.bubble.answer")}
         >
           <MdView className="kn-bubble-big-text" text={said} links={saidLinks} />
         </div>

@@ -8,4 +8,12 @@ export const ptCommon = {
   "common.remove": "Remover",
   "common.retry": "Tentar de novo",
   "common.loadingModel": "Carregando o modelo…",
+  "common.ok": "Ok",
+  "common.undo": "Desfazer",
+  "common.close": "Fechar",
+  "common.see": "Ver",
+  "common.keep": "Manter",
+  "common.discard": "Descartar",
+  "common.continue": "Continuar",
+  "common.skip": "Pular",
 } as const;

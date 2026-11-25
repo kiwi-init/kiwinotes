@@ -5,6 +5,7 @@
 
 import { useLayoutEffect, useRef } from "react";
 
+import { useT } from "../src/i18n.ts";
 import { BubbleTail } from "./BubbleTail";
 
 /** O mesmo limite do "Testar" de Ajustes (spec #9878, #10878). Passou, o campo avisa e não manda; a colagem não é cortada. */
@@ -46,6 +47,7 @@ export function CatAsk(p: {
     t.style.height = "auto";
     t.style.height = `${t.scrollHeight}px`;
   }, [p.draft]);
+  const { t } = useT();
   const tooLong = p.draft.length > ASK_MAX;
   const ok = canSend(p.draft, p.busy);
   const send = () => {
@@ -56,7 +58,7 @@ export function CatAsk(p: {
       className="kn-bubble-shell kn-cat-ask"
       inert={p.sent}
       role="dialog"
-      aria-label="Falar com o agente"
+      aria-label={t("hub.ask.aria")}
       // Esc fecha de qualquer ponto do campo (o texto, o "Mandar", o "Cancelar o pedido"), não só do texto.
       onKeyDown={(e) => {
         if (e.key !== "Escape") return;
@@ -67,8 +69,8 @@ export function CatAsk(p: {
       <textarea
         ref={field}
         className="kn-cat-ask-field"
-        aria-label="O pedido ao agente"
-        placeholder="Peça algo ao agente…"
+        aria-label={t("hub.ask.field")}
+        placeholder={t("hub.ask.placeholder")}
         rows={1}
         value={p.draft}
         onChange={(e) => p.onDraft(e.target.value)}
@@ -82,7 +84,7 @@ export function CatAsk(p: {
       />
       {p.busy ? (
         <p className="kn-cat-ask-note" role="status">
-          Há um pedido em andamento.{" "}
+          {t("hub.ask.busy")}{" "}
           <button
             type="button"
             className="kn-cat-ask-link"
@@ -93,19 +95,19 @@ export function CatAsk(p: {
               field.current?.focus();
             }}
           >
-            Cancelar o pedido
+            {t("hub.ask.cancel")}
           </button>
         </p>
       ) : null}
       {tooLong ? (
         <p className="kn-cat-ask-note" role="status">
-          O pedido passa de {ASK_MAX} caracteres: encurte para mandar. O texto longo fica nas notas, que o agente lê.
+          {t("hub.ask.tooLong", { max: ASK_MAX })}
         </p>
       ) : null}
       {p.hint ? <p className="kn-cat-ask-note kn-cat-ask-hint">{p.hint}</p> : null}
       <div className="kn-cat-ask-actions">
         <button type="button" className="kn-cat-ask-send" tabIndex={0} disabled={!ok} onClick={send}>
-          Mandar
+          {t("hub.ask.send")}
         </button>
       </div>
       <BubbleTail />

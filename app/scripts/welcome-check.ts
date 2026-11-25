@@ -17,7 +17,7 @@ import { join, resolve } from "node:path";
 import { type Browser, type Page, webkit } from "playwright-core";
 import { connect, request } from "./cli";
 import { openWindow, type UiContext } from "./ui-page";
-import { typingDuration, WELCOME_TEXT } from "../ui/hub/onboarding/welcomeText.ts";
+import { typingDuration, welcomeText } from "../ui/hub/onboarding/welcomeText.ts";
 
 const app = resolve(import.meta.dir, "..");
 const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T20795-welcome"));
@@ -84,7 +84,7 @@ try {
     const typedNow = async () => ((await p.locator(".kn-welcome-text > span[aria-hidden]").first().textContent()) ?? "").length;
     assert.equal(await p.locator('.kn-hub[data-entering="hold"]').count(), 1, "o hub segurado para a intro");
     // Mais que o tempo do texto inteiro, como uma intro longa.
-    await Bun.sleep(typingDuration(WELCOME_TEXT) + 1000);
+    await Bun.sleep(typingDuration(welcomeText()) + 1000);
     assert.equal(await typedNow(), 0, "o balão se escreveu atrás da intro");
     assert.equal(await p.locator('.kn-welcome-bubble[data-typed="true"]').count(), 0, "o balão terminou atrás da intro");
     await p.evaluate(() => {
@@ -125,7 +125,7 @@ try {
     assert.ok(partial.length > 10 && partial.length < 120, `no meio, um pedaço: ${partial.length}`);
     // O leitor de tela ouve o texto inteiro desde o começo, e uma vez só (o pedaço que se escreve fica de fora).
     const tree = await p.locator(".kn-welcome").ariaSnapshot();
-    assert.ok(tree.includes(WELCOME_TEXT), `o balão no leitor de tela:\n${tree}`);
+    assert.ok(tree.includes(welcomeText()), `o balão no leitor de tela:\n${tree}`);
     assert.equal(tree.split("Olá, tudo bem?").length - 1, 1, `o texto uma vez só:\n${tree}`);
     await p.screenshot({ path: join(out, "boas-vindas-escrevendo.png") });
     await p.waitForSelector('.kn-welcome-bubble[data-typed="true"]', { timeout: 15000 });

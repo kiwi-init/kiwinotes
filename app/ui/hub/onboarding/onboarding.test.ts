@@ -3,15 +3,16 @@
 import { expect, test } from "bun:test";
 
 import { ONBOARDING_STEPS } from "../../../src/shared/agent-onboarding.ts";
-import { holdName, stepText, canLeaveClaude, magicCandidates, magicRequest, projectRows, reasonText, searchLine, controlLine, controlStep, type ControlPhase, DEFAULT_TONE, toneExample, toneOf, withTone, progressLine, projectsSummary, shortcutSummary, STEP_COUNT, STEP_TEXT, stepAt, toneSummary } from "./onboardingText.ts";
+import { appLocale, setAppLocale } from "../../src/i18n.ts";
+import { holdName, stepText, canLeaveClaude, magicCandidates, magicRequest, projectRows, reasonText, searchLine, controlLine, controlStep, type ControlPhase, DEFAULT_TONE, toneExample, toneOf, withTone, progressLine, projectsSummary, shortcutSummary, STEP_COUNT, stepAt, toneSummary } from "./onboardingText.ts";
 
 test("os 10 passos na ordem do spec, cada um com título e frase (o do Control, sem subtítulo: a frase é a do cartão)", () => {
   expect(STEP_COUNT).toBe(10);
-  expect(ONBOARDING_STEPS.map((s) => STEP_TEXT[s].title.length > 0 && (s === "control" || STEP_TEXT[s].hint.length > 0))).toEqual(Array(10).fill(true));
-  expect(STEP_TEXT.control.hint).toBe("");
+  expect(ONBOARDING_STEPS.map((s) => stepText(s).title.length > 0 && (s === "control" || stepText(s).hint.length > 0))).toEqual(Array(10).fill(true));
+  expect(stepText("control").hint).toBe("");
   // Spec #17709: o passo 1 acorda o Kiwi Cat; a frase de baixo diz o que se instala: o agente escolhido (spec #24666).
-  expect(STEP_TEXT.claude.title).toBe("Oi! Vamos acordar o Kiwi Cat");
-  expect(STEP_TEXT.claude.hint).toContain("(o Claude Code ou o Gemini) está instalado");
+  expect(stepText("claude").title).toBe("Oi! Vamos acordar o Kiwi Cat");
+  expect(stepText("claude").hint).toContain("(o Claude Code ou o Gemini) está instalado");
   expect([stepAt(1), stepAt(4), stepAt(10), stepAt(0), stepAt(12)]).toEqual(["claude", "guardrail", "done", "claude", "done"]);
   expect(progressLine(3)).toBe("Passo 3 de 10");
 });
@@ -98,6 +99,28 @@ test("o passo 3: o jeito de falar troca só a linha dele nas instruções, e o e
   );
   expect(examples.size).toBe(4);
   expect(toneExample({ length: "curto", register: "informal" }).length).toBeLessThan(toneExample({ length: "detalhado", register: "informal" }).length);
+});
+
+test("o passo 3 em inglês (T28191): a linha sai em inglês, e trocar a língua troca a linha que já está, sem pôr uma segunda", () => {
+  const before = appLocale();
+  const mine = "Sempre em português.\nNão mexa na pasta Arquivo.";
+  try {
+    const pt = withTone(mine, { length: "detalhado", register: "formal" });
+    setAppLocale({ ...before, locale: "en" });
+    expect(toneOf(pt)).toEqual({ length: "detalhado", register: "formal" });
+    const en = withTone(pt, { length: "detalhado", register: "formal" });
+    expect(en).toBe(`How to talk: detailed answers that explain why; formal tone.\n${mine}`);
+    expect(toneOf(en)).toEqual({ length: "detalhado", register: "formal" });
+    expect(toneOf(withTone(en, DEFAULT_TONE))).toEqual(DEFAULT_TONE);
+    expect(withTone(en, DEFAULT_TONE)).toBe(`How to talk: short answers, straight to the point; casual tone, like a colleague.\n${mine}`);
+    // E o inverso: de volta ao português, a linha em inglês vira a de português.
+    setAppLocale({ ...before, locale: "pt" });
+    const back = withTone(en, { length: "curto", register: "formal" });
+    expect(back).toBe(`Jeito de falar: respostas curtas, direto ao ponto; tom formal.\n${mine}`);
+    expect(toneOf(en)).toEqual({ length: "detalhado", register: "formal" });
+  } finally {
+    setAppLocale(before);
+  }
 });
 
 test("o passo 6 (spec #12950): os marcados primeiro, depois o achado, sem repetir, cada um com o motivo", () => {

@@ -13,7 +13,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HomeToday } from "../../src/shared/home.ts";
 import { shortcutLabel } from "../../src/shared/shortcuts.ts";
 import { ago, hour, today, when } from "./format.ts";
-import { greeting, nextPhrase } from "./greeting.ts";
+import { greeting, nextPhraseKey } from "./greeting.ts";
+import { useT } from "../src/i18n.ts";
 import { useHomeToday } from "./data.ts";
 import type { InicioView } from "./InicioMenu.tsx";
 import { Pendencias } from "./Pendencias.tsx";
@@ -81,8 +82,10 @@ function useCatAnchor(el: HTMLElement | null, on: boolean) {
 }
 
 export function Home({ active, cat, searchShortcut, onSearch, onOpenNote, onDictation, onAgentSettings, view = "inicio" }: HomeProps) {
-  // A saudação e a frase são desta abertura do hub: não mudam enquanto ele fica aberto.
-  const [top] = useState(() => ({ hello: greeting(new Date()), phrase: nextPhrase(safeStorage()), date: today(Date.now()) }));
+  const { t, locale } = useT();
+  // A frase é uma por abertura (a chave fica guardada); a saudação e a data seguem a língua quando ela troca.
+  const [phrase] = useState(() => nextPhraseKey(safeStorage()));
+  const top = useMemo(() => ({ hello: greeting(new Date()), phrase: t(phrase), date: today(Date.now()) }), [locale, phrase]);
   const data = useHomeToday(active);
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   // Fora da vista Início não há o lugar do gato: ele fica no canto, como nas outras abas (lead #16013).
@@ -99,7 +102,7 @@ export function Home({ active, cat, searchShortcut, onSearch, onOpenNote, onDict
         <p className="kn-home-phrase">{top.phrase}</p>
         <button type="button" className="kn-home-search" onClick={onSearch}>
           <SearchIcon size={18} />
-          <span>Buscar nas notas e reuniões</span>
+          <span>{t("home.search")}</span>
           <kbd>{shortcutLabel(searchShortcut)}</kbd>
         </button>
       </div>
@@ -118,6 +121,7 @@ function safeStorage(): Storage | null {
 
 /** O gato dormindo (o agente desligado): o clique abre um menu com "Ligar o agente". */
 function SleepingCat({ onAgentSettings }: { onAgentSettings(): void }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -133,7 +137,7 @@ function SleepingCat({ onAgentSettings }: { onAgentSettings(): void }) {
   }, [open]);
   return (
     <div className="kn-home-cat kn-home-asleep" ref={box}>
-      <button type="button" className="kn-home-asleep-hit" aria-label="O agente está desligado" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button type="button" className="kn-home-asleep-hit" aria-label={t("home.agentOff")} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <img className="kn-home-asleep-light" src={sleepingLight} alt="" draggable={false} />
         <img className="kn-home-asleep-dark" src={sleepingDark} alt="" draggable={false} />
       </button>
@@ -148,7 +152,7 @@ function SleepingCat({ onAgentSettings }: { onAgentSettings(): void }) {
               onAgentSettings();
             }}
           >
-            Ligar o agente em Configurações
+            {t("home.agentTurnOn")}
           </button>
         </div>
       ) : null}
@@ -157,11 +161,12 @@ function SleepingCat({ onAgentSettings }: { onAgentSettings(): void }) {
 }
 
 function Day({ data, onOpenNote, onDictation }: { data: HomeToday; onOpenNote(path: string, internal: boolean): void; onDictation(): void }) {
-  const now = useMemo(() => Date.now(), [data]);
+  const { t, locale } = useT();
+  const now = useMemo(() => Date.now(), [data, locale]);
   const { continue: last, editedToday, dictationsToday, lastMeeting } = data;
   const left = editedToday.length > 0 || dictationsToday.length > 0;
   if (!last && !left && !lastMeeting) {
-    return <p className="kn-home-empty">Nada por aqui hoje ainda. As notas, os ditados e as reuniões do dia aparecem aqui.</p>;
+    return <p className="kn-home-empty">{t("home.empty")}</p>;
   }
   return (
     <>
@@ -169,7 +174,7 @@ function Day({ data, onOpenNote, onDictation }: { data: HomeToday; onOpenNote(pa
         <button type="button" className="kn-home-card kn-home-continue" onClick={() => onOpenNote(last.path, false)}>
           <span className="kn-home-continue-icon"><NoteIcon size={18} /></span>
           <span className="kn-home-continue-text">
-            <span className="kn-home-kicker">Continuar de onde parou</span>
+            <span className="kn-home-kicker">{t("home.continue")}</span>
             <span className="kn-home-continue-title">{last.title}</span>
             {last.excerpt ? <span className="kn-home-muted kn-home-clip">{last.excerpt}</span> : null}
           </span>
@@ -182,7 +187,7 @@ function Day({ data, onOpenNote, onDictation }: { data: HomeToday; onOpenNote(pa
           <div>
             {editedToday.length > 0 ? (
               <section className="kn-home-block">
-                <h2 className="kn-home-label">Editadas hoje</h2>
+                <h2 className="kn-home-label">{t("home.editedToday")}</h2>
                 <ul className="kn-home-list">
                   {editedToday.map((n) => (
                     <li key={n.path}>
@@ -199,7 +204,7 @@ function Day({ data, onOpenNote, onDictation }: { data: HomeToday; onOpenNote(pa
             ) : null}
             {dictationsToday.length > 0 ? (
               <section className="kn-home-block">
-                <h2 className="kn-home-label">Ditados de hoje</h2>
+                <h2 className="kn-home-label">{t("home.dictationsToday")}</h2>
                 <ul className="kn-home-list">
                   {dictationsToday.map((d) => (
                     <li key={d.id}>
@@ -217,14 +222,14 @@ function Day({ data, onOpenNote, onDictation }: { data: HomeToday; onOpenNote(pa
         ) : null}
         {lastMeeting ? (
           <section className="kn-home-block">
-            <h2 className="kn-home-label">Última reunião</h2>
+            <h2 className="kn-home-label">{t("home.lastMeeting")}</h2>
             <div className="kn-home-card kn-home-meeting">
               <button type="button" className="kn-home-meeting-head" onClick={() => onOpenNote(lastMeeting.path, true)}>
                 <span className="kn-home-ico"><MeetingIcon /></span>
                 <b className="kn-home-clip">{lastMeeting.title}</b>
               </button>
               <p className="kn-home-muted kn-home-meeting-meta">
-                {[when(lastMeeting.startedAt, now), lastMeeting.durationMin != null ? `${lastMeeting.durationMin} min` : null, lastMeeting.people.join(", ") || null]
+                {[when(lastMeeting.startedAt, now), lastMeeting.durationMin != null ? t("home.minutes", { min: String(lastMeeting.durationMin) }) : null, lastMeeting.people.join(", ") || null]
                   .filter(Boolean)
                   .join(" · ")}
               </p>
@@ -235,7 +240,7 @@ function Day({ data, onOpenNote, onDictation }: { data: HomeToday; onOpenNote(pa
               ) : null}
               {lastMeeting.minutesPath ? (
                 <button type="button" className="kn-home-link" onClick={() => onOpenNote(lastMeeting.minutesPath!, lastMeeting.minutesInternal)}>
-                  Abrir a ata <ChevronIcon size={12} />
+                  {t("home.openMinutes")} <ChevronIcon size={12} />
                 </button>
               ) : null}
             </div>

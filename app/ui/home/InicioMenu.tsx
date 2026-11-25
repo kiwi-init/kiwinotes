@@ -6,6 +6,8 @@ import { createPortal } from "react-dom";
 import { api } from "../src/api.ts";
 import { HomeIcon } from "./icons.tsx";
 import { useHome } from "./useHome.ts";
+import { useT } from "../src/i18n.ts";
+import type { TextKey } from "../../src/shared/i18n/index.ts";
 
 export const INICIO_VIEWS = ["inicio", "pendencias", "semana"] as const;
 export type InicioView = (typeof INICIO_VIEWS)[number];
@@ -33,15 +35,16 @@ export const VIEW_ICON: Record<InicioView, (p: { className?: string }) => ReactN
   ),
 };
 
-export const VIEW_LABEL: Record<InicioView, string> = { inicio: "Início", pendencias: "Pendências", semana: "Semana" };
+export const VIEW_LABEL: Record<InicioView, TextKey> = { inicio: "hub.tab.home", pendencias: "home.pending.title", semana: "home.view.week" };
 
 /** O que vai dentro da aba: o ícone e o nome da tela aberta, e a seta do menu. */
 export function InicioTabLabel({ view }: { view: InicioView }) {
+  const { t } = useT();
   const Icon = VIEW_ICON[view];
   return (
     <>
       <Icon className="kn-tab-icon" />
-      <span className="kn-home-v-tab-label">{VIEW_LABEL[view]}</span>
+      <span className="kn-home-v-tab-label">{t(VIEW_LABEL[view])}</span>
       <svg className="kn-home-v-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="m3 4.5 3 3 3-3" />
       </svg>
@@ -64,6 +67,7 @@ export function InicioMenu({
   onPick(v: InicioView): void;
   onClose(): void;
 }) {
+  const { t } = useT();
   const ref = useRef<HTMLDivElement>(null);
   const load = useHome(api.home.pending);
   const pending = load.state === "ready" ? load.data.total.meeting + load.data.total.note : 0;
@@ -96,7 +100,7 @@ export function InicioMenu({
     <div
       className="kn-home-v-menu"
       role="menu"
-      aria-label="Telas do Início"
+      aria-label={t("home.view.menu")}
       ref={ref}
       style={rect ? { top: rect.bottom + 6, left: rect.left } : undefined}
       onKeyDown={(e) => {
@@ -126,8 +130,8 @@ export function InicioMenu({
             onClick={() => pick(v)}
           >
             <Icon />
-            <span>{VIEW_LABEL[v]}</span>
-            {v === "pendencias" && pending ? <span className="kn-home-v-count" aria-label={`${pending} abertas`}>{pending}</span> : null}
+            <span>{t(VIEW_LABEL[v])}</span>
+            {v === "pendencias" && pending ? <span className="kn-home-v-count" aria-label={t("home.pending.open", { n: pending })}>{pending}</span> : null}
             {v === view ? (
               <svg className="kn-home-v-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M2.5 6.2 5 8.5l4.5-5" />

@@ -7,19 +7,22 @@ import type { ProjectReason } from "../../../src/notes/project-finder.ts";
 import type { ProjectInfo } from "../../../src/notes/projects.ts";
 import type { AgentTurnEvent, AgentVoiceUi, ProjectCandidate, ProjectSearchView } from "../../../src/shared/ui-contract.ts";
 import { AGENTS, kindOf, loginUnknown, programOf, type AgentKind, type ProgramState } from "../../settings/agentText.ts";
+import type { TextKey } from "../../../src/shared/i18n/index.ts";
+import { t } from "../../src/i18n.ts";
 
-export const STEP_TEXT: Record<OnboardingStep, { title: string; hint: string }> = {
-  claude: { title: "Oi! Vamos acordar o Kiwi Cat", hint: "O Kiwi confere se o seu agente (o Claude Code ou o Gemini) está instalado e logado, baixa a ponte quando é o Claude Code e manda um oi para testar." },
-  // Sem subtítulo (revisão do T13145): o cartão (que leva o aviso do microfone) e a frase embaixo já dizem como.
-  control: { title: "Aperta o Control e fala oi", hint: "" },
-  tone: { title: "O seu jeito", hint: "Como o agente fala com você: curto ou detalhado, formal ou informal." },
-  guardrail: { title: "O guardrail na prática", hint: "Escreva uma senha de mentira e veja o Kiwi esconder antes de qualquer coisa sair do Mac." },
-  model: { title: "O Modelo de nota", hint: "Como o agente organiza as suas notas." },
-  projects: { title: "Os seus projetos", hint: "Marque as pastas que são projetos. O Kiwi só lê os nomes, aqui no Mac." },
-  color: { title: "Escolha a cor do Kiwi Cat!", hint: "A névoa em volta dele e os detalhes. Dá para trocar depois em Ajustes." },
-  place: { title: "Onde o Kiwi Cat aparece", hint: "Por cima dos outros apps, enquanto o agente trabalha: escolha o canto e o tamanho. Dá para trocar depois em Ajustes." },
-  magic: { title: "Um gostinho", hint: "Se quiser, o agente organiza uma nota sua agora, e você vê o antes e o depois." },
-  done: { title: "Pronto!", hint: "É só segurar o Control." },
+/** O título e a frase de cada passo, no catálogo (spec #28171). O passo 2 não tem frase (revisão do T13145): o cartão
+ * (que leva o aviso do microfone) e a frase embaixo já dizem como. `{hold}` é o atalho escolhido (spec #12946). */
+export const STEP_KEYS: Record<OnboardingStep, { title: TextKey; hint: TextKey | null }> = {
+  claude: { title: "onb.step.claude.title", hint: "onb.step.claude.hint" },
+  control: { title: "onb.step.control.title", hint: null },
+  tone: { title: "onb.step.tone.title", hint: "onb.step.tone.hint" },
+  guardrail: { title: "onb.step.guardrail.title", hint: "onb.step.guardrail.hint" },
+  model: { title: "onb.step.model.title", hint: "onb.step.model.hint" },
+  projects: { title: "onb.step.projects.title", hint: "onb.step.projects.hint" },
+  color: { title: "onb.step.color.title", hint: "onb.step.color.hint" },
+  place: { title: "onb.step.place.title", hint: "onb.step.place.hint" },
+  magic: { title: "onb.step.magic.title", hint: "onb.step.magic.hint" },
+  done: { title: "onb.step.done.title", hint: "onb.step.done.hint" },
 };
 
 export const STEP_COUNT = ONBOARDING_STEPS.length;
@@ -28,7 +31,7 @@ export const STEP_COUNT = ONBOARDING_STEPS.length;
 export const stepAt = (n: number): OnboardingStep => ONBOARDING_STEPS[Math.min(Math.max(n, 1), STEP_COUNT) - 1]!;
 
 /** "Passo 3 de 10". */
-export const progressLine = (n: number) => `Passo ${n} de ${STEP_COUNT}`;
+export const progressLine = (n: number) => t("onb.progress", { step: String(n), total: String(STEP_COUNT) });
 
 /**
  * O passo 1 é o único que segura a pessoa (spec #11955: sem o agente logado, ele não liga). O "Pular" dele só vale quando
@@ -43,32 +46,32 @@ export function canLeaveClaude(s: { claude: ProgramState | null; adapter: { phas
 /** O jeito de falar no cartão final: a 1ª linha das instruções, curta; sem instruções, o padrão. */
 export function toneSummary(instructions: string): string {
   const first = instructions.split("\n").find((l) => l.trim())?.trim() ?? "";
-  if (!first) return "O padrão do agente";
+  if (!first) return t("onb.summary.toneDefault");
   return first.length > 60 ? `${first.slice(0, 59)}…` : first;
 }
 
 /** Os projetos no cartão final: até 3 nomes e "mais N". */
 export function projectsSummary(names: readonly string[]): string {
-  if (!names.length) return "Nenhum ainda";
+  if (!names.length) return t("onb.summary.noProjects");
   const shown = names.slice(0, 3).join(", ");
-  return names.length > 3 ? `${shown} e mais ${names.length - 3}` : shown;
+  return names.length > 3 ? t("onb.summary.moreProjects", { shown, n: String(names.length - 3) }) : shown;
 }
 
 /** Como as frases chamam o atalho do Kiwi Cat (spec #12946): "o Control", "o ⌥ direito", ou a combinação ("⌃⌥Espaço"). */
 export function holdName(text: string | null | undefined): string {
-  const t = text ?? DEFAULT_SHORTCUTS.agent!;
-  return parseShortcut(t)?.kind === "key" ? `o ${shortcutLabel(t)}` : shortcutLabel(t);
+  const s = text ?? DEFAULT_SHORTCUTS.agent!;
+  return parseShortcut(s)?.kind === "key" ? t("onb.hold.key", { key: shortcutLabel(s) }) : shortcutLabel(s);
 }
 
 /** O texto do passo, com o atalho escolhido no lugar do Control (spec #12946). */
-export function stepText(step: OnboardingStep, hold = "o Control"): { title: string; hint: string } {
-  const t = STEP_TEXT[step];
-  return { title: t.title.replaceAll("o Control", hold), hint: t.hint.replaceAll("o Control", hold) };
+export function stepText(step: OnboardingStep, hold = holdName(null)): { title: string; hint: string } {
+  const k = STEP_KEYS[step];
+  return { title: t(k.title, { hold }), hint: k.hint ? t(k.hint, { hold }) : "" };
 }
 
 /** O atalho no cartão final. */
-export function shortcutSummary(controlShortcut: boolean, hold = "o Control"): string {
-  return controlShortcut ? `Segure ${hold} para falar` : "Ligue o Kiwi Cat em Ajustes › Agente";
+export function shortcutSummary(controlShortcut: boolean, hold = holdName(null)): string {
+  return controlShortcut ? t("onb.summary.hold", { hold }) : t("onb.summary.noShortcut");
 }
 
 // ── Passo 2: o Control (T12002) ──────────────────────────────────────────────────────────────────────────────────────
@@ -92,19 +95,19 @@ export function controlStep(s: ControlPhase, e: { voice: AgentVoiceUi } | { turn
 }
 
 /** A frase do passo 2 para o estado. */
-export function controlLine(s: ControlPhase, hold = "o Control"): string {
+export function controlLine(s: ControlPhase, hold = holdName(null)): string {
   switch (s.phase) {
     case "waiting":
-      return `Segure ${hold}, diga "oi" e solte.`;
+      return t("onb.control.waiting", { hold });
     case "listening":
-      return `Ouvindo… solte ${hold} para mandar.`;
+      return t("onb.control.listening", { hold });
     case "processing":
-      return "Entendendo o que você disse…";
+      return t("onb.control.processing");
     case "asked":
       // Sem o texto ("Mostrar o que eu falei" desligado, spec #26055), a frase não repete a fala.
-      return s.text ? `Você disse: "${s.text}". O gato está pensando…` : "O gato está pensando…";
+      return s.text ? t("onb.control.askedText", { text: s.text }) : t("onb.control.asked");
     case "answered":
-      return s.text ? `Deu certo! Você disse "${s.text}". Agora é só segurar ${hold} quando quiser.` : `Deu certo! Agora é só segurar ${hold} quando quiser.`;
+      return s.text ? t("onb.control.answeredText", { text: s.text, hold }) : t("onb.control.answered", { hold });
   }
 }
 
@@ -117,20 +120,24 @@ export interface Tone {
 
 export const DEFAULT_TONE: Tone = { length: "curto", register: "informal" };
 
-/** O começo da linha que o onboarding cuida nas instruções: só ela muda; o resto é da pessoa. */
-const TONE_PREFIX = "Jeito de falar:";
+/**
+ * O começo da linha que o onboarding cuida nas instruções: só ela muda; o resto é da pessoa. A linha sai na língua do
+ * app, e as duas são reconhecidas (quem trocou de língua não ganha uma segunda linha).
+ */
+const TONE_PREFIXES = ["Jeito de falar:", "How to talk:"];
+const isToneLine = (l: string) => TONE_PREFIXES.some((p) => l.trim().startsWith(p));
 
 /** A linha das instruções para o jeito escolhido. */
-export function toneLine(t: Tone): string {
-  const len = t.length === "curto" ? "respostas curtas, direto ao ponto" : "respostas detalhadas, explicando o porquê";
-  const reg = t.register === "informal" ? "tom informal, de colega" : "tom formal";
-  return `${TONE_PREFIX} ${len}; ${reg}.`;
+export function toneLine(tone: Tone): string {
+  const len = t(tone.length === "curto" ? "onb.tone.line.short" : "onb.tone.line.detailed");
+  const reg = t(tone.register === "informal" ? "onb.tone.line.informal" : "onb.tone.line.formal");
+  return `${t("onb.tone.prefix")} ${len}; ${reg}.`;
 }
 
 /** As instruções com a linha do jeito de falar trocada (ou posta no começo); as outras linhas ficam como estão. */
 export function withTone(instructions: string, t: Tone): string {
   const lines = instructions.split("\n");
-  const at = lines.findIndex((l) => l.trim().startsWith(TONE_PREFIX));
+  const at = lines.findIndex(isToneLine);
   if (at >= 0) {
     lines[at] = toneLine(t);
     return lines.join("\n");
@@ -140,20 +147,17 @@ export function withTone(instructions: string, t: Tone): string {
 
 /** O jeito que as instruções já pedem (a linha do onboarding), ou o padrão. */
 export function toneOf(instructions: string): Tone {
-  const line = instructions.split("\n").find((l) => l.trim().startsWith(TONE_PREFIX));
+  const line = instructions.split("\n").find(isToneLine);
   if (!line) return DEFAULT_TONE;
-  return { length: line.includes("detalhadas") ? "detalhado" : "curto", register: line.includes("tom formal") ? "formal" : "informal" };
+  const detailed = line.includes("detalhadas") || line.includes("detailed");
+  const formal = line.includes("tom formal") || line.includes("; formal tone");
+  return { length: detailed ? "detalhado" : "curto", register: formal ? "formal" : "informal" };
 }
 
 /** A resposta de exemplo, fixa, do próprio Kiwi (sem pedido ao agente), para a pergunta "o que tem de novo no projeto?". */
-export function toneExample(t: Tone): string {
-  if (t.length === "curto")
-    return t.register === "informal"
-      ? "Duas novidades: o prazo foi para abril e a Ana entrou no time. Quer que eu anote no projeto?"
-      : "Há duas novidades: o prazo passou para abril e a Ana passou a integrar a equipe. Deseja que eu registre no projeto?";
-  return t.register === "informal"
-    ? "Teve duas coisas novas. O prazo foi para abril, porque a revisão da segurança atrasou uma semana e o time preferiu não apertar. E a Ana entrou no time: ela cuida da parte de reuniões, que estava parada. Quer que eu anote as duas no diário do projeto?"
-    : "Há duas novidades. O prazo foi transferido para abril, em razão do atraso de uma semana na revisão de segurança, e a equipe optou por não comprimir o cronograma. Além disso, a Ana passou a integrar a equipe e assumirá a parte de reuniões, que estava parada. Deseja que eu registre ambas no diário do projeto?";
+export function toneExample(tone: Tone): string {
+  if (tone.length === "curto") return t(tone.register === "informal" ? "onb.tone.example.shortInformal" : "onb.tone.example.shortFormal");
+  return t(tone.register === "informal" ? "onb.tone.example.detailedInformal" : "onb.tone.example.detailedFormal");
 }
 
 // ── Passo 6: os projetos (T11999) ────────────────────────────────────────────────────────────────────────────────────
@@ -181,9 +185,9 @@ export function projectRows(projects: readonly Pick<ProjectInfo, "name" | "folde
     return {
       key: keyOf(p),
       name: c?.name ?? p.name,
-      where: c?.where ?? p.outside ?? `Notas/${p.folder}`,
+      where: c?.where ?? p.outside ?? t("onb.projects.notes", { folder: p.folder }),
       // O que a busca não achou foi a pessoa que marcou: a linha diz isso no lugar do motivo (e não entra na contagem).
-      reason: c ? reasonText(c.reason) : "escolhida por você",
+      reason: c ? reasonText(c.reason) : t("onb.projects.chosen"),
       ...(p.outside ? { outside: p.outside } : { folder: p.folder }),
       marked: p.folder,
     };
@@ -202,38 +206,37 @@ export function projectRows(projects: readonly Pick<ProjectInfo, "name" | "folde
 export function reasonText(reason: ProjectReason): string {
   switch (reason.kind) {
     case "name":
-      return "o nome diz projeto";
+      return t("onb.reason.name");
     case "marker":
-      return `tem ${reason.marker}`;
+      return t("onb.reason.marker", { marker: reason.marker });
     case "note":
-      return "tem a nota do projeto";
+      return t("onb.reason.note");
     case "inside":
-      return `dentro de ${reason.group}`;
+      return t("onb.reason.inside", { group: reason.group });
   }
 }
 
 /** A linha de onde a busca está: procurando, achou, parou; e os lugares que o macOS não deixou ler. */
 export function searchLine(view: Pick<ProjectSearchView, "state" | "found" | "skipped">): string {
   const n = view.found.length;
-  const count = n === 1 ? "1 pasta" : `${n} pastas`;
+  const count = t("onb.search.count", { n });
   const head =
-    view.state === "searching" ? `Procurando… ${count} até agora.`
-    : view.state === "stopped" ? `Parei a busca: ${count}.`
-    : view.state === "done" ? (n ? `Achei ${count}.` : "Não achei nenhuma pasta de projeto.")
+    view.state === "searching" ? t("onb.search.searching", { count })
+    : view.state === "stopped" ? t("onb.search.stopped", { count })
+    : view.state === "done" ? (n ? t("onb.search.found", { count }) : t("onb.search.none"))
     : "";
   if (!view.skipped.length) return head;
-  return `${head} Ficaram de fora, sem permissão: ${view.skipped.join(", ")}.`.trim();
+  return t("onb.search.skipped", { head, places: view.skipped.join(", ") }).trim();
 }
 
 /** O aviso de uma linha antes da busca (spec #12950): por que o pedido do macOS pode aparecer. */
-export const SEARCH_NOTICE =
-  "Para procurar em Documents, Desktop e no iCloud Drive, o macOS pode pedir permissão uma vez. O Kiwi só lê os nomes das pastas, e nada sai do Mac.";
+export const searchNotice = (): string => t("onb.search.notice");
 
 // ── Passo 8: o momento mágico (T12001) ───────────────────────────────────────────────────────────────────────────────
 
 /** O pedido do passo 8: organizar uma nota no Modelo, sem perder nada. É o único pedido do onboarding. */
 export function magicRequest(path: string): string {
-  return `Organize a nota "${path}" no Modelo de nota: leia com kiwi ler/nota e reescreva com kiwi escrever/trocar, mantendo todo o conteúdo. Mude só essa nota.`;
+  return t("onb.magic.request", { path });
 }
 
 /**

@@ -8,25 +8,27 @@ import { Segmented } from "../src/kit/index.tsx";
 import { MeetingIcon, NoteIcon } from "./icons.tsx";
 import { ago } from "./format.ts";
 import { useHome } from "./useHome.ts";
+import { t, useT } from "../src/i18n.ts";
 
 type Filter = "all" | "meeting" | "note";
 
-const FILTERS: { value: Filter; label: string }[] = [
-  { value: "all", label: "Todas" },
-  { value: "meeting", label: "Reuniões" },
-  { value: "note", label: "Notas" },
+const filters = (): { value: Filter; label: string }[] => [
+  { value: "all", label: t("home.pending.all") },
+  { value: "meeting", label: t("hub.tab.meetings") },
+  { value: "note", label: t("hub.tab.notes") },
 ];
 
 export function Pendencias({ onOpen, now = Date.now }: { onOpen(path: string, internal: boolean): void; now?: () => number }) {
+  useT();
   const load = useHome(api.home.pending);
   const [filter, setFilter] = useState<Filter>("all");
-  if (load.state !== "ready") return <PendingShell>{load.state === "error" ? <p className="kn-home-v-empty">Não deu para ler as pendências.</p> : null}</PendingShell>;
+  if (load.state !== "ready") return <PendingShell>{load.state === "error" ? <p className="kn-home-v-empty">{t("home.pending.readFailed")}</p> : null}</PendingShell>;
   const { groups, total } = load.data;
   const shown = groups.filter((g) => filter === "all" || g.origin === filter);
   return (
     <PendingShell
       sub={summary(total)}
-      filter={total.meeting + total.note > 0 ? <Segmented value={filter} options={FILTERS} onChange={setFilter} label="Mostrar" /> : null}
+      filter={total.meeting + total.note > 0 ? <Segmented value={filter} options={filters()} onChange={setFilter} label={t("home.pending.show")} /> : null}
     >
       {shown.length === 0 ? (
         <p className="kn-home-v-empty">{emptyText(filter, total)}</p>
@@ -46,7 +48,7 @@ function PendingShell({ sub, filter, children }: { sub?: string; filter?: ReactN
     <div className="kn-home-v-page" data-view="pendencias">
       <div className="kn-home-v-head">
         <div>
-          <h1 className="kn-home-v-title">Pendências</h1>
+          <h1 className="kn-home-v-title">{t("home.pending.title")}</h1>
           {sub ? <p className="kn-home-v-sub">{sub}</p> : null}
         </div>
         {filter}
@@ -56,17 +58,15 @@ function PendingShell({ sub, filter, children }: { sub?: string; filter?: ReactN
   );
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
 export function summary(total: HomePending["total"]): string {
   const all = total.meeting + total.note;
-  if (all === 0) return "Nada em aberto.";
-  return `${plural(all, "aberta", "abertas")} · ${total.meeting} das reuniões, ${total.note} das notas`;
+  if (all === 0) return t("home.pending.none");
+  return t("home.pending.summary", { n: all, meeting: String(total.meeting), note: String(total.note) });
 }
 
 function emptyText(filter: Filter, total: HomePending["total"]): string {
-  if (total.meeting + total.note === 0) return "Nenhum - [ ] aberto nas notas, nem próximo passo nas atas.";
-  return filter === "meeting" ? "Nenhum próximo passo aberto nas atas." : "Nenhum - [ ] aberto nas notas.";
+  if (total.meeting + total.note === 0) return t("home.pending.emptyAll");
+  return filter === "meeting" ? t("home.pending.emptyMeetings") : t("home.pending.emptyNotes");
 }
 
 function Group({ g, now, onOpen }: { g: PendingGroup; now: number; onOpen(): void }) {
@@ -77,7 +77,7 @@ function Group({ g, now, onOpen }: { g: PendingGroup; now: number; onOpen(): voi
         <span className="kn-home-v-group-title">{g.title}</span>
         <span className="kn-home-v-muted kn-home-v-group-where">{[g.folder, g.editedAt ? ago(g.editedAt, now) : null].filter(Boolean).join(" · ")}</span>
         <button type="button" className="kn-home-v-link" onClick={onOpen}>
-          Abrir
+          {t("home.open")}
         </button>
       </header>
       <ul className="kn-home-v-list">
@@ -90,7 +90,7 @@ function Group({ g, now, onOpen }: { g: PendingGroup; now: number; onOpen(): voi
         {g.more > 0 ? (
           <li className="kn-home-v-more">
             <button type="button" className="kn-home-v-link" onClick={onOpen}>
-              e mais {g.more}
+              {t("home.pending.more", { n: g.more })}
             </button>
           </li>
         ) : null}

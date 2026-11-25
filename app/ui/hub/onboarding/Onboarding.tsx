@@ -11,6 +11,7 @@ import type { ProjectInfo } from "../../../src/notes/projects.ts";
 import { catColorOptions } from "../../../src/shared/kiwicat-colors.ts";
 import { api, has } from "../../src/api.ts";
 import { Button, Kbd, Segmented, Select } from "../../src/kit/index.tsx";
+import { t, useT } from "../../src/i18n.ts";
 import { shortcutLabel } from "../../../src/shared/shortcuts.ts";
 import { ViewPanel } from "../../settings/AgentActivity.tsx";
 import { ControlRow } from "../../settings/ControlRow.tsx";
@@ -34,7 +35,7 @@ import {
   projectRows,
   type ProjectRow,
   searchLine,
-  SEARCH_NOTICE,
+  searchNotice,
   progressLine,
   projectsSummary,
   shortcutSummary,
@@ -48,7 +49,7 @@ import {
 type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
 
 /** O oi do passo 1: o mesmo "Testar" de Ajustes › Agente. */
-export const HELLO = "Diga oi em uma frase.";
+export const helloText = (): string => t("onb.hello");
 /** Quantas vezes (uma por segundo) o oi espera o agente ocupado com outra coisa. */
 const HELLO_WAIT_TRIES = 30;
 
@@ -128,6 +129,7 @@ async function askWhenFree(text: string, onWait: () => void): Promise<string> {
 
 /** Passo 1: o agente escolhido instalado e logado, a ponte baixada no clique (só o Claude Code), e um oi para testar. */
 function ClaudeStep({ status }: { status: AgentStatus }) {
+  const { t } = useT();
   const [checking, setChecking] = useState(false);
   const [test, setTest] = useState<TestState>(IDLE_TEST);
   const [failure, setFailure] = useState<string | null>(null);
@@ -147,10 +149,10 @@ function ClaudeStep({ status }: { status: AgentStatus }) {
     setChecking(false);
   };
   const hello = async () => {
-    setTest({ ...IDLE_TEST, phase: "running", status: "Mandando o oi…" });
+    setTest({ ...IDLE_TEST, phase: "running", status: t("onb.hello.sending") });
     try {
-      const id = await askWhenFree(HELLO, () => setTest((t) => ({ ...t, status: `Esperando o ${status.name}…` })));
-      setTest((t) => (t.id ? t : { ...t, id }));
+      const id = await askWhenFree(helloText(), () => setTest((x) => ({ ...x, status: t("onb.hello.waiting", { name: status.name }) })));
+      setTest((x) => (x.id ? x : { ...x, id }));
     } catch (e) {
       const code = (e as { code?: string })?.code ?? "E_AGENT_FAILED";
       setTest({ ...IDLE_TEST, phase: "error", error: { code, message: e instanceof Error ? e.message : String(e) } });
@@ -181,14 +183,14 @@ function ClaudeStep({ status }: { status: AgentStatus }) {
     <div className="kn-onb-checks">
       <div className="kn-onb-check" data-ok={claude.ok}>
         <span className="kn-onb-check-text">{claude.text}</span>
-        {!claude.ok ? <Button onClick={() => void check()} disabled={checking}>{checking ? "Conferindo…" : "Conferir de novo"}</Button> : null}
+        {!claude.ok ? <Button onClick={() => void check()} disabled={checking}>{checking ? t("onb.claude.checking") : t("onb.claude.checkAgain")}</Button> : null}
       </div>
       {needsAdapter ? (
         <div className="kn-onb-check" data-ok={phase === "ready"}>
           <span className="kn-onb-check-text">{adapterLine(status)}</span>
           {phase === "missing" || phase === "error" ? (
             <Button variant="primary" onClick={() => void call(() => api.agent.download())} disabled={!claude.ok}>
-              {phase === "error" ? "Tentar de novo" : "Baixar"}
+              {phase === "error" ? t("onb.claude.retry") : t("onb.claude.download")}
             </Button>
           ) : null}
         </div>
@@ -199,9 +201,9 @@ function ClaudeStep({ status }: { status: AgentStatus }) {
         </div>
       ) : null}
       <div className="kn-onb-check" data-ok={test.phase === "done"}>
-        <span className="kn-onb-check-text">{test.phase === "done" ? `O ${status.name} respondeu.` : "Mande um oi para testar."}</span>
+        <span className="kn-onb-check-text">{test.phase === "done" ? t("onb.hello.answered", { name: status.name }) : t("onb.hello.ask")}</span>
         <Button onClick={() => void hello()} disabled={!ready || test.phase === "running"}>
-          {test.phase === "running" ? "Esperando…" : "Mandar um oi"}
+          {test.phase === "running" ? t("onb.hello.waitingShort") : t("onb.hello.send")}
         </Button>
       </div>
       {test.text ? <p className="kn-onb-answer">{test.text}</p> : null}
@@ -217,6 +219,7 @@ function ClaudeStep({ status }: { status: AgentStatus }) {
  * segue a fala (`agent.voice`) e a resposta (`agent.turn`). O microfone só abre enquanto ela segura o Control.
  */
 function ControlStep({ status, onStatus, settings }: { status: AgentStatus; onStatus(s: AgentStatus): void; settings: AppSettings }) {
+  const { t } = useT();
   const hold = holdName(settings.shortcuts.agent);
   const [phase, setPhase] = useState<ControlPhase>({ phase: "waiting" });
   useEffect(() => {
@@ -238,7 +241,7 @@ function ControlStep({ status, onStatus, settings }: { status: AgentStatus; onSt
           <span>{controlLine(phase, hold)}</span>
         </p>
       ) : (
-        <p className="kn-onb-status">Ligue o atalho para testar. Se preferir digitar, pode pular: o gato também ouve pelo clique.</p>
+        <p className="kn-onb-status">{t("onb.control.off")}</p>
       )}
     </div>
   );
@@ -249,6 +252,7 @@ function ControlStep({ status, onStatus, settings }: { status: AgentStatus; onSt
  * pedido), e muda na hora. A escolha vira uma linha das instruções do agente; as outras linhas da pessoa ficam.
  */
 function ToneStep({ status, onStatus }: { status: AgentStatus; onStatus(s: AgentStatus): void }) {
+  const { t } = useT();
   const [tone, setTone] = useState<Tone>(() => toneOf(status.instructions));
   const [failure, setFailure] = useState<string | null>(null);
   const choose = (next: Tone) => {
@@ -260,27 +264,27 @@ function ToneStep({ status, onStatus }: { status: AgentStatus; onStatus(s: Agent
     <div className="kn-onb-tone">
       <div className="kn-onb-tone-pick">
         <Segmented
-          label="Tamanho das respostas"
+          label={t("onb.tone.length")}
           value={tone.length}
           options={[
-            { value: "curto", label: "Curto" },
-            { value: "detalhado", label: "Detalhado" },
+            { value: "curto", label: t("onb.tone.short") },
+            { value: "detalhado", label: t("onb.tone.detailed") },
           ]}
           onChange={(length) => choose({ ...tone, length })}
         />
         <Segmented
-          label="Tom"
+          label={t("onb.tone.register")}
           value={tone.register}
           options={[
-            { value: "informal", label: "Informal" },
-            { value: "formal", label: "Formal" },
+            { value: "informal", label: t("onb.tone.informal") },
+            { value: "formal", label: t("onb.tone.formal") },
           ]}
           onChange={(register) => choose({ ...tone, register })}
         />
       </div>
-      <p className="kn-onb-ask">O que tem de novo no projeto?</p>
+      <p className="kn-onb-ask">{t("onb.tone.ask")}</p>
       <p className="kn-onb-answer" aria-live="polite">{toneExample(tone)}</p>
-      <p className="kn-onb-status">Um exemplo do Kiwi, sem gastar pedido. Fica nas instruções, em Ajustes › Agente.</p>
+      <p className="kn-onb-status">{t("onb.tone.note")}</p>
       {failure ? <p className="kn-onb-failure" role="alert">{failure}</p> : null}
     </div>
   );
@@ -290,13 +294,14 @@ function ToneStep({ status, onStatus }: { status: AgentStatus; onStatus(s: Agent
  * Passo 4: o guardrail na prática. O que a pessoa escreve passa pelo filtro local (`agent.guardPreview`) e volta com o
  * segredo trocado pelo marcador, na hora. Nada vai ao agente.
  */
-export const GUARD_EXAMPLE = "a senha do servidor é abc123";
+export const guardExample = (): string => t("onb.guard.example");
 function GuardStep() {
-  const [text, setText] = useState(GUARD_EXAMPLE);
+  const { t } = useT();
+  const [text, setText] = useState(guardExample);
   const [seen, setSeen] = useState<{ text: string; held: number } | null>(null);
   useEffect(() => {
     let alive = true;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api.agent.guardPreview(text).then(
         (r) => alive && setSeen(r),
         () => alive && setSeen(null),
@@ -304,24 +309,24 @@ function GuardStep() {
     }, 120);
     return () => {
       alive = false;
-      clearTimeout(t);
+      clearTimeout(timer);
     };
   }, [text]);
   const parts = seen ? seen.text.split(/(‹segredo [^›\n]{0,40}›)/) : [];
   return (
     <div className="kn-onb-guard">
       <label className="kn-onb-label" htmlFor="kn-onb-guard-input">
-        Você escreve
+        {t("onb.guard.you")}
       </label>
       <input id="kn-onb-guard-input" className="kn-input" value={text} maxLength={300} onChange={(e) => setText(e.target.value)} />
-      <div className="kn-onb-label">O agente recebe</div>
+      <div className="kn-onb-label">{t("onb.guard.agent")}</div>
       <p className="kn-onb-seen" aria-live="polite">
         {parts.map((p, i) => (i % 2 ? <mark key={i} className="kn-onb-marker">{p}</mark> : <span key={i}>{p}</span>))}
       </p>
       <p className="kn-onb-status">
         {seen && seen.held > 0
-          ? "O Kiwi trocou o segredo antes de qualquer coisa sair do Mac. O original fica aqui, e volta só na nota de onde saiu."
-          : "Sem segredo, o texto vai como está."}
+          ? t("onb.guard.held")
+          : t("onb.guard.none")}
       </p>
     </div>
   );
@@ -334,6 +339,7 @@ function GuardStep() {
  * uma pasta de fora vira um projeto dentro da pasta de notas, com o caminho na nota principal.
  */
 function ProjectsStep() {
+  const { t } = useT();
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [view, setView] = useState<ProjectSearchView>({ state: "idle", found: [], skipped: [] });
   /** As caixas como a pessoa as deixou, na hora do clique (spec #12918), antes de o Kiwi responder. */
@@ -405,18 +411,18 @@ function ProjectsStep() {
   };
   return (
     <div className="kn-onb-projects">
-      {view.state === "idle" ? <p className="kn-onb-status">{SEARCH_NOTICE}</p> : null}
+      {view.state === "idle" ? <p className="kn-onb-status">{searchNotice()}</p> : null}
       <div className="kn-onb-search">
         {searching ? (
-          <Button data-search="stop" onClick={stop}>Parar</Button>
+          <Button data-search="stop" onClick={stop}>{t("onb.search.stop")}</Button>
         ) : (
-          <Button variant="primary" data-search="start" onClick={start}>{view.state === "idle" ? "Procurar no Mac" : "Procurar de novo"}</Button>
+          <Button variant="primary" data-search="start" onClick={start}>{view.state === "idle" ? t("onb.search.start") : t("onb.search.again")}</Button>
         )}
-        <Button data-search="choose" onClick={() => void choose()}>Escolher outra pasta…</Button>
+        <Button data-search="choose" onClick={() => void choose()}>{t("onb.search.choose")}</Button>
         <span className="kn-onb-status" aria-live="polite">{searchLine(view)}</span>
       </div>
       {rows.length ? (
-        <ul className="kn-onb-folders" aria-label="As pastas de projeto">
+        <ul className="kn-onb-folders" aria-label={t("onb.search.list")}>
           {rows.map((r) => (
             <li key={r.key} data-key={r.key}>
               <label className="kn-onb-folder">
@@ -430,7 +436,7 @@ function ProjectsStep() {
           ))}
         </ul>
       ) : null}
-      <p className="kn-onb-status">Uma pasta marcada ganha uma nota principal na pasta de notas. Nada é copiado nem movido de onde ela está.</p>
+      <p className="kn-onb-status">{t("onb.search.mainNote")}</p>
       {failure ? <p className="kn-onb-failure" role="alert">{failure}</p> : null}
     </div>
   );
@@ -451,6 +457,7 @@ type Magic =
  * e na Atividade); a tela mostra o antes e o depois, com [Manter] e [Desfazer] (o desfazer do pedido).
  */
 function MagicStep({ status, settings }: { status: AgentStatus; settings: AppSettings }) {
+  const { t } = useT();
   const [notes, setNotes] = useState<string[] | null>(null);
   const [path, setPath] = useState("");
   const [magic, setMagic] = useState<Magic>({ phase: "pick" });
@@ -512,43 +519,43 @@ function MagicStep({ status, settings }: { status: AgentStatus; settings: AppSet
     }
   };
   if (notes === null) return null;
-  if (!notes.length) return <p className="kn-onb-status">Ainda não há notas para organizar. Dá para pular: o agente organiza quando você pedir.</p>;
+  if (!notes.length) return <p className="kn-onb-status">{t("onb.magic.empty")}</p>;
   return (
     <div className="kn-onb-magic">
       {magic.phase === "pick" || magic.phase === "error" ? (
         <>
           <div className="kn-onb-magic-pick">
-            <Select label="A nota para organizar" value={path} options={notes.map((n) => ({ value: n, label: n.replace(/\.md$/, "") }))} onChange={setPath} />
+            <Select label={t("onb.magic.pick")} value={path} options={notes.map((n) => ({ value: n, label: n.replace(/\.md$/, "") }))} onChange={setPath} />
             <Button variant="primary" onClick={() => void run()} disabled={!path || !status.enabled}>
-              Organizar esta nota
+              {t("onb.magic.run")}
             </Button>
           </div>
           <p className="kn-onb-status">
-            Isto manda um pedido ao {status.name} e gasta do seu plano. É o único passo que fala com ele. O texto de antes fica nas Versões da nota.
+            {t("onb.magic.cost", { name: status.name })}
           </p>
           {magic.phase === "error" ? <p className="kn-onb-failure" role="alert">{magic.message}</p> : null}
         </>
       ) : magic.phase === "running" ? (
-        <p className="kn-onb-status" aria-live="polite">{waiting ? `Esperando o ${status.name}…` : `O ${status.name} está organizando ${path.replace(/\.md$/, "")}…`}</p>
+        <p className="kn-onb-status" aria-live="polite">{waiting ? t("onb.hello.waiting", { name: status.name }) : t("onb.magic.running", { name: status.name, note: path.replace(/\.md$/, "") })}</p>
       ) : magic.phase === "review" ? (
         <>
-          <p className="kn-onb-status">O antes e o depois de {magic.view.path.replace(/\.md$/, "")}:</p>
+          <p className="kn-onb-status">{t("onb.magic.review", { note: magic.view.path.replace(/\.md$/, "") })}</p>
           <div className="kn-onb-diff">
             <ViewPanel view={{ phase: "ready", view: magic.view }} />
           </div>
           <div className="kn-onb-magic-pick">
             <Button variant="primary" onClick={() => setMagic({ phase: "kept" })}>
-              Manter
+              {t("common.keep")}
             </Button>
-            <Button onClick={() => void undo(magic.id)}>Desfazer</Button>
+            <Button onClick={() => void undo(magic.id)}>{t("common.undo")}</Button>
           </div>
         </>
       ) : magic.phase === "kept" ? (
-        <p className="kn-onb-try" data-phase="answered">Ficou assim. Dá para desfazer depois, em Ajustes › Atividade do agente.</p>
+        <p className="kn-onb-try" data-phase="answered">{t("onb.magic.kept")}</p>
       ) : magic.phase === "undone" ? (
-        <p className="kn-onb-try">Desfeito: a nota voltou como estava.</p>
+        <p className="kn-onb-try">{t("onb.magic.undone")}</p>
       ) : (
-        <p className="kn-onb-status">O {status.name} não mudou a nota: {magic.text}</p>
+        <p className="kn-onb-status">{t("onb.magic.none", { name: status.name, text: magic.text })}</p>
       )}
     </div>
   );
@@ -556,6 +563,7 @@ function MagicStep({ status, settings }: { status: AgentStatus; settings: AppSet
 
 /** Passo 10: o cartão final, com o que ficou escolhido. */
 function DoneStep({ status, settings }: { status: AgentStatus; settings: AppSettings }) {
+  const { t } = useT();
   const [projects, setProjects] = useState<string[] | null>(null);
   useEffect(() => {
     if (!has("projects.list")) return setProjects([]);
@@ -570,10 +578,10 @@ function DoneStep({ status, settings }: { status: AgentStatus; settings: AppSett
   }, []);
   const color = catColorOptions().find((c) => c.id === settings.kiwicat.cor) ?? catColorOptions()[0]!;
   const rows: [string, string][] = [
-    ["A cor", color.label],
-    ["O jeito de falar", toneSummary(status.instructions)],
-    ["Os projetos", projects === null ? "…" : projectsSummary(projects)],
-    ["O atalho", shortcutSummary(status.controlShortcut, holdName(settings.shortcuts.agent))],
+    [t("onb.card.color"), color.label],
+    [t("onb.card.tone"), toneSummary(status.instructions)],
+    [t("onb.card.projects"), projects === null ? "…" : projectsSummary(projects)],
+    [t("onb.card.shortcut"), shortcutSummary(status.controlShortcut, holdName(settings.shortcuts.agent))],
   ];
   return (
     <dl className="kn-onb-card">
@@ -588,6 +596,7 @@ function DoneStep({ status, settings }: { status: AgentStatus; settings: AppSett
 }
 
 export function Onboarding() {
+  const { t } = useT();
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -659,7 +668,7 @@ export function Onboarding() {
   const next = () => (n >= STEP_COUNT ? set({ state: "done" }) : set({ step: n + 1 }));
 
   return (
-    <div className="kn-onb" ref={dialog} role="dialog" aria-modal="true" aria-label="Conhecendo o agente" data-motion={reduced ? "reduced" : "full"} data-step={step}>
+    <div className="kn-onb" ref={dialog} role="dialog" aria-modal="true" aria-label={t("onb.aria")} data-motion={reduced ? "reduced" : "full"} data-step={step}>
       <header className="kn-onb-top">
         <ol className="kn-onb-dots" aria-label={progressLine(n)}>
           {Array.from({ length: STEP_COUNT }, (_, i) => (
@@ -667,7 +676,7 @@ export function Onboarding() {
           ))}
         </ol>
         <span className="kn-onb-progress">{progressLine(n)}</span>
-        <button type="button" className="kn-onb-close" aria-label="Fechar o onboarding" onClick={() => set({ state: "done" })}>
+        <button type="button" className="kn-onb-close" aria-label={t("onb.close")} onClick={() => set({ state: "done" })}>
           ×
         </button>
       </header>
@@ -702,18 +711,18 @@ export function Onboarding() {
         ) : step === "done" ? (
           <DoneStep status={status} settings={settings} />
         ) : (
-          <p className="kn-onb-soon">Este passo chega nas próximas tasks do spec #11955.</p>
+          <p className="kn-onb-soon">{t("onb.soon")}</p>
         )}
         {failure ? <p className="kn-onb-failure" role="alert">{failure}</p> : null}
       </section>
       <footer className="kn-onb-actions">
-        {n > 1 ? <Button onClick={() => set({ step: n - 1 })}>Voltar</Button> : <span />}
+        {n > 1 ? <Button onClick={() => set({ step: n - 1 })}>{t("onb.back")}</Button> : <span />}
         <span className="kn-onb-actions-end">
           {n < STEP_COUNT ? (
-            <Button onClick={next}>Pular</Button>
+            <Button onClick={next}>{t("common.skip")}</Button>
           ) : null}
           <Button variant="primary" onClick={next} disabled={blocked}>
-            {n < STEP_COUNT ? "Continuar" : "Pronto, é só segurar o Control"}
+            {n < STEP_COUNT ? t("common.continue") : t("onb.finish", { hold })}
           </Button>
         </span>
       </footer>

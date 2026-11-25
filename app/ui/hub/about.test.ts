@@ -5,10 +5,12 @@ import { describe, expect, test } from "bun:test";
 import { uiCapabilities } from "../../src/bun/ui-capabilities.ts";
 import { directInvoke } from "../../src/bun/ui-engine.ts";
 import { releaseNotesUrl, UPDATES_OFF_BY_SETTING, type UpdatesView } from "../../src/shared/ui-contract.ts";
-import { appearanceLine, CREDITS, creditsLine, downloadProgress, updateBand } from "./aboutText.ts";
+import { formatTime } from "../../src/shared/i18n/index.ts";
+import { appLocale, setAppLocale } from "../src/i18n.ts";
+import { appearanceLine, CREDITS, creditsLine, creditUse, downloadProgress, updateBand } from "./aboutText.ts";
 
 const at = "2026-11-04T12:30:00.000Z";
-const hhmm = new Date(at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const hhmm = formatTime("pt", new Date(at));
 
 describe("a faixa da atualização (spec #16837)", () => {
   const band = (v: UpdatesView) => updateBand(v);
@@ -220,4 +222,28 @@ describe("a aparência no Sobre e a faixa Nova aparência pronta (contrato 1.99.
     expect(appearanceLine({ window: "notes", uiVersion: "2026.11.9", builtIn: true, pending: null })).toEqual({ name: "Notas", version: "2026.11.9 (de fábrica)" });
     expect(appearanceLine({ window: "settings", uiVersion: "2026.11.12", builtIn: false, pending: "2026.11.13" })).toEqual({ name: "Ajustes", version: "2026.11.12 · nova pronta: 2026.11.13" });
   });
+});
+
+test("o Sobre em inglês (spec #28171): a faixa, a aparência e o uso de cada biblioteca", () => {
+  const before = appLocale();
+  setAppLocale({ ...before, locale: "en" });
+  try {
+    const MB = 1024 * 1024;
+    expect(updateBand({ state: "idle", lastCheck: { at, result: "latest" } })).toMatchObject({
+      title: "You're on the latest version",
+      detail: `Checked at ${formatTime("en", new Date(at))}.`,
+      action: { kind: "check", label: "Check for updates" },
+    });
+    expect(updateBand({ state: "downloading", version: "2026.11.3", lastCheck: null, done: 1234 * MB, total: 2468 * MB } as UpdatesView)).toMatchObject({
+      title: "Downloading version 2026.11.3",
+      detail: "1,234 of 2,468 MB · 50%",
+    });
+    expect(updateBand({ state: "ready", version: "2026.11.3", lastCheck: null }).action).toEqual({ kind: "apply", label: "Update and restart" });
+    expect(appearanceLine({ window: "notes", uiVersion: "2026.11.9", builtIn: true, pending: "2026.11.10" })).toEqual({ name: "Notes", version: "2026.11.9 (built in) · new one ready: 2026.11.10" });
+    for (const c of CREDITS) expect(creditUse(c)).not.toBe(c.use);
+  } finally {
+    setAppLocale(before);
+  }
+  // O arquivo de avisos segue em português, seja qual for a língua do app.
+  for (const c of CREDITS) expect(creditUse(c)).toBe(c.use);
 });

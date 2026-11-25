@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { AgentMemoryView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
+import { t, useT } from "../src/i18n.ts";
 import { useHubNav } from "../src/hubNav.ts";
 import { Button } from "../src/kit/index.tsx";
 import { MEMORY_TITLE, overLine } from "../settings/memoryText.ts";
@@ -20,12 +21,13 @@ type Change = AgentMemoryView["changes"][number];
 /** A frase do balão para uma mudança na memória. */
 export function memoryBubbleLine(c: Change): string {
   if (c.action === "over") return overLine(c.over ?? { facts: 0, long: 0 });
-  if (c.action === "full") return `A memória está cheia: não anotei "${c.fact}". Apague um fato em Ajustes › Agente › Memória.`;
-  if (c.undone) return c.action === "remember" ? `Desfeito: não anotei "${c.fact}".` : `Desfeito: "${c.fact}" voltou para a memória.`;
-  return c.action === "remember" ? `Anotei: ${c.fact}` : `Esqueci: ${c.fact}`;
+  if (c.action === "full") return t("hub.memory.full", { fact: c.fact });
+  if (c.undone) return t(c.action === "remember" ? "hub.memory.undoneRemember" : "hub.memory.undoneForget", { fact: c.fact });
+  return t(c.action === "remember" ? "hub.memory.remembered" : "hub.memory.forgot", { fact: c.fact });
 }
 
 export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boolean; onShown?: (shown: boolean) => void; reduced?: boolean }) {
+  const { t } = useT();
   const [changes, setChanges] = useState<Change[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -78,12 +80,12 @@ export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boo
   return (
     <BubblePresence itemKey={showing ? "memoria" : null} reduced={reduced}>
       {showing ? (
-        <div className="kn-bubble-shell kn-bubble kn-memory-bubble" onMouseDown={keepFocus} role="status" aria-label="A memória do agente">
+        <div className="kn-bubble-shell kn-bubble kn-memory-bubble" onMouseDown={keepFocus} role="status" aria-label={t("hub.memory.aria")}>
           <ul className="kn-memory-list">
             {changes.map((c) => (
               <li key={c.id} className="kn-memory-item">
                 <span className="kn-memory-line">{memoryBubbleLine(c)}</span>
-                {!c.undone && c.action !== "full" && c.action !== "over" ? <Button onClick={() => undo(c.id)}>Desfazer</Button> : null}
+                {!c.undone && c.action !== "full" && c.action !== "over" ? <Button onClick={() => undo(c.id)}>{t("common.undo")}</Button> : null}
               </li>
             ))}
           </ul>
@@ -100,16 +102,16 @@ export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boo
                     nav.openSettings("agent", MEMORY_TITLE);
                   }}
                 >
-                  Abrir a memória
+                  {t("hub.memory.open")}
                 </Button>
               ) : null}
               <Button data-role="dismiss" onClick={close}>
-                Ok
+                {t("common.ok")}
               </Button>
             </div>
           ) : (
             <div className="kn-memory-actions">
-              <Button onClick={close}>Ok</Button>
+              <Button onClick={close}>{t("common.ok")}</Button>
             </div>
           )}
           <BubbleTail />

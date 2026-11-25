@@ -10,4 +10,12 @@ export const enCommon: { readonly [K in keyof typeof ptCommon]: Entry } = {
   "common.remove": "Remove",
   "common.retry": "Try again",
   "common.loadingModel": "Loading the model…",
+  "common.ok": "OK",
+  "common.undo": "Undo",
+  "common.close": "Close",
+  "common.see": "View",
+  "common.keep": "Keep",
+  "common.discard": "Discard",
+  "common.continue": "Continue",
+  "common.skip": "Skip",
 };

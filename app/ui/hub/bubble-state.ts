@@ -18,9 +18,10 @@ import type { AgentTurnEvent, BubbleLink } from "../../src/shared/ui-contract";
 import { linkLabel } from "../../src/shared/bubble-links";
 import { plainMarkdown } from "../src/bubbleMarkdown";
 import { limitBubble } from "../settings/usageText";
+import { t } from "../src/i18n";
 
 /** O que o balão diz enquanto o agente está na web (spec #11908). */
-export const WEB_LINE = "Pesquisando na web…";
+export const webLine = (): string => t("hub.bubble.web");
 
 /**
  * Quanto a resposta fica na tela antes de dar lugar a um balão com ação (a memória, a rotina, a proposta; T28350): o
@@ -268,7 +269,7 @@ export class BubbleFeed {
       this.closedLen = this.said.length;
       if (this.dismissed) return;
       // A web (spec #11908): o balão diz que o agente saiu do cofre, até a próxima ferramenta ou a resposta.
-      this.put("tool" in e && e.tool === "web" ? this.line(WEB_LINE) : null, now);
+      this.put("tool" in e && e.tool === "web" ? this.line(webLine()) : null, now);
     } else if (e.type === "done") {
       this.finish(e.id);
       let base = this.closedLen;
