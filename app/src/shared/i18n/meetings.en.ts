@@ -46,7 +46,6 @@ export const enMeetings: { readonly [K in keyof typeof ptMeetings]: Entry } = {
 
   "meetings.settings.title": "Meeting settings",
   "meetings.settings.loadFailed": "Couldn't read the meeting settings.",
-  "meetings.settings.saveFailed": "Couldn't save. Try again.",
   "meetings.settings.suggest": "Ask whether to record",
   "meetings.settings.suggestHint": "When a meeting app takes the microphone, once per meeting. It never records on its own.",
   "meetings.settings.apps": "Apps that count as a meeting",

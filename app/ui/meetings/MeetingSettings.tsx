@@ -54,7 +54,7 @@ export function MeetingSettingsSection() {
 
   return (
     <Section title={t("meetings.settings.title")}>
-      {failed ? <div className="kn-meet-settings-error" role="alert">{t("meetings.settings.saveFailed")}</div> : null}
+      {failed ? <div className="kn-meet-settings-error" role="alert">{t("common.saveFailed")}</div> : null}
       {shortcuts ? (
         <>
           <ShortcutRow id="meeting" shortcuts={shortcuts} />

@@ -9,6 +9,7 @@ import {
   durationLabel,
   elapsedLabel,
   type MeetingLive,
+  MEETINGS_FOLDER_LABEL,
   type MeetingNote,
   NOT_RECORDING,
   participantsLabel,
@@ -22,8 +23,6 @@ import { MeetingSettingsSection } from "./MeetingSettings.tsx";
 
 type Load = "loading" | "ready" | "error";
 
-/** A pasta das reuniões no disco (`MEETINGS_FOLDER`, src/notes/meetings.ts): o nome não muda com a língua. */
-const MEETINGS_FOLDER = "Reuniões";
 /** O atalho padrão de gravar, como o vazio mostra. */
 const MEETING_SHORTCUT = "⌃⌥R";
 
@@ -158,7 +157,7 @@ export function Meetings({ onOpen }: { onOpen(path: string): void }) {
         </Empty>
       ) : load === "ready" && meetings.length === 0 ? (
         <Empty icon={<MeetingIcon />} title={t("meetings.empty")}>
-          {withStrong((shortcut) => t("meetings.emptyHint", { shortcut, folder: MEETINGS_FOLDER }), MEETING_SHORTCUT)}
+          {withStrong((shortcut) => t("meetings.emptyHint", { shortcut, folder: MEETINGS_FOLDER_LABEL }), MEETING_SHORTCUT)}
         </Empty>
       ) : (
         groups.map((g) => (
@@ -314,7 +313,7 @@ export function LiveCard({ live }: { live: Extract<MeetingLive, { recording: tru
         ) : live.warning === "transcription_unavailable" ? (
           <div className="kn-meet-live-error">{t("meetings.live.noTranscription")}</div>
         ) : live.warning === "note_recreated" ? (
-          <div className="kn-meet-live-error">{t("meetings.live.noteRecreated", { folder: MEETINGS_FOLDER })}</div>
+          <div className="kn-meet-live-error">{t("meetings.live.noteRecreated", { folder: MEETINGS_FOLDER_LABEL })}</div>
         ) : null}
         {error ? <div className="kn-meet-live-error">{error}</div> : null}
       </div>

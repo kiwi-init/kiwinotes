@@ -6,10 +6,13 @@
 //
 // Puro (sem disco nem helper), para o `bun test`.
 
-/** Uma nota de reunião, como a lista mostra. */
 import { type Locale, translate } from "./i18n/index.ts";
 import { canonicalShortcut, isShortcutFor } from "./shortcuts.ts";
 
+/** A pasta das reuniões no disco, a mesma do `MEETINGS_FOLDER` de src/notes/meetings.ts: o nome não muda com a língua. */
+export const MEETINGS_FOLDER_LABEL = "Reuniões";
+
+/** Uma nota de reunião, como a lista mostra. */
 export interface MeetingNote {
   path: string;
   title: string;

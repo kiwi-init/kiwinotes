@@ -49,7 +49,6 @@ export const ptMeetings = {
   // Os ajustes de reunião.
   "meetings.settings.title": "Ajustes de reunião",
   "meetings.settings.loadFailed": "Não deu para ler os ajustes de reunião.",
-  "meetings.settings.saveFailed": "Não deu para salvar. Tente de novo.",
   "meetings.settings.suggest": "Perguntar se quer gravar",
   "meetings.settings.suggestHint": "Quando um app de reunião pega o microfone, uma vez por reunião. Nunca grava sozinho.",
   "meetings.settings.apps": "Apps que contam como reunião",
