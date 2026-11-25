@@ -33,9 +33,11 @@ test("a janela sobe na língua do engine e troca na hora com o app.localeChanged
   // A língua fixa: a dica sem a parte do Automático.
   expect(en).not.toContain("For now");
 
-  // O Automático, até o fim do spec #28171, fica em português (`AUTO_FOLLOWS_SYSTEM`), e a dica diz isso.
-  handlers.get("app.localeChanged")!({ setting: "auto", locale: "pt", system: "en" } satisfies AppLocale);
-  expect(renderToStaticMarkup(<LanguageSection />)).toContain("Por enquanto, o Automático fica em português");
+  // O Automático segue o macOS (T30629, `AUTO_FOLLOWS_SYSTEM`), e a dica diz em que língua está.
+  handlers.get("app.localeChanged")!({ setting: "auto", locale: "en", system: "en" } satisfies AppLocale);
+  const auto = renderToStaticMarkup(<LanguageSection />);
+  expect(auto).toContain("From macOS, now in English.");
+  expect(auto).not.toContain("For now");
 
   handlers.get("app.localeChanged")!({ setting: "pt", locale: "pt", system: "en" } satisfies AppLocale);
   expect(t("settings.topic.general")).toBe("Geral");

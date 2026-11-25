@@ -42,14 +42,13 @@ test("o que mudou de lugar: o Sobre virou assunto, e Suas reuniões foi para Reu
   expect(HUB_SECTIONS).toContain("about");
 });
 
-test("T29319: nesta release, o Geral (o Idioma do app) não aparece: nem na lista, nem pelo ?topic=, nem como o último aberto", () => {
-  expect(SHOWN_TOPICS).toEqual(["appearance", "dictation", "notes", "meetings", "agent", "activity", "privacy", "about"]);
-  expect(isSettingsTopic("general")).toBe(false);
-  const storage = { getItem: () => "general" };
-  expect(readLastTopic(storage)).toBe("appearance");
-  expect(stepTopic("appearance", -1)).toBe("appearance");
-  // Com a chave ligada (a última parte do spec #28171), ele volta na frente.
-  expect(shownTopics(true)).toEqual(SETTINGS_TOPICS);
+test("T30629: o Geral (o Idioma do app) volta na frente da lista, pelo ?topic= e como o último aberto", () => {
+  expect(SHOWN_TOPICS).toEqual(SETTINGS_TOPICS);
+  expect(isSettingsTopic("general")).toBe(true);
+  expect(readLastTopic({ getItem: () => "general" })).toBe("general");
+  expect(stepTopic("appearance", -1)).toBe("general");
+  // Sem a escolha (T29319, a release de antes), ele some da lista.
+  expect(shownTopics(false)).toEqual(SETTINGS_TOPICS.filter((t) => t !== "general"));
 });
 
 test("↑ e ↓ param no primeiro e no último assunto", () => {

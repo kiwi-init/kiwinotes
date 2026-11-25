@@ -306,8 +306,8 @@ describe("contrato 1.0.0 (T1192)", () => {
     const caps = uiCapabilities({ ...f.deps, systemLanguages: () => system, localeChanged: (l) => void changes.push(l) });
     const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
     for (const bad of ["es", "", null, 1, "AUTO"]) expect(await call("settings.set", { language: bad })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
-    // O Automático fica em português até o fim do spec #28171 (`AUTO_FOLLOWS_SYSTEM`), mesmo com o macOS em inglês.
-    expect(await call("app.locale", {})).toEqual({ ok: true, value: { setting: "auto", locale: "pt", system: "en" } });
+    // O Automático segue o macOS (T30629, `AUTO_FOLLOWS_SYSTEM`): com ele em inglês, o app também.
+    expect(await call("app.locale", {})).toEqual({ ok: true, value: { setting: "auto", locale: "en", system: "en" } });
     expect(await call("app.locale", { x: 1 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     // Outro ajuste não avisa a língua.
     await call("settings.set", { cues: false });
