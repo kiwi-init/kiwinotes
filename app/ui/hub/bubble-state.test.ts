@@ -47,6 +47,20 @@ describe("o resumo (spec #27881)", () => {
     expect(summaryOf("• Ana, sexta\n• Bruno, segunda e terça", fits(14))).toBe("• Ana, sexta");
   });
 
+  test("o pulo do título para no título: as linhas curtas seguidas e a tabela ficam (#28077)", () => {
+    const tabela = "| Dia | Leitura |\n| --- | --- |\n| Segunda | Capítulo 1 |\n| Terça | Capítulo 2 |\n| Quarta | Capítulo 3 |";
+    // Título + tabela: o título sai, e o resumo é o começo da tabela, não a última linha.
+    expect(summaryOf(bubblePlain(`## Notas da semana\n\n${tabela}`), fits(40))).toBe("Dia · Leitura\nSegunda · Capítulo 1");
+    // A tabela sem título: o começo dela.
+    expect(summaryOf(bubblePlain(tabela), fits(40))).toBe("Dia · Leitura\nSegunda · Capítulo 1");
+    // Linhas curtas seguidas, sem parágrafo: nenhuma é título, o resumo é o começo.
+    expect(summaryOf("Comando\nbun run exemplo start\nbun run exemplo stop", fits(32))).toBe("Comando\nbun run exemplo start");
+    // Três linhas curtas antes do parágrafo já são conteúdo: o resumo começa nelas.
+    expect(summaryOf(`Ana\nBruno\nCarla\n${LONGA}`, fits(20))).toBe("Ana\nBruno\nCarla");
+    // Um título e um subtítulo, sem nada depois: os dois ficam.
+    expect(summaryOf("Projeto X\nAs notas", fits(10))).toBe("Projeto X");
+  });
+
   test("nem a primeira frase cabe: entre palavras, com \"…\"; uma palavra maior que o balão, pelas letras", () => {
     const s = summaryOf(LONGA, fits(20));
     expect(s).toBe("Achei três notas…");

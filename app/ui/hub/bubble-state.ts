@@ -45,8 +45,31 @@ function sentenceEnds(text: string): number[] {
   return out;
 }
 
-/** O título que abre o texto corrido: curto, sem pontuação no fim e sem ser item de lista (o `#` já saiu no corrido). */
-const TITLE = /^(?![•◦▪]\s|\d+[.)]\s)[^\n]{1,60}(?<![.!?…:;,])\n(?=\s*\S)/;
+/**
+ * A linha que pode ser título no texto corrido (o `#` já saiu): curta, sem pontuação no fim, sem ser item de lista nem
+ * linha de tabela (as células vêm com " · ").
+ */
+const TITLE_LINE = /^(?![•◦▪]\s|\d+[.)]\s)(?!.* · )[^\n]{1,60}(?<![.!?…:;,])$/;
+/** Quantas linhas curtas do começo contam como título: o título e um subtítulo. Mais que isso é conteúdo (#28077). */
+const MAX_TITLES = 2;
+
+/**
+ * Onde o corpo começa depois dos títulos do começo (#28009, #28077): até `MAX_TITLES` linhas curtas, e só quando a
+ * linha seguinte é corpo (um parágrafo, um item de lista ou uma linha de tabela). Linhas curtas seguidas de outra
+ * linha curta, ou sem nada depois, não são título: o resumo começa no começo. 0 quando não há título a pular.
+ */
+function titlesEnd(t: string): number {
+  let at = 0;
+  for (let n = 0; n <= MAX_TITLES; n++) {
+    const nl = t.indexOf("\n", at);
+    const line = (nl < 0 ? t.slice(at) : t.slice(at, nl)).trim();
+    if (!TITLE_LINE.test(line)) return n > 0 && line ? at : 0;
+    if (nl < 0) return 0;
+    at = nl + 1;
+    while (/\s/.test(t[at] ?? "")) at++;
+  }
+  return 0;
+}
 
 /**
  * O resumo de um texto corrido (spec #27881): ele inteiro, se cabe no balão (`fits`); senão, as frases do começo que
@@ -57,13 +80,8 @@ export function summarize(plain: string, fits: (s: string) => boolean): { text: 
   const t = plain.trim();
   let from = plain.length - plain.trimStart().length;
   if (!t || fits(t)) return { text: t, from };
-  let body = t;
-  for (let m = TITLE.exec(body); m; m = TITLE.exec(body)) {
-    const rest = body.slice(m[0].length);
-    from += m[0].length + rest.length - rest.trimStart().length;
-    body = rest.trimStart();
-  }
-  return { text: cut(body, fits), from };
+  const skip = titlesEnd(t);
+  return { text: cut(t.slice(skip), fits), from: from + skip };
 }
 
 export function summaryOf(plain: string, fits: (s: string) => boolean): string {
