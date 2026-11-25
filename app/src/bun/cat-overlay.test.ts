@@ -939,6 +939,30 @@ describe("o aviso de limite de uso no overlay (T29063)", () => {
     }
   });
 
+  test("fechar no × durante a espera do aviso: a resposta não volta depois", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(limit("warning", { percent: 85 }));
+    r.advance(100);
+    r.cat.turn(doneWith("Resumi a nota."));
+    r.cat.close();
+    r.take();
+    r.advance(readingMs(WARN) + 50);
+    expect(r.take()).toEqual([]);
+  });
+
+  test("a hora de volta de um pedido não vaza para o seguinte", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(limit("out", { resetsAt: new Date(Date.now() + 3600_000).toISOString() }));
+    r.cat.turn(doneWith("Resumi."));
+    r.advance(60_000);
+    r.take();
+    talk(r, "r2");
+    r.cat.turn({ type: "error", id: "r2", code: "E_AGENT_LIMIT", message: "limite do agente." } as AgentTurnEvent);
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: voiceErrorLine("limite do agente."), error: true }]);
+  });
+
   test("com o hub à vista, o aviso fica no gato do canto", () => {
     const r = rig();
     r.cat.configure(true);
