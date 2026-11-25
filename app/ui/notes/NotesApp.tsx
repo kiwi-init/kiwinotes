@@ -13,6 +13,8 @@ import { api as appApi } from "../src/api.ts";
 import { Button, Empty, HoverLabel } from "../src/kit/index.tsx";
 import { TopBar } from "../src/topbar.tsx";
 import { useShortcuts } from "../src/useShortcuts.ts";
+import { useT } from "../src/i18n.ts";
+import type { TextKey } from "../../src/shared/i18n/index.ts";
 import { DEFAULT_SHORTCUTS, matchesKeyEvent, shortcutLabel } from "../../src/shared/shortcuts.ts";
 import { Popover } from "./Popover.tsx";
 import { PatchedListing } from "./listing-patch.ts";
@@ -76,8 +78,6 @@ type SaveOutcome = "clean" | "saved" | "conflict" | "error";
 
 /** Onde entram as notas que não têm lugar ainda: a nota rápida do A3 (#1509) e o rascunho órfão recuperado. */
 const INBOX = "Caixa de entrada";
-/** O porquê de um nome com `# ^ | [ ]` mudar ao renomear (T7520). */
-const LINK_SAFE_NOTE = " (sem # ^ | [ ], que quebram os [[links]] para ela)";
 
 /** A ordem da árvore fica no navegador da janela (uma conveniência de quem vê, T2469). */
 const SORT_KEY = "kiwi.notes.sort";
@@ -224,6 +224,10 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     readable?: boolean;
   } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  // A língua das telas (T29244): `tr`, porque o `t` daqui é o alvo do menu.
+  const { t: tr, locale, time: fmtTime, date: fmtDate } = useT();
+  /** O porquê de um nome com `# ^ | [ ]` mudar ao renomear (T7520). */
+  const LINK_SAFE_NOTE = tr("notes.linkSafe");
   // A pasta que acabou de nascer (spec #19265): a linha dela pisca por ~1 s.
   const [fresh, setFresh] = useState<string | null>(null);
   useEffect(() => {
@@ -881,7 +885,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         setPaletteQuery("");
         flushSync(() => setPalette((p) => !p));
       }
-      else if (matchesKeyEvent(s.newNote, e)) void create("Sem título", true, selectedFolderRef.current);
+      else if (matchesKeyEvent(s.newNote, e)) void create(tr("notes.untitled"), true, selectedFolderRef.current);
       else if (matchesKeyEvent(s.focusMode, e)) togglesRef.current.toggleFocus();
       else if (matchesKeyEvent(s.typewriter, e)) togglesRef.current.toggleTypewriter();
       else return;
@@ -941,7 +945,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const addNoteProperty = () => {
     if (view !== "note") return;
     const added = addProperty(frontmatter.current);
-    if (!added) return failed_("adicionar uma propriedade: o frontmatter desta nota não é YAML válido")(null);
+    if (!added) return failed_("notes.do.addProperty")(null);
     onProperties(added.frontmatter);
     setNewProperty(added.key);
   };
@@ -955,7 +959,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     // direto para o app padrão do Mac.
     if (api.files?.read) return void openFileView(p, false, at);
     setTreeOpen(false);
-    api.files?.open(p).catch(failed_("abrir o arquivo"));
+    api.files?.open(p).catch(failed_("notes.do.openFile"));
   };
 
   const onOpenLink = async (target: string) => {
@@ -1008,7 +1012,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     const cleaned = wanted !== typed ? LINK_SAFE_NOTE : "";
     if (!note || !wanted || wanted === note.title) {
       setTitle(note?.title ?? "");
-      if (note && cleaned) say(`O nome continua “${note.title}”${cleaned}.`);
+      if (note && cleaned) say(tr("notes.renamedKept", { name: note.title, why: cleaned }));
       return;
     }
     const original = note.path, opened = shown.current;
@@ -1018,14 +1022,14 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     if (!r) return setTitle(note.title); // já existe uma nota com esse nome
     const n = await api.get(r.meta.path).catch(() => null);
     if (n && pending.current === null && (current.current === original || (current.current === null && shown.current === opened))) show(n);
-    const done = cleaned ? `Nota renomeada para “${noteName(r.meta.path)}”${cleaned}.` : "Nota renomeada.";
-    say(r.skippedPaths?.length ? `${done} Confira os links em: ${r.skippedPaths.join(", ")}.` : `${done} ${r.updatedLinks} ${r.updatedLinks === 1 ? "link atualizado" : "links atualizados"}.`);
+    const done = cleaned ? tr("notes.renamedTo", { name: noteName(r.meta.path), why: cleaned }) : tr("notes.renamed");
+    say(r.skippedPaths?.length ? tr("notes.checkLinks", { done, paths: r.skippedPaths.join(", ") }) : `${done} ${tr("notes.linksUpdated", { n: r.updatedLinks })}.`);
     void refresh();
   };
 
   const reportRefactor = (r: RefactorResult) => {
-    const summary = `${r.updatedReferences} ${r.updatedReferences === 1 ? "referência atualizada" : "referências atualizadas"} em ${r.updatedNotes} ${r.updatedNotes === 1 ? "nota" : "notas"}.`;
-    say(r.skippedPaths.length ? `${summary} Confira as notas que não puderam ser atualizadas por completo: ${r.skippedPaths.join(", ")}.` : summary);
+    const summary = `${tr("notes.refsUpdated", { n: r.updatedReferences })} ${tr("notes.inNotes", { n: r.updatedNotes })}.`;
+    say(r.skippedPaths.length ? tr("notes.refsSkipped", { summary, paths: r.skippedPaths.join(", ") }) : summary);
     void refresh();
   };
   const performRefactor = async (name: string) => {
@@ -1125,24 +1129,20 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     !!folder &&
     !(projectList.meetingsFolder && insideOrIs(projectList.meetingsFolder, folder)) &&
     !projectList.projects.some((x) => insideOrIs(x.folder, folder) || insideOrIs(folder, x.folder));
-  const projectAction = (what: string, run: () => Promise<unknown>) =>
+  const projectAction = (doKey: TextKey, run: () => Promise<unknown>) =>
     void run().then(
       () => void projectLists?.request(),
       (e) => {
         const code = errorCode(e);
-        say(
-          code === "E_NESTED"
-            ? `Não deu para ${what}: um projeto não fica dentro de outro.`
-            : code === "E_MEETINGS_FOLDER"
-              ? `Não deu para ${what}: a pasta das reuniões não pode ser um projeto.`
-              : `Não deu para ${what}.`,
-        );
+        const what = tr(doKey);
+        say(tr(code === "E_NESTED" ? "notes.failed.nested" : code === "E_MEETINGS_FOLDER" ? "notes.failed.meetings" : "notes.failed", { what }));
       },
     );
 
   const say = (text: string, undo?: () => void) => setToast({ text, undo });
-  const failed_ = (what: string) => (e: unknown) => say(`Não deu para ${what}${errorCode(e) === "E_EXISTS" ? ": já existe um com esse nome" : ""}.`,
-    );
+  /** "Não deu para …", com o que a pessoa tentou (`notes.do.*`). */
+  const failed_ = (doKey: TextKey) => (e: unknown) =>
+    say(tr(errorCode(e) === "E_EXISTS" ? "notes.failed.exists" : "notes.failed", { what: tr(doKey) }));
 
   /**
    * Depois de mexer no vault: a lista de novo, e a nota aberta reaberta no lugar novo, se ela mudou de path. A lista é
@@ -1178,7 +1178,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     if (!folders) return;
     const taken = new Set((listing?.folders ?? []).filter((f) => folderOf(f) === parent).map((f) => f.slice(f.lastIndexOf("/") + 1)),
     );
-    const r = await folders.create(join(parent, freeName("Nova pasta", taken))).catch(failed_("criar a pasta"));
+    const r = await folders.create(join(parent, freeName(tr("notes.menu.newFolder"), taken))).catch(failed_("notes.do.createFolder"));
     if (!r) return;
     await after([r.path]);
     // Spec #19265: a pasta escolhida não muda. Antes ela virava a nova, e o próximo clique criava uma dentro da outra.
@@ -1196,15 +1196,15 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       const safe = linkSafeName(clean); // T7520: sem `# ^ | [ ]`, que quebram os [[links]]
       if (!safe || safe === noteName(target.path)) return;
       if (current.current === target.path && !(await leave())) return;
-      const r = await api.rename(target.path, `${join(folderOf(target.path), safe)}.md`).catch(failed_("renomear a nota"));
+      const r = await api.rename(target.path, `${join(folderOf(target.path), safe)}.md`).catch(failed_("notes.do.renameNote"));
       if (r) await after({ from: target.path, to: r.meta.path });
-      if (r && safe !== clean) say(`Nota renomeada para “${noteName(r.meta.path)}”${LINK_SAFE_NOTE}.`);
+      if (r && safe !== clean) say(tr("notes.renamedTo", { name: noteName(r.meta.path), why: LINK_SAFE_NOTE }));
     } else if (target.kind === "file") {
       if (clean === target.path.slice(target.path.lastIndexOf("/") + 1)) return;
-      await renameFile(target.path, join(folderOf(target.path), clean), "renomear o arquivo");
+      await renameFile(target.path, join(folderOf(target.path), clean), "notes.do.renameFile");
     } else if (folders) {
       if (current.current?.startsWith(`${target.path}/`) && !(await leave())) return;
-      const r = await folders.rename(target.path, join(folderOf(target.path), clean)).catch(failed_("renomear a pasta"));
+      const r = await folders.rename(target.path, join(folderOf(target.path), clean)).catch(failed_("notes.do.renameFolder"));
       if (r) await after({ from: target.path, to: r.path });
     }
   };
@@ -1213,7 +1213,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
    * Renomear e mover um arquivo que não é nota (T19878, spec #19256): o engine reescreve os links das notas. O arquivo
    * aberto na janela grava antes e segue para o caminho novo.
    */
-  const renameFile = async (from: string, to: string, what: string) => {
+  const renameFile = async (from: string, to: string, what: TextKey) => {
     const rename = api.files?.rename;
     if (!rename) return;
     const isOpen = view === "file" && fileOpen === from;
@@ -1222,15 +1222,15 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     if (!r) return;
     if (isOpen) setFileOpen(r.path);
     await after({ from, to: r.path });
-    if (r.skippedPaths.length) say(`${r.skippedPaths.length === 1 ? "Uma nota mudou" : `${r.skippedPaths.length} notas mudaram`} no meio e ficou com o link antigo.`);
-    else if (r.updatedLinks) say(`${r.updatedLinks === 1 ? "1 link atualizado" : `${r.updatedLinks} links atualizados`}.`);
+    if (r.skippedPaths.length) say(tr("notes.oldLinkKept", { n: r.skippedPaths.length }));
+    else if (r.updatedLinks) say(`${tr("notes.linksUpdated", { n: r.updatedLinks })}.`);
   };
 
   /** "Copiar caminho" (T19878): o caminho inteiro no disco, quando se sabe a pasta; senão, o de dentro da pasta. */
   const copyPath = (p: string) => {
     void appApi.copy(shownFolder?.path ? `${shownFolder.path.replace(/\/$/, "")}/${p}` : p).then(
-      () => say("Caminho copiado."),
-      () => say("Não deu para copiar o caminho."),
+      () => say(tr("notes.pathCopied")),
+      () => say(tr("notes.pathCopyFailed")),
     );
   };
 
@@ -1240,21 +1240,21 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     if (target.kind === "note") {
       if (folderOf(target.path) === folder) return;
       if (current.current === target.path && !(await leave())) return;
-      const r = await folders.moveNote(target.path, folder).catch(failed_("mover a nota"));
+      const r = await folders.moveNote(target.path, folder).catch(failed_("notes.do.moveNote"));
       if (r) await after({ from: target.path, to: r.meta.path });
     } else if (target.kind === "file") {
       if (folderOf(target.path) === folder) return;
-      await renameFile(target.path, join(folder, target.path.slice(target.path.lastIndexOf("/") + 1)), "mover o arquivo");
+      await renameFile(target.path, join(folder, target.path.slice(target.path.lastIndexOf("/") + 1)), "notes.do.moveFile");
     } else {
       if (folder === target.path || folder.startsWith(`${target.path}/`) || folderOf(target.path) === folder) return;
       if (current.current?.startsWith(`${target.path}/`) && !(await leave())) return;
-      const r = await folders.move(target.path, folder).catch(failed_("mover a pasta"));
+      const r = await folders.move(target.path, folder).catch(failed_("notes.do.moveFolder"));
       if (r) await after({ from: target.path, to: r.path });
     }
   };
 
   const duplicate = async (path: string) => {
-    const n = await folders?.duplicateNote(path).catch(failed_("duplicar a nota"));
+    const n = await folders?.duplicateNote(path).catch(failed_("notes.do.duplicateNote"));
     if (!n) return;
     await after([n.path]);
     await open(n.path);
@@ -1303,10 +1303,10 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     }
     try {
       const { file } = await ex(path, format, theme);
-      say(`Exportada: ${file.slice(file.lastIndexOf("/") + 1)}`);
+      say(tr("notes.exported", { file: file.slice(file.lastIndexOf("/") + 1) }));
     } catch (e) {
       if (errorCode(e) === "E_CANCELED") return;
-      failed_("exportar a nota")(e);
+      failed_("notes.do.exportNote")(e);
     }
   };
 
@@ -1334,15 +1334,15 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     );
     const r =
       target.kind === "note"
-        ? await api.delete(target.path).catch(failed_("apagar a nota"))
+        ? await api.delete(target.path).catch(failed_("notes.do.deleteNote"))
         : target.kind === "file"
-          ? await api.files?.delete?.(target.path).catch(failed_("apagar o arquivo"))
-          : await folders?.delete(target.path).catch(failed_("apagar a pasta"));
+          ? await api.files?.delete?.(target.path).catch(failed_("notes.do.deleteFile"))
+          : await folders?.delete(target.path).catch(failed_("notes.do.deleteFolder"));
     if (!r) return;
     await after([target.path]);
     // O engine guarda o apagado por 10 min antes da Lixeira (#2493); o aviso dura 8 s, então o Desfazer sempre chega a tempo.
     say(
-      `“${name}” foi para a Lixeira.`,
+      tr("notes.trashed", { name }),
       folders
         ? () =>
             void folders.restore(target.path).then(
@@ -1354,7 +1354,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
                 await after([target.path, back.path]);
                 if (target.kind === "note") await open(back.path);
               },
-              failed_("desfazer"))
+              failed_("notes.do.undo"))
         : undefined,
     );
   };
@@ -1368,8 +1368,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const copyLink = (path: string) => {
     const paths = (listing?.notes ?? []).map((n) => n.path);
     void appApi.copy(`[[${linkTextFor(path, paths)}]]`).then(
-      () => say("Link copiado."),
-      () => say("Não deu para copiar o link."),
+      () => say(tr("notes.linkCopied")),
+      () => say(tr("notes.linkCopyFailed")),
     );
   };
 
@@ -1383,49 +1383,49 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   /** O menu de botão direito, para uma nota, uma pasta ou a área vazia. */
   const menuFor = (t: SideTarget): MenuItem[] => {
     const sortItems: MenuItem[] = [
-      { kind: "title", label: "Ordenar por" },
-      { label: "Nome", checked: sortBy === "name", onSelect: () => sort("name"),
+      { kind: "title", label: tr("notes.menu.sortBy") },
+      { label: tr("notes.menu.sortName"), checked: sortBy === "name", onSelect: () => sort("name"),
       },
-      { label: "Edição", checked: sortBy === "edited", onSelect: () => sort("edited"),
+      { label: tr("notes.menu.sortEdited"), checked: sortBy === "edited", onSelect: () => sort("edited"),
       },
-      { label: "Criação", checked: sortBy === "created", onSelect: () => sort("created"),
+      { label: tr("notes.menu.sortCreated"), checked: sortBy === "created", onSelect: () => sort("created"),
       },
     ];
     if (t.kind === "empty") {
       return [
         ...(folderController?.supported ? [
-          {label:"Abrir pasta…",onSelect:()=>{void leave().then(async ok=>{if(ok)await folderController.open();});}},
-          ...(folderController.view?.recent??[]).map(r=>({label:`Abrir ${r.name}`,onSelect:()=>{void leave().then(async ok=>{if(ok)await folderController.open(r.key);});}})),
+          {label:tr("notes.menu.openFolder"),onSelect:()=>{void leave().then(async ok=>{if(ok)await folderController.open();});}},
+          ...(folderController.view?.recent??[]).map(r=>({label:tr("notes.menu.openRecent",{name:r.name}),onSelect:()=>{void leave().then(async ok=>{if(ok)await folderController.open(r.key);});}})),
           {kind:"separator" as const},
         ]:[]),
-        { label: "Nova nota", hint: shortcuts.newNote === null ? undefined : shortcutLabel(shortcuts.newNote), onSelect: () => void create("Sem título", true, ""),
+        { label: tr("notes.newNote"), hint: shortcuts.newNote === null ? undefined : shortcutLabel(shortcuts.newNote), onSelect: () => void create(tr("notes.untitled"), true, ""),
         },
-        ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate(""),
+        ...(api.templates ? [{ label: tr("notes.menu.fromTemplate"), onSelect: () => fromTemplate(""),
               },
             ] : []),
-        ...(api.canvas ? [{ label: "Novo quadro branco", onSelect: () => void newCanvas("") }] : []),
-        ...(folders ? [{ label: "Nova pasta", onSelect: () => void newFolder("") }] : []),
+        ...(api.canvas ? [{ label: tr("notes.menu.newBoard"), onSelect: () => void newCanvas("") }] : []),
+        ...(folders ? [{ label: tr("notes.menu.newFolder"), onSelect: () => void newFolder("") }] : []),
         { kind: "separator" },
         ...sortItems,
       ];
     }
     if (t.kind === "folder") {
       return [
-        { label: "Nova nota aqui", onSelect: () => void create("Sem título", true, t.path),
+        { label: tr("notes.menu.newNoteHere"), onSelect: () => void create(tr("notes.untitled"), true, t.path),
         },
-        ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate(t.path),
+        ...(api.templates ? [{ label: tr("notes.menu.fromTemplate"), onSelect: () => fromTemplate(t.path),
               },
             ] : []),
-        ...(api.canvas ? [{ label: "Novo quadro branco aqui", onSelect: () => void newCanvas(t.path) }] : []),
-        { label: "Nova pasta aqui", onSelect: () => void newFolder(t.path), disabled: !folders,
+        ...(api.canvas ? [{ label: tr("notes.menu.newBoardHere"), onSelect: () => void newCanvas(t.path) }] : []),
+        { label: tr("notes.menu.newFolderHere"), onSelect: () => void newFolder(t.path), disabled: !folders,
         },
-        { label: "Nova pasta ao lado", onSelect: () => void newFolder(folderOf(t.path)), disabled: !folders },
+        { label: tr("notes.menu.newFolderBeside"), onSelect: () => void newFolder(folderOf(t.path)), disabled: !folders },
         { kind: "separator" },
-        { label: "Renomear", onSelect: () => setRenaming(`f:${t.path}`), disabled: !folders,
+        { label: tr("notes.menu.rename"), onSelect: () => setRenaming(`f:${t.path}`), disabled: !folders,
         },
-        { label: "Mover para…", onSelect: () => setMoving(t), disabled: !folders,
+        { label: tr("notes.menu.moveTo"), onSelect: () => setMoving(t), disabled: !folders,
         },
-        { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders,
+        { label: tr("notes.menu.reveal"), onSelect: () => void folders?.reveal(t.path).catch(failed_("notes.do.reveal")), disabled: !folders,
         },
         // Os projetos (spec #9847): só o que o engine aceitaria aparece no menu.
         ...(projectsApi && projectByFolder.has(t.path)
@@ -1433,15 +1433,15 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
               { kind: "separator" as const },
               // Pelo teclado, o caminho até a escolha da nota principal apagada (o aviso é só do mouse).
               ...(projectByFolder.get(t.path)!.main === null && menu
-                ? [{ label: "Escolher a nota principal…", onSelect: () => setProjectPick({ x: menu.x, y: menu.y, folder: t.path }) }]
+                ? [{ label: tr("notes.menu.pickMain"), onSelect: () => setProjectPick({ x: menu.x, y: menu.y, folder: t.path }) }]
                 : []),
-              { label: "Deixar de ser projeto", onSelect: () => projectAction("deixar de ser projeto", () => projectsApi.unmark(t.path)) },
+              { label: tr("notes.menu.unmarkProject"), onSelect: () => projectAction("notes.do.unmarkProject", () => projectsApi.unmark(t.path)) },
             ]
           : projectsApi && canMark(t.path)
-            ? [{ kind: "separator" as const }, { label: "Marcar como projeto", onSelect: () => projectAction("marcar como projeto", () => projectsApi.mark(t.path)) }]
+            ? [{ kind: "separator" as const }, { label: tr("notes.menu.markProject"), onSelect: () => projectAction("notes.do.markProject", () => projectsApi.mark(t.path)) }]
             : []),
         { kind: "separator" },
-        { label: "Apagar", danger: true, onSelect: () => void remove(t), disabled: !folders,
+        { label: tr("notes.menu.delete"), danger: true, onSelect: () => void remove(t), disabled: !folders,
         },
       ];
     }
@@ -1451,37 +1451,37 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       const shownHere = Boolean(api.canvas && /\.canvas$/i.test(t.path)) || Boolean(api.files?.read);
       const canMove = Boolean(api.files?.rename);
       return [
-        { label: "Abrir", onSelect: () => openVaultFile(t.path) },
-        ...(shownHere ? [{ label: "Abrir no app padrão", onSelect: () => void api.files?.open(t.path).catch(failed_("abrir o arquivo")) }] : []),
-        { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders },
-        { label: "Copiar caminho", onSelect: () => copyPath(t.path) },
+        { label: tr("notes.menu.open"), onSelect: () => openVaultFile(t.path) },
+        ...(shownHere ? [{ label: tr("notes.menu.openDefault"), onSelect: () => void api.files?.open(t.path).catch(failed_("notes.do.openFile")) }] : []),
+        { label: tr("notes.menu.reveal"), onSelect: () => void folders?.reveal(t.path).catch(failed_("notes.do.reveal")), disabled: !folders },
+        { label: tr("notes.menu.copyPath"), onSelect: () => copyPath(t.path) },
         // O histórico do arquivo (T21239), como o da nota; o do xlsx e o do quadro desde o T22432.
-        ...(api.versions && hasVersions(t.path) ? [{ label: "Versões…", onSelect: () => void openVersions(t.path) }] : []),
+        ...(api.versions && hasVersions(t.path) ? [{ label: tr("notes.menu.versions"), onSelect: () => void openVersions(t.path) }] : []),
         { kind: "separator" },
-        { label: "Renomear", onSelect: () => setRenaming(sideKey(t)), disabled: !canMove },
-        { label: "Mover para…", onSelect: () => setMoving(t), disabled: !canMove || !folders },
+        { label: tr("notes.menu.rename"), onSelect: () => setRenaming(sideKey(t)), disabled: !canMove },
+        { label: tr("notes.menu.moveTo"), onSelect: () => setMoving(t), disabled: !canMove || !folders },
         { kind: "separator" },
-        { label: "Apagar", danger: true, onSelect: () => void remove(t), disabled: !api.files?.delete || !folders },
+        { label: tr("notes.menu.delete"), danger: true, onSelect: () => void remove(t), disabled: !api.files?.delete || !folders },
       ];
     }
     const isPinned = pinned.includes(t.path);
     return [
-      { label: "Abrir", onSelect: () => void open(t.path) },
-      { label: isPinned ? "Desafixar" : "Fixar", onSelect: () => void togglePin(t.path), disabled: !pins,
+      { label: tr("notes.menu.open"), onSelect: () => void open(t.path) },
+      { label: tr(isPinned ? "notes.menu.unpin" : "notes.menu.pin"), onSelect: () => void togglePin(t.path), disabled: !pins,
       },
       ...(() => {
         // A nota dentro de um projeto, que ainda não é a principal (spec #9847).
         const project = projectsApi ? projectList.projects.find((x) => insideOrIs(x.folder, t.path)) : undefined;
         return project && project.main !== t.path
-          ? [{ label: "Usar como nota principal", onSelect: () => projectAction("trocar a nota principal", () => projectsApi!.setMain(project.folder, t.path)) }]
+          ? [{ label: tr("notes.menu.useAsMain"), onSelect: () => projectAction("notes.do.setMain", () => projectsApi!.setMain(project.folder, t.path)) }]
           : [];
       })(),
       { kind: "separator" },
-      { label: "Renomear", onSelect: () => setRenaming(`n:${t.path}`) },
+      { label: tr("notes.menu.rename"), onSelect: () => setRenaming(`n:${t.path}`) },
       ...(api.meetings && note?.path === t.path && isMeetingNote(note.content)
         ? [
             {
-              label: "Renomear falante…",
+              label: tr("notes.menu.renameSpeaker"),
               onSelect: () => {
                 void leave()
                   .then(async (ok) => {
@@ -1489,24 +1489,24 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
                     const speakers = await api.meetings!.speakers(t.path);
                     if (speakers.length)
                       setSpeakerDialog({ path: t.path, speakers });
-                    else say("Ainda não há falantes nesta reunião.");
+                    else say(tr("notes.noSpeakers"));
                   })
-                  .catch(failed_("ler os falantes"));
+                  .catch(failed_("notes.do.readSpeakers"));
               },
             },
           ]
         : []),
-      { label: "Duplicar", onSelect: () => void duplicate(t.path), disabled: !folders,
+      { label: tr("notes.menu.duplicate"), onSelect: () => void duplicate(t.path), disabled: !folders,
       },
-      { label: "Mover para…", onSelect: () => setMoving(t), disabled: !folders,
+      { label: tr("notes.menu.moveTo"), onSelect: () => setMoving(t), disabled: !folders,
       },
-      { label: "Copiar link [[…]]", onSelect: () => copyLink(t.path) },
-      ...(api.versions ? [{ label: "Versões…", onSelect: () => void openVersions(t.path) }] : []),
-      ...(api.export ? [{ label: "Exportar…", onSelect: () => setExporting(t.path) }] : []),
-      { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders,
+      { label: tr("notes.menu.copyLink"), onSelect: () => copyLink(t.path) },
+      ...(api.versions ? [{ label: tr("notes.menu.versions"), onSelect: () => void openVersions(t.path) }] : []),
+      ...(api.export ? [{ label: tr("notes.menu.export"), onSelect: () => setExporting(t.path) }] : []),
+      { label: tr("notes.menu.reveal"), onSelect: () => void folders?.reveal(t.path).catch(failed_("notes.do.reveal")), disabled: !folders,
       },
       { kind: "separator" },
-      { label: "Apagar", danger: true, onSelect: () => void remove(t) },
+      { label: tr("notes.menu.delete"), danger: true, onSelect: () => void remove(t) },
     ];
   };
 
@@ -1549,9 +1549,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       (r) =>
         r.templates.length
           ? setPicking({ folder, templates: r.templates, insert })
-          : say(`Nenhum modelo ainda. As notas da pasta “${r.folder}” viram modelos.`,
-              ),
-      failed_("ler os modelos"),
+          : say(tr("notes.noTemplates", { folder: r.folder })),
+      failed_("notes.do.readTemplates"),
     );
   };
 
@@ -1570,7 +1569,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const setSavedList = (list: SavedSearch[]) => {
     const sv = api.savedSearches;
     if (!sv) return;
-    sv.set(list).then(setSaved, failed_("guardar a busca"));
+    sv.set(list).then(setSaved, failed_("notes.do.saveSearch"));
   };
 
   /** Guarda a busca do ⌘K na árvore (o nome é a própria busca; repetida, não duplica). */
@@ -1578,37 +1577,37 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     const q = query.trim();
     if (!q || !saved) return;
     setPalette(false);
-    if (saved.some((s) => s.query === q)) return say("Essa busca já está salva.");
+    if (saved.some((s) => s.query === q)) return say(tr("notes.searchAlreadySaved"));
     setSavedList([...saved, { name: q, query: q }]);
-    say(`Busca salva: “${q}”. Ela fica na árvore.`);
+    say(tr("notes.searchSaved", { query: q }));
   };
 
   /** "Novo quadro branco" (T6600): um `.canvas` vazio na pasta, aberto na hora, com o nome pronto para trocar. */
   const newCanvas = async (folder: string) => {
     if (!api.canvas || !(await leave())) return;
     try {
-      const c = await api.canvas.create(folder, "Quadro sem título");
+      const c = await api.canvas.create(folder, tr("notes.untitledBoard"));
       await refresh();
       await openCanvas(c.path);
       requestAnimationFrame(() => (document.querySelector(".kn-canvas-title") as HTMLInputElement | null)?.select());
     } catch (e) {
-      failed_("criar o quadro")(e);
+      failed_("notes.do.createBoard")(e);
     }
   };
 
   const paletteCommands = [
-    ...(api.canvas ? [{ id: "canvas", title: "Novo quadro branco", words: "canvas quadro branco tela whiteboard desenho" }] : []),
-    ...(api.templates ? [{ id: "template", title: "Nova nota a partir de modelo…", words: "modelo template",
+    ...(api.canvas ? [{ id: "canvas", title: tr("notes.menu.newBoard"), words: "canvas quadro branco tela whiteboard desenho board drawing new" }] : []),
+    ...(api.templates ? [{ id: "template", title: tr("notes.menu.fromTemplate"), words: "modelo template new note",
           },
         ] : []),
-    ...(saved ? [{ id: "save-search", title: "Salvar esta busca na árvore", withQuery: true,
+    ...(saved ? [{ id: "save-search", title: tr("notes.cmd.saveSearch"), withQuery: true,
           },
         ] : []),
     // Os comandos da nota aberta só nas Notas: fora delas, a nota não está na tela (spec #16821).
     ...(active && note && view === "note" ? [
-      { id: "focus", title: focusMode ? "Sair do modo foco" : "Modo foco", words: "foco concentrar distração zen esconder" },
-      { id: "typewriter", title: typewriter ? "Desligar a máquina de escrever" : "Máquina de escrever", words: "máquina escrever centralizar linha typewriter" },
-      { id: "add-property", title: "Adicionar propriedade", words: "propriedade frontmatter metadado campo yaml" },
+      { id: "focus", title: tr(focusMode ? "notes.cmd.focusOff" : "notes.cmd.focus"), words: "foco concentrar distração zen esconder focus distraction hide" },
+      { id: "typewriter", title: tr(typewriter ? "notes.cmd.typewriterOff" : "notes.cmd.typewriter"), words: "máquina escrever centralizar linha typewriter center line" },
+      { id: "add-property", title: tr("notes.cmd.addProperty"), words: "propriedade frontmatter metadado campo yaml property metadata field" },
     ] : []),
   ];
 
@@ -1628,7 +1627,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         onChange={setDragWidth}
         onCommit={(px) => {
           if (px === prefs.noteWidth) setDragWidth(null);
-          else api.prefs?.setNoteWidth(px).catch(failed_("guardar a largura da nota"));
+          else api.prefs?.setNoteWidth(px).catch(failed_("notes.do.saveWidth"));
         }}
       />
     ) : null;
@@ -1764,8 +1763,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   if (failed && !listing) {
     return (
       <Shell>
-        <Empty title="Não deu para abrir o vault">
-          <Button onClick={() => void refresh()}>Tentar de novo</Button>
+        <Empty title={tr("notes.vaultFailed")}>
+          <Button onClick={() => void refresh()}>{tr("notes.retry")}</Button>
         </Empty>
       </Shell>
     );
@@ -1784,22 +1783,22 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             tabIndex={0}
             aria-expanded={treeOpen}
             aria-haspopup="dialog"
-            title="Pastas e notas"
+            title={tr("notes.tree")}
           >
             <TreeIcon />
-            <span className="kn-crumb-label">{note?.folder ? note.folder.replace(/\//g, " / ") : "Notas"}</span>
+            <span className="kn-crumb-label">{note?.folder ? note.folder.replace(/\//g, " / ") : tr("notes.title")}</span>
             <Chevron />
           </button>
         }
         end={
           <span className="kn-float-group">
-            <button type="button" className="kn-expand" title={withKey("Nova nota", "newNote")} aria-label="Nova nota" onClick={() => void create("Sem título", true, selectedFolderRef.current)}>
+            <button type="button" className="kn-expand" title={withKey(tr("notes.newNote"), "newNote")} aria-label={tr("notes.newNote")} onClick={() => void create(tr("notes.untitled"), true, selectedFolderRef.current)}>
               <PenIcon />
-              <HoverLabel>Nova nota</HoverLabel>
+              <HoverLabel>{tr("notes.newNote")}</HoverLabel>
             </button>
-            <button type="button" className="kn-expand" title={withKey("Buscar", "palette")} aria-label="Buscar" onClick={() => openPalette()}>
+            <button type="button" className="kn-expand" title={withKey(tr("notes.search"), "palette")} aria-label={tr("notes.search")} onClick={() => openPalette()}>
               <SearchIcon />
-              <HoverLabel>Buscar</HoverLabel>
+              <HoverLabel>{tr("notes.search")}</HoverLabel>
             </button>
           </span>
         }
@@ -1845,10 +1844,10 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
           }}
           onOpen={(p) => void open(p)}
           onOpenFile={api.files ? (p: string) => openVaultFile(p, query.trim() ? textHits?.lines.get(p) : undefined) : undefined}
-          onNewNote={(f) => void create("Sem título", true, f)}
+          onNewNote={(f) => void create(tr("notes.untitled"), true, f)}
           onNewFolder={folders ? (f) => void newFolder(f) : undefined}
           fresh={fresh}
-          onFreshHidden={(path) => say(`Pasta criada ${whereLabel(folderOf(path))}`)}
+          onFreshHidden={(path) => say(tr("notes.folderCreated", { where: whereLabel(folderOf(path), locale) }))}
           showExtensions={prefs.showExtensions}
           dailyFolder={prefs.dailyFolder}
           onDaily={api.extras ? () => void openDaily() : undefined}
@@ -1886,7 +1885,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             onOpenLink={(t) => void onOpenLink(t)}
             onOpenNote={(p) => void open(p)}
             onOpenTag={openTag}
-            onOpenFile={api.files ? (p) => void api.files?.open(p).catch(failed_("abrir o arquivo")) : undefined}
+            onOpenFile={api.files ? (p) => void api.files?.open(p).catch(failed_("notes.do.openFile")) : undefined}
             onRenamed={(p) => {
               setBoard(p);
               void refresh();
@@ -1895,7 +1894,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
           />
         ) : view === "file" && fileOpen && api.files?.read ? (
           <>
-          {kiwiTouched === fileOpen ? <KiwiNotice cor={prefs.catColor} text="O Kiwi atualizou este arquivo" /> : null}
+          {kiwiTouched === fileOpen ? <KiwiNotice cor={prefs.catColor} text={tr("notes.kiwiUpdatedFile")} /> : null}
           <FileView
             key={fileOpen}
             files={api.files as FilesApi}
@@ -1903,8 +1902,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             {...(fileAt?.path === fileOpen ? { at: fileAt.at } : {})}
             flushRef={fileFlush}
             widthHandles={widthHandles}
-            onOpenExternal={(p) => void api.files?.open(p).catch(failed_("abrir o arquivo"))}
-            onReveal={folders ? (p) => void folders.reveal(p).catch(failed_("mostrar no Finder")) : undefined}
+            onOpenExternal={(p) => void api.files?.open(p).catch(failed_("notes.do.openFile"))}
+            onReveal={folders ? (p) => void folders.reveal(p).catch(failed_("notes.do.reveal")) : undefined}
             stat={statFile}
             kiwi={kiwiSheets}
             onVersions={api.versions ? (p) => void openVersions(p) : undefined}
@@ -1924,13 +1923,13 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
           <>
         {orphans[0] ? (
           <div className="kn-conflict kn-orphan" role="alert">
-            {`Há um rascunho de “${noteName(orphans[0].path)}”, uma nota que não existe mais (renomeada ou apagada fora do Kiwi Notes).`}
+            {tr("notes.orphan", { name: noteName(orphans[0].path) })}
             <span className="kn-conflict-actions">
               <button type="button" className="kn-bt" onClick={() => dropOrphan(orphans[0]!)}>
-                Descartar
+                {tr("notes.discard")}
               </button>
               <button type="button" className="kn-bt kn-bt-acc" onClick={() => void recoverOrphan(orphans[0]!)}>
-                Recuperar como nota nova
+                {tr("notes.recoverAsNew")}
               </button>
             </span>
           </div>
@@ -1942,7 +1941,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
           >
             {widthHandles}
             {note.folder ? (
-              <div className="kn-page-crumbs" aria-label="Pasta">
+              <div className="kn-page-crumbs" aria-label={tr("notes.folder")}>
                 {note.folder.split("/").map((part, i) => (
                   <span key={i}>{part}</span>
                 ))}
@@ -1950,7 +1949,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             ) : null}
             <input
               className="kn-title"
-              aria-label="Título da nota"
+              aria-label={tr("notes.noteTitle")}
               value={title}
               spellCheck={false}
               onChange={(e) => setTitle(e.target.value)}
@@ -1967,12 +1966,12 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             />
             <div className="kn-meta">
               {note.tags.map((t) => (
-                <button type="button" key={`#${t}`} className="kn-meta-bt" title={`Notas com #${t}`} onClick={() => openTag(t)}
+                <button type="button" key={`#${t}`} className="kn-meta-bt" title={tr("notes.withTag", { tag: t })} onClick={() => openTag(t)}
                   onContextMenu={api.renameTag ? e => { e.preventDefault(); e.stopPropagation(); setTagMenu({ x: e.clientX, y: e.clientY, tag: t }); } : undefined}>
                   #{t}
                 </button>
               ))}
-              {[editedLabel(note), `${words} ${words === 1 ? "palavra" : "palavras"}`,
+              {[editedLabel(note, undefined, locale), tr("notes.words", { n: words }),
                   ].map((t) => (
                 <span key={t}>{t}</span>
               ))}
@@ -1985,10 +1984,10 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
                 disabled={!backlinks.length && !api.extras}
                 onClick={() => setBackOpen((o) => !o)}
               >
-                {backlinks.length ? `citada em ${backlinks.length}` : "nenhuma nota cita esta"}
+                {backlinks.length ? tr("notes.citedIn", { n: backlinks.length }) : tr("notes.citedNone")}
               </button>
               {backOpen && (backlinks.length || api.extras) ? (
-                <Popover className="kn-back-pop" label="Citada em" anchor={backRef} onClose={() => setBackOpen(false)}>
+                <Popover className="kn-back-pop" label={tr("notes.citedTitle")} anchor={backRef} onClose={() => setBackOpen(false)}>
                   {backlinks.map((b) => (
                     <button type="button" className="kn-back" key={b.path} onClick={() => void open(b.path)}>
                       <span className="kn-link">{b.title}</span>
@@ -1996,7 +1995,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
                     </button>
                   ))}
                   {!backlinks.length ? (
-                        <div className="kn-faint">Nenhuma nota cita esta com link.</div>
+                        <div className="kn-faint">{tr("notes.citedNoLink")}</div>
                       ) : null}
                   {/* "Mencionada sem link" (T2593): as que citam o título sem [[ ]], com o "Linkar". */}
                   {api.extras ? (
@@ -2017,19 +2016,18 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             />
             {note.readOnly ? (
               <div className="kn-conflict kn-readonly" role="status">
-                Esta nota não está em UTF-8, e os caracteres que o Kiwi Notes não entendeu aparecem como �. Aqui ela só é
-                lida, para eles não se perderem; para editar, salve a nota em UTF-8 no app de onde ela veio.
+                {tr("notes.readOnly")}
               </div>
             ) : null}
             {gone ? (
               <div className="kn-conflict kn-save-alert kn-gone" role="alert">
-                Esta nota foi apagada ou renomeada fora do Kiwi Notes. O que você escreveu continua aqui.
+                {tr("notes.gone")}
                 <span className="kn-conflict-actions">
                   <button type="button" className="kn-bt" onClick={discard}>
-                    Descartar
+                    {tr("notes.discard")}
                   </button>
                   <button type="button" className="kn-bt kn-bt-acc" onClick={() => void recoverGone()}>
-                    Recuperar como nota nova
+                    {tr("notes.recoverAsNew")}
                   </button>
                 </span>
               </div>
@@ -2037,65 +2035,63 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
               <div className="kn-conflict kn-save-alert kn-merge" role="alert">
                 {/* T5454: o resto do que mudou fora já entrou; só os trechos que os dois mudaram pedem uma escolha. */}
                 <span>
-                  {conflict.merge.conflicts.length === 1
-                    ? "Esta nota mudou fora do Kiwi Notes no mesmo trecho que você editou. Escolha esse trecho; o resto do que mudou fora entra junto."
-                    : `Esta nota mudou fora do Kiwi Notes em ${conflict.merge.conflicts.length} trechos que você também editou. Escolha esses trechos; o resto do que mudou fora entra junto.`}
+                  {tr("notes.conflict", { n: conflict.merge.conflicts.length })}
                 </span>
                 {conflict.merge.conflicts.slice(0, 3).map((c, i) => (
                   <div className="kn-merge-block" key={i}>
                     <div>
-                      <small>A sua</small>
-                      <pre>{c.mine.trim() || "(apagado)"}</pre>
+                      <small>{tr("notes.conflict.mine")}</small>
+                      <pre>{c.mine.trim() || tr("notes.conflict.deleted")}</pre>
                     </div>
                     <div>
-                      <small>A de fora</small>
-                      <pre>{c.theirs.trim() || "(apagado)"}</pre>
+                      <small>{tr("notes.conflict.theirs")}</small>
+                      <pre>{c.theirs.trim() || tr("notes.conflict.deleted")}</pre>
                     </div>
                   </div>
                 ))}
                 <span className="kn-conflict-actions">
                   <button type="button" className="kn-bt" onClick={() => resolveConflict("theirs")}>
-                    {conflict.merge.conflicts.length === 1 ? "Usar a de fora nesse trecho" : "Usar a de fora nesses trechos"}
+                    {tr("notes.conflict.useTheirs", { n: conflict.merge.conflicts.length })}
                   </button>
                   <button type="button" className="kn-bt kn-bt-acc" onClick={() => resolveConflict("mine")}>
-                    Manter a minha
+                    {tr("notes.conflict.keepMine")}
                   </button>
                 </span>
               </div>
             ) : saveFailed ? (
               <div className="kn-conflict kn-save-alert" role="alert" data-reason={saveFailed}>
-                    {saveFailed === "disk-full"
-                      ? "O disco está cheio: não deu para gravar esta nota. Libere espaço e tente de novo; o que você escreveu continua aqui."
-                      : "Não deu para gravar esta nota. O que você escreveu continua aqui."}
+                    {tr(saveFailed === "disk-full" ? "notes.diskFull" : "notes.saveFailed")}
                     <span className="kn-conflict-actions">
                   <button type="button" className="kn-bt" onClick={discard}>
-                    Descartar a edição
+                    {tr("notes.discardEdit")}
                   </button>
                   <button type="button" className="kn-bt kn-bt-acc" onClick={() => void save()}>
-                    Tentar de novo
+                    {tr("notes.retry")}
                   </button>
                 </span>
               </div>
             ) : draft ? (
               <div className="kn-conflict kn-draft" role="alert">
-                {`Esta nota tem uma edição das ${new Date(draft.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${
-                  isToday(draft.at) ? "" : ` de ${new Date(draft.at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}`
-                } que não foi gravada${draft.baseVersion !== note.version ? ", e a nota mudou depois disso" : ""}.`}
+                {tr(draft.baseVersion !== note.version ? "notes.draft.changed" : "notes.draft", {
+                  when: isToday(draft.at)
+                    ? tr("notes.draft.when", { time: fmtTime(new Date(draft.at)) })
+                    : tr("notes.draft.whenDay", { time: fmtTime(new Date(draft.at)), date: fmtDate(new Date(draft.at)) }),
+                })}
                 <span className="kn-conflict-actions">
                   <button type="button" className="kn-bt" onClick={dropDraft}>
-                    Descartar
+                    {tr("notes.discard")}
                   </button>
                   <button type="button" className="kn-bt kn-bt-acc" onClick={recoverDraft}>
-                    Recuperar
+                    {tr("notes.recover")}
                   </button>
                 </span>
               </div>
             ) : null}
             {linkWarnings.length ? <details className="kn-link-warnings">
-              <summary>{linkWarnings.length === 100 ? "100 ou mais" : linkWarnings.length} {linkWarnings.length === 1 ? "link quebrado" : "links quebrados"}</summary>
-              <ul>{linkWarnings.map((w, i) => <li key={`${w.line}:${i}`}><span>{w.target}</span> — {w.reason === "note" ? "nota não encontrada" : "título não encontrado"} · linha {w.line}</li>)}</ul>
+              <summary>{linkWarnings.length === 100 ? tr("notes.brokenLinks.many") : tr("notes.brokenLinks", { n: linkWarnings.length })}</summary>
+              <ul>{linkWarnings.map((w, i) => <li key={`${w.line}:${i}`}><span>{w.target}</span> — {tr(w.reason === "note" ? "notes.broken.note" : "notes.broken.heading")} · {tr("notes.broken.line", { line: w.line })}</li>)}</ul>
             </details> : null}
-            {kiwiWriting ? <KiwiNotice cor={prefs.catColor} text="O Kiwi está escrevendo…" hint="clique ou digite para pular" /> : null}
+            {kiwiWriting ? <KiwiNotice cor={prefs.catColor} text={tr("notes.kiwiWriting")} hint={tr("notes.kiwiWritingHint")} /> : null}
             <NoteEditor
               docKey={docKey}
               readOnly={note.readOnly === true}
@@ -2105,7 +2101,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
               links={links}
               onChange={onChange}
               createSplit={!conflict && !draft ? async (tail) => {
-                const n = await api.create(`${note.title} — continuação`, note.folder || undefined, tail);
+                const n = await api.create(tr("notes.continuation", { title: note.title }), note.folder || undefined, tail);
                 void refresh();
                 return n.path;
               } : undefined}
@@ -2135,9 +2131,9 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             />
           </article>
         ) : listing && !listing.notes.length ? (
-          <Empty icon={<NoNotesIcon />} title="Nenhuma nota ainda">
-            <Button variant="primary" onClick={() => void create("Sem título", true)}>
-              Nova nota
+          <Empty icon={<NoNotesIcon />} title={tr("notes.noNotes")}>
+            <Button variant="primary" onClick={() => void create(tr("notes.untitled"), true)}>
+              {tr("notes.newNote")}
             </Button>
           </Empty>
         ) : null}
@@ -2162,7 +2158,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       ) : null}
       {refactor ? <RefactorDialog key={`${refactor.kind}:${refactor.name}`} kind={refactor.kind} name={refactor.name} onRename={performRefactor} onClose={() => setRefactor(null)} /> : null}
       {tagMenu && api.renameTag ? <ContextMenu x={tagMenu.x} y={tagMenu.y} items={[
-        { label: `Renomear #${tagMenu.tag}…`, onSelect: () => { setTreeOpen(false); setRefactor({ kind: "tag", name: tagMenu.tag }); } },
+        { label: tr("notes.menu.renameTag", { tag: tagMenu.tag }), onSelect: () => { setTreeOpen(false); setRefactor({ kind: "tag", name: tagMenu.tag }); } },
       ]} onClose={() => setTagMenu(null)} /> : null}
       {speakerDialog && api.meetings ? (
         <MeetingSpeakerDialog
@@ -2191,16 +2187,16 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             const name = folder.slice(folder.lastIndexOf("/") + 1);
             const notes = (listing?.notes ?? []).filter((n) => n.path.startsWith(`${folder}/`)).sort((a, b) => a.path.localeCompare(b.path, "pt-BR"));
             return [
-              { kind: "title" as const, label: `A nota principal de “${name}”` },
+              { kind: "title" as const, label: tr("notes.menu.mainOf", { name }) },
               ...notes.map((n) => ({
                 label: n.path.slice(folder.length + 1).replace(/\.md$/i, ""),
-                onSelect: () => projectAction("trocar a nota principal", () => projectsApi.setMain(folder, n.path)),
+                onSelect: () => projectAction("notes.do.setMain", () => projectsApi.setMain(folder, n.path)),
               })),
               ...(notes.length ? [{ kind: "separator" as const }] : []),
               {
-                label: `Criar “${name}”`,
+                label: tr("notes.menu.createMain", { name }),
                 onSelect: () =>
-                  projectAction("criar a nota principal", async () => {
+                  projectAction("notes.do.createMain", async () => {
                     const created = await api.create(name, folder, `# ${name}\n`);
                     await projectsApi.setMain(folder, created.path);
                     await refresh();
@@ -2212,7 +2208,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       ) : null}
       {moving && moving.kind !== "empty" ? (
         <FolderPicker
-          title={`Mover “${moving.path.slice(moving.path.lastIndexOf("/") + 1).replace(/\.md$/, "")}” para…`}
+          title={tr("notes.moveTitle", { name: moving.path.slice(moving.path.lastIndexOf("/") + 1).replace(/\.md$/, "") })}
           folders={["", ...(listing?.folders ?? [])].filter(
             (f) => f !== folderOf(moving.path) && (moving.kind !== "folder" || (f !== moving.path && !f.startsWith(`${moving.path}/`))),
           )}
@@ -2222,10 +2218,10 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       ) : null}
       {picking ? (
         <ListPicker
-          title={picking.insert ? "Pôr o modelo na nota…" : `Nova nota${picking.folder ? ` em “${picking.folder.replace(/\//g, " / ")}”` : ""} a partir de…`}
+          title={picking.insert ? tr("notes.template.insert") : picking.folder ? tr("notes.template.newIn", { folder: picking.folder.replace(/\//g, " / ") }) : tr("notes.template.new")}
           items={picking.templates.map((m) => ({ value: m.path, label: m.title,
           }))}
-          emptyText="Nenhum modelo com esse nome"
+          emptyText={tr("notes.template.none")}
           onPick={(path) => {
             const m = picking.templates.find((x) => x.path === path);
             setPicking(null);
@@ -2238,7 +2234,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
                 }),
               );
               focusEditor();
-            }, failed_("ler o modelo"));
+            }, failed_("notes.do.readTemplate"));
           }}
           onClose={() => setPicking(null)}
         />
@@ -2264,13 +2260,13 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       ) : null}
       {exporting ? (
         <ListPicker
-          title={`Exportar “${noteName(exporting)}” como…`}
+          title={tr("notes.export.title", { name: noteName(exporting) })}
           items={[
-            { value: "md", label: "Markdown (.md), com os anexos ao lado" },
-            { value: "html", label: "HTML (.html), com o tema de agora" },
-            { value: "pdf", label: "PDF (.pdf)" },
+            { value: "md", label: tr("notes.export.md") },
+            { value: "html", label: tr("notes.export.html") },
+            { value: "pdf", label: tr("notes.export.pdf") },
           ]}
-          emptyText="Nenhum formato com esse nome"
+          emptyText={tr("notes.export.none")}
           onPick={(f) => void exportNote(exporting, f as ExportFormat)}
           onClose={() => setExporting(null)}
         />
@@ -2311,6 +2307,7 @@ const KIWI_EDITOR: KiwiEditor = {
 
 
 export function NotesApp({ active = true, openRequest = null, searchRequest = 0, searchSeen, onShow }: { active?: boolean; openRequest?: { path: string; n: number; internal?:boolean } | null; searchRequest?: number; searchSeen?: { current: number }; onShow?: () => void } = {}) {
+  const { t: tr } = useT();
   const request = openRequest?.n ?? 0;
   const [mode,setMode] = useState({n:request,internal:openRequest?.internal===true});
   const controller = useNotesFolders(()=>setMode({n:request,internal:false}));
@@ -2329,8 +2326,8 @@ export function NotesApp({ active = true, openRequest = null, searchRequest = 0,
     const a = notesApi(folder?.id);
     return a && forgetDraftOnDelete(a,drafts);
   }, [drafts,folder?.id,controller.supported]);
-  if (!api) return <Shell><Empty title={controller.error|| (controller.supported?"Abrindo a pasta das notas…":"As notas ainda não chegaram a esta versão do app")}/></Shell>;
-  return <>{controller.view&&controller.view.progress.phase!=="idle"?<div className="kn-folder-progress" role="status" aria-live="polite">Lendo {controller.view.progress.path}… {controller.view.progress.seen} arquivos encontrados.</div>:null}<Notes key={folder?.id??"legacy"} api={api} drafts={drafts} active={active} openRequest={openRequest} searchRequest={searchRequest} searchSeen={searchSeen} onShow={onShow} folderController={controller} folderRef={folder}/><FolderConfirmation controller={controller}/></>;
+  if (!api) return <Shell><Empty title={controller.error|| tr(controller.supported?"notes.opening":"notes.unavailable")}/></Shell>;
+  return <>{controller.view&&controller.view.progress.phase!=="idle"?<div className="kn-folder-progress" role="status" aria-live="polite">{tr("notes.reading",{path:controller.view.progress.path,n:controller.view.progress.seen})}</div>:null}<Notes key={folder?.id??"legacy"} api={api} drafts={drafts} active={active} openRequest={openRequest} searchRequest={searchRequest} searchSeen={searchSeen} onShow={onShow} folderController={controller} folderRef={folder}/><FolderConfirmation controller={controller}/></>;
 }
 
 

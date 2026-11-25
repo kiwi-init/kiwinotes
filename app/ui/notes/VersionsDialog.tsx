@@ -8,9 +8,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { collapse, diffStats, lineDiff } from "./diff.ts";
 import { type FilesApi, viewerFor } from "./files/viewers.ts";
 import type { VersionInfo, VersionsApi } from "./types.ts";
+import { useT } from "../src/i18n.ts";
+import { INTL_TAG, type Locale } from "../../src/shared/i18n/index.ts";
 
-const when = (iso: string) =>
-  new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+const when = (iso: string, locale: Locale) =>
+  new Date(iso).toLocaleString(INTL_TAG[locale], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 
 export function VersionsDialog({
   api,
@@ -31,6 +33,7 @@ export function VersionsDialog({
   /** O texto que o diff compara (T22432): o quadro em cartões e setas, no lugar do JSON. */
   readable?(text: string): string;
 }) {
+  const { t, locale } = useT();
   const [list, setList] = useState<VersionInfo[] | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
@@ -67,23 +70,23 @@ export function VersionsDialog({
     setError(null);
     const r = await api.restore(path, picked).catch(() => null);
     if (r && r.saved) onRestored();
-    else setError("A nota mudou enquanto isso (no Obsidian, talvez). Feche e abra de novo para ver a versão de agora.");
+    else setError(t("notes.versions.changed"));
   };
 
   return (
     <div className="kn-palette-scrim" onMouseDown={onClose} onKeyDown={(e) => e.key === "Escape" && onClose()}>
-      <div className="kn-palette kn-versions" role="dialog" aria-label={`Versões de ${title}`} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="kn-palette kn-versions" role="dialog" aria-label={t("notes.versions.of", { title })} onMouseDown={(e) => e.stopPropagation()}>
         <header className="kn-versions-h">
-          <span className="kn-versions-title">Versões de “{title}”</span>
-          <button type="button" className="kn-bt" onClick={onClose} aria-label="Fechar">
-            Fechar
+          <span className="kn-versions-title">{t("notes.versions.ofQuoted", { title })}</span>
+          <button type="button" className="kn-bt" onClick={onClose} aria-label={t("notes.close")}>
+            {t("notes.close")}
           </button>
         </header>
         {list === null ? null : !list.length ? (
-          <p className="kn-faint kn-versions-empty">Ainda não há versões: elas nascem quando o arquivo é editado.</p>
+          <p className="kn-faint kn-versions-empty">{t("notes.versions.none")}</p>
         ) : (
           <div className="kn-versions-body">
-            <ul className="kn-versions-list" role="listbox" aria-label="Versões">
+            <ul className="kn-versions-list" role="listbox" aria-label={t("notes.versions")}>
               {list.map((v) => (
                 <li key={v.id}>
                   <button
@@ -93,19 +96,19 @@ export function VersionsDialog({
                     className="kn-versions-it"
                     onClick={() => setPicked(v.id)}
                   >
-                    {when(v.at)}
+                    {when(v.at, locale)}
                   </button>
                 </li>
               ))}
             </ul>
-            <div className="kn-versions-diff" aria-label="O que o Restaurar muda">
+            <div className="kn-versions-diff" aria-label={t("notes.versions.diff")}>
               {bytes ? (
-                <div className="kn-versions-stats">Restaurar troca o arquivo de agora por esta versão.</div>
+                <div className="kn-versions-stats">{t("notes.versions.replace")}</div>
               ) : null}
               {bytes ? <VersionPreview path={path} base64={bytes.base64} at={bytes.at} /> : null}
               {stats ? (
                 <div className="kn-versions-stats">
-                  {stats.added || stats.removed ? `Restaurar traz ${stats.added} e tira ${stats.removed} ${stats.removed === 1 ? "linha" : "linhas"}` : "Igual ao texto de agora."}
+                  {stats.added || stats.removed ? t("notes.versions.stats", { added: stats.added, n: stats.removed }) : t("notes.versions.same")}
                 </div>
               ) : null}
               <pre className="kn-diff" hidden={!!bytes}>
@@ -113,7 +116,7 @@ export function VersionsDialog({
                   ? collapse(diff).map((l, i) =>
                       l.kind === "gap" ? (
                         <div key={i} className="kn-diff-gap">
-                          … {l.count} {l.count === 1 ? "linha igual" : "linhas iguais"}
+                          … {t("notes.versions.gap", { n: l.count })}
                         </div>
                       ) : (
                         <div key={i} className={`kn-diff-${l.kind}`}>
@@ -127,7 +130,7 @@ export function VersionsDialog({
               {error ? <p className="kn-trash-error" role="alert">{error}</p> : null}
               <div className="kn-versions-actions">
                 <button type="button" className="kn-bt kn-bt-acc" disabled={!picked || (!bytes && (!stats || (!stats.added && !stats.removed)))} onClick={() => void restore()}>
-                  Restaurar esta versão
+                  {t("notes.versions.restore")}
                 </button>
               </div>
             </div>
@@ -140,6 +143,7 @@ export function VersionsDialog({
 
 /** A versão em bytes no visualizador do arquivo, só leitura: nada grava, nada chama o engine (T22432). */
 function VersionPreview({ path, base64, at }: { path: string; base64: string; at: string }) {
+  const { t, locale } = useT();
   const viewer = viewerFor(path);
   const flushRef = useRef<(() => Promise<boolean>) | null>(null);
   const files = useMemo<FilesApi>(
@@ -153,8 +157,8 @@ function VersionPreview({ path, base64, at }: { path: string; base64: string; at
   if (!viewer || viewer.as !== "binary") return null;
   const file = { path, size: Math.floor((base64.length * 3) / 4), version: `versao:${at}`, base64 };
   return (
-    <div className="kn-versions-preview" aria-label="A versão escolhida, só leitura">
-      <viewer.View key={at} path={path} file={file} files={files} flushRef={flushRef} readOnly={`a versão de ${when(at)}.`} />
+    <div className="kn-versions-preview" aria-label={t("notes.versions.preview")}>
+      <viewer.View key={at} path={path} file={file} files={files} flushRef={flushRef} readOnly={t("notes.versions.readOnly", { when: when(at, locale) })} />
     </div>
   );
 }

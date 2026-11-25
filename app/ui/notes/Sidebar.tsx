@@ -11,8 +11,10 @@ import { folderOf } from "./links.ts";
 import { titleRanges } from "./palette.ts";
 import type { FileNode, TreeNode } from "./tree.ts";
 import { HoverLabel } from "../src/kit/index.tsx";
+import { useT } from "../src/i18n.ts";
+import { INTL_TAG, type Locale, translate } from "../../src/shared/i18n/index.ts";
 import { TreeIcon, Twisty } from "./treeIcons.tsx";
-import { type SavedSearch, SEARCH_TOO_LONG, searchTooLong } from "../../src/shared/query.ts";
+import { MAX_SEARCH_QUERY, type SavedSearch, searchTooLong } from "../../src/shared/query.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { SectionId } from "./sidebarState.ts";
 import { canDrop, type Dragged, dropEdge, dropFolder, type DropRow, springFolder, springOpener } from "./treeDrop.ts";
@@ -115,11 +117,13 @@ export interface SideRoot {
 }
 
 function ModifiedAt({ value }: { value?: string }) {
+  const { locale } = useT();
   if (!value || Number.isNaN(Date.parse(value))) return null;
   const date = new Date(value);
+  const tag = INTL_TAG[locale];
   return (
-    <time dateTime={value} title={date.toLocaleString("pt-BR")}>
-      {date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+    <time dateTime={value} title={date.toLocaleString(tag)}>
+      {date.toLocaleDateString(tag, { day: "2-digit", month: "2-digit" })}
     </time>
   );
 }
@@ -129,8 +133,9 @@ const ESC_LAYERS = ".kn-menu, .kn-palette-scrim, .kn-toast";
 /** Quando conferir se a pasta nova ficou à vista: depois da rolagem até ela. */
 const FRESH_CHECK_MS = 250;
 
-/** "na raiz" ou "em Projetos": onde os botões do topo criam. */
-export const whereLabel = (folder: string) => (folder ? `em ${folder.slice(folder.lastIndexOf("/") + 1)}` : "na raiz");
+/** "na raiz" ou "em Projetos": onde os botões do topo criam, na língua das telas (T29244). */
+export const whereLabel = (folder: string, locale: Locale = "pt") =>
+  folder ? translate(locale, "notes.where.in", { folder: folder.slice(folder.lastIndexOf("/") + 1) }) : translate(locale, "notes.where.root");
 
 /** Uma nota do dia: `AAAA-MM-DD.md` na pasta das notas do dia. */
 export const isDailyNote = (path: string, dailyFolder: string | undefined) =>
@@ -185,6 +190,7 @@ export function withExt(name: string | null, ext: string): string | null {
 
 /** O campo de renomear: Enter grava, Esc desiste, sair do campo grava. */
 function RenameInput({ initial, depth, fresh, onDone }: { initial: string; depth: number; fresh?: boolean; onDone(name: string | null): void }) {
+  const { t } = useT();
   const ref = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(initial);
   const done = useRef(false);
@@ -203,7 +209,7 @@ function RenameInput({ initial, depth, fresh, onDone }: { initial: string; depth
       ref={ref}
       className="kn-side-rename"
       data-fresh={fresh || undefined}
-      aria-label="Novo nome"
+      aria-label={t("notes.side.newName")}
       style={{ marginLeft: depth * 14 }}
       value={value}
       spellCheck={false}
@@ -221,6 +227,7 @@ function RenameInput({ initial, depth, fresh, onDone }: { initial: string; depth
 }
 
 export function Sidebar(p: SidebarProps) {
+  const { t, locale } = useT();
   const [dropOn, setDropOn] = useState<string | null>(null);
   // O que está sendo arrastado (T19937): o `dragover` não lê o `dataTransfer`, e o destino depende do que se arrasta.
   const dragged = useRef<Dragged | null>(null);
@@ -377,7 +384,7 @@ export function Sidebar(p: SidebarProps) {
     <span className="kn-side-tools" onContextMenu={(event) => menu(event, target)}>
       <ModifiedAt value={mtime} />
       {target.kind === "note" && p.onPin ? (
-        <button type="button" className="kn-side-action" aria-label={`${pinned.has(target.path) ? "Desafixar" : "Fixar"} “${name}”`} aria-pressed={pinned.has(target.path)} onClick={async (event) => {
+        <button type="button" className="kn-side-action" aria-label={t(pinned.has(target.path) ? "notes.side.unpinName" : "notes.side.pinName", { name })} aria-pressed={pinned.has(target.path)} onClick={async (event) => {
           if (event.ctrlKey) return; // ⌃-clique no Mac é menu, não fixar (#2693).
           const button = event.currentTarget;
           const nav = button.closest("nav");
@@ -395,7 +402,7 @@ export function Sidebar(p: SidebarProps) {
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true"><path d="M5 2h6l-1 5 2 3H4l2-3-1-5ZM8 10v4" /></svg>
         </button>
       ) : null}
-      <button type="button" className="kn-side-action" aria-label={`Mais ações para “${name}”`} aria-haspopup="menu" aria-expanded={p.menuOn === sideKey(target)} onClick={(event) => {
+      <button type="button" className="kn-side-action" aria-label={t("notes.side.moreActions", { name })} aria-haspopup="menu" aria-expanded={p.menuOn === sideKey(target)} onClick={(event) => {
         if (event.ctrlKey) return;
         const rect = event.currentTarget.getBoundingClientRect();
         p.onMenu({ x: rect.left, y: rect.bottom }, target);
@@ -515,7 +522,7 @@ export function Sidebar(p: SidebarProps) {
               <span className="kn-side-name">{n.name}</span>
               {p.projects?.has(n.path) ? <ProjectMark kind="folder" /> : null}
               {p.projects?.get(n.path)?.main === null ? (
-                <span className="kn-side-warn" title="A nota principal foi apagada: clique para escolher outra" aria-label="sem nota principal">
+                <span className="kn-side-warn" title={t("notes.side.mainGone")} aria-label={t("notes.side.noMain")}>
                   !
                 </span>
               ) : null}
@@ -591,7 +598,7 @@ export function Sidebar(p: SidebarProps) {
     <nav
       ref={navRef}
       className="kn-side"
-      aria-label="Notas"
+      aria-label={t("notes.title")}
       onScroll={onScroll}
       data-drop={dropOn === "" || undefined}
       onContextMenu={(e) => menu(e, { kind: "empty" })}
@@ -667,8 +674,8 @@ export function Sidebar(p: SidebarProps) {
         className="kn-side-search"
         type="search"
         {...NO_TEXT_ASSIST}
-        placeholder="Ir para uma nota ou pasta"
-        aria-label="Ir para uma nota ou pasta"
+        placeholder={t("notes.side.goTo")}
+        aria-label={t("notes.side.goTo")}
         autoFocus={p.autoFocus ?? true}
         value={p.query}
         onChange={(e) => p.onQuery(e.target.value)}
@@ -685,12 +692,12 @@ export function Sidebar(p: SidebarProps) {
           type="button"
           className="kn-side-new kn-expand"
           data-new="note"
-          title={`Nova nota ${whereLabel(p.selectedFolder)}${newNoteKey ? ` (${newNoteKey})` : ""}`}
-          aria-label={`Nova nota ${whereLabel(p.selectedFolder)}`}
+          title={`${t("notes.side.newNoteWhere", { where: whereLabel(p.selectedFolder, locale) })}${newNoteKey ? ` (${newNoteKey})` : ""}`}
+          aria-label={t("notes.side.newNoteWhere", { where: whereLabel(p.selectedFolder, locale) })}
           onClick={() => p.onNewNote?.(p.selectedFolder)}
         >
           <TreeIcon name="note-plus" />
-          <HoverLabel>Nota</HoverLabel>
+          <HoverLabel>{t("notes.side.note")}</HoverLabel>
         </button>
       ) : null}
       {p.onNewFolder ? (
@@ -698,52 +705,52 @@ export function Sidebar(p: SidebarProps) {
           type="button"
           className="kn-side-new kn-expand"
           data-new="folder"
-          title={`Nova pasta ${whereLabel(p.selectedFolder)}`}
-          aria-label={`Nova pasta ${whereLabel(p.selectedFolder)}`}
+          title={t("notes.side.newFolderWhere", { where: whereLabel(p.selectedFolder, locale) })}
+          aria-label={t("notes.side.newFolderWhere", { where: whereLabel(p.selectedFolder, locale) })}
           onClick={() => p.onNewFolder?.(p.selectedFolder)}
         >
           <TreeIcon name="folder-plus" />
-          <HoverLabel>Pasta</HoverLabel>
+          <HoverLabel>{t("notes.folder")}</HoverLabel>
         </button>
       ) : null}
       {p.onCollapseAll ? (
-        <button type="button" className="kn-side-new kn-expand" data-all="collapse" title="Recolher todas as pastas" aria-label="Recolher todas as pastas" onClick={() => p.onCollapseAll?.()}>
+        <button type="button" className="kn-side-new kn-expand" data-all="collapse" title={t("notes.side.collapseAll")} aria-label={t("notes.side.collapseAll")} onClick={() => p.onCollapseAll?.()}>
           <TreeIcon name="collapse-all" />
-          <HoverLabel>Recolher</HoverLabel>
+          <HoverLabel>{t("notes.side.collapse")}</HoverLabel>
         </button>
       ) : null}
       {p.onExpandAll ? (
-        <button type="button" className="kn-side-new kn-expand" data-all="expand" title="Expandir todas as pastas" aria-label="Expandir todas as pastas" onClick={() => p.onExpandAll?.()}>
+        <button type="button" className="kn-side-new kn-expand" data-all="expand" title={t("notes.side.expandAll")} aria-label={t("notes.side.expandAll")} onClick={() => p.onExpandAll?.()}>
           <TreeIcon name="expand-all" />
-          <HoverLabel>Expandir</HoverLabel>
+          <HoverLabel>{t("notes.side.expand")}</HoverLabel>
         </button>
       ) : null}
       {dragging ? (
         // A faixa "Raiz" (T19937): enquanto arrasta, presa embaixo da busca, por cima da árvore (não empurra as linhas).
         <div className="kn-side-rootdrop" data-drop={dropOn === "" || undefined} data-off={!canDrop(dragged.current, "") || undefined} {...dropZone("")}>
           <TreeIcon name="folder" />
-          <span>{p.root ? `Raiz: ${p.root.name}` : "Raiz"}</span>
+          <span>{p.root ? t("notes.side.rootOf", { name: p.root.name }) : t("notes.side.root")}</span>
         </div>
       ) : null}
       </div>
       {!searching && p.root ? <RootFolder root={p.root} selected={p.selectedFolder === ""} onSelect={() => p.onSelectFolder("")} /> : null}
       {!searching && p.onDaily ? (
-        <button type="button" className="kn-side-item kn-side-daily" onClick={() => p.onDaily?.()} title={`Nota do dia${dailyKey ? ` (${dailyKey})` : ""}`}>
+        <button type="button" className="kn-side-item kn-side-daily" onClick={() => p.onDaily?.()} title={`${t("notes.side.daily")}${dailyKey ? ` (${dailyKey})` : ""}`}>
           <TreeIcon name="today" />
-          <span className="kn-side-name">Hoje</span>
+          <span className="kn-side-name">{t("notes.side.today")}</span>
           {dailyKey ? <span className="kn-side-count">{dailyKey}</span> : null}
         </button>
       ) : null}
       {!searching && p.pinned.length ? (
         <>
-          {head("pinned", "Fixadas")}
+          {head("pinned", t("notes.side.pinned"))}
           {!shut("pinned") && p.pinned.map((n) => noteItem({ path: n.path, name: n.title }, 0, `p:${n.path}`, false))}
           <div className="kn-side-gap" />
         </>
       ) : null}
       {!searching && p.saved?.length && p.onSaved ? (
         <>
-          {head("saved", "Buscas salvas")}
+          {head("saved", t("notes.side.saved"))}
           {!shut("saved") && p.saved.map((s) => (
             <div key={`s:${s.query}`} className="kn-side-saved">
               <button type="button" className="kn-side-item" data-kind="search" title={s.query} onClick={(e) => !e.ctrlKey && p.onSaved?.(s.query)}>
@@ -751,7 +758,7 @@ export function Sidebar(p: SidebarProps) {
                 <span className="kn-side-name">{s.name}</span>
               </button>
               {p.onUnsave ? (
-                <button type="button" className="kn-side-x" aria-label={`Tirar a busca “${s.name}”`} title="Tirar da lista" onClick={() => p.onUnsave?.(s.query)}>
+                <button type="button" className="kn-side-x" aria-label={t("notes.side.unsave", { name: s.name })} title={t("notes.side.unsaveTitle")} onClick={() => p.onUnsave?.(s.query)}>
                   ×
                 </button>
               ) : null}
@@ -762,13 +769,13 @@ export function Sidebar(p: SidebarProps) {
       ) : null}
       {!searching && p.recent.length ? (
         <>
-          {head("recent", "Recentes")}
+          {head("recent", t("notes.side.recent"))}
           {!shut("recent") && p.recent.map((n) => noteItem({ path: n.path, name: n.title }, 0, `r:${n.path}`, false))}
           <div className="kn-side-gap" />
         </>
       ) : null}
       {/* Na busca, o resultado vem inteiro, mesmo com a seção Notas recolhida. */}
-      {searching ? <div className="kn-side-head" data-section="notes">Resultado</div> : head("notes", "Notas")}
+      {searching ? <div className="kn-side-head" data-section="notes">{t("notes.side.result")}</div> : head("notes", t("notes.title"))}
       {showTree ? (
         <div
           ref={listRef}
@@ -779,12 +786,12 @@ export function Sidebar(p: SidebarProps) {
           {rows.slice(first, last).map(row)}
         </div>
       ) : null}
-      {searching && !p.tree.length ? <div className="kn-side-empty">{searchTooLong(p.query) ? SEARCH_TOO_LONG : "Nada com esse nome"}</div> : null}
+      {searching && !p.tree.length ? <div className="kn-side-empty">{searchTooLong(p.query) ? t("notes.searchTooLong", { max: MAX_SEARCH_QUERY }) : t("notes.side.nothing")}</div> : null}
       {!searching && p.tags?.length && p.onTag ? (
         <>
           <div className="kn-side-gap" />
-          {head("tags", "Tags")}
-          {!shut("tags") && tagItems(p.tags, 0, p.onTag, p.onTagMenu)}
+          {head("tags", t("notes.side.tags"))}
+          {!shut("tags") && tagItems(p.tags, 0, p.onTag, p.onTagMenu, locale)}
         </>
       ) : null}
       {!searching && p.onTrash ? (
@@ -797,7 +804,7 @@ export function Sidebar(p: SidebarProps) {
             onClick={() => p.onTrash?.()}
           >
             <TreeIcon name="trash" />
-            <span className="kn-side-name">Lixeira</span>
+            <span className="kn-side-name">{t("notes.side.trash")}</span>
             {p.trashCount ? <span className="kn-side-count">{p.trashCount}</span> : null}
           </button>
         </>
@@ -807,7 +814,7 @@ export function Sidebar(p: SidebarProps) {
 }
 
 /** As tags, com as filhas recuadas embaixo da mãe, e quantas notas cada uma tem. */
-function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void, onMenu?: SidebarProps["onTagMenu"]): ReactElement[] {
+function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void, onMenu: SidebarProps["onTagMenu"], locale: Locale): ReactElement[] {
   return tags.flatMap((t) => [
     <button
       type="button"
@@ -815,7 +822,7 @@ function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void, 
       className="kn-side-item"
       data-kind="tag"
       style={{ paddingLeft: depth * 14 }}
-      title={`Notas com #${t.tag}`}
+      title={translate(locale, "notes.withTag", { tag: t.tag })}
       // ⌃-clique é o clique secundário do Mac: abre só o menu, não a busca por baixo dele (T2693, T2751).
       onClick={(e) => !e.ctrlKey && onTag(t.tag)}
       onContextMenu={onMenu ? e => { e.preventDefault(); e.stopPropagation(); onMenu({ x: e.clientX, y: e.clientY }, t.tag); } : undefined}
@@ -824,7 +831,7 @@ function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void, 
       <span className="kn-side-name">#{t.name}</span>
       <span className="kn-side-count">{t.count}</span>
     </button>,
-    ...tagItems(t.children, depth + 1, onTag, onMenu),
+    ...tagItems(t.children, depth + 1, onTag, onMenu, locale),
   ]);
 }
 
@@ -833,6 +840,7 @@ function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void, 
  * árvore, o "Abrir pasta…" e as recentes.
  */
 function RootFolder({ root, selected, onSelect }: { root: SideRoot; selected: boolean; onSelect(): void }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   return (
     <div className="kn-side-root" data-open={open || undefined}>
@@ -843,8 +851,8 @@ function RootFolder({ root, selected, onSelect }: { root: SideRoot; selected: bo
           type="button"
           className="kn-side-root-toggle"
           aria-expanded={open}
-          aria-label="Outras pastas de notas"
-          title="Abrir outra pasta de notas"
+          aria-label={t("notes.side.otherRoots")}
+          title={t("notes.side.openOtherRoot")}
           onClick={() => setOpen(!open)}
         >
           <Twisty open={open} />
@@ -853,8 +861,8 @@ function RootFolder({ root, selected, onSelect }: { root: SideRoot; selected: bo
           type="button"
           className="kn-side-item kn-side-root-bt"
           data-selected={selected || undefined}
-          aria-label={`Pasta das notas: ${root.name}`}
-          title={`${root.path} · o + Nota e o + Pasta criam aqui`}
+          aria-label={t("notes.side.rootLabel", { name: root.name })}
+          title={t("notes.side.rootTitle", { path: root.path })}
           onClick={(e) => !e.ctrlKey && onSelect()}
         >
           <TreeIcon name={open ? "folder-open" : "folder"} />
@@ -862,10 +870,10 @@ function RootFolder({ root, selected, onSelect }: { root: SideRoot; selected: bo
         </button>
       </div>
       {open ? (
-        <div className="kn-side-root-list" role="group" aria-label="Pastas de notas">
+        <div className="kn-side-root-list" role="group" aria-label={t("notes.side.roots")}>
           <button type="button" className="kn-side-item" data-root="open" onClick={() => root.onOpen()}>
             <TreeIcon name="folder-plus" />
-            <span className="kn-side-name">Abrir pasta…</span>
+            <span className="kn-side-name">{t("notes.menu.openFolder")}</span>
           </button>
           {root.recent.map((r) => (
             <button type="button" className="kn-side-item" data-root="recent" key={r.key} title={r.path} onClick={() => root.onOpen(r.key)}>
@@ -886,14 +894,15 @@ function RootFolder({ root, selected, onSelect }: { root: SideRoot; selected: bo
  * pequena. Só a cor do texto secundário, para não brigar com o nome.
  */
 function ProjectMark({ kind }: { kind: "folder" | "main" }) {
+  const { t } = useT();
   return kind === "folder" ? (
-    <span className="kn-side-project" data-project="folder" title="Projeto" aria-label="projeto">
+    <span className="kn-side-project" data-project="folder" title={t("notes.side.project")} aria-label={t("notes.side.projectLower")}>
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
         <path d="M3 13V3.5h7.5L9 6l1.5 2.5H3" strokeLinejoin="round" />
       </svg>
     </span>
   ) : (
-    <span className="kn-side-project" data-project="main" title="Nota principal do projeto" aria-label="nota principal">
+    <span className="kn-side-project" data-project="main" title={t("notes.side.projectMain")} aria-label={t("notes.side.projectMainLower")}>
       <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
         <path d="M8 1.8l1.8 3.9 4.2.5-3.1 2.9.8 4.2L8 11.2l-3.7 2.1.8-4.2L2 6.2l4.2-.5Z" />
       </svg>

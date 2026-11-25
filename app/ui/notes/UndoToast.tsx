@@ -1,6 +1,7 @@
 // O aviso de baixo com "Desfazer" (T2469): depois de apagar, por 8 s. Some sozinho ou com o clique.
 
 import { useEffect, useRef } from "react";
+import { useT } from "../src/i18n.ts";
 
 export interface Toast {
   text: string;
@@ -8,6 +9,7 @@ export interface Toast {
 }
 
 export function UndoToast({ toast, onDone }: { toast: Toast; onDone(): void }) {
+  const { t } = useT();
   // O prazo conta por aviso, não por render: o pai passa um onDone novo a cada render.
   const done = useRef(onDone);
   done.current = onDone;
@@ -27,7 +29,7 @@ export function UndoToast({ toast, onDone }: { toast: Toast; onDone(): void }) {
             onDone();
           }}
         >
-          Desfazer
+          {t("notes.undo")}
         </button>
       ) : null}
     </div>
