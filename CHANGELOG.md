@@ -4,6 +4,31 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+## [2026.11.14](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.14) (2026-11-25)
+
+- **Esconder o Idioma do app nesta release: o app fica em português (T29319)** ([#380](https://github.com/kiwi-init/kiwinotes/pull/380))
+- **agent-usage-check verde: as trilhas em Ajustes e o aviso de limite no balão (T28584)** ([#370](https://github.com/kiwi-init/kiwinotes/pull/370))
+- **Voz do gato: a ligação do app numa função testada (T29234)** ([#378](https://github.com/kiwi-init/kiwinotes/pull/378))
+- **Voz do gato: a mídia dos outros apps desce à metade e a voz sobe ×2 (T26830)** ([#376](https://github.com/kiwi-init/kiwinotes/pull/376))
+- **App em inglês: a base, ainda escondida (o app fica em português)** ([#360](https://github.com/kiwi-init/kiwinotes/pull/360), [#372](https://github.com/kiwi-init/kiwinotes/pull/372))
+- **A boca do gato mexe no app: a voz ligada pela mesma função do headless (T28675)** ([#368](https://github.com/kiwi-init/kiwinotes/pull/368))
+- **O Kiwi-cat no estado falando, pelo volume da voz (T26829)** ([#356](https://github.com/kiwi-init/kiwinotes/pull/356))
+- **Balões do gato: os botões com texto no tema claro (T28460)** ([#366](https://github.com/kiwi-init/kiwinotes/pull/366))
+- **A voz do gato no alto-falante: a saída de verdade pelo helper (T27825)** ([#362](https://github.com/kiwi-init/kiwinotes/pull/362))
+- **O balão com ação não fica atrás da resposta do gato (T28350)** ([#364](https://github.com/kiwi-init/kiwinotes/pull/364))
+- **Balão do gato no overlay: o resumo e o Ver mais (T28010)** ([#352](https://github.com/kiwi-init/kiwinotes/pull/352))
+- **A fala do gato lê ONG, SUS e MEC como palavra (T27958)** ([#358](https://github.com/kiwi-init/kiwinotes/pull/358))
+- **A Kiwi PT-1 no catálogo, como a voz padrão (T28150)** ([#354](https://github.com/kiwi-init/kiwinotes/pull/354))
+- **Balão do gato: um balão só, com o resumo e o Ver mais (T27897)** ([#348](https://github.com/kiwi-init/kiwinotes/pull/348))
+- **Ajustes de voz: catálogo, seleção e prévia (T27778)** ([#350](https://github.com/kiwi-init/kiwinotes/pull/350))
+- **O gato fala: o ajuste em Ajustes › Agente, com a voz baixada só no clique (T26736)** ([#346](https://github.com/kiwi-init/kiwinotes/pull/346))
+- **Voz do gato 3: o modelo e a voz baixados no clique, e o warmup ao fim (T26729)** ([#344](https://github.com/kiwi-init/kiwinotes/pull/344))
+- **Voz do gato 2: o processo isolado da síntese (T26732)** ([#342](https://github.com/kiwi-init/kiwinotes/pull/342))
+- **O player da fala do gato: pedaços na ordem, interromper e mudo na reunião (T26734)** ([#340](https://github.com/kiwi-init/kiwinotes/pull/340))
+- **Voz do gato 4: o verbo falar e o texto para a fala (T26709)** ([#336](https://github.com/kiwi-init/kiwinotes/pull/336))
+- **ADR 0014: o runtime da voz do gato (T26708)** ([#339](https://github.com/kiwi-init/kiwinotes/pull/339))
+- **tree-hover-ui-check: o Hub nas Notas pelo ?section=, e o check no CI (T26379)** ([#334](https://github.com/kiwi-init/kiwinotes/pull/334))
+
 ## [2026.11.13](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.13) (2026-11-24)
 
 - **Livewire 2026.11.5 e Hutch 0.29.0 (T25776)** ([#313](https://github.com/kiwi-init/kiwinotes/pull/313))
