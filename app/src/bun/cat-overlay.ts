@@ -309,7 +309,7 @@ export class CatOverlay {
    */
   private limit(e: Extract<AgentTurnEvent, { type: "limit" }>): void {
     if (e.id !== this.turnId) return;
-    const line = limitBubble(e.status, e.percent, e.resetsAt, Date.now());
+    const line = limitBubble(e.status, e.percent, e.resetsAt, Date.now(), mainLocale.get());
     if (e.status === "out") {
       this.outLine = line;
       return;

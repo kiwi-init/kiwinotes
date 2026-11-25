@@ -14,6 +14,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { BubbleLink } from "../../src/shared/ui-contract";
 import { api } from "../src/api";
+import { appLocale } from "../src/i18n";
 import { BUBBLE_LINES, BubbleFeed, type BubbleView, type ChunkLink, readingMs } from "./bubble-state";
 import { BubblePresence } from "./BubblePresence";
 import { BubbleTail } from "./BubbleTail";
@@ -86,7 +87,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = fa
 
   useEffect(() => {
     const m = measurer();
-    const f = new BubbleFeed(m.fits, reduced);
+    const f = new BubbleFeed(m.fits, reduced, Date.now, () => appLocale().locale);
     feed.current = f;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {

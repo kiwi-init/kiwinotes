@@ -921,6 +921,24 @@ describe("o aviso de limite de uso no overlay (T29063)", () => {
     expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.erroExit }]);
   });
 
+  test("com o app em English, o aviso e o limite acabado saem em inglês", () => {
+    mainLocale.set("en");
+    try {
+      const r = rig();
+      talk(r);
+      r.cat.turn(limit("warning", { percent: 85 }));
+      expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "You've used 85% of your limit. I'll keep going, but take it easy.", error: false }]);
+      const o = rig();
+      talk(o);
+      o.cat.turn(limit("out"));
+      o.cat.turn({ type: "error", id: "r1", code: "E_AGENT_LIMIT", message: "usage limit reached" } as AgentTurnEvent);
+      expect(bubbles(o.take())).toEqual([{ type: "catOverlay.bubble", text: limitBubble("out", undefined, undefined, Date.now(), "en"), error: true }]);
+      expect(limitBubble("out", undefined, undefined, Date.now(), "en")).toBe("Your limit ran out.");
+    } finally {
+      mainLocale.set("pt");
+    }
+  });
+
   test("com o hub à vista, o aviso fica no gato do canto", () => {
     const r = rig();
     r.cat.configure(true);
