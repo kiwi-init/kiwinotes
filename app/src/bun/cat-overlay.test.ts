@@ -912,7 +912,13 @@ describe("o aviso de limite de uso no overlay (T29063)", () => {
     r.take();
     r.cat.turn(limit("out"));
     r.cat.turn({ type: "error", id: "r1", code: "E_AGENT_LIMIT", message: "usage limit reached" } as AgentTurnEvent);
-    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: limitBubble("out", undefined, undefined, Date.now()), error: true }]);
+    const line = limitBubble("out", undefined, undefined, Date.now());
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: line, error: true }]);
+    // Sem a fala não há conversa: sem a pergunta, o gato sai depois do tempo de ler.
+    r.advance(readingMs(line) - 1);
+    expect(r.take()).toEqual([]);
+    r.advance(1);
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.erroExit }]);
   });
 
   test("com o hub à vista, o aviso fica no gato do canto", () => {

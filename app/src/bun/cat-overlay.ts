@@ -282,9 +282,14 @@ export class CatOverlay {
       this.speak(line, true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
     }
     // O limite acabado sai no balão em qualquer pedido, como no hub (T29063): sem ele, o gato some com cara de erro.
+    // Sem a fala não há conversa: nada de "Precisa de mais alguma coisa?", o gato fica o tempo de ler e sai.
     else if (e.type === "error" && e.code === CAT_LIMIT_CODE && this.outLine) {
       this.cancelWarning();
-      this.speak(this.outLine, true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+      this.bubbleShown = true;
+      this.asking = false;
+      this.bubbleNow = { text: this.outLine, error: true };
+      this.host.send({ type: "catOverlay.bubble", ...this.bubbleNow });
+      this.linger(Math.max(OVERLAY_TIMES.erro, readingMs(this.outLine)), OVERLAY_TIMES.erroExit);
     }
     else if (state === "pronto") {
       const leave = () => this.linger(OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
