@@ -8,7 +8,8 @@
 // Efeito junto: com `pt.lproj` e `en.lproj` no bundle, o AppKit passa a escrever os itens de sistema do menu (Desfazer,
 // Copiar…) na língua do Mac quando ela é uma dessas duas.
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { type Locale, LOCALES, type TextKey, translate } from "../src/shared/i18n/index.ts";
@@ -42,4 +43,43 @@ export function writeUsageStrings(app: string): string[] {
     writeFileSync(file, stringsFile(usageDescriptions(locale)));
     return file;
   });
+}
+
+/** Um plist (ou `.strings`) lido pelo `plutil`, ou null se ele não lê. */
+function readPlist(file: string): Record<string, unknown> | null {
+  if (!existsSync(file)) return null;
+  const r = spawnSync("plutil", ["-convert", "json", "-o", "-", file], { encoding: "utf8" });
+  if (r.status !== 0) return null;
+  try {
+    return JSON.parse(r.stdout);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * O que falta no `.app` para o pedido do mic sair na língua do Mac: o `InfoPlist.strings` de cada língua, com todas as
+ * frases, e a `CFBundleDevelopmentRegion` com a frase de reserva no Info.plist. Vazio quando está tudo lá.
+ */
+export function usageStringsProblems(app: string): string[] {
+  const problems: string[] = [];
+  const info = readPlist(path.join(app, "Contents", "Info.plist"));
+  if (info?.CFBundleDevelopmentRegion !== DEVELOPMENT_REGION) problems.push(`Info.plist: CFBundleDevelopmentRegion is not ${DEVELOPMENT_REGION}`);
+  for (const key of Object.keys(USAGE_KEYS)) if (!info?.[key]) problems.push(`Info.plist: no ${key}`);
+  for (const locale of LOCALES) {
+    const rel = path.join("Contents", "Resources", `${locale}.lproj`, "InfoPlist.strings");
+    const strings = readPlist(path.join(app, rel));
+    if (!strings) {
+      problems.push(`${rel}: missing or unreadable`);
+      continue;
+    }
+    for (const key of Object.keys(USAGE_KEYS)) if (!strings[key]) problems.push(`${rel}: no ${key}`);
+  }
+  return problems;
+}
+
+/** Para o `verify-signature.ts`: o build falha se o pedido do mic do `.app` não está em todas as línguas. */
+export function assertUsageStrings(app: string): void {
+  const problems = usageStringsProblems(app);
+  if (problems.length) throw new Error(`${path.basename(app)}: ${problems.join("; ")}`);
 }

@@ -80,7 +80,7 @@ export function pack(dir: string, entries: string[], tarZst: string): void {
 }
 
 /** O .app que está num .tar.zst, conferido sem tocar no arquivo. Lança se não houver app ou se um selo falhar. */
-export function verifyBundle(tarZst: string): string[] {
+export function verifyBundle(tarZst: string, check?: (app: string) => void): string[] {
   return withTemp((dir) => {
     unpack(tarZst, dir);
     const apps = appsIn(dir, 1);
@@ -88,6 +88,7 @@ export function verifyBundle(tarZst: string): string[] {
     for (const app of apps) {
       try {
         verifyApp(app);
+        check?.(app);
       } catch (e) {
         throw new Error(`${path.basename(app)} inside ${tarZst}: ${(e as Error).message}`);
       }

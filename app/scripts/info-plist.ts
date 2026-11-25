@@ -25,16 +25,11 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { identityKeys } from "./bundle-identity.ts";
+import { applyAppPlist } from "./app-plist.ts";
 import { resealBundles, signAdHoc } from "./signing.ts";
-import { DEVELOPMENT_REGION, usageDescriptions, writeUsageStrings } from "./usage-strings.ts";
 
 /** No Info.plist do wrapper: o ambiente que o LaunchServices passa ao extractor (T951). */
 const WRAPPER_ENVIRONMENT = { ELECTROBUN_INSTALLER_UI_AUTOCLOSE: "1" };
-
-// As frases do pedido de permissão (T29006): as do Info.plist são as da língua de reserva, e cada língua do app vai no
-// `InfoPlist.strings` do `.lproj` dela (`usage-strings.ts`), que o macOS escolhe pela língua do Mac.
-const USAGE: Record<string, string> = { ...usageDescriptions(DEVELOPMENT_REGION), CFBundleDevelopmentRegion: DEVELOPMENT_REGION };
 
 /** Os Info.plist de todos os .app dentro de `dir` (o app e, no release, o wrapper). */
 function infoPlists(dir: string, depth = 4): string[] {
@@ -50,16 +45,6 @@ function infoPlists(dir: string, depth = 4): string[] {
     }
   }
   return out;
-}
-
-function setKeys(plist: string): void {
-  const read = spawnSync("plutil", ["-extract", "CFBundleVersion", "raw", plist], { encoding: "utf8" });
-  if (read.status !== 0) throw new Error(`info-plist: no CFBundleVersion in ${plist}`);
-  for (const [key, value] of Object.entries({ ...USAGE, ...identityKeys(read.stdout.trim()) })) {
-    // -replace cria a chave quando ela não existe.
-    const r = spawnSync("plutil", ["-replace", key, "-string", value, plist], { stdio: "inherit" });
-    if (r.status !== 0) throw new Error(`info-plist: plutil failed on ${plist}`);
-  }
 }
 
 // O Hutch carrega o hook como módulo (sem `import.meta.main`), então o corpo roda no topo.
@@ -82,10 +67,10 @@ function setKeys(plist: string): void {
     for (const file of resealBundles(bundles)) console.log(`info-plist: re-signed the app inside ${file}`);
   }
   for (const p of plists) {
-    setKeys(p);
+    // As frases do mic em cada língua (T29006), antes da assinatura, que sela os recursos (`app-plist.ts`).
+    const strings = applyAppPlist(p);
     console.log(`info-plist: usage descriptions, display name and short version in ${p}`);
-    // Antes da assinatura, que sela os recursos.
-    for (const f of writeUsageStrings(path.dirname(path.dirname(p)))) console.log(`info-plist: ${path.relative(path.dirname(path.dirname(p)), f)}`);
+    for (const f of strings) console.log(`info-plist: ${path.relative(path.dirname(path.dirname(p)), f)}`);
   }
   if (wrapper) {
     const plist = path.join(wrapper, "Contents", "Info.plist");
