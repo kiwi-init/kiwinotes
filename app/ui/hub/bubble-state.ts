@@ -45,13 +45,33 @@ function sentenceEnds(text: string): number[] {
   return out;
 }
 
+/** O título que abre o texto corrido: curto, sem pontuação no fim e sem ser item de lista (o `#` já saiu no corrido). */
+const TITLE = /^(?![•◦▪]\s|\d+[.)]\s)[^\n]{1,60}(?<![.!?…:;,])\n(?=\s*\S)/;
+
 /**
  * O resumo de um texto corrido (spec #27881): ele inteiro, se cabe no balão (`fits`); senão, as frases do começo que
- * cabem; senão, as palavras do começo que cabem com "…" (e, se nem a primeira palavra cabe, as letras dela).
+ * cabem; senão, as palavras do começo que cabem com "…" (e, se nem a primeira palavra cabe, as letras dela). No corte,
+ * os títulos do começo ficam de fora: o resumo sai do parágrafo (#28009). `from` é onde ele começa em `plain`.
  */
-export function summaryOf(plain: string, fits: (s: string) => boolean): string {
+export function summarize(plain: string, fits: (s: string) => boolean): { text: string; from: number } {
   const t = plain.trim();
-  if (!t || fits(t)) return t;
+  let from = plain.length - plain.trimStart().length;
+  if (!t || fits(t)) return { text: t, from };
+  let body = t;
+  for (let m = TITLE.exec(body); m; m = TITLE.exec(body)) {
+    const rest = body.slice(m[0].length);
+    from += m[0].length + rest.length - rest.trimStart().length;
+    body = rest.trimStart();
+  }
+  return { text: cut(body, fits), from };
+}
+
+export function summaryOf(plain: string, fits: (s: string) => boolean): string {
+  return summarize(plain, fits).text;
+}
+
+function cut(t: string, fits: (s: string) => boolean): string {
+  if (fits(t)) return t;
   let best = "";
   for (const end of sentenceEnds(t)) {
     const cand = t.slice(0, end).trimEnd();
@@ -299,11 +319,10 @@ export class BubbleFeed {
     let raw = this.said.slice(base);
     if (!plainOf(raw).trim()) [raw, base] = [this.said, 0];
     const plain = plainOf(raw);
-    const text = summaryOf(plain, this.fits);
+    const { text, from: lead } = summarize(plain, this.fits);
     if (!text) return null;
-    const lead = plain.length - plain.trimStart().length;
     // O texto cortado com "…" acaba antes delas: um rótulo cortado leva só o pedaço que aparece.
-    const shown = text.endsWith("…") && !plain.trim().startsWith(text) ? text.length - 1 : text.length;
+    const shown = text.endsWith("…") && !plain.slice(lead).startsWith(text) ? text.length - 1 : text.length;
     const links = this.saidLinks.length
       ? plainLinks(raw, this.saidLinks, base)
           .map((l) => ({ from: l.from - lead, to: Math.min(l.to - lead, shown), path: l.path }))

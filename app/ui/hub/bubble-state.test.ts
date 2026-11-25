@@ -30,6 +30,23 @@ describe("o resumo (spec #27881)", () => {
     expect(summaryOf("Os prazos:\n- Ana, sexta\n- Bruno, segunda e terça", fits(24))).toBe("Os prazos:\n- Ana, sexta");
   });
 
+  test("o título do começo não é o resumo: as frases do parágrafo (#28009)", () => {
+    // Título + parágrafo longo: as frases dele que cabem, sem o título.
+    expect(summaryOf(`A mudança\n${LONGA}`, fits(60))).toBe("Achei três notas sobre o Projeto X.");
+    // Dois títulos seguidos (o `#` e o `##`): os dois ficam de fora.
+    expect(summaryOf(bubblePlain(`# Projeto X\n\n## As notas\n\n${LONGA}`), fits(60))).toBe("Achei três notas sobre o Projeto X.");
+    // Título + parágrafo curto, que não cabem juntos: o parágrafo inteiro.
+    expect(summaryOf("Uma linha de título bem comprida aqui\nPronto, anotei.", fits(30))).toBe("Pronto, anotei.");
+    // Nem a primeira frase do parágrafo cabe: as palavras dele, com "…", e não o título.
+    expect(summaryOf(`A mudança\n${LONGA}`, fits(20))).toBe("Achei três notas…");
+    // Só o título, ou tudo cabendo: o texto como está.
+    expect(summaryOf("A mudança da Ana", fits(20))).toBe("A mudança da Ana");
+    expect(summaryOf("A mudança\nPronto.", fits(40))).toBe("A mudança\nPronto.");
+    // A linha que termina em pontuação não é título, e o item de lista também não.
+    expect(summaryOf("Os prazos:\n- Ana, sexta\n- Bruno, segunda e terça", fits(24))).toBe("Os prazos:\n- Ana, sexta");
+    expect(summaryOf("• Ana, sexta\n• Bruno, segunda e terça", fits(14))).toBe("• Ana, sexta");
+  });
+
   test("nem a primeira frase cabe: entre palavras, com \"…\"; uma palavra maior que o balão, pelas letras", () => {
     const s = summaryOf(LONGA, fits(20));
     expect(s).toBe("Achei três notas…");
@@ -398,6 +415,13 @@ describe("as notas e os arquivos no balão pequeno (spec #17683)", () => {
     ]);
     expect(depois.view(0)!.full).toBe(bubblePlain(TEXTO));
     expect(labels(depois)).toEqual([["o plano", "Plano.md"], ["Projeto X/relatorio.pdf", "Projeto X/relatorio.pdf"]]);
+    // Com um título antes, que fica fora do resumo: os links contam de onde o resumo começa.
+    const titulo = "## Os arquivos\n\n";
+    const comTitulo = run(new BubbleFeed(fits(110)), [
+      { type: "done", stopReason: "end_turn", text: titulo + TEXTO + "\n\nMais um parágrafo para não caber inteiro." + " Outra frase.".repeat(20), links: LINKS.map((l) => ({ ...l, from: l.from + titulo.length, to: l.to + titulo.length })) },
+    ]);
+    expect(comTitulo.view(0)!.full).toBe(bubblePlain(TEXTO));
+    expect(labels(comTitulo)).toEqual([["o plano", "Plano.md"], ["Projeto X/relatorio.pdf", "Projeto X/relatorio.pdf"]]);
     // A fala do cat_speak não tem a posição no texto do `done`: sem links.
     const fala = run(new BubbleFeed(fits(200)), [
       { type: "speech", text: "Criei o plano e salvei o relatório." },
