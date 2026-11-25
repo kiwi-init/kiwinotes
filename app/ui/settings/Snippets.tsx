@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { api, type Snippet } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { LoadError, type LoadState, RemoveIcon, rowKey, SavedNote, useAutosave } from "../src/kit/editable.tsx";
 import { Button, HoverLabel, Section } from "../src/kit/index.tsx";
 
@@ -8,6 +9,7 @@ type Row = Snippet & { key: string; isNew?: boolean };
 
 /** Frases faladas que viram texto pronto: "meu e-mail" → o endereço. */
 export function SnippetsSection() {
+  const { t } = useT();
   const [rows, setRows] = useState<Row[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const loaded = state === "ready";
@@ -34,11 +36,11 @@ export function SnippetsSection() {
   const update = (key: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
   return (
-    <Section title="Snippets">
+    <Section title={t("snippets.section")}>
       {state === "error" ? (
         <LoadError file="snippets.json" onRetry={load} />
       ) : rows.length === 0 ? (
-        <div className="kn-list-empty">Fale "meu e-mail" e o endereço entra no lugar. Bom para assinaturas, links e respostas prontas.</div>
+        <div className="kn-list-empty">{t("snippets.empty")}</div>
       ) : (
         rows.map((r) => (
           <div className="kn-list-row" key={r.key} data-new={r.isNew}>
@@ -47,8 +49,8 @@ export function SnippetsSection() {
               data-strong="true"
               style={{ width: 170 }}
               value={r.trigger}
-              placeholder="Quando eu disser…"
-              aria-label="Frase falada"
+              placeholder={t("snippets.triggerPlaceholder")}
+              aria-label={t("snippets.trigger")}
               autoFocus={r.isNew}
               onChange={(e) => update(r.key, { trigger: e.target.value })}
             />
@@ -57,26 +59,26 @@ export function SnippetsSection() {
               style={{ flex: 1 }}
               rows={Math.min(5, Math.max(1, r.text.split("\n").length))}
               value={r.text}
-              placeholder="…entra este texto"
-              aria-label={`Texto de ${r.trigger || "snippet"}`}
+              placeholder={t("snippets.textPlaceholder")}
+              aria-label={r.trigger ? t("snippets.textOf", { trigger: r.trigger }) : t("snippets.textOfEmpty")}
               onChange={(e) => update(r.key, { text: e.target.value })}
             />
             <button
               type="button"
               className="kn-icon-button kn-expand"
               data-tone="danger"
-              aria-label={`Remover ${r.trigger || "snippet"}`}
+              aria-label={r.trigger ? t("snippets.remove", { trigger: r.trigger }) : t("snippets.removeEmpty")}
               onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
             >
               <RemoveIcon />
-              <HoverLabel>Remover</HoverLabel>
+              <HoverLabel>{t("common.remove")}</HoverLabel>
             </button>
           </div>
         ))
       )}
       <div className="kn-list-footer">
         <Button disabled={!loaded} onClick={() => setRows((rs) => [...rs, { key: rowKey(), trigger: "", text: "", isNew: true }])}>
-          Adicionar snippet
+          {t("snippets.add")}
         </Button>
         <SavedNote {...status} incomplete={incomplete} />
       </div>

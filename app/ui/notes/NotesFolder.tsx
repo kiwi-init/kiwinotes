@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Row } from "../src/kit/index.tsx";
 import type {
   FolderRef,
@@ -68,29 +69,33 @@ export function FolderConfirmation({
 }: {
   controller: FolderController;
 }) {
+  const { t } = useT();
   if (!c.pending) return null;
+  // O caminho fica em `<strong>`, dentro da frase da língua.
+  const [before, after = ""] = t("notesFolder.big.body", { n: c.pending.count - 1, path: "\u0000" }).split("\u0000");
   return (
     <div className="kn-palette-scrim">
       <section
         className="kn-palette kn-folder-confirm"
         role="dialog"
-        aria-label="Pasta grande"
+        aria-label={t("notesFolder.big.aria")}
       >
-        <h2>Esta pasta tem muitos arquivos</h2>
+        <h2>{t("notesFolder.big.title")}</h2>
         <p>
-          Há mais de {c.pending.count - 1} arquivos em{" "}
-          <strong>{c.pending.path}</strong>. Abrir a pasta pode levar um tempo.
+          {before}
+          <strong>{c.pending.path}</strong>
+          {after}
         </p>
         <div>
           <button type="button" className="kn-bt" onClick={c.cancel}>
-            Cancelar
+            {t("common.cancel")}
           </button>
           <button
             type="button"
             className="kn-bt kn-bt-acc"
             onClick={() => void c.open(undefined, c.pending!.token)}
           >
-            Abrir mesmo assim
+            {t("notesFolder.big.open")}
           </button>
         </div>
       </section>
@@ -106,6 +111,7 @@ export function NotesFolderControl({
   folder?: FolderRef;
   onBeforeOpen?: () => Promise<boolean>;
 }) {
+  const { t } = useT();
   const [menu, setMenu] = useState(false);
   if (!c.supported || !c.view) return null;
   const shown = folder ?? c.view.current;
@@ -119,7 +125,7 @@ export function NotesFolderControl({
       <button
         type="button"
         className="kn-bt"
-        aria-label="Pasta das notas"
+        aria-label={t("notesFolder.label")}
         title={shown.path}
         aria-expanded={menu}
         onClick={() => setMenu(!menu)}
@@ -130,10 +136,10 @@ export function NotesFolderControl({
         <div
           className="kn-folder-menu"
           role="menu"
-          aria-label="Pastas de notas"
+          aria-label={t("notesFolder.menu")}
         >
           <button type="button" role="menuitem" onClick={() => void choose()}>
-            Abrir pasta…
+            {t("notesFolder.open")}
           </button>
           {c.view.recent.map((r) => (
             <button
@@ -154,12 +160,13 @@ export function NotesFolderControl({
   );
 }
 export function NotesFolderRow() {
+  const { t } = useT();
   const c = useNotesFolders();
   if (!c.supported) return null;
   return (
     <Row
-      label="Pasta das notas"
-      hint={`${c.view?.current.path ?? "Lendo a pasta…"} · As reuniões e o histórico do ditado continuam no lugar de sempre.`}
+      label={t("notesFolder.label")}
+      hint={t("notesFolder.hint", { path: c.view?.current.path ?? t("notesFolder.reading") })}
     >
       <NotesFolderControl controller={c} />
       <FolderConfirmation controller={c} />

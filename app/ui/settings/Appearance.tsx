@@ -6,14 +6,16 @@ import { useMemo, useState } from "react";
 
 import type { Appearance, AppearanceFont, AppearanceMode, Motion, TextSize } from "../../src/shared/appearance.ts";
 import { fold } from "../notes/palette.ts";
+import { useT } from "../src/i18n.ts";
 import { Row, Section, Segmented } from "../src/kit/index.tsx";
 import { useAppearance } from "../src/styles/appearance.ts";
 import { type ColorTheme, type ThemeAppearance, THEMES } from "../src/styles/themes.ts";
+import type { TextKey } from "../../src/shared/i18n/index.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 
-const SIDES: { side: ThemeAppearance; title: string }[] = [
-  { side: "dark", title: "Escuros" },
-  { side: "light", title: "Claros" },
+const SIDES: { side: ThemeAppearance; titleKey: TextKey }[] = [
+  { side: "dark", titleKey: "appearance.themes.dark" },
+  { side: "light", titleKey: "appearance.themes.light" },
 ];
 
 function ThemeTile({ theme, chosen, onPick }: { theme: ColorTheme; chosen: boolean; onPick: () => void }) {
@@ -32,13 +34,14 @@ function ThemeTile({ theme, chosen, onPick }: { theme: ColorTheme; chosen: boole
 }
 
 export function AppearanceSection() {
+  const { t: tr } = useT();
   const [a, set] = useAppearance();
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const change = (patch: Partial<Appearance>) => {
     setError(null);
-    set(patch).catch(() => setError("Não deu para guardar a Aparência. Tente de novo."));
+    set(patch).catch(() => setError(tr("appearance.saveFailed")));
   };
 
   const shown = useMemo(() => {
@@ -54,67 +57,67 @@ export function AppearanceSection() {
   };
 
   return (
-    <Section title="Aparência">
-      <Row label="Modo" hint="Sistema segue o claro e o escuro do Mac.">
+    <Section title={tr("appearance.section")}>
+      <Row label={tr("appearance.mode")} hint={tr("appearance.mode.hint")}>
         <Segmented<AppearanceMode>
-          label="Modo"
+          label={tr("appearance.mode")}
           value={a.mode}
           onChange={(mode) => change({ mode })}
           options={[
-            { value: "system", label: "Sistema" },
-            { value: "dark", label: "Escuro" },
-            { value: "light", label: "Claro" },
+            { value: "system", label: tr("appearance.mode.system") },
+            { value: "dark", label: tr("appearance.mode.dark") },
+            { value: "light", label: tr("appearance.mode.light") },
           ]}
         />
       </Row>
-      <Row label="Tamanho do texto">
+      <Row label={tr("appearance.textSize")}>
         <Segmented<TextSize>
-          label="Tamanho do texto"
+          label={tr("appearance.textSize")}
           value={a.textSize}
           onChange={(textSize) => change({ textSize })}
           options={[
-            { value: "small", label: "Pequeno" },
-            { value: "default", label: "Padrão" },
-            { value: "large", label: "Grande" },
-            { value: "larger", label: "Maior" },
-            { value: "largest", label: "Máximo" },
+            { value: "small", label: tr("appearance.textSize.small") },
+            { value: "default", label: tr("appearance.textSize.default") },
+            { value: "large", label: tr("appearance.textSize.large") },
+            { value: "larger", label: tr("appearance.textSize.larger") },
+            { value: "largest", label: tr("appearance.textSize.largest") },
           ]}
         />
       </Row>
-      <Row label="Fonte">
+      <Row label={tr("appearance.font")}>
         <Segmented<AppearanceFont>
-          label="Fonte"
+          label={tr("appearance.font")}
           value={a.font}
           onChange={(font) => change({ font })}
           options={[
-            { value: "system", label: "Sistema" },
-            { value: "inter", label: "Inter" },
-            { value: "lato", label: "Lato" },
-            { value: "atkinson", label: "Atkinson" },
+            { value: "system", label: tr("appearance.font.system") },
+            { value: "inter", label: "Inter" }, // i18n-ok: o nome da fonte
+            { value: "lato", label: "Lato" }, // i18n-ok: o nome da fonte
+            { value: "atkinson", label: "Atkinson" }, // i18n-ok: o nome da fonte
           ]}
         />
       </Row>
-      <Row label="Movimento" hint="O Reduzir movimento do macOS também corta as animações.">
+      <Row label={tr("appearance.motion")} hint={tr("appearance.motion.hint")}>
         <Segmented<Motion>
-          label="Movimento"
+          label={tr("appearance.motion")}
           value={a.motion}
           onChange={(motion) => change({ motion })}
           options={[
-            { value: "full", label: "Completo" },
-            { value: "reduced", label: "Reduzido" },
+            { value: "full", label: tr("appearance.motion.full") },
+            { value: "reduced", label: tr("appearance.motion.reduced") },
           ]}
         />
       </Row>
       <div className="kn-themes">
         <div className="kn-themes-head">
-          <span className="kn-themes-title">Temas</span>
+          <span className="kn-themes-title">{tr("appearance.themes")}</span>
           <input
             id="kn-theme-search"
             className="kn-themes-search"
             type="search"
             {...NO_TEXT_ASSIST}
-            placeholder="Buscar temas"
-            aria-label="Buscar temas"
+            placeholder={tr("appearance.themes.search")}
+            aria-label={tr("appearance.themes.search")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -124,14 +127,14 @@ export function AppearanceSection() {
             {error}
           </p>
         ) : null}
-        {SIDES.map(({ side, title }) => {
+        {SIDES.map(({ side, titleKey }) => {
           const list = shown.filter((t) => t.appearance === side);
           if (!list.length) return null;
           const chosen = side === "dark" ? a.darkTheme : a.lightTheme;
           return (
             <div key={side} className="kn-themes-group">
               <div className="kn-themes-sub">
-                {title} {list.length}
+                {tr(titleKey)} {list.length}
               </div>
               <div className="kn-themes-grid">
                 {list.map((t) => (
@@ -141,7 +144,7 @@ export function AppearanceSection() {
             </div>
           );
         })}
-        {shown.length === 0 ? <p className="kn-themes-empty">Nenhum tema com esse nome.</p> : null}
+        {shown.length === 0 ? <p className="kn-themes-empty">{tr("appearance.themes.none")}</p> : null}
       </div>
     </Section>
   );

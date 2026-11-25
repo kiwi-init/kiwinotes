@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { cpSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { tempDir } from "../test/tmp.ts";
 import { fixedTexts, MIGRATED, MIGRATED_MAIN, mainFixedTexts, SWIFT_DIRS, swiftFixedTexts } from "./i18n-check.ts";
 
 test("acha o texto entre as tags, os atributos visíveis e as opções; ignora o t(), o código e o sem letra (T28190)", () => {
@@ -17,6 +18,7 @@ test("acha o texto entre as tags, os atributos visíveis e as opções; ignora o
       </Row>
     );
     const y = { id: "codigo", title: "Título" };
+    const z = [{ value: "inter", label: "Inter" }]; // i18n-ok: o nome da fonte
   `;
   expect(fixedTexts("x.tsx", src).map((t) => t.text)).toEqual(["Rótulo", "Dica", "Olá, Ana", "Solto", "Opção A", "Busca", "Título"]);
   expect(fixedTexts("x.tsx", src)[0]!.line).toBe(3);
@@ -66,4 +68,24 @@ test("o main migrado e o Swift do helper não têm texto fixo (T28192)", () => {
   const files = SWIFT_DIRS.flatMap((d) => swift(path.join(root, d)));
   expect(files.length).toBeGreaterThan(20);
   for (const f of files) expect({ f, texts: swiftFixedTexts(readFileSync(f, "utf8")) }).toEqual({ f, texts: [] });
+});
+
+test("uma tela migrada com texto fixo faz o check sair 1, e sem ele sai 0 (T28297, revisão do #360)", () => {
+  const root = path.resolve(import.meta.dir, "..");
+  // A árvore falsa (`<tmp>/app` e `<tmp>/native`): as pastas que o check lê, copiadas, e depois a primeira tela
+  // migrada com um texto fixo a mais.
+  const dir = path.join(tempDir("i18n-check-"), "app");
+  mkdirSync(dir);
+  // As pastas das telas e as do main migrado (o `MIGRATED_MAIN` cresce: o T29006 pôs arquivos de `scripts/`).
+  const dirs = new Set(["ui", ...MIGRATED_MAIN.map((f) => path.dirname(f))]);
+  for (const d of dirs) cpSync(path.join(root, d), path.join(dir, d), { recursive: true, filter: (p) => !p.includes("node_modules") });
+  for (const d of SWIFT_DIRS) cpSync(path.join(root, d), path.join(dir, d), { recursive: true });
+  const run = () => Bun.spawnSync(["bun", path.join(root, "scripts/i18n-check.ts")], { env: { ...process.env, KIWI_I18N_ROOT: dir, GITHUB_ACTIONS: "" } });
+  expect(run().exitCode).toBe(0);
+  const screen = path.join(dir, MIGRATED[0]!);
+  writeFileSync(screen, readFileSync(screen, "utf8") + "\nexport const Extra = () => <p>Texto solto</p>;\n");
+  const out = run();
+  expect(out.exitCode).toBe(1);
+  expect(out.stderr.toString()).toContain(`${MIGRATED[0]}:`);
+  expect(out.stderr.toString()).toContain("Texto solto");
 });

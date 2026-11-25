@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 
 import { api, type DictionaryTerm } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { LoadError, type LoadState, RemoveIcon, rowKey, SavedNote, useAutosave } from "../src/kit/editable.tsx";
 import { Button, HoverLabel, Section } from "../src/kit/index.tsx";
 
@@ -14,6 +15,7 @@ const toTerms = (rows: Row[]): DictionaryTerm[] =>
 
 /** Termos que o STT deve reconhecer e que a limpeza nunca muda (ORBIT, SILO, nomes de pessoas). */
 export function DictionarySection() {
+  const { t } = useT();
   const [rows, setRows] = useState<Row[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const loaded = state === "ready";
@@ -52,11 +54,11 @@ export function DictionarySection() {
   const update = (key: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
   return (
-    <Section title="Dicionário">
+    <Section title={t("dictionary.section")}>
       {state === "error" ? (
         <LoadError file="dictionary.json" onRetry={load} />
       ) : rows.length === 0 ? (
-        <div className="kn-list-empty">Termos do seu trabalho, como ORBIT, SILO ou nomes de pessoas, saem sempre com esta grafia.</div>
+        <div className="kn-list-empty">{t("dictionary.empty")}</div>
       ) : (
         rows.map((r) => (
           <Fragment key={r.key}>
@@ -66,8 +68,8 @@ export function DictionarySection() {
                 data-strong="true"
                 style={{ width: 170 }}
                 value={r.term}
-                placeholder="Grafia certa"
-                aria-label="Termo"
+                placeholder={t("dictionary.termPlaceholder")}
+                aria-label={t("dictionary.term")}
                 autoFocus={r.isNew}
                 onChange={(e) => update(r.key, { term: e.target.value })}
               />
@@ -75,19 +77,19 @@ export function DictionarySection() {
                 className="kn-input"
                 style={{ flex: 1 }}
                 value={r.aliases}
-                placeholder="Outras formas de dizer, separadas por vírgula"
-                aria-label={`Outras formas de dizer ${r.term}`}
+                placeholder={t("dictionary.aliasesPlaceholder")}
+                aria-label={t("dictionary.aliasesOf", { term: r.term })}
                 onChange={(e) => update(r.key, { aliases: e.target.value })}
               />
               <button
                 type="button"
                 className="kn-icon-button kn-expand"
                 data-tone="danger"
-                aria-label={`Remover ${r.term || "termo"}`}
+                aria-label={r.term ? t("dictionary.remove", { term: r.term }) : t("dictionary.removeEmpty")}
                 onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
               >
                 <RemoveIcon />
-                <HoverLabel>Remover</HoverLabel>
+                <HoverLabel>{t("common.remove")}</HoverLabel>
               </button>
             </div>
             {(warnings.get(r.term.trim()) ?? []).map((text) => (
@@ -100,7 +102,7 @@ export function DictionarySection() {
       )}
       <div className="kn-list-footer">
         <Button disabled={!loaded} onClick={() => setRows((rs) => [...rs, { key: rowKey(), term: "", aliases: "", isNew: true }])}>
-          Adicionar termo
+          {t("dictionary.add")}
         </Button>
         <SavedNote {...status} incomplete={incomplete} />
       </div>

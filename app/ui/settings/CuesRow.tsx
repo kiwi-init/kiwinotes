@@ -2,9 +2,11 @@
 import { useEffect, useState } from "react";
 
 import { api, has } from "../src/api.ts";
+import { useT } from "../src/i18n.ts";
 import { Row, Switch } from "../src/kit/index.tsx";
 
 export function CuesRow() {
+  const { t } = useT();
   const [on, setOn] = useState<boolean | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -32,8 +34,8 @@ export function CuesRow() {
   };
 
   return (
-    <Row label="Som ao começar e terminar" hint={failed ? "Não deu para salvar. Tente de novo." : "Um som curto quando o ditado ou a reunião começa e termina."}>
-      <Switch label="Som ao começar e terminar" checked={on} onChange={change} />
+    <Row label={t("cues.label")} hint={failed ? t("common.saveFailed") : t("cues.hint")}>
+      <Switch label={t("cues.label")} checked={on} onChange={change} />
     </Row>
   );
 }

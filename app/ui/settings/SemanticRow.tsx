@@ -4,28 +4,31 @@ import { useEffect, useState } from "react";
 
 import type { SemanticStatus } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
+import { t, useT } from "../src/i18n.ts";
 import { Row, Switch } from "../src/kit/index.tsx";
 
 const MB = (bytes: number) => Math.round(bytes / 1e6);
 
+/** A dica na língua de agora (o `t()` de fora do React; a linha redesenha pelo `useT()`). */
 export function semanticHint(s: SemanticStatus | null, failed: boolean): string {
-  if (failed) return "Não deu para salvar. Tente de novo.";
-  if (!s || !s.enabled) return "Desligada. Ligar baixa o modelo (135 MB) uma vez, do huggingface.co.";
+  if (failed) return t("common.saveFailed");
+  if (!s || !s.enabled) return t("semantic.off", { size: 135 });
   if (s.phase === "downloading") {
     const pct = s.total ? Math.floor(((s.done ?? 0) / s.total) * 100) : 0;
-    return `Baixando o modelo: ${pct}% de ${MB(s.total ?? 135e6)} MB, uma vez só. O texto das notas não sai daqui.`;
+    return t("semantic.downloading", { pct, size: MB(s.total ?? 135e6) });
   }
-  if (s.phase === "loading") return "Carregando o modelo…";
-  if (s.phase === "error") return "Não deu para baixar o modelo agora. Tenta de novo em alguns minutos.";
-  if (s.phase === "ready" && s.indexed < s.notes) return `Lendo as notas: ${s.indexed} de ${s.notes}. A busca já usa as que estão prontas.`;
-  if (s.phase === "ready") return "Acha notas pelo assunto, mesmo sem as palavras. Roda neste Mac; nada sai daqui.";
-  return "Esperando a pasta de notas abrir.";
+  if (s.phase === "loading") return t("common.loadingModel");
+  if (s.phase === "error") return t("semantic.failed");
+  if (s.phase === "ready" && s.indexed < s.notes) return t("semantic.indexing", { done: s.indexed, total: s.notes });
+  if (s.phase === "ready") return t("semantic.ready");
+  return t("semantic.waiting");
 }
 
 const settled = (s: SemanticStatus | null) =>
   !s || !s.enabled || s.phase === "error" || (s.phase === "ready" && s.indexed >= s.notes);
 
 export function SemanticRow() {
+  useT(); // redesenha quando a língua muda; o texto sai do `t()`, como na dica
   const [status, setStatus] = useState<SemanticStatus | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -66,8 +69,8 @@ export function SemanticRow() {
   };
 
   return (
-    <Row label="Buscar pelo sentido" hint={semanticHint(status, failed)}>
-      <Switch label="Buscar pelo sentido" checked={status.enabled} onChange={change} />
+    <Row label={t("semantic.label")} hint={semanticHint(status, failed)}>
+      <Switch label={t("semantic.label")} checked={status.enabled} onChange={change} />
     </Row>
   );
 }

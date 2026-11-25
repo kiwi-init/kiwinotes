@@ -3,6 +3,7 @@ import "./lists.css";
 
 import { useEffect, useRef, useState } from "react";
 
+import { useT } from "../i18n.ts";
 import { Button } from "./index.tsx";
 
 /**
@@ -98,11 +99,8 @@ export function TrashIcon() {
 
 /** `incomplete`: linhas com algo escrito que ainda não valem (e não foram salvas), para o "Salvo" não enganar (T914). */
 export function SavedNote({ saved, error, incomplete = 0 }: { saved: boolean; error: boolean; incomplete?: number }) {
-  const text = error
-    ? "Não deu para salvar"
-    : incomplete
-      ? `Salvo, menos ${incomplete === 1 ? "a linha incompleta" : `as ${incomplete} linhas incompletas`}`
-      : "Salvo";
+  const { t } = useT();
+  const text = error ? t("list.saveFailed") : incomplete ? t("list.savedButIncomplete", { n: incomplete }) : t("list.saved");
   return (
     <span className="kn-saved" data-show={saved || error} role="status" style={error ? { color: "var(--danger)" } : undefined}>
       {text}
@@ -114,13 +112,17 @@ export type LoadState = "loading" | "ready" | "error";
 
 /** A lista não abriu (o arquivo editado à mão não é um JSON válido): diz qual, em vez de parecer vazia (T914). */
 export function LoadError({ file, onRetry }: { file: string; onRetry: () => void }) {
+  const { t } = useT();
+  // O nome do arquivo fica em `<code>`, dentro da frase da língua.
+  const [before, after = ""] = t("list.loadError", { file: "\u0000" }).split("\u0000");
   return (
     <div className="kn-list-empty" role="alert">
       <div style={{ color: "var(--danger)", marginBottom: 8 }}>
-        Não deu para ler o <code>{file}</code>. Corrija o arquivo (ou apague-o para começar do zero) e tente de novo. Até
-        lá, nada daqui é salvo.
+        {before}
+        <code>{file}</code>
+        {after}
       </div>
-      <Button onClick={onRetry}>Tentar de novo</Button>
+      <Button onClick={onRetry}>{t("common.retry")}</Button>
     </div>
   );
 }

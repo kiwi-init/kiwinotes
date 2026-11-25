@@ -2,6 +2,7 @@
 // se escolhe por qual entrada.
 
 import { type AudioInputs, type MicInUse, type MicrophoneChoice, microphoneUid } from "../../src/shared/microphone.ts";
+import { t } from "../src/i18n.ts";
 
 export interface MicOption {
   value: MicrophoneChoice;
@@ -13,19 +14,20 @@ export interface MicOption {
  * dele), um salvo que saiu (desconectado) e o Padrão do sistema. Sem a lista (helper fora do ar ou antigo), só as fixas.
  * "Mic do Mac" some num Mac sem microfone (um Mac mini), a não ser que seja a escolha salva.
  */
+// Os textos na língua de agora (o `t()` de fora do React; a linha redesenha pelo `useT()`).
 export function micOptions(choice: MicrophoneChoice, inputs: AudioInputs | null): MicOption[] {
-  const out: MicOption[] = [{ value: "auto", label: "Automático" }];
+  const out: MicOption[] = [{ value: "auto", label: t("mic.auto") }];
   const hasBuiltin = !inputs || inputs.inputs.some((i) => i.transport === "builtin");
-  if (hasBuiltin || choice === "builtin") out.push({ value: "builtin", label: "Mic do Mac" });
+  if (hasBuiltin || choice === "builtin") out.push({ value: "builtin", label: t("mic.builtin") });
   for (const i of inputs?.inputs ?? []) {
     if (i.transport === "builtin") continue;
     out.push({ value: `uid:${i.uid}`, label: i.name });
   }
   const uid = microphoneUid(choice);
   if (uid && !out.some((o) => o.value === choice)) {
-    out.push({ value: choice, label: inputs ? "Microfone salvo (desconectado)" : "Microfone salvo" });
+    out.push({ value: choice, label: inputs ? t("mic.savedDisconnected") : t("mic.saved") });
   }
-  out.push({ value: "system", label: "Padrão do sistema" });
+  out.push({ value: "system", label: t("mic.system") });
   return out;
 }
 
@@ -41,21 +43,21 @@ export function micHint(choice: MicrophoneChoice, inputs: AudioInputs | null): s
   // Um salvo fora da lista está desconectado, diga o `using` o que disser.
   if (uid && inputs && !found) {
     return using?.fellBack && using.name && !using.lidClosed
-      ? `Desconectado. Até ele voltar, o ditado grava pelo ${using.name}.`
-      : "Desconectado. Até ele voltar, o ditado usa o Automático.";
+      ? t("mic.hint.disconnectedUsing", { name: using.name })
+      : t("mic.hint.disconnected");
   }
   const live = using && inputs ? liveHint(choice, using, inputs) : null;
   if (live) return live;
   const out = inputs?.output;
   if (choice === "auto") {
     return out?.transport === "bluetooth"
-      ? `Com ${out.name || "o fone Bluetooth"} na saída, o ditado grava pelo mic do Mac e o som do fone não cai.`
-      : "Com fone Bluetooth na saída, o ditado grava pelo mic do Mac e o som do fone não cai.";
+      ? t("mic.hint.autoWith", { name: out.name || t("mic.hint.bluetoothHeadset") })
+      : t("mic.hint.auto");
   }
-  if (choice === "builtin") return "O ditado grava sempre pelo mic do Mac.";
-  if (choice === "system") return "O microfone padrão do macOS. Com AirPods, o som deles abaixa enquanto você dita.";
-  if (found?.transport === "bluetooth") return "Um microfone Bluetooth: enquanto você dita, o som do fone abaixa.";
-  return "O ditado grava sempre por este microfone. Se ele sair, volta para o Automático.";
+  if (choice === "builtin") return t("mic.hint.builtin");
+  if (choice === "system") return t("mic.hint.system");
+  if (found?.transport === "bluetooth") return t("mic.hint.bluetooth");
+  return t("mic.hint.fixed");
 }
 
 /**
@@ -68,8 +70,7 @@ function liveHint(choice: MicrophoneChoice, using: MicInUse, inputs: AudioInputs
   const notTheMac = transport !== "builtin";
   const applies = using.lidClosed || (choice === "builtin" && notTheMac) || (choice === "auto" && bluetoothOut && notTheMac);
   if (!applies) return null;
-  const name = using.name || "microfone padrão do macOS";
-  const lid = using.lidClosed ? "Com a tampa fechada, o mic do Mac não grava. " : "";
-  const drop = transport === "bluetooth" && bluetoothOut ? ": enquanto você dita, o som do fone abaixa." : ".";
-  return `${lid}Agora o ditado grava pelo ${name}${drop}`;
+  const name = using.name || t("mic.hint.defaultName");
+  const now = transport === "bluetooth" && bluetoothOut ? t("mic.hint.nowDucking", { name }) : t("mic.hint.now", { name });
+  return using.lidClosed ? `${t("mic.hint.lidClosed")} ${now}` : now;
 }

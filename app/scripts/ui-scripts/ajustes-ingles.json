@@ -1,0 +1,29 @@
+{
+  "window": "hub",
+  "steps": [
+    { "invoke": "settings.set", "args": { "language": "en" }, "name": "o app em inglês (T28297); a escolha da língua está escondida (#380): o headless sobe com KIWI_LANGUAGE_CHOICE=1" },
+    { "waitFor": ".kn-tab", "name": "o hub abre" },
+    { "click": "[role='tab'][data-section='settings']", "name": "vai para as Configurações" },
+    { "click": ".kn-prefs-item[data-topic=appearance]", "name": "Aparência" },
+    { "expectText": ".kn-prefs-topic[data-topic=appearance] .kn-row-label >> nth=0", "text": "Mode", "name": "a Aparência em inglês" },
+    { "waitFor": ".kn-prefs-topic[data-topic=appearance] input[placeholder='Search themes']", "name": "a busca dos temas" },
+    { "screenshot": "1-appearance.png" },
+    { "click": ".kn-prefs-item[data-topic=dictation]", "name": "Ditado" },
+    { "expectText": ".kn-prefs-topic[data-topic=dictation]", "text": "Shortcuts · Dictation", "name": "os atalhos do Ditado" },
+    { "expectText": ".kn-prefs-topic[data-topic=dictation]", "text": "Dictate", "name": "o nome do atalho" },
+    { "expectText": ".kn-prefs-topic[data-topic=dictation]", "text": "Transcription", "name": "a Transcrição" },
+    { "expectText": ".kn-prefs-topic[data-topic=dictation]", "text": "Sound at start and end", "name": "o som" },
+    { "expectText": ".kn-prefs-topic[data-topic=dictation]", "text": "Add term", "name": "o Dicionário" },
+    { "expectText": ".kn-prefs-topic[data-topic=dictation]", "text": "Add snippet", "name": "os Snippets" },
+    { "screenshot": "2-dictation.png" },
+    { "click": ".kn-prefs-item[data-topic=notes]", "name": "Notas" },
+    { "expectText": ".kn-prefs-topic[data-topic=notes]", "text": "Show file extensions", "name": "as Notas em inglês" },
+    { "expectText": ".kn-prefs-topic[data-topic=notes]", "text": "Shortcuts · Notes sidebar", "name": "as teclas da barra lateral" },
+    { "screenshot": "3-notes.png" },
+    { "click": ".kn-prefs-item[data-topic=privacy]", "name": "Privacidade" },
+    { "expectText": ".kn-prefs-topic[data-topic=privacy]", "text": "Everything is local, except the agent you choose", "name": "a regra de privacidade" },
+    { "screenshot": "4-privacy.png" },
+    { "invoke": "settings.set", "args": { "language": "pt" }, "name": "de volta ao português" },
+    { "expectText": ".kn-prefs-topic[data-topic=privacy]", "text": "Tudo é local, menos o agente que você escolher", "name": "a mesma tela troca na hora" }
+  ]
+}

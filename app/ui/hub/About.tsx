@@ -3,7 +3,7 @@
 // conferência da assinatura). A faixa tem um estado de cada vez: parado, procurando, baixando (com a barra), pronta,
 // aplicando, e erro ou desligado. Com a versão nova baixada e conferida, o botão vira "Atualizar e reiniciar": um
 // clique a mais, para não cortar um ditado no meio (#2385).
-// Embaixo, discretos: a regra de privacidade (`PRIVACY_RULE`, ADR 0011), o "Salvar diagnóstico" (T5350) e as Licenças, numa tela à parte.
+// Embaixo, discretos: a regra de privacidade (`privacy.rule`, ADR 0011), o "Salvar diagnóstico" (T5350) e as Licenças, numa tela à parte.
 
 import "./about.css";
 
@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import { type AppAbout, releaseNotesUrl, type UiAppearance, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button, Row, Switch } from "../src/kit/index.tsx";
-import { PRIVACY_RULE } from "../settings/agentText.ts";
+import { t as translateNow } from "../src/i18n.ts";
 import { appearanceLine, CHANNEL, CHECK_UPDATES_HINT, CREDITS, DIAG_HINT, REVERT_HINT, updateBand } from "./aboutText.ts";
 import appIcon from "./app-icon.webp";
 
@@ -122,7 +122,7 @@ export function About() {
       {about.ui && about.ui.windows.length ? <Appearance initial={about.ui} /> : null}
 
       <footer className="kn-about-foot">
-        <span className="kn-about-privacy">{PRIVACY_RULE}.</span>
+        <span className="kn-about-privacy">{translateNow("privacy.rule")}.</span>
         <span className="kn-about-actions">
           {has("diagnostics.save") ? (
             <button type="button" className="kn-about-quiet" title={DIAG_HINT} disabled={diag.state === "saving"} onClick={() => void saveDiagnostics()}>
