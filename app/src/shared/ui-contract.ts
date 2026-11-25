@@ -327,7 +327,9 @@ export type { NoteModel };
 // 1.104.0 (T28190, spec #28171): o idioma do app. O `language` nas settings ("auto", "pt" ou "en"), o `app.locale` (a
 //   escolha, a língua de agora e a do macOS) e o evento `app.localeChanged`, quando a língua ou a escolha mudam. Só
 //   acréscimo.
-export const UI_CONTRACT_VERSION = "1.104.0";
+// 1.105.0 (T26829, spec #26687): a voz do gato. O evento `agent.speech`, com o nível do que a voz dele tocou (o gato
+//   fica no `falando`) e `null` no fim, no corte ou no erro. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.105.0";
 /** O `reason` do `updates` desligado quando foi a pessoa, em Ajustes (1.97.0, T25110), e não o build. */
 export const UPDATES_OFF_BY_SETTING = "desligado em Buscar atualizações";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
@@ -1530,6 +1532,11 @@ export interface UiEvents {
    * `idle` (cancelado, ou a fala vazia: o gato volta ao repouso, e no overlay sai pela saída de cancelamento).
    */
   "agent.voice": AgentVoiceUi;
+  /**
+   * A voz do gato (1.105.0, T26829): `nivel` de 0 a 1 enquanto ela toca (o RMS do pedaço, com o volume da saída), e
+   * `null` quando para, pelo fim, pelo corte ou pelo erro. O gato fica no `falando` com a boca nesse nível.
+   */
+  "agent.speech": AgentSpeechUi;
   /** Uma proposta da reunião nasceu, foi escolhida, aplicada ou descartada (1.57.0, spec #8360). */
   "agent.proposalsChanged": { proposals: AgentProposalSummary[] };
   /** A memória do agente mudou (1.60.0, spec #11469): pelo agente, pela pessoa ou por um [Desfazer]. */
@@ -1551,6 +1558,9 @@ export type AgentRoutineEvent = RoutineEventWho &
   );
 /** Qual rotina: uma das prontas, ou uma nova (1.69.0), com o id e o nome. */
 export type RoutineEventWho = { kind: RoutineKind; id?: undefined; name?: undefined } | { kind: "custom"; id: string; name: string };
+
+/** A voz do gato tocando (1.105.0, T26829). */
+export interface AgentSpeechUi { turnId: string; nivel: number | null }
 
 /** O que o gato mostra durante a fala ao agente (1.55.0). `voz`: o nível do mic, de 0 a 1. */
 export type AgentVoiceUi =

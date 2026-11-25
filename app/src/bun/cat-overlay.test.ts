@@ -774,3 +774,102 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(r.take()).toEqual([]);
   });
 });
+
+// T26829: a voz do gato. O nível vai à página (o `falando`, com a boca nele) e o `null` volta ao estado de antes; com
+// a voz tocando, o gato não sai do overlay, e a espera da resposta recomeça quando ela para.
+describe("a voz do gato no overlay (T26829)", () => {
+  const doneWith = (t: string, id = "r1"): AgentTurnEvent => ({ type: "done", id, stopReason: "end_turn", text: t }) as AgentTurnEvent;
+  const falas = (sent: CatOverlayCommand[]) => sent.filter((c) => c.type === "catOverlay.fala");
+  function talk(r: ReturnType<typeof rig>, id = "r1") {
+    r.cat.configure(true);
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.voice({ phase: "processing" });
+    r.cat.turn(started(id));
+    r.cat.voice({ phase: "asked", text: "um pedido", id });
+    r.take();
+  }
+
+  test("o nível vai à página, limitado a 0–1, e o null volta ao estado de antes", () => {
+    const r = rig();
+    talk(r);
+    r.cat.speech({ turnId: "r1", nivel: 0.4 });
+    r.cat.speech({ turnId: "r1", nivel: 3 });
+    r.cat.speech({ turnId: "r1", nivel: 0.123456 });
+    r.cat.speech({ turnId: "r1", nivel: null });
+    expect(r.take()).toEqual([
+      { type: "catOverlay.fala", nivel: 0.4 },
+      { type: "catOverlay.fala", nivel: 1 },
+      { type: "catOverlay.fala", nivel: 0.123 },
+      { type: "catOverlay.fala", nivel: null },
+    ]);
+    // Um null a mais (sem voz tocando) não manda nada.
+    r.cat.speech({ turnId: "r1", nivel: null });
+    expect(r.take()).toEqual([]);
+  });
+
+  test("com a voz tocando, o gato não sai; a espera recomeça inteira no fim da voz", () => {
+    const r = rig();
+    talk(r);
+    r.cat.speech({ turnId: "r1", nivel: 0.5 });
+    r.cat.turn(doneWith("Feito."));
+    r.take();
+    // Muito mais que a espera inteira: o gato segue na tela, falando.
+    r.advance(OVERLAY_TIMES.idleAsk + OVERLAY_TIMES.askLeave + 1000);
+    expect(r.cat.visible).toBe(true);
+    expect(r.take()).toEqual([]);
+    r.cat.speech({ turnId: "r1", nivel: null });
+    expect(falas(r.take())).toEqual([{ type: "catOverlay.fala", nivel: null }]);
+    r.advance(OVERLAY_TIMES.idleAsk - 1);
+    expect(r.take()).toEqual([]);
+    r.advance(1);
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Feito.", error: false, ask: true }]);
+    r.advance(OVERLAY_TIMES.askLeave);
+    expect(r.cat.visible).toBe(false);
+  });
+
+  test("sem balão (o pronto de um pedido escrito), a voz tocando também segura o gato", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.turn(started("r1"));
+    r.take();
+    r.cat.speech({ turnId: "r1", nivel: 0.5 });
+    r.cat.turn(doneWith("Feito."));
+    r.take();
+    r.advance(OVERLAY_TIMES.pronto + OVERLAY_TIMES.prontoExit + 1000);
+    expect(r.cat.visible).toBe(true);
+    expect(r.take().filter((c) => c.type === "catOverlay.hide")).toEqual([]);
+    // A voz para: a espera do pronto recomeça inteira.
+    r.cat.speech({ turnId: "r1", nivel: null });
+    r.take();
+    r.advance(OVERLAY_TIMES.pronto - 1);
+    expect(r.cat.visible).toBe(true);
+    r.advance(1);
+    expect(r.take().some((c) => c.type === "catOverlay.hide")).toBe(true);
+  });
+
+  test("a voz que começa depois do pronto também segura o gato", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.turn(started("r1"));
+    r.cat.turn(doneWith("Feito."));
+    r.take();
+    r.advance(OVERLAY_TIMES.pronto - 10);
+    r.cat.speech({ turnId: "r1", nivel: 0.5 });
+    r.advance(1000);
+    expect(r.cat.visible).toBe(true);
+    r.cat.speech({ turnId: "r1", nivel: null });
+    r.advance(OVERLAY_TIMES.pronto);
+    expect(r.take().some((c) => c.type === "catOverlay.hide")).toBe(true);
+  });
+
+  test("com o gato fora do overlay, ou o interruptor desligado, nada vai à página", () => {
+    const r = rig();
+    r.cat.speech({ turnId: "r1", nivel: 0.5 });
+    expect(r.take()).toEqual([]);
+    r.cat.configure(true);
+    r.take();
+    r.cat.speech({ turnId: "r1", nivel: 0.5 });
+    r.cat.speech({ turnId: "r1", nivel: null });
+    expect(falas(r.take())).toEqual([]);
+  });
+});

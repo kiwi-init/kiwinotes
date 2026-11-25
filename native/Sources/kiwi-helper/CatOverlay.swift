@@ -133,6 +133,13 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         script("window.kiwiOverlay?.set({voz: \(value)})")
     }
 
+    /// A voz do gato (T26829): o nível do que ela tocou, para a boca do `falando`; nil volta ao estado de antes.
+    func speech(_ level: Double?) {
+        guard gate.shows else { return }
+        let value = level.map { String(format: "%.3f", min(max($0, 0), 1)) } ?? "null"
+        script("window.kiwiOverlay?.set({fala: \(value)})")
+    }
+
     /// A posição e o tamanho do gato (spec #12949). Valem do próximo `load` (o app carrega de novo quando mudam); a
     /// janela continua sem pegar clique (`ignoresMouseEvents`, #504).
     func place(position: String?, scale: Double?) {

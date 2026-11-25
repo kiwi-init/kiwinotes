@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type FalaEvento, FalaPlayer, ligarFalaPlayer, nivelRms, type Pcm, type SaidaFala, type SinteseFala } from "./fala-player.ts";
+import { type FalaEvento, FalaPlayer, falaNaTela, ligarFalaPlayer, nivelRms, type Pcm, type SaidaFala, type SinteseFala } from "./fala-player.ts";
 
 // Tudo falso (T26734): a síntese devolve PCM sintético, a saída só anota. Nada sai no alto-falante.
 
@@ -264,5 +264,64 @@ describe("ligarFalaPlayer (T26734)", () => {
     desligar();
     expect(player.falando).toBeUndefined();
     expect(ouvintes.size).toBe(0);
+  });
+});
+
+// T26829: o que vai ao gato. O nível do que tocou, e `null` no fim, no corte e no erro.
+describe("falaNaTela (T26829)", () => {
+  function rig() {
+    const enviados: { turnId: string; nivel: number | null }[] = [];
+    return { enviados, naTela: falaNaTela((e) => enviados.push(e)) };
+  }
+
+  test("o nível passa, e o terminou vira null, pelo fim, pelo corte e pelo erro", () => {
+    for (const motivo of ["fim", "cancelado", "erro"] as const) {
+      const { enviados, naTela } = rig();
+      naTela({ tipo: "comecou", turnId: "t" });
+      naTela({ tipo: "nivel", turnId: "t", nivel: 0.3 });
+      naTela({ tipo: "nivel", turnId: "t", nivel: 0.6 });
+      naTela({ tipo: "nivel", turnId: "t", nivel: 0 });
+      naTela({ tipo: "terminou", turnId: "t", motivo });
+      expect(enviados).toEqual([
+        { turnId: "t", nivel: 0.3 },
+        { turnId: "t", nivel: 0.6 },
+        { turnId: "t", nivel: 0 },
+        { turnId: "t", nivel: null },
+      ]);
+    }
+  });
+
+  test("um turno cortado antes do 1º pedaço não abre a boca do gato", () => {
+    const { enviados, naTela } = rig();
+    naTela({ tipo: "comecou", turnId: "t" });
+    naTela({ tipo: "nivel", turnId: "t", nivel: 0 });
+    naTela({ tipo: "terminou", turnId: "t", motivo: "cancelado" });
+    expect(enviados).toEqual([]);
+  });
+
+  test("com o player de verdade: o corte no meio manda o null, e o turno novo fala de novo", async () => {
+    const { enviados, naTela } = rig();
+    const tocando: (() => void)[] = [];
+    const saida: SaidaFala = {
+      tocar: (_pcm, aoTocar) => new Promise<void>((r) => { aoTocar(1); tocando.push(r); }),
+      limpar: () => { for (const r of tocando.splice(0)) r(); },
+    };
+    const sintese: SinteseFala = {
+      async *sintetizar() { yield pedaco(16384, 1); yield pedaco(16384, 2); },
+    };
+    const player = new FalaPlayer({ sintese, saida, evento: naTela });
+    const a = player.falar({ turnId: "a", frases: ["Uma frase."] });
+    await Bun.sleep(1);
+    player.cancelar();
+    await a;
+    expect(enviados.at(-1)).toEqual({ turnId: "a", nivel: null });
+    expect(enviados.some((e) => e.turnId === "a" && typeof e.nivel === "number" && e.nivel > 0.4)).toBe(true);
+    const b = player.falar({ turnId: "b", frases: ["Outra."] });
+    await Bun.sleep(1);
+    for (const r of tocando.splice(0)) r();
+    await Bun.sleep(1);
+    for (const r of tocando.splice(0)) r();
+    await b;
+    expect(enviados.filter((e) => e.turnId === "b").at(-1)).toEqual({ turnId: "b", nivel: null });
   });
 });
