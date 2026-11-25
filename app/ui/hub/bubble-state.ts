@@ -21,6 +21,15 @@ import { limitBubble } from "../settings/usageText";
 /** O que o balão diz enquanto o agente está na web (spec #11908). */
 export const WEB_LINE = "Pesquisando na web…";
 
+/**
+ * Quanto a resposta fica na tela antes de dar lugar a um balão com ação (a memória, a rotina, a proposta; T28350): o
+ * tempo de leitura de antes do balão único, 1,5 s mais 60 ms por caractere, entre 2 e 8 s. Sem balão esperando, a
+ * resposta fica até o clique (spec #27881).
+ */
+export function readingMs(text: string): number {
+  return Math.min(8000, Math.max(2000, 1500 + 60 * [...text].length));
+}
+
 /** A largura máxima do balão, em pixels, e quantas linhas cabem. */
 export const BUBBLE_WIDTH = 320; // a do balão do pacote do KiwiCat (T14933)
 export const BUBBLE_LINES = 3;

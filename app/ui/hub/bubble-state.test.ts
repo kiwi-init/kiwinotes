@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentTurnEvent, BubbleLink } from "../../src/shared/ui-contract";
-import { ANSWER_HOLD_MS, BubbleFeed, bubblePlain, plainLinks, summaryOf, WEB_LINE } from "./bubble-state";
+import { ANSWER_HOLD_MS, BubbleFeed, bubblePlain, plainLinks, readingMs, summaryOf, WEB_LINE } from "./bubble-state";
 
 const fits = (max: number) => (s: string) => [...s].length <= max;
 const ev = (e: Record<string, unknown>) => ({ id: "p1", ...e }) as AgentTurnEvent;
@@ -443,5 +443,16 @@ describe("as notas e os arquivos no balão pequeno (spec #17683)", () => {
     ]);
     expect(fala.view(0)!.links).toBeUndefined();
     expect(fala.links()).toEqual(LINKS);
+  });
+});
+
+describe("o tempo de leitura antes de dar lugar a um balão com ação (T28350)", () => {
+  test("1,5 s mais 60 ms por caractere, entre 2 e 8 s", () => {
+    expect(readingMs("")).toBe(2000);
+    expect(readingMs("Pronto.")).toBe(2000);
+    expect(readingMs("x".repeat(50))).toBe(4500);
+    expect(readingMs("x".repeat(500))).toBe(8000);
+    // Caractere, não unidade do UTF-16.
+    expect(readingMs("🐱".repeat(50))).toBe(4500);
   });
 });

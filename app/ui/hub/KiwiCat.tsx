@@ -54,6 +54,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
   /** O balão da memória está na tela (spec #11469): a proposta espera ele sair. */
   const [noting, setNoting] = useState(false);
   const [routining, setRoutining] = useState(false);
+  const [proposing, setProposing] = useState(false);
   useEffect(() => { handle.current?.update({ parado: reduced }); }, [reduced]);
   // A paleta (spec #14963), pelo id: troca no próximo quadro, sem reiniciar o gato.
   const corRef = useRef(cor); corRef.current = cor;
@@ -250,14 +251,15 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
       </BubblePresence>
       {/* O balão (spec #9495): ao lado do gato, fora da caixa dele. Com o campo aberto ele espera escondido, sem perder
           o que chega, e aparece depois que o pedido sai (#10868). */}
-      <CatBubble reduced={reduced} hidden={asking || away} onShown={onShown} drop={dropAnswer} />
+      {/* Um balão com ação esperando (T28350): com o agente parado, a resposta dá lugar a ele depois do tempo de leitura. */}
+      <CatBubble reduced={reduced} hidden={asking || away} onShown={onShown} drop={dropAnswer} yieldTo={(noting || routining || proposing) && !(busy || activity.busy) && !sending} />
       {/* A proposta da reunião (spec #8360): no mesmo canto, depois que a resposta sai da tela. */}
       {/* "Anotei: …" (spec #11469): depois da resposta; a proposta da reunião espera ele sair, e também o pedido em
           andamento (sem isso ela voltava por um instante entre a pergunta e a resposta, spec #11652). */}
       <MemoryBubble hidden={askShown || away || talking} onShown={setNoting} reduced={reduced} />
       {/* As rotinas (spec #12150): o resumo pronto, com [Ver] [Manter] [Descartar], depois da memória. */}
       <RoutineBubble hidden={askShown || away || talking || noting} onShown={setRoutining} reduced={reduced} />
-      <ProposalBubble hidden={proposalHidden({ asking: askShown, away, talking, answering, noting, routining, busy: busy || activity.busy, sending })} reduced={reduced} />
+      <ProposalBubble hidden={proposalHidden({ asking: askShown, away, talking, answering, noting, routining, busy: busy || activity.busy, sending })} reduced={reduced} onPending={setProposing} />
     </BubbleCornerContext.Provider>
   );
 }
