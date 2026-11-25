@@ -260,6 +260,19 @@ describe("o que fica como antes", () => {
     expect(plain.view(0)!.text).toBe("O Claude Code atingiu o limite de uso da sua conta.");
   });
 
+  test("com o app em English, o aviso e o limite acabado saem em inglês (T29063)", () => {
+    const wall = () => new Date(2026, 10, 13, 14, 0).getTime();
+    const f = new BubbleFeed(fits(80), false, wall, () => "en");
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "limit", status: "warning", percent: 82 }), 10);
+    expect(f.view(10)!.text).toBe("You've used 82% of your limit. I'll keep going, but take it easy.");
+    const out = new BubbleFeed(fits(80), false, wall, () => "en");
+    out.event(ev({ type: "started" }), 0);
+    out.event(ev({ type: "limit", status: "out", resetsAt: new Date(2026, 10, 13, 18, 40).toISOString() }), 0);
+    out.event(ev({ type: "error", code: "E_AGENT_LIMIT", message: "usage limit reached" }), 0);
+    expect(out.view(0)!.text).toBe("Your limit ran out. It comes back at 6:40 PM.");
+  });
+
   test("a web (spec #11908): o balão diz que o agente está pesquisando, até a próxima ferramenta ou a resposta", () => {
     const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);

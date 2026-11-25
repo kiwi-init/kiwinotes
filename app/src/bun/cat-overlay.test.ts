@@ -6,6 +6,8 @@ import type { AgentTurnEvent, BubbleLink } from "../shared/ui-contract.ts";
 import type { Command } from "../shared/ipc.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import type { AgentStatus, AppSettings } from "../shared/ui-contract.ts";
+import { limitBubble } from "../../ui/settings/usageText.ts";
+import { readingMs } from "../../ui/hub/bubble-state.ts";
 import { mainLocale } from "./locale.ts";
 import { ASK_LINE, attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_TIMES, plainBubbleText, shiftLinks, voiceErrorLine } from "./cat-overlay.ts";
 
@@ -813,6 +815,182 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
 
 // T26829: a voz do gato. O nível vai à página (o `falando`, com a boca nele) e o `null` volta ao estado de antes; com
 // a voz tocando, o gato não sai do overlay, e a espera da resposta recomeça quando ela para.
+// T29063 (achado no #370, #29059): o aviso de limite de uso aparecia só no balão do hub. Com o gato no overlay, a
+// pessoa não via que estava perto do limite, e o limite acabado chegava como "Não consegui falar com o agente: …".
+describe("o aviso de limite de uso no overlay (T29063)", () => {
+  const doneWith = (t: string, id = "r1"): AgentTurnEvent => ({ type: "done", id, stopReason: "end_turn", text: t }) as AgentTurnEvent;
+  const limit = (status: "warning" | "out", extra: { percent?: number; resetsAt?: string } = {}, id = "r1"): AgentTurnEvent =>
+    ({ type: "limit", id, status, ...extra }) as AgentTurnEvent;
+  function talk(r: ReturnType<typeof rig>, id = "r1") {
+    r.cat.configure(true);
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.voice({ phase: "processing" });
+    r.cat.turn(started(id));
+    r.cat.voice({ phase: "asked", text: "resume a nota de ontem", id });
+    r.take();
+  }
+  const bubbles = (sent: CatOverlayCommand[]) => sent.filter((c) => c.type === "catOverlay.bubble");
+  const WARN = limitBubble("warning", 85, undefined, Date.now());
+
+  test("o aviso entra no balão enquanto o agente trabalha, como no hub", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(limit("warning", { percent: 85 }));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: WARN, error: false }]);
+    expect(WARN).toBe("Você já usou 85% do seu limite. Eu sigo, mas vale ir com calma.");
+  });
+
+  test("a resposta que chega logo depois espera o tempo de leitura do aviso (readingMs do #370)", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(limit("warning", { percent: 85 }));
+    r.take();
+    r.advance(500);
+    r.cat.turn(doneWith("Resumi a nota."));
+    expect(bubbles(r.take())).toEqual([]);
+    r.advance(readingMs(WARN) - 500 - 1);
+    expect(bubbles(r.take())).toEqual([]);
+    r.advance(1);
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Resumi a nota.", error: false }]);
+    // E a espera da conversa (spec #13380) começa só daí.
+    r.advance(OVERLAY_TIMES.idleAsk);
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Resumi a nota.", error: false, ask: true }]);
+  });
+
+  test("a resposta que chega depois da leitura entra na hora", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(limit("warning", { percent: 85 }));
+    r.take();
+    r.advance(readingMs(WARN) + 10);
+    r.cat.turn(doneWith("Resumi a nota."));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Resumi a nota.", error: false }]);
+  });
+
+  test("o erro não espera o aviso", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(limit("warning"));
+    r.take();
+    r.cat.turn({ type: "error", id: "r1", code: "E_NETWORK", message: "sem internet." } as AgentTurnEvent);
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: voiceErrorLine("sem internet."), error: true }]);
+    // Nem volta depois: a espera do aviso foi junto.
+    r.advance(readingMs(WARN));
+    expect(bubbles(r.take())).toEqual([]);
+  });
+
+  test("o limite acabado: o erro diz quando ele volta, no lugar da mensagem do agente", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(limit("out"));
+    expect(bubbles(r.take())).toEqual([]);
+    r.cat.turn({ type: "error", id: "r1", code: "E_AGENT_LIMIT", message: "usage limit reached" } as AgentTurnEvent);
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: limitBubble("out", undefined, undefined, Date.now()), error: true }]);
+  });
+
+  test("um pedido que não veio da fala também mostra o aviso, e o gato fica até a leitura acabar", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.turn(started());
+    r.take();
+    r.cat.turn(limit("warning", { percent: 90 }));
+    const line = limitBubble("warning", 90, undefined, Date.now());
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: line, error: false }]);
+    r.cat.turn(doneWith("ok"));
+    r.take();
+    // O pronto sem balão de resposta (spec #12938) só começa a sair depois do tempo de leitura do aviso.
+    r.advance(readingMs(line) + OVERLAY_TIMES.pronto - 1);
+    expect(r.take().filter((c) => c.type === "catOverlay.hide")).toEqual([]);
+    r.advance(1);
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit }]);
+  });
+
+  test("um pedido que não veio da fala também diz quando o limite volta", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.turn(started());
+    r.take();
+    r.cat.turn(limit("out"));
+    r.cat.turn({ type: "error", id: "r1", code: "E_AGENT_LIMIT", message: "usage limit reached" } as AgentTurnEvent);
+    const line = limitBubble("out", undefined, undefined, Date.now());
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: line, error: true }]);
+    // Sem a fala não há conversa: sem a pergunta, o gato sai depois do tempo de ler.
+    r.advance(readingMs(line) - 1);
+    expect(r.take()).toEqual([]);
+    r.advance(1);
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.erroExit }]);
+  });
+
+  test("com o app em English, o aviso e o limite acabado saem em inglês", () => {
+    mainLocale.set("en");
+    try {
+      const r = rig();
+      talk(r);
+      r.cat.turn(limit("warning", { percent: 85 }));
+      expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "You've used 85% of your limit. I'll keep going, but take it easy.", error: false }]);
+      const o = rig();
+      talk(o);
+      o.cat.turn(limit("out"));
+      o.cat.turn({ type: "error", id: "r1", code: "E_AGENT_LIMIT", message: "usage limit reached" } as AgentTurnEvent);
+      expect(bubbles(o.take())).toEqual([{ type: "catOverlay.bubble", text: limitBubble("out", undefined, undefined, Date.now(), "en"), error: true }]);
+      expect(limitBubble("out", undefined, undefined, Date.now(), "en")).toBe("Your limit ran out.");
+    } finally {
+      mainLocale.set("pt");
+    }
+  });
+
+  test("fechar no × durante a espera do aviso: a resposta não volta depois", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(limit("warning", { percent: 85 }));
+    r.advance(100);
+    r.cat.turn(doneWith("Resumi a nota."));
+    r.cat.close();
+    r.take();
+    r.advance(readingMs(WARN) + 50);
+    expect(r.take()).toEqual([]);
+  });
+
+  test("a hora de volta de um pedido não vaza para o seguinte", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(limit("out", { resetsAt: new Date(Date.now() + 3600_000).toISOString() }));
+    r.cat.turn(doneWith("Resumi."));
+    r.advance(60_000);
+    r.take();
+    talk(r, "r2");
+    r.cat.turn({ type: "error", id: "r2", code: "E_AGENT_LIMIT", message: "limite do agente." } as AgentTurnEvent);
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: voiceErrorLine("limite do agente."), error: true }]);
+  });
+
+  test("com o hub à vista, o aviso fica no gato do canto", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.setHubInView(true);
+    r.cat.turn(started());
+    r.cat.turn(limit("warning", { percent: 90 }));
+    expect(bubbles(r.take())).toEqual([]);
+  });
+
+  test("um aviso atrasado de outro pedido não entra", () => {
+    const r = rig();
+    talk(r, "r2");
+    r.cat.turn(limit("warning", { percent: 90 }, "r1"));
+    expect(bubbles(r.take())).toEqual([]);
+  });
+
+  test("um pedido novo tira o aviso do anterior e a resposta que esperava por ele", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(limit("warning"));
+    r.cat.turn(doneWith("Resumi a nota."));
+    r.take();
+    talk(r, "r2");
+    r.advance(readingMs(WARN));
+    expect(bubbles(r.take())).toEqual([]);
+  });
+});
+
 describe("a voz do gato no overlay (T26829)", () => {
   const doneWith = (t: string, id = "r1"): AgentTurnEvent => ({ type: "done", id, stopReason: "end_turn", text: t }) as AgentTurnEvent;
   const falas = (sent: CatOverlayCommand[]) => sent.filter((c) => c.type === "catOverlay.fala");

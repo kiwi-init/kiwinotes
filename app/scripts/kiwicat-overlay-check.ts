@@ -159,7 +159,8 @@ try {
   await waitFor("o fim 3", () => at((c) => c.type === "catOverlay.hide", p2) >= 0, 30_000);
   report.checks.push("a new request during the exit comes back without a hide in between (no blink)");
 
-  // 3. O erro fica 2200 ms e sai em 180 ms.
+  // 3. O erro fica 2200 ms e sai em 180 ms. Este é o limite acabado: desde a T29063 o balão diz a hora de volta, e o gato
+  // fica o tempo de lê-lo, que passa dos 2200 ms.
   from = log.length;
   await invoke("agent.ask", { text: "/limite" }).catch(() => {});
   await waitFor("o erro", () => at((c) => c.estado === "erro", from) >= 0);
