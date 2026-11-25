@@ -12,6 +12,7 @@
 // A pinça e o ⌘+/⌘−/⌘0 (T22178, spec #21198) usam o zoom do próprio viewer, e o papel branco cresce junto: o diagrama
 // segue nítido, e o clique e o link continuam caindo onde o viewer espera. Os botões de zoom da barra dele fazem o mesmo.
 
+import { t as tNow, useT } from "../../src/i18n.ts";
 import viewerUrl from "./drawio/viewer-static.min.js?url";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -27,15 +28,17 @@ import { recallZoom, rememberZoom } from "./zoom.ts";
 const DRAWIO_ZOOM = { min: 0.25, max: 4 };
 
 
-/** As dicas da barra do viewer em português (sem os textos dele, que viriam da rede, elas ficariam em inglês). */
-const TOOLBAR_PT = [
-  "previousPage=Página anterior",
-  "nextPage=Próxima página",
-  "zoomOut=Diminuir o zoom",
-  "zoomIn=Aumentar o zoom",
-  "fit=Ajustar à janela",
-  "layers=Camadas",
-].join("\n");
+/** As dicas da barra do viewer na língua do app (sem os textos dele, que viriam da rede, elas ficam no inglês dele).
+ * O viewer carrega uma vez por janela: a troca de língua chega a ele no próximo carregamento. */
+const toolbarTexts = () =>
+  [
+    `previousPage=${tNow("files.drawio.prevPage")}`,
+    `nextPage=${tNow("files.drawio.nextPage")}`,
+    `zoomOut=${tNow("files.zoomOut")}`,
+    `zoomIn=${tNow("files.zoomIn")}`,
+    `fit=${tNow("files.fitWindow")}`,
+    `layers=${tNow("files.drawio.layers")}`,
+  ].join("\n");
 
 /** O pouco do mxGraph que o ⌘F usa (T22217): a célula pelo id e onde ela está desenhada. */
 interface DrawioCellState {
@@ -92,7 +95,7 @@ function loadViewer(): Promise<DrawioGlobals> {
     script.onload = () => {
       if (!w.GraphViewer) return reject(new Error("draw.io viewer did not load"));
       installDrawioGuard(w as Parameters<typeof installDrawioGuard>[0]);
-      w.mxResources?.parse(TOOLBAR_PT);
+      w.mxResources?.parse(toolbarTexts());
       resolve(w);
     };
     script.onerror = () => reject(new Error("draw.io viewer did not load"));
@@ -107,6 +110,7 @@ function loadViewer(): Promise<DrawioGlobals> {
 type State = { kind: "loading" } | { kind: "ready" } | { kind: "tooLarge" } | { kind: "error" };
 
 export function DrawioViewer({ path, file }: FileViewerProps) {
+  const { t } = useT();
   const text = "text" in file ? file.text : "";
   const box = useRef<HTMLDivElement>(null);
   // O arquivo é conferido antes do viewer carregar: um que não é diagrama, ou que passa do teto, nem chega nele.
@@ -272,7 +276,7 @@ export function DrawioViewer({ path, file }: FileViewerProps) {
       {find && state.kind === "ready" ? (
         <div className="kn-file-drawio-find">
           <FindBar
-            label="Procurar no diagrama"
+            label={t("files.drawio.find")}
             query={find.query}
             index={find.index}
             total={found.length}

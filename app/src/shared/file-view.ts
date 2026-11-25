@@ -67,8 +67,8 @@ export const hasVersions = (name: string): boolean => hasTextVersions(name) || /
 
 export const viewLimit = (as: FileReadAs): number => (as === "text" ? MAX_VIEW_TEXT_BYTES : MAX_VIEW_BYTES);
 
-/** "1,2 MB", "340 KB", "12 B": o tamanho como o Finder diz. */
-export function fileSize(bytes: number): string {
+/** "1,2 MB", "340 KB", "12 B": o tamanho como o Finder diz, com a vírgula ou o ponto da língua ("1.2 MB" em inglês). */
+export function fileSize(bytes: number, locale: "pt" | "en" = "pt"): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB"];
   let value = bytes / 1024;
@@ -77,7 +77,7 @@ export function fileSize(bytes: number): string {
     value /= 1024;
     unit++;
   }
-  return `${value >= 100 ? Math.round(value) : value.toFixed(1).replace(".", ",").replace(/,0$/, "")} ${units[unit]}`;
+  return `${value >= 100 ? Math.round(value) : (locale === "en" ? value.toFixed(1) : value.toFixed(1).replace(".", ",")).replace(/[.,]0$/, "")} ${units[unit]}`;
 }
 
 /** O áudio e o vídeo que tocam nas Notas (T19315): o tipo MIME de cada um fica em `ui/notes/files/media.ts`. */

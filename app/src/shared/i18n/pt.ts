@@ -12,6 +12,7 @@ import { ptMeetingsSettings } from "./meetings-settings.pt.ts";
 import { ptMeetings } from "./meetings.pt.ts";
 import { ptNotes } from "./notes.pt.ts";
 import { ptSettings } from "./settings.pt.ts";
+import { ptViewers } from "./viewers.pt.ts";
 
 // A chave diz onde o texto aparece (`settings.…` em Ajustes); o plural vai como `{ one, other }`, com o parâmetro `n`.
 
@@ -121,6 +122,7 @@ export const PT_PARTS = {
   common: ptCommon,
   notes: ptNotes,
   editor: ptEditor,
+  viewers: ptViewers,
   settings: ptSettings,
   meetingsSettings: ptMeetingsSettings,
   catOverlay: ptCatOverlay,
@@ -145,4 +147,6 @@ export const pt = {
   ...ptActivity,
   // O editor das Notas (T29842): `editor.pt.ts`.
   ...ptEditor,
+  // Os visualizadores das Notas (T29245): `viewers.pt.ts`.
+  ...ptViewers,
 } as const;

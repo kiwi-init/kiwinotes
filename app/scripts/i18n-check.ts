@@ -117,6 +117,24 @@ export const MIGRATED = [
   "ui/settings/activityText.ts",
   "ui/settings/AgentActivity.tsx",
   "ui/settings/DoubtAnswers.tsx",
+  // Os visualizadores das Notas (T29245).
+  "ui/notes/NoteFacts.tsx",
+  "ui/notes/canvas/CanvasView.tsx",
+  "ui/notes/editor/embeds.tsx",
+  "ui/notes/editor/mermaid.tsx",
+  "ui/notes/editor/renderedWidget.tsx",
+  "ui/notes/files/DocxFormatBar.tsx",
+  "ui/notes/files/DocxViewer.tsx",
+  "ui/notes/files/DrawioViewer.tsx",
+  "ui/notes/files/FileView.tsx",
+  "ui/notes/files/ImageViewer.tsx",
+  "ui/notes/files/MediaViewer.tsx",
+  "ui/notes/files/PdfViewer.tsx",
+  "ui/notes/files/SheetPane.tsx",
+  "ui/notes/files/TableGrid.tsx",
+  "ui/notes/files/TableViewer.tsx",
+  "ui/notes/files/TextViewer.tsx",
+  "ui/notes/files/XlsxViewer.tsx",
 ];
 
 /** O main e a notificação já no catálogo (T28192): menu, bandeja, status, diálogo do link, pílula e notificação. */

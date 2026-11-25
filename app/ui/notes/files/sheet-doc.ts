@@ -15,6 +15,7 @@ import { inspectXlsx, patchXlsx, readXlsx } from "../../../src/shared/sheet/xlsx
 
 import { checkZip } from "./zipSize.ts";
 import { isXlsx, localizeNumber, TooLarge } from "./sheet.ts";
+import type { SheetWhy } from "../../../src/shared/sheet/why.ts";
 
 export type Decimal = "," | ".";
 
@@ -33,7 +34,8 @@ export interface SheetDoc {
   /** As abas escondidas no Excel: ficam no arquivo, fora da tela. */
   hidden: string[];
   /** Por que o arquivo abre só para leitura (a senha, as macros), ou `null`. */
-  readOnly: string | null;
+  /** Por que abre só para leitura (T29245): a tela traduz. */
+  readOnly: SheetWhy | null;
 }
 
 /**
@@ -68,7 +70,7 @@ export function openDoc(bytes: Uint8Array, name: string, display: Display = plai
     if (!zip.ok) throw zip.reason === "too-large" ? new TooLarge("the spreadsheet is too large to open here") : new Error("not an xlsx file");
   }
   const inspection = inspectXlsx(bytes, name);
-  const readOnly = inspection.editable ? null : inspection.detail;
+  const readOnly = inspection.editable ? null : inspection.why;
   const book = readXlsx(bytes, name);
   const sheets: GridSheet[] = book.sheets.map((s) => ({
     name: s.name,

@@ -13,15 +13,17 @@ export const DOCX_SAVE_DELAY = 400;
 const CAT_GRACE_MS = 50;
 const CAT_GRACE_TRIES = 6;
 
-export const CHANGED_OUTSIDE = "O arquivo mudou fora do Kiwi: abri a versão nova, e a última edição não foi gravada.";
-export const SAVE_FAILED = "Não deu para gravar este documento agora. O Kiwi tenta de novo na próxima edição.";
+/** Os avisos do gravador são chaves do catálogo (`viewers.*.ts`): a tela do documento traduz na língua dela. */
+export const CHANGED_OUTSIDE = "files.docx.changedOutside" as const;
+export const SAVE_FAILED = "files.docx.saveFailed" as const;
+export type DocxNotice = typeof CHANGED_OUTSIDE | typeof SAVE_FAILED;
 
 export interface DocxSaverOptions {
   path: string;
   files: Pick<FilesApi, "saveBytes">;
   /** O docx de agora, do motor. Chamado só quando há o que gravar. */
   bytes(): Uint8Array;
-  notice(text: string | null): void;
+  notice(key: DocxNotice | null): void;
   /** Outro app gravou antes de nós: abrir estes bytes no lugar. */
   reload(base64: string, version: string): void;
   /**

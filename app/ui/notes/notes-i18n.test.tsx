@@ -1,14 +1,31 @@
 // A casca das Notas em inglês (T29244, spec #28171): a árvore, as propriedades, os diálogos pequenos e os textos que
 // saem de funções (editada hoje, "em Projetos", o tempo da Lixeira, a contagem do ⌘F, as datas das propriedades).
+// Os visualizadores (T29245): a grade da planilha, a barra do docx, o cartão do arquivo, a pasta grande e a linha de
+// fatos da nota.
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { translate } from "../../src/shared/i18n/index.ts";
+import { fileSize } from "../../src/shared/file-view.ts";
+import { checkOp, SheetOpError } from "../../src/shared/sheet/ops.ts";
+import { why, whyText } from "../../src/shared/sheet/why.ts";
+import { partText, readZip, writeZip } from "../../src/shared/sheet/zip.ts";
 import { setAppLocale } from "../src/i18n.ts";
+import { DocxFormatBar } from "./files/DocxFormatBar.tsx";
+import { CHANGED_OUTSIDE, SAVE_FAILED } from "./files/docxSaver.ts";
+import { modified, typeLabel } from "./files/fileCard.ts";
+import { openDoc } from "./files/sheet-doc.ts";
+import { readOnlyText, refusedText } from "./files/sheet-session.ts";
+import { TableGrid } from "./files/TableGrid.tsx";
 import { findCount } from "./find.ts";
 import { FindBar } from "./FindBar.tsx";
 import { formatDate } from "./frontmatter-properties.ts";
 import { MeetingSpeakerDialog } from "./MeetingSpeakerDialog.tsx";
+import { NoteFacts } from "./NoteFacts.tsx";
 import { Properties } from "./Properties.tsx";
 import { RefactorDialog } from "./RefactorDialog.tsx";
 import { Sidebar, type SidebarProps, whereLabel } from "./Sidebar.tsx";
@@ -101,5 +118,78 @@ describe("a casca das Notas em inglês", () => {
     expect(findCount("x", -1, 0, "en")).toBe("Nothing found");
     expect(findCount("x", 0, 1200, "en")).toBe("1 of 1,200");
     expect(formatDate("2026-01-09T08:05", "en")).toBe("Jan 9, 2026, 08:05");
+  });
+});
+
+describe("os visualizadores das Notas em inglês (T29245)", () => {
+  const today = new Date();
+  const mtime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 1).toISOString();
+
+  test("a linha de fatos da nota aberta: editada hoje e as palavras, na língua da tela", () => {
+    english();
+    const facts = renderToStaticMarkup(<NoteFacts note={{ mtime }} words={1234} />);
+    expect(facts).toBe("<span>edited today</span><span>1,234 words</span>");
+    setAppLocale({ setting: "auto", locale: "pt", system: "pt" });
+    expect(renderToStaticMarkup(<NoteFacts note={{ mtime }} words={1} />)).toContain("editada hoje");
+  });
+
+  test("a grade da planilha: o rodapé, a barra da célula e as dicas", () => {
+    english();
+    const grid = renderToStaticMarkup(<TableGrid header={["Fruta", "Preço"]} rows={[["Caju", "3"], ["Manga", "5"]]} columns={2} foot="read as UTF-16" />);
+    expect(grid).toContain("2 rows, 2 columns, read as UTF-16");
+    expect(grid).toContain("Click a cell to see all of its contents");
+    expect(grid).toContain('aria-label="Selected cell"');
+    expect(grid).not.toContain("linhas");
+    expect(grid).not.toContain("Clique numa célula");
+  });
+
+  test("a barra de formatação do docx traduz os títulos e o nome do botão", () => {
+    english();
+    const state = { bold: true, italic: false, underline: false, strike: false, heading: 0, bullet: false, ordered: false, alignment: null };
+    const bar = renderToStaticMarkup(<DocxFormatBar spot={{ top: 0, left: 0, state }} onFormat={() => {}} />);
+    expect(bar).toContain('aria-label="Formatting"');
+    expect(bar).toContain('title="Bold (⌘B)"');
+    expect(bar).toContain('aria-label="Bold"');
+    expect(bar).not.toContain("Negrito");
+  });
+
+  test("o cartão do arquivo, o tamanho e os avisos do docx seguem a língua; o português continua o padrão", () => {
+    expect(typeLabel("Projeto X/backup.zip", "en")).toBe("ZIP file");
+    expect(typeLabel("Makefile", "en")).toBe("File with no extension");
+    expect(typeLabel("Projeto X/backup.zip")).toBe("Arquivo ZIP");
+    expect(modified("2026-03-04T15:06:00", "en")).toMatch(/^Mar 4, 2026.*3:06\sPM$/);
+    expect(fileSize(1_258_291, "en")).toBe("1.2 MB");
+    expect(fileSize(1_258_291)).toBe("1,2 MB");
+    expect(fileSize(1024, "en")).toBe("1 KB");
+    expect(translate("en", CHANGED_OUTSIDE)).toBe("The file changed outside Kiwi: the new version is open, and your last edit wasn't saved.");
+    expect(translate("pt", SAVE_FAILED)).toBe("Não deu para gravar este documento agora. O Kiwi tenta de novo na próxima edição.");
+  });
+
+  test("o motivo da planilha (revisão #30550): a tela traduz, e o agente segue com a frase em português", () => {
+    // Uma aba protegida: a planilha abre só para leitura, e o motivo vem do motor como chave, com o nome da aba.
+    const original = new Uint8Array(readFileSync(join(import.meta.dir, "../../test/fixtures/sheet/estoque.xlsx")));
+    const sheet1 = partText(original, readZip(original).find((p) => p.name === "xl/worksheets/sheet1.xml")!);
+    const locked = sheet1.replace("<autoFilter", '<sheetProtection sheet="1"/><autoFilter');
+    const bytes = writeZip(original, readZip(original), new Map([["xl/worksheets/sheet1.xml", new TextEncoder().encode(locked)]]));
+    const doc = openDoc(bytes, "Projeto X/estoque.xlsx");
+    english();
+    expect(readOnlyText(doc)).toBe("tab Estoque is protected");
+    expect(translate("en", "files.sheet.readOnly", { why: readOnlyText(doc)! })).toBe("Read only: tab Estoque is protected");
+    expect(doc.readOnly && whyText("pt", doc.readOnly)).toBe("a aba Estoque está protegida");
+    // Uma edição recusada: a tela em inglês; o `message`, que vai ao agente, igual ao de antes.
+    let refused: unknown;
+    try {
+      checkOp({ op: "renameSheet", sheet: "Estoque", name: "a/b" }, ["Estoque"]);
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused).toBeInstanceOf(SheetOpError);
+    expect(refusedText(refused)).toBe("Couldn't do that: a tab name can't have \\ / ? * [ ] :.");
+    expect(whyText("en", (refused as SheetOpError).why)).toBe("a tab name can't have \\ / ? * [ ] :");
+    expect((refused as SheetOpError).message).toBe("o nome da aba não pode ter \\ / ? * [ ] :");
+    // O motivo com outro motivo dentro ("apagar linhas"): as duas partes na mesma língua.
+    const comments = why("files.sheet.why.comments", { what: { key: "files.sheet.why.what.deleteRows" } });
+    expect(whyText("en", comments)).toBe("can't delete rows: the tab has comments");
+    expect(new SheetOpError(comments).message).toBe("não dá para apagar linhas: a aba tem comentários");
   });
 });

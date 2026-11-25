@@ -292,9 +292,8 @@ export function insideGroup(nodes: readonly CanvasNode[], group: Box & { id?: st
 
 // ---------------------------------------------------------------- as cores
 
-/** As 6 cores do formato ("1" a "6"): vermelho, laranja, amarelo, verde, ciano e roxo. */
+/** As 6 cores do formato ("1" a "6"): vermelho, laranja, amarelo, verde, ciano e roxo (os nomes: `canvas.color.N`). */
 export const CANVAS_PRESETS = ["1", "2", "3", "4", "5", "6"] as const;
-export const CANVAS_PRESET_NAMES: Readonly<Record<string, string>> = { "1": "Vermelho", "2": "Laranja", "3": "Amarelo", "4": "Verde", "5": "Ciano", "6": "Roxo" };
 
 /** A cor de um nó ou aresta como CSS: o token do preset, o hex do arquivo, ou `null` (a cor padrão). Nada além disso. */
 export function canvasColor(color: unknown): string | null {

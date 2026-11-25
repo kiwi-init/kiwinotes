@@ -3,6 +3,7 @@
 // duplo no fundo cria um cartão, e o ⌘Z desfaz. Grava sozinho como a nota (condicional pela versão), e o que o Kiwi não
 // conhece no arquivo fica como estava. Nada de rede: um nó de link é um cartão com o endereço, que só abre no clique.
 
+import { t as tNow, useT } from "../../src/i18n.ts";
 import { memo, type MutableRefObject, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -18,7 +19,6 @@ import {
   type CanvasEdge,
   type CanvasNode,
   CanvasParseError,
-  CANVAS_PRESET_NAMES,
   CANVAS_PRESETS,
   type CanvasSide,
   edgeGeometry,
@@ -96,6 +96,7 @@ interface Handlers {
 }
 
 export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpenTag, onOpenFile, onRenamed, onError, onVersions }: CanvasViewProps) {
+  const { t: tr } = useT();
   const [doc, setDoc] = useState<CanvasDoc | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -141,7 +142,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
         setDoc(d);
         setProblem(null);
       } catch (e) {
-        setProblem(e instanceof CanvasParseError ? `Este quadro não abre: ${e.message}. O arquivo fica como está.` : "Este quadro não abre.");
+        setProblem(e instanceof CanvasParseError ? tNow("canvas.parseError", { error: e.message }) : tNow("canvas.openFailed"));
       }
     },
     [],
@@ -151,7 +152,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
     let alive = true;
     api.canvas.get(path).then(
       (f) => alive && load(f),
-      () => alive && setProblem("Este quadro não está mais no vault."),
+      () => alive && setProblem(tNow("canvas.gone")),
     );
     return () => {
       alive = false;
@@ -625,7 +626,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
       onRenamed(r.path);
     } catch (e) {
       setTitle(canvasName(path));
-      onError(errorCode(e) === "E_EXISTS" ? "Já existe um quadro com esse nome." : "Não deu para renomear o quadro.");
+      onError(errorCode(e) === "E_EXISTS" ? tNow("canvas.renameExists") : tNow("canvas.renameFailed"));
     }
   };
 
@@ -645,28 +646,28 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
     };
     const colors: MenuItem = {
       kind: "submenu",
-      label: "Cor",
+      label: tr("canvas.menu.color"),
       items: [
-        { label: "Sem cor", checked: current === undefined, onSelect: paint(undefined) },
-        ...CANVAS_PRESETS.map((c) => ({ label: CANVAS_PRESET_NAMES[c]!, checked: current === c, onSelect: paint(c) })),
+        { label: tr("canvas.menu.noColor"), checked: current === undefined, onSelect: paint(undefined) },
+        ...CANVAS_PRESETS.map((c) => ({ label: tr(`canvas.color.${c}`), checked: current === c, onSelect: paint(c) })),
       ],
     };
     const items: MenuItem[] = [];
-    if (node?.type === "text") items.push({ label: "Editar o texto", onSelect: () => startEditing(id) });
-    if (node?.type === "group") items.push({ label: "Renomear o grupo", onSelect: () => startEditing(id) });
+    if (node?.type === "text") items.push({ label: tr("canvas.menu.editText"), onSelect: () => startEditing(id) });
+    if (node?.type === "group") items.push({ label: tr("canvas.menu.renameGroup"), onSelect: () => startEditing(id) });
     if (node?.type === "file" && typeof node.file === "string") {
       const file = node.file;
-      if (/\.md$/i.test(file)) items.push({ label: "Abrir a nota", onSelect: () => onOpenNote(file) });
-      else if (onOpenFile) items.push({ label: "Abrir no app padrão", onSelect: () => onOpenFile(file) });
+      if (/\.md$/i.test(file)) items.push({ label: tr("canvas.menu.openNote"), onSelect: () => onOpenNote(file) });
+      else if (onOpenFile) items.push({ label: tr("notes.menu.openDefault"), onSelect: () => onOpenFile(file) });
     }
     if (node?.type === "link") {
       const url = externalUrl(String(node.url ?? ""));
-      if (url) items.push({ label: "Abrir no navegador", onSelect: () => void window.open(url, "_blank", "noopener,noreferrer") });
+      if (url) items.push({ label: tr("canvas.menu.openBrowser"), onSelect: () => void window.open(url, "_blank", "noopener,noreferrer") });
     }
-    if (edge) items.push({ label: edge.label ? "Editar o rótulo" : "Pôr um rótulo", onSelect: () => startEditing(id) });
+    if (edge) items.push({ label: edge.label ? tr("canvas.menu.editLabel") : tr("canvas.menu.addLabel"), onSelect: () => startEditing(id) });
     items.push(colors);
-    if (node && node.type !== "group" && d) items.push({ label: "Trazer para a frente", onSelect: () => change(bringToFront(d, id)) });
-    items.push({ kind: "separator" }, { label: "Apagar", danger: true, onSelect: removeSelected });
+    if (node && node.type !== "group" && d) items.push({ label: tr("canvas.menu.toFront"), onSelect: () => change(bringToFront(d, id)) });
+    items.push({ kind: "separator" }, { label: tr("notes.menu.delete"), danger: true, onSelect: removeSelected });
     return items;
   };
 
@@ -695,14 +696,14 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
   const cards = nodes.filter((n) => n.type !== "group");
   const single = selected.size === 1 ? byId.get([...selected][0]!) : undefined;
   const grid = vp.zoom >= 0.3 ? 24 * vp.zoom : 0;
-  const status = saveState === "saving" || saveState === "pending" ? "Gravando…" : saveState === "saved" ? "Gravado" : "";
+  const status = saveState === "saving" || saveState === "pending" ? tr("canvas.saving") : saveState === "saved" ? tr("canvas.saved") : "";
 
   return (
     <div className="kn-canvas-wrap" ref={wrap}>
       <div className="kn-canvas-head">
         <input
           className="kn-canvas-title"
-          aria-label="Nome do quadro"
+          aria-label={tr("canvas.name")}
           value={title}
           size={Math.max(6, title.length + 1)}
           spellCheck={false}
@@ -721,7 +722,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
         </span>
         {find ? (
           <FindBar
-            label="Procurar no quadro"
+            label={tr("canvas.find")}
             query={find.query}
             index={find.index}
             total={found.length}
@@ -734,7 +735,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
       </div>
       {conflict ? (
         <div className="kn-conflict kn-canvas-alert" role="alert">
-          O quadro mudou fora do Kiwi Notes enquanto você editava.
+          {tr("canvas.changedOutside")}
           <span className="kn-conflict-actions">
             <button
               type="button"
@@ -750,7 +751,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
                 setSaveState("saved");
               }}
             >
-              Usar o de fora
+              {tr("files.useTheirs")}
             </button>
             <button
               type="button"
@@ -763,16 +764,16 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
                 void save();
               }}
             >
-              Manter o meu
+              {tr("files.keepMine")}
             </button>
           </span>
         </div>
       ) : saveState === "error" ? (
         <div className="kn-conflict kn-canvas-alert kn-save-alert" role="alert">
-          Não deu para gravar o quadro.
+          {tr("canvas.saveFailed")}
           <span className="kn-conflict-actions">
             <button type="button" className="kn-bt kn-bt-acc" onClick={() => void save()}>
-              Tentar de novo
+              {tr("notes.retry")}
             </button>
           </span>
         </div>
@@ -818,7 +819,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
                 style={{ left: g.middle.x, top: g.middle.y }}
                 autoFocus
                 defaultValue={x.label ?? ""}
-                aria-label="Rótulo da seta"
+                aria-label={tr("canvas.edgeLabel")}
                 onPointerDown={(e) => e.stopPropagation()}
                 onChange={(e) => handlers.current.editLabel(x.id, e.target.value)}
                 onBlur={stopEditing}
@@ -845,31 +846,31 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
           ))}
           {single && !editing ? <Handles node={single} handlers={handlers} zoom={vp.zoom} /> : null}
         </div>
-        {!nodes.length ? <div className="kn-canvas-empty">Clique duas vezes no quadro para escrever um cartão.</div> : null}
+        {!nodes.length ? <div className="kn-canvas-empty">{tr("canvas.empty")}</div> : null}
       </div>
-      <div className="kn-canvas-bar" role="toolbar" aria-label="Quadro">
-        <button type="button" className="kn-bt" onClick={addTextHere} title="Um cartão de texto no meio da tela">
-          + Cartão
+      <div className="kn-canvas-bar" role="toolbar" aria-label={tr("canvas.bar")}>
+        <button type="button" className="kn-bt" onClick={addTextHere} title={tr("canvas.addCard.hint")}>
+          {tr("canvas.addCard")}
         </button>
         <span className="kn-canvas-bar-sep" />
-        <button type="button" className="kn-bt" aria-label="Afastar" onClick={() => setVp((v) => zoomAt(v, { x: size().width / 2, y: size().height / 2 }, 1 / 1.25))}>
+        <button type="button" className="kn-bt" aria-label={tr("canvas.zoomOut")} onClick={() => setVp((v) => zoomAt(v, { x: size().width / 2, y: size().height / 2 }, 1 / 1.25))}>
           −
         </button>
-        <button type="button" className="kn-bt kn-canvas-zoom" title="Voltar a 100%" onClick={() => setVp((v) => zoomAt(v, { x: size().width / 2, y: size().height / 2 }, 1 / v.zoom))}>
+        <button type="button" className="kn-bt kn-canvas-zoom" title={tr("canvas.zoomReset")} onClick={() => setVp((v) => zoomAt(v, { x: size().width / 2, y: size().height / 2 }, 1 / v.zoom))}>
           {Math.round(vp.zoom * 100)}%
         </button>
-        <button type="button" className="kn-bt" aria-label="Aproximar" onClick={() => setVp((v) => zoomAt(v, { x: size().width / 2, y: size().height / 2 }, 1.25))}>
+        <button type="button" className="kn-bt" aria-label={tr("canvas.zoomIn")} onClick={() => setVp((v) => zoomAt(v, { x: size().width / 2, y: size().height / 2 }, 1.25))}>
           +
         </button>
         <span className="kn-canvas-bar-sep" />
-        <button type="button" className="kn-bt" onClick={fitAll} title="Mostrar o quadro inteiro">
-          Enquadrar
+        <button type="button" className="kn-bt" onClick={fitAll} title={tr("canvas.fit.hint")}>
+          {tr("canvas.fit")}
         </button>
         {onVersions ? (
           <>
             <span className="kn-canvas-bar-sep" />
-            <button type="button" className="kn-bt kn-canvas-versions" onClick={onVersions} title="As versões guardadas deste quadro">
-              Versões
+            <button type="button" className="kn-bt kn-canvas-versions" onClick={onVersions} title={tr("canvas.versions.hint")}>
+              {tr("notes.versions")}
             </button>
           </>
         ) : null}
@@ -898,6 +899,7 @@ const NodeBox = memo(function NodeBox({ node, selected, found, editing, handlers
   api: NotesApi;
   links: CanvasLinks;
 }) {
+  const { t: tr } = useT();
   const cls = `kn-canvas-node kn-canvas-type-${["text", "file", "link", "group"].includes(node.type) ? node.type : "other"}${selected ? " is-selected" : ""}${found ? " is-found" : ""}${canvasColor(node.color) ? " has-color" : ""}`;
   const style: React.CSSProperties = { left: node.x, top: node.y, width: node.width, height: node.height, ...colorStyle(node.color) };
   const common = {
@@ -917,7 +919,7 @@ const NodeBox = memo(function NodeBox({ node, selected, found, editing, handlers
             className="kn-canvas-group-label kn-canvas-group-input"
             autoFocus
             defaultValue={node.label ?? ""}
-            aria-label="Nome do grupo"
+            aria-label={tr("canvas.groupName")}
             onChange={(e) => handlers.current.editLabel(node.id, e.target.value)}
             onBlur={() => handlers.current.stopEditing()}
             onKeyDown={(e) => (e.key === "Enter" || e.key === "Escape") && backToBoard(e)}
@@ -936,7 +938,7 @@ const NodeBox = memo(function NodeBox({ node, selected, found, editing, handlers
             className="kn-canvas-textarea"
             autoFocus
             defaultValue={node.text ?? ""}
-            aria-label="Texto do cartão"
+            aria-label={tr("canvas.cardText")}
             spellCheck
             onChange={(e) => handlers.current.editText(node.id, e.target.value)}
             onBlur={() => handlers.current.stopEditing()}
@@ -954,7 +956,7 @@ const NodeBox = memo(function NodeBox({ node, selected, found, editing, handlers
       ) : node.type === "link" ? (
         <LinkBody url={String(node.url ?? "")} />
       ) : (
-        <div className="kn-canvas-other">O Kiwi ainda não desenha este tipo de nó ({node.type}). Ele fica no arquivo como está.</div>
+        <div className="kn-canvas-other">{tr("canvas.unknownNode", { type: node.type })}</div>
       )}
     </div>
   );
@@ -963,6 +965,7 @@ const NodeBox = memo(function NodeBox({ node, selected, found, editing, handlers
 const IMAGE = /\.(png|jpe?g|gif|webp|heic|svg)$/i;
 
 function FileBody({ node, api, links }: { node: CanvasNode; api: NotesApi; links: CanvasLinks }) {
+  const { t: tr } = useT();
   const file = typeof node.file === "string" ? node.file : "";
   const note = /\.md$/i.test(file);
   const image = IMAGE.test(file);
@@ -979,7 +982,7 @@ function FileBody({ node, api, links }: { node: CanvasNode; api: NotesApi; links
   const name = file.split("/").at(-1) ?? file;
   if (image) {
     if (img === undefined) return <div className="kn-canvas-file-name">{name}</div>;
-    if (img === null) return <div className="kn-canvas-missing">{name} não está no vault</div>;
+    if (img === null) return <div className="kn-canvas-missing">{tr("canvas.fileMissing", { name })}</div>;
     return <img className="kn-canvas-image" src={img.dataUrl} alt={name} draggable={false} />;
   }
   if (!note) {
@@ -997,7 +1000,7 @@ function FileBody({ node, api, links }: { node: CanvasNode; api: NotesApi; links
         {node.subpath ? <span className="kn-canvas-subpath">{node.subpath}</span> : null}
       </div>
       {content === null ? (
-        <div className="kn-canvas-missing">Esta nota não está no vault.</div>
+        <div className="kn-canvas-missing">{tr("canvas.noteMissing")}</div>
       ) : (
         <div className="kn-canvas-scroll">{content ? <CanvasMarkdown text={content} links={links} /> : null}</div>
       )}
@@ -1006,6 +1009,7 @@ function FileBody({ node, api, links }: { node: CanvasNode; api: NotesApi; links
 }
 
 function LinkBody({ url }: { url: string }) {
+  const { t: tr } = useT();
   const safe = externalUrl(url);
   let host = url;
   try {
@@ -1019,7 +1023,7 @@ function LinkBody({ url }: { url: string }) {
       <span className="kn-canvas-link-url">{url}</span>
       {safe ? (
         <button type="button" className="kn-bt kn-canvas-link-open" onClick={() => void window.open(safe, "_blank", "noopener,noreferrer")}>
-          Abrir no navegador
+          {tr("canvas.menu.openBrowser")}
         </button>
       ) : null}
     </div>
@@ -1051,6 +1055,7 @@ function EdgePath({ edge, from, to, selected, onDown, onDouble, onMenu }: {
 }
 
 function Handles({ node, handlers, zoom }: { node: CanvasNode; handlers: MutableRefObject<Handlers>; zoom: number }) {
+  const { t: tr } = useT();
   // As alças ficam do mesmo tamanho na tela, com qualquer zoom.
   const s = 1 / zoom;
   return (
@@ -1062,7 +1067,7 @@ function Handles({ node, handlers, zoom }: { node: CanvasNode; handlers: Mutable
             key={side}
             className="kn-canvas-port"
             data-side={side}
-            title="Arraste até outro cartão para ligar"
+            title={tr("canvas.connect")}
             style={{ left: p.x, top: p.y, transform: `translate(-50%, -50%) scale(${s})` }}
             onPointerDown={(e) => handlers.current.connectDown(e, node, side)}
           />
@@ -1070,7 +1075,7 @@ function Handles({ node, handlers, zoom }: { node: CanvasNode; handlers: Mutable
       })}
       <div
         className="kn-canvas-resize"
-        title="Arraste para mudar o tamanho"
+        title={tr("canvas.resize")}
         style={{ left: node.x + node.width, top: node.y + node.height, transform: `translate(-50%, -50%) scale(${s})` }}
         onPointerDown={(e) => handlers.current.resizeDown(e, node)}
       />

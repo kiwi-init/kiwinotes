@@ -4,6 +4,7 @@
 // o nome, o tipo, o tamanho, "Abrir no app padrão" e "Mostrar no Finder", nunca uma tela vazia. Com o cartão, o botão
 // sai do topo (um só, #19747). Sumido, ele só diz o que houve.
 
+import { useT } from "../../src/i18n.ts";
 import { type MutableRefObject, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
 
 import type { VaultFile } from "../types.ts";
@@ -43,6 +44,7 @@ interface Props {
 }
 
 export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef, widthHandles, kiwi, viewer = viewerFor(path), at, onVersions }: Props) {
+  const { t, locale } = useT();
   const [state, setState] = useState<FileState>({ kind: "loading" });
   const [info, setInfo] = useState<VaultFile | null>(null);
   const generation = useRef(0);
@@ -91,7 +93,7 @@ export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef
 
   const open = (
     <button type="button" className="kn-bt kn-file-open" onClick={() => onOpenExternal(path)}>
-      Abrir no app padrão
+      {t("notes.menu.openDefault")}
     </button>
   );
   // O tamanho de um pacote seria o da pasta, não o do documento: fica de fora (revisão #19798).
@@ -104,19 +106,19 @@ export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef
       <h2 className="kn-file-card-name">{name}</h2>
       <dl className="kn-file-card-facts">
         <div>
-          <dt>Tipo</dt>
-          <dd>{typeLabel(name)}</dd>
+          <dt>{t("files.card.type")}</dt>
+          <dd>{typeLabel(name, locale)}</dd>
         </div>
         {size !== undefined ? (
           <div>
-            <dt>Tamanho</dt>
-            <dd>{fileSize(size)}</dd>
+            <dt>{t("files.card.size")}</dt>
+            <dd>{fileSize(size, locale)}</dd>
           </div>
         ) : null}
         {info?.mtime ? (
           <div>
-            <dt>Modificado</dt>
-            <dd>{modified(info.mtime)}</dd>
+            <dt>{t("files.card.modified")}</dt>
+            <dd>{modified(info.mtime, locale)}</dd>
           </div>
         ) : null}
       </dl>
@@ -125,7 +127,7 @@ export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef
         {open}
         {onReveal ? (
           <button type="button" className="kn-bt kn-file-reveal" onClick={() => onReveal(path)}>
-            Mostrar no Finder
+            {t("notes.menu.reveal")}
           </button>
         ) : null}
       </div>
@@ -141,17 +143,17 @@ export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef
         <h1 className="kn-file-title" title={path}>
           {name}
         </h1>
-        {state.kind === "ready" ? <span className="kn-file-meta">{fileSize(state.file.size)}</span> : null}
+        {state.kind === "ready" ? <span className="kn-file-meta">{fileSize(state.file.size, locale)}</span> : null}
         {card ? null : (
           <span className="kn-file-actions">
             {html && state.kind === "ready" ? (
               <button type="button" className="kn-bt kn-file-preview-toggle" aria-pressed={preview} onClick={() => setPreview((on) => !on)}>
-                Prévia
+                {t("files.preview")}
               </button>
             ) : null}
             {onVersions && state.kind === "ready" && hasVersions(name) && !("readOnly" in state.file && state.file.readOnly) ? (
               <button type="button" className="kn-bt kn-file-versions" onClick={() => onVersions(path)}>
-                Versões
+                {t("notes.versions")}
               </button>
             ) : null}
             {open}
@@ -165,15 +167,15 @@ export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef
             <state.viewer.View path={path} file={state.file} files={files} flushRef={flushRef} widthHandles={widthHandles} preview={html && preview} kiwi={kiwi} {...(at ? { at } : {})} />
           </Suspense>
         ) : state.kind === "tooLarge" ? (
-          fileCard(`Este arquivo tem ${fileSize(state.size)}, e o Kiwi Notes mostra aqui até ${fileSize(state.limit)}.`)
+          fileCard(t("files.tooLarge", { size: fileSize(state.size, locale), limit: fileSize(state.limit, locale) }))
         ) : state.kind === "unsupported" ? (
-          fileCard("O Kiwi Notes não mostra este tipo de arquivo aqui. Ele abre no app padrão do Mac.")
+          fileCard(t("files.unsupported"))
         ) : state.kind === "missing" ? (
           <div className="kn-file-notice" role="alert">
-            <p>Este arquivo não está mais na pasta das notas. Ele pode ter sido movido ou apagado fora do Kiwi Notes.</p>
+            <p>{t("files.missing")}</p>
           </div>
         ) : state.kind === "error" ? (
-          fileCard("Não deu para ler este arquivo.")
+          fileCard(t("files.readFailed"))
         ) : null}
       </div>
     </div>

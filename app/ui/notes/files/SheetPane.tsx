@@ -2,6 +2,7 @@
 // gravar), a folga embaixo e à direita para digitar além dos dados, e cada edição da grade traduzida para as linhas do
 // arquivo e entregue à sessão (`useSheetSession`), que grava.
 
+import { useT } from "../../src/i18n.ts";
 import { useMemo, useState } from "react";
 
 import { kiwiFaceUrl } from "../editor/kiwi-face.ts";
@@ -34,6 +35,7 @@ interface Props {
 }
 
 export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, countHeader = true, zoomKey, goTo }: Props) {
+  const { t } = useT();
   const editable = !session.readOnly;
   const [spec, setSpec] = useState<ViewSpec>({});
   const texts = useMemo(() => sheetTexts(sheet), [sheet]);
@@ -120,14 +122,14 @@ export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, cou
   }, [session.boxMoved]);
 
   const parts = [
-    spec.filter ? `só “${spec.filter.values[0] || "vazias"}” na ${columnName(spec.filter.col)}` : "",
-    spec.sort ? `pela ${columnName(spec.sort.col)}, de ${spec.sort.dir === 1 ? "A a Z" : "Z a A"}` : "",
+    spec.filter ? t("files.grid.view.filter", { value: spec.filter.values[0] || t("files.grid.view.empty"), column: columnName(spec.filter.col) }) : "",
+    spec.sort ? t(spec.sort.dir === 1 ? "files.grid.view.sortAsc" : "files.grid.view.sortDesc", { column: columnName(spec.sort.col) }) : "",
   ].filter(Boolean);
   const view: GridView = {
     sort: (col, dir) => setSpec((s) => ({ ...s, sort: { col, dir } })),
     filterTo: (col, text) => setSpec((s) => ({ ...s, filter: { col, values: [text] } })),
     clear: () => setSpec({}),
-    label: parts.length ? `vista ${parts.join(", ")} (o arquivo não muda)` : null,
+    label: parts.length ? t("files.grid.view", { parts: parts.join(", ") }) : null,
   };
 
   return (
