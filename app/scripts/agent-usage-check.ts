@@ -23,7 +23,7 @@ const packages = join(data, "packages.json");
 writeFileSync(packages, JSON.stringify(registry.pinned));
 async function cli(args: string[]) {
   const p = Bun.spawn([process.execPath, join(app, "scripts/cli.ts"), ...args, "--data", data], {
-    cwd: app, stdout: "pipe", stderr: "pipe", env: { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages, KIWI_FAKE_AGENT_WARNING_MS: "3000" },
+    cwd: app, stdout: "pipe", stderr: "pipe", env: { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages },
   });
   const text = await new Response(p.stdout).text();
   assert.equal(await p.exited, 0, text + (await new Response(p.stderr).text()));
@@ -174,7 +174,7 @@ try {
   // O hub à vista (spec #9810): sem isso, no headless o gato do pedido vai ao overlay e o hub esconde o balão dele.
   assert.equal((await ctx.send({ cmd: "hubView", view: true })).ok, true);
   await invoke("agent.ask", { text: "/aviso" });
-  // O aviso inteiro e já digitado: desde o #348 ele é a linha de estado até a resposta (o falso espera 3 s nele, T28584).
+  // O trecho do aviso inteiro e já digitado.
   await q.waitForFunction(
     () => {
       const ghost = document.querySelector(".kn-bubble-ghost")?.textContent ?? "";
