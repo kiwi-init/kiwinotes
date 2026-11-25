@@ -34,6 +34,7 @@ const NETWORK_CAPABILITIES: Record<string, { roots: string[]; why: string; carri
   "notes.semanticStatus": { roots: ["modelo da busca"], why: "com a busca pelo sentido ligada, começa o download do modelo (E5 small)", carries: "um GET da URL fixa do modelo; nada da pessoa" },
   "settings.set": { roots: ["modelo da busca", "modelo do ditado"], why: "ligar a busca pelo sentido ou o ditado preciso baixa o modelo (E5 small, Whisper small)", carries: "um GET da URL fixa do modelo; nada da pessoa" },
   "meetings.stop": { roots: ["reunião ao agente"], why: "ao fim da reunião, com o agente ligado e \"propor sozinho\", o agente monta a proposta (spec #8360)", carries: "o caminho da nota da reunião; o agente lê a transcrição pelas ferramentas, e o áudio nunca vai" },
+  "catVoice.download": { roots: ["modelo da voz do gato"], why: "o clique da pessoa baixa o Qwen3-TTS e a voz do gato, na revisão fixa e com o SHA-256 conferido (T26729, ADR 0014)", carries: "um GET da URL fixa de cada arquivo; nada da pessoa" },
   "agent.download": { roots: ["agente"], why: "baixa o adaptador ACP do agente, na versão fixa e conferida (#8368)", carries: "um GET do pacote fixo; nada da pessoa" },
   "agent.ask": { roots: ["agente"], why: "o pedido vai ao agente que a pessoa ligou (ADR 0011)", carries: "o texto do pedido e os trechos que o agente lê pelas ferramentas do Kiwi" },
   "agent.prepare": { roots: ["agente"], why: "abre o programa do agente antes do pedido, para responder mais rápido (ADR 0011)", carries: "a abertura da sessão no agente; nenhum texto da pessoa" },
@@ -110,6 +111,7 @@ function roots(body: string, agentNet: Set<string>): string[] {
   check("fetch", /\bfetch\s*\(/);
   check("updater", /deps\.about\??\.(check|apply)\b/);
   check("imagem de fora", /deps\.remoteImage\b/);
+  check("modelo da voz do gato", /deps\.catVoice!?\??\.download\b/);
   check("modelo da busca", /semanticEngine\??\.start\b|\bsemantic\??\.sync\b/);
   // Ligar o ditado preciso é salvar o ajuste: o main ouve o `settingsChanged` e baixa o Whisper (session.ts).
   if (/\bpreciseDictation\b/.test(body) && /settings\??\.save\b|settingsChanged\b/.test(body)) found.push("modelo do ditado");

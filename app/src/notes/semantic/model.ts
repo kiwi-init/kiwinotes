@@ -10,6 +10,8 @@ export interface ModelFile {
   name: string;
   size: number;
   sha256: string;
+  /** Um arquivo que não está no Hugging Face (a voz do gato, T26729): a URL fixa dele. O SHA-256 confere do mesmo jeito. */
+  url?: string;
 }
 
 export interface ModelManifest {
@@ -36,7 +38,7 @@ export const modelBytes = (m: ModelManifest) => m.files.reduce((sum, f) => sum +
 export const modelDir = (root: string, m: ModelManifest) => path.join(root, m.id, m.revision);
 
 export const fileUrl = (m: ModelManifest, f: ModelFile) =>
-  `https://huggingface.co/${m.repo}/resolve/${m.revision}/${f.name}`;
+  f.url ?? `https://huggingface.co/${m.repo}/resolve/${m.revision}/${f.name}`;
 
 export class ModelError extends Error {
   constructor(

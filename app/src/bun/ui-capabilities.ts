@@ -34,7 +34,7 @@ import type { TextIndex } from "../notes/text-index.ts";
 import type { SemanticIndex } from "../notes/semantic/index.ts";
 import type { SemanticEngine } from "../notes/semantic/engine.ts";
 import { semanticQueryText } from "../shared/query.ts";
-import type { PreciseStatus, ProjectCandidate, ProjectSearchView, SemanticStatus } from "../shared/ui-contract.ts";
+import type { CatVoiceStatus, PreciseStatus, ProjectCandidate, ProjectSearchView, SemanticStatus } from "../shared/ui-contract.ts";
 import { isSetupPermission, type SetupModel, type SetupPermission, type SetupStatus } from "../shared/first-run.ts";
 import { modelBytes } from "../notes/semantic/model.ts";
 import { WHISPER_SMALL } from "./precise-dictation.ts";
@@ -202,6 +202,14 @@ export interface CapabilityDeps {
   semanticSource?: Pick<Vault, "semanticDocuments" | "onChanged">;
   /** O modo preciso do ditado (T6602), da sessão com o helper. Sem ela, `null`: o status vem só da configuração. */
   precise?(): PreciseStatus | null;
+  /** A voz do gato baixada no clique (T26729, `cat-voice-model.ts`). Sem ela, as `catVoice.*` dão E_UNAVAILABLE. */
+  catVoice?: {
+    status(): CatVoiceStatus;
+    refresh(): Promise<CatVoiceStatus>;
+    download(): Promise<void>;
+    cancel(): Promise<void>;
+    remove(): Promise<void>;
+  };
   /**
    * O passo da primeira abertura (T20796), da sessão com o helper: as permissões e o modelo agora, o botão de uma
    * permissão e o fim do passo. Sem ela (o headless sem helper, testes antigos): permissões `null`, o modelo `starting`,
@@ -653,6 +661,11 @@ export function uiCapabilities(deps: CapabilityDeps,
   const dropUnder = (gone: string) => (p: string) =>
     under(gone, p) ? null : p;
 
+  // A voz do gato (T26729): sem ela, nada a mostrar nem a baixar.
+  const catVoice = async () => {
+    if (!deps.catVoice) throw new CapabilityError("E_UNAVAILABLE", "cat voice unavailable");
+    return deps.catVoice;
+  };
   const handlers: { [K in UiCapability]: (args: unknown,
     ) => Promise<UiCapabilities[K]["result"]> | UiCapabilities[K]["result"];
   } = {
@@ -1486,6 +1499,29 @@ export function uiCapabilities(deps: CapabilityDeps,
       // Sem o helper de pé (ou sem sessão, no headless sem helper): só o que a configuração diz.
       const enabled = (await deps.settings.load()).preciseDictation;
       return { enabled, phase: enabled ? "waiting" : "off", size: modelBytes(WHISPER_SMALL) };
+    },
+    "catVoice.status": async (args) => {
+      noArgs(args, "catVoice.status");
+      return (await catVoice()).refresh();
+    },
+    "catVoice.download": async (args) => {
+      noArgs(args, "catVoice.download");
+      const v = await catVoice();
+      // Volta na hora: o download leva minutos, e o andamento sai no `catVoice.status`. O erro vira o estado `error`.
+      void deps.catVoice!.download().catch(() => {});
+      return v.status();
+    },
+    "catVoice.cancel": async (args) => {
+      noArgs(args, "catVoice.cancel");
+      const v = await catVoice();
+      await v.cancel();
+      return v.status();
+    },
+    "catVoice.remove": async (args) => {
+      noArgs(args, "catVoice.remove");
+      const v = await catVoice();
+      await v.remove();
+      return v.status();
     },
     "notes.backlinks": async (args) => (await vault()).backlinks(fields(args, "notes.backlinks", ["path"]).path),
     "notes.resolve": async (args) => (await vault()).resolve(fields(args, "notes.resolve", ["link"]).link),

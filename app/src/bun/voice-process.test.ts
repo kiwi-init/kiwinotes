@@ -177,6 +177,23 @@ describe("VoiceProcess", () => {
     expect(v.running).toBe(true);
   });
 
+  test("o warmup sobe o processo, espera o warm e depois o ocioso vale", async () => {
+    const { v, cmds, spawns } = make({ idleMs: 60 });
+    expect(await v.warmup()).toBe(20);
+    expect(cmds().map((c) => c.type)).toEqual(["load", "warmup"]);
+    expect(v.running).toBe(true);
+    await Bun.sleep(250);
+    expect(v.running).toBe(false);
+    expect(spawns()).toBe(1);
+  });
+
+  test("o warmup que falha vira throw e não deixa o processo de pé", async () => {
+    const { v } = make({ assets: () => ({ ...ASSETS, refText: "frio-falha" }) });
+    await expect(v.warmup()).rejects.toThrow(/warmup: falha inventada/);
+    await Bun.sleep(30);
+    expect(v.running).toBe(false);
+  });
+
   test("uma frase em andamento segura o ocioso", async () => {
     const { v } = make({ idleMs: 10 });
     await collect(v.sintetizar("Primeira.", new AbortController().signal));

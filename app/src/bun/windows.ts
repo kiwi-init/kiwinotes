@@ -23,6 +23,8 @@ import { session } from "./session.ts";
 import type { Sidecar } from "./sidecar.ts";
 import { stores } from "./stores.ts";
 import { type CapabilityDeps, uiCapabilities } from "./ui-capabilities.ts";
+import { createCatVoice } from "./cat-voice-model.ts";
+import { voicePath } from "./voice-process.ts";
 import { type BuiltIn, builtInFrom, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir, uiChannelFor } from "./ui-engine.ts";
 import { updatesOff } from "./updates.ts";
 import { uiChannelFetch } from "./ui-channel-fetch.ts";
@@ -130,6 +132,11 @@ export function onWindowClosed(fn: (name: WindowName) => void): () => void {
 let debugClipboard = "";
 /** O registro do que é lento (spec #12918), no log local: as chamadas das telas, o Bun parado e os quadros travados. */
 export const appSlowLog = slowLog();
+/**
+ * A voz do gato (T26729): o modelo baixado no clique e o processo `kiwi-voice` que o usa. O player (T26734) fala pelo
+ * `catVoice.voice`. Sem o clique, nada baixa; no headless, nada baixa nunca.
+ */
+export const catVoice = createCatVoice({ modelsDir: stores.modelsDir, bin: voicePath(PATHS.VIEWS_FOLDER), download: process.env.KIWI_HEADLESS !== "1" });
 const capabilities = uiCapabilities({
   introDone: () => {
     for (const fn of introDoneListeners) fn();
@@ -201,6 +208,7 @@ const capabilities = uiCapabilities({
   // O seletor de microfone dos Ajustes (T3230): o helper lista as entradas, sem abrir nenhuma.
   audioInputs: async () => (await session.get()?.audioInputs()) ?? null,
   precise: () => session.get()?.precise.status() ?? null,
+  catVoice: catVoice.model,
   // O passo da primeira abertura (T20796): o botão de cada permissão pede pelo helper; o fim solta os pedidos da abertura.
   setup: {
     live: () => session.get()?.setupLive() ?? null,

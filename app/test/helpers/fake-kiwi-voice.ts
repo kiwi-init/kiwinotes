@@ -3,7 +3,8 @@
 // amostra vale o número do bloco. Frases especiais:
 //   "cai"   → o processo sai com o código 3 no meio da frase
 //   "erro"  → um `error` com o id da frase
-// O `load` com refText "sem-modelo" responde com um `error` sem id. Cada comando recebido vai para o arquivo do 1º
+// O `load` com refText "sem-modelo" responde com um `error` sem id. O `warmup` responde `warm` em 20 ms, ou, com o refText
+// "frio-falha", um `error` sem id (o Metal que não compila). Cada comando recebido vai para o arquivo do 1º
 // argumento, uma linha por comando, para o teste conferir o `cancel` e o `quit`.
 
 import { appendFileSync } from "node:fs";
@@ -14,6 +15,7 @@ const send = (o: object) => process.stdout.write(JSON.stringify(o) + "\n");
 const cancelled = new Set<string>();
 let queue: { id: string; text: string }[] = [];
 let busy = false;
+let failWarm = false;
 
 function pcm(value: number, n = 6000): string {
   const b = Buffer.alloc(n * 2);
@@ -52,8 +54,11 @@ for await (const chunk of Bun.stdin.stream()) {
     if (logFile) appendFileSync(logFile, line + "\n");
     const m = JSON.parse(line);
     if (m.type === "load") {
+      failWarm = m.refText === "frio-falha";
       if (m.refText === "sem-modelo") send({ type: "error", message: "load: sem o modelo" });
       else setTimeout(() => send({ type: "ready", sampleRate: 24000, loadMs: 5 }), 20);
+    } else if (m.type === "warmup") {
+      setTimeout(() => send(failWarm ? { type: "error", message: "warmup: falha inventada" } : { type: "warm", ms: 20 }), 20);
     } else if (m.type === "speak") {
       queue.push({ id: m.id, text: m.text });
       void pump();
