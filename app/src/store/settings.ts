@@ -20,6 +20,7 @@ import { folderPath } from "../notes/paths.ts";
 import { type AgentOnboarding, DEFAULT_AGENT_ONBOARDING, sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
 import type { AgentKind } from "../shared/ui-contract.ts";
 import { type AgentRoutines, DEFAULT_AGENT_ROUTINES, sanitizeAgentRoutines } from "../shared/agent-routines.ts";
+import { DEFAULT_LANGUAGE, isLanguageSetting, type LanguageSetting } from "../shared/i18n/index.ts";
 import { readJson, writeJson } from "./files.ts";
 
 export interface AppSettings {
@@ -54,6 +55,11 @@ export interface AppSettings {
    * padrão; desligado, nenhum GET a partir da próxima checagem, sem reiniciar.
    */
   checkUpdates: boolean;
+  /**
+   * "Idioma do app" (spec #28171, T28190): Automático (a língua do macOS), português ou inglês. Muda os textos de todas
+   * as janelas na hora; o ditado, a voz do gato e as respostas do agente não mudam por ele.
+   */
+  language: LanguageSetting;
   /** Por qual microfone o ditado grava (spec #3202, T3230). O helper recebe no `config.set`. Padrão: "auto". */
   microphone: MicrophoneChoice;
   /** A árvore das Notas mostra a extensão (`.md`, `.pdf`…) depois do nome (T3370). Desligado por padrão. */
@@ -274,7 +280,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR, posicao: DEFAULT_CAT_POSITION, tamanho: CAT_SIZE.default, voz: DEFAULT_CAT_VOICE }, firstRun: "done" };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, checkUpdates: true, language: DEFAULT_LANGUAGE, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR, posicao: DEFAULT_CAT_POSITION, tamanho: CAT_SIZE.default, voz: DEFAULT_CAT_VOICE }, firstRun: "done" };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -333,6 +339,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     ocr: typeof o.ocr === "boolean" ? o.ocr : true,
     semanticSearch: o.semanticSearch !== false,
     checkUpdates: o.checkUpdates !== false,
+    language: isLanguageSetting(o.language) ? o.language : DEFAULT_LANGUAGE,
     microphone: isMicrophoneChoice(o.microphone) ? o.microphone : DEFAULT_MICROPHONE,
     showExtensions: o.showExtensions === true,
     cues: o.cues !== false,

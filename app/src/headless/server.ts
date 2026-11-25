@@ -30,6 +30,7 @@ import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { HomeChanges } from "../bun/home.ts";
 import { remoteImageUrl } from "../notes/remote-image.ts";
 import { type AudioInput, type AudioInputs, type MicInUse, type MicrophoneChoice, microphoneUid } from "../shared/microphone.ts";
+import { envSystemLanguages } from "../bun/system-language.ts";
 
 /** A imagem de fora do headless (um quadrado azul de 16 px): o roteiro testa o caminho do clique sem rede. */
 const HEADLESS_IMAGE = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGOw6blDEmIY1TCqYfhqAACorqQQpPjnMgAAAABJRU5ErkJggg==", "base64");
@@ -252,6 +253,9 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       agentVoice?.settingsChanged(settings);
       event("settings.changed", settings);
     },
+    // O headless não lê o Mac: o Automático segue o KIWI_SYSTEM_LANG (`en-US`), ou fica em português.
+    systemLanguages: () => envSystemLanguages() ?? [],
+    localeChanged: (locale) => event("app.localeChanged", locale),
     projectsChangedIn: (folderId) => event("projects.changed", { folderId }),
     dictationNotes: stores.dictationNotes,
     // Headless nunca encosta no clipboard da pessoa: o texto vai só para o log, como o dryRun do insert.

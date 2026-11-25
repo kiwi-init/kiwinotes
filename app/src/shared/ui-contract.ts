@@ -1,5 +1,6 @@
 import type { SetupPermission, SetupStatus } from "./first-run.ts";
 import type { CatVoiceId } from "./cat-voices.ts";
+import type { AppLocale } from "./i18n/index.ts";
 import type { NoteModel } from "./note-model.ts";
 import type { SheetOp } from "./sheet/ops.ts";
 import type { DocxOp } from "./docx/ops.ts";
@@ -323,7 +324,10 @@ export type { NoteModel };
 //   `catVoice.preview` (o Ouvir: fala o texto fixo numa voz, sem mudar a escolha). Só acréscimo.
 // 1.103.0 (T27897, spec #27881): o balão único. O evento `speech` no `agent.turn`: a fala do `cat_speak`, em todo
 //   pedido (com a voz ligada ou não), que vira o resumo do balão. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.103.0";
+// 1.104.0 (T28190, spec #28171): o idioma do app. O `language` nas settings ("auto", "pt" ou "en"), o `app.locale` (a
+//   escolha, a língua de agora e a do macOS) e o evento `app.localeChanged`, quando a língua ou a escolha mudam. Só
+//   acréscimo.
+export const UI_CONTRACT_VERSION = "1.104.0";
 /** O `reason` do `updates` desligado quando foi a pessoa, em Ajustes (1.97.0, T25110), e não o build. */
 export const UPDATES_OFF_BY_SETTING = "desligado em Buscar atualizações";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
@@ -412,6 +416,11 @@ export interface UiCapabilities {
   "setup.done": { args: Record<string, never>; result: SetupStatus };
   /** A versão do app, o canal, o link das notas da versão e as atualizações agora (1.6.0, T2386). */
   "app.about": { args: Record<string, never>; result: AppAbout };
+  /**
+   * O idioma do app (1.104.0, spec #28171): o que está em Ajustes › Geral, a língua de agora e a que o Automático daria
+   * (a do macOS, lida uma vez ao abrir). Para trocar: `settings.set {language}`.
+   */
+  "app.locale": { args: Record<string, never>; result: AppLocale };
   /**
    * "Salvar diagnóstico" (1.25.0, T5350): um .txt com versões, permissões (só o estado), STT, quedas e o fim do log, sem
    * texto nem áudio. No app vai para ~/Downloads e aparece no Finder; no headless, para <dados>/diagnostics.
@@ -1308,6 +1317,7 @@ export const UI_CAPABILITIES = [
   "setup.request",
   "setup.done",
   "app.about",
+  "app.locale",
   "diagnostics.save",
   "diagnostics.slowFrame",
   "updates.check",
@@ -1476,6 +1486,8 @@ export interface UiEvents {
   "ui.updateReady": UiStatus;
   /** As Configurações mudaram (1.8.0): todas as janelas trocam a Aparência na hora, sem reiniciar. */
   "settings.changed": AppSettings;
+  /** O idioma do app mudou (1.104.0): todas as janelas trocam os textos na hora, sem reiniciar. */
+  "app.localeChanged": AppLocale;
   /** O passo da primeira abertura mudou (1.86.0, T20796): uma permissão dada, o modelo baixou mais um pouco. */
   "setup.changed": SetupStatus;
   /** Entrou ou saiu um microfone, ou mudou a saída padrão (1.18.0): os Ajustes listam de novo. */
