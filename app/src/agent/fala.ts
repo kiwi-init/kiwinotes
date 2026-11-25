@@ -117,9 +117,12 @@ const LETRAS: Record<string, string> = {
   A: "a", B: "bê", C: "cê", D: "dê", E: "é", F: "efe", G: "gê", H: "agá", I: "i", J: "jota", K: "cá", L: "ele", M: "eme",
   N: "ene", O: "ó", P: "pê", Q: "quê", R: "erre", S: "esse", T: "tê", U: "u", V: "vê", W: "dáblio", X: "xis", Y: "ípsilon", Z: "zê",
 };
-/** As siglas que se leem como palavra, não letra por letra. */
-const SIGLAS_PALAVRA = new Set(["ONU", "OTAN", "UNESCO", "FIFA", "NASA", "PIX", "CEP", "INSS", "OK"]);
-const SIGLA_LIDA: Record<string, string> = { OK: "ok", PIX: "pix", CEP: "cep", INSS: "inss" };
+/**
+ * As siglas que se leem como palavra, não letra por letra. As curtas (até 3 letras) precisam estar aqui, senão saem
+ * soletradas: ONG, SUS e MEC se falam como palavra no Brasil (T27958, #27957).
+ */
+const SIGLAS_PALAVRA = new Set(["ONU", "OTAN", "UNESCO", "FIFA", "NASA", "PIX", "CEP", "INSS", "OK", "ONG", "SUS", "MEC"]);
+const SIGLA_LIDA: Record<string, string> = { OK: "ok", PIX: "pix", CEP: "cep", INSS: "inss", ONG: "ong", SUS: "sus", MEC: "mec" };
 
 /** Os substantivos femininos que o gato mais conta ("duas notas", "uma hora"). */
 const FEMININOS = new Set([
