@@ -6,6 +6,9 @@
 //   ainda chegar daquela frase é jogado fora.
 // - O PCM sai em fatias de 80 ms (1920 amostras Int16 mono a 24 kHz); a última da frase pode ser menor.
 // - O processo cair, ou dar erro numa frase, vira um throw no iterador daquela frase. A próxima frase sobe outro.
+// - A voz (T27778): cada `speak` leva a referência, o texto e o idioma da voz. Ela é lida uma vez por fala (o `signal`
+//   do turno, o mesmo para todas as frases dele): trocar a voz no meio de uma fala só vale a partir da próxima, e o
+//   processo quente não recarrega o modelo. O Ouvir (`com`) fala numa voz fixa, sem mexer na escolhida.
 
 import path from "node:path";
 
@@ -41,6 +44,7 @@ export interface VoiceChild {
 export interface VoiceProcessOptions {
   /** O executável: o `voicePath`. */
   bin: string;
+  /** O modelo e a voz escolhida: o `load` do processo, e a voz de cada fala nova. */
   assets: () => VoiceAssets | Promise<VoiceAssets>;
   idleMs?: number;
   cacheMB?: number;
@@ -111,6 +115,8 @@ export class VoiceProcess implements SinteseFala {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly idleMs: number;
   private readonly log: (m: string) => void;
+  /** A voz de cada fala, pelo `signal` dela: lida na 1ª frase, a mesma até o fim. */
+  private readonly voices = new WeakMap<AbortSignal, Promise<VoiceAssets>>();
 
   constructor(private readonly opts: VoiceProcessOptions) {
     this.idleMs = opts.idleMs ?? VOICE_IDLE_MS;
@@ -122,7 +128,26 @@ export class VoiceProcess implements SinteseFala {
     return this.live !== null && !this.live.dead;
   }
 
-  async *sintetizar(frase: string, signal: AbortSignal): AsyncGenerator<Int16Array> {
+  sintetizar(frase: string, signal: AbortSignal): AsyncGenerator<Int16Array> {
+    return this.gerar(frase, signal, this.opts.assets);
+  }
+
+  /** A síntese numa voz fixa (o Ouvir dos Ajustes, T27778): a escolhida não muda. */
+  com(voz: () => VoiceAssets | Promise<VoiceAssets>): SinteseFala {
+    return { sintetizar: (frase, signal) => this.gerar(frase, signal, voz) };
+  }
+
+  private voiceOf(signal: AbortSignal, voz: () => VoiceAssets | Promise<VoiceAssets>): Promise<VoiceAssets> {
+    let v = this.voices.get(signal);
+    if (!v) {
+      v = Promise.resolve().then(voz);
+      v.catch(() => {});
+      this.voices.set(signal, v);
+    }
+    return v;
+  }
+
+  private async *gerar(frase: string, signal: AbortSignal, voz: () => VoiceAssets | Promise<VoiceAssets>): AsyncGenerator<Int16Array> {
     if (signal.aborted) return;
     this.clearIdle();
     const id = `f${this.nextId++}`;
@@ -132,10 +157,21 @@ export class VoiceProcess implements SinteseFala {
     signal.addEventListener("abort", onAbort);
     let leftover = new Int16Array(0);
     try {
+      const voice = this.voiceOf(signal, voz);
       const live = (turn.live = this.start());
       await Promise.race([live.ready, new Promise<void>((r) => signal.addEventListener("abort", () => r(), { once: true }))]);
       if (signal.aborted) return;
-      live.child.write(JSON.stringify({ type: "speak", id, text: frase }));
+      let a: VoiceAssets;
+      try {
+        a = await voice;
+      } catch (e) {
+        throw new VoiceError(`kiwi-voice: sem a voz (${(e as Error).message})`);
+      }
+      if (signal.aborted) return;
+      if (live.dead) throw new VoiceError("kiwi-voice: parado");
+      live.child.write(
+        JSON.stringify({ type: "speak", id, text: frase, voice: { refAudio: a.refAudio, refText: a.refText, language: a.language ?? "portuguese" } }),
+      );
       for (;;) {
         if (signal.aborted) return;
         const c = turn.chunks.shift();

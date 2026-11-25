@@ -1,4 +1,5 @@
 import type { SetupPermission, SetupStatus } from "./first-run.ts";
+import type { CatVoiceId } from "./cat-voices.ts";
 import type { NoteModel } from "./note-model.ts";
 import type { SheetOp } from "./sheet/ops.ts";
 import type { DocxOp } from "./docx/ops.ts";
@@ -71,20 +72,40 @@ export interface PreciseStatus {
   size: number;
 }
 /**
- * A voz do gato (T26729, ADR 0014): o Qwen3-TTS e a voz de referência, baixados no clique da pessoa. `noVoice`: o modelo
- * está no disco, mas a voz ainda não foi escolhida (#26939). `warming`: o processo da voz compila os kernels Metal.
+ * A voz do gato (T26729, ADR 0014): o Qwen3-TTS e as vozes de referência, baixados no clique da pessoa. `noVoice`: o
+ * modelo está no disco, e falta alguma referência (o mesmo clique completa só elas, 1.102.0). `warming`: o processo da
+ * voz compila os kernels Metal.
  */
 export interface CatVoiceStatus {
   phase: "off" | "downloading" | "warming" | "ready" | "noVoice" | "error";
   /** Bytes baixados e o total, enquanto baixa. */
   done?: number;
   total?: number;
-  /** O que falhou: o download, um arquivo com o SHA-256 diferente ou o aquecimento do processo. */
+  /** O que falhou: o download do modelo, um arquivo dele com o SHA-256 diferente ou o aquecimento do processo. */
   error?: "download" | "hash" | "warmup";
-  /** O que o clique baixa, em bytes: o modelo e a voz. */
+  /** O que o clique baixa, em bytes: o modelo e todas as vozes. */
   size: number;
-  /** A voz de referência já está no manifesto. */
+  /** A voz escolhida está pronta para falar (o modelo e a referência dela no disco). */
   voice: boolean;
+  /** O modelo (os pesos) está no disco (1.102.0, spec #27531). */
+  model: boolean;
+  /** As vozes do catálogo, na ordem de `CAT_VOICE_IDS` (1.102.0). O nome e o idioma vêm de `src/shared/cat-voices.ts`. */
+  voices: CatVoiceItem[];
+  /** A voz guardada em `kiwicat.voz` (1.102.0). */
+  selected: CatVoiceId;
+  /** A voz cuja prévia está tocando, se alguma (1.102.0). */
+  preview: CatVoiceId | null;
+}
+/**
+ * Uma voz do catálogo (1.102.0, spec #27531). `soon`: ainda sem referência (a do português chega depois). `missing`: falta
+ * baixar. `error`: o último clique não trouxe a referência dela (a rede ou o SHA-256); as outras seguem.
+ */
+export interface CatVoiceItem {
+  id: CatVoiceId;
+  state: "ready" | "missing" | "error" | "soon";
+  error?: "download" | "hash";
+  /** Os bytes da referência; o `soon` não tem. */
+  size?: number;
 }
 /** O embed de uma nota (T6594): o pedaço que aparece, ou o fragmento que falta. */
 export type NoteEmbed =
@@ -297,7 +318,10 @@ export type { NoteModel };
 //   `catVoice.remove`, todos com o `CatVoiceStatus`. Só acréscimo.
 // 1.101.0 (T26736, spec #26687): "O gato fala", o `catSpeaks` no `AgentStatus` e no `agent.configure` (desligado por
 //   padrão). Ligar não baixa nada: a voz vem no `catVoice.download`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.101.0";
+// 1.102.0 (T27778, spec #27531): as vozes do gato. O `CatVoiceStatus` ganha o `model`, as `voices` (o estado de cada
+//   uma), a `selected` e a `preview`; o `kiwicat.voz` nas settings (a voz escolhida, um id de `cat-voices.ts`); e o
+//   `catVoice.preview` (o Ouvir: fala o texto fixo numa voz, sem mudar a escolha). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.102.0";
 /** O `reason` do `updates` desligado quando foi a pessoa, em Ajustes (1.97.0, T25110), e não o build. */
 export const UPDATES_OFF_BY_SETTING = "desligado em Buscar atualizações";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
@@ -639,6 +663,12 @@ export interface UiCapabilities {
   "catVoice.cancel": { args: Record<string, never>; result: CatVoiceStatus };
   /** Apaga o modelo e a voz. */
   "catVoice.remove": { args: Record<string, never>; result: CatVoiceStatus };
+  /**
+   * O Ouvir (1.102.0, spec #27531): fala o texto fixo da voz `id`, sem mudar a `kiwicat.voz` e sem o agente. Volta na
+   * hora; a voz tocando sai no `preview` do status. Uma prévia nova corta a anterior; durante uma fala do gato, espera ela
+   * acabar. `id: null` para a prévia. E_UNAVAILABLE sem a voz ou sem a saída de som.
+   */
+  "catVoice.preview": { args: { id: CatVoiceId | null }; result: CatVoiceStatus };
   /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */
   "notes.resolve": { args: { link: string }; result: string | null };
   /** O que um embed de nota mostra (1.36.0, T6594): o pedaço já cortado, `missing` sem o título ou o bloco, null sem a nota. */
@@ -1296,6 +1326,7 @@ export const UI_CAPABILITIES = [
   "catVoice.download",
   "catVoice.cancel",
   "catVoice.remove",
+  "catVoice.preview",
   "notes.backlinks",
   "notes.resolve",
   "notes.embed",

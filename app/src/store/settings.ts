@@ -15,6 +15,7 @@ import { type NotesShortcut, sanitizeShortcuts, type Shortcuts } from "../shared
 import { DEFAULT_MEETING_SETTINGS, type MeetingSettings, sanitizeMeetingSettings } from "../shared/meetings.ts";
 import { type CatColorChoice, DEFAULT_CAT_COLOR, isCatColorChoice } from "../shared/kiwicat-colors.ts";
 import { CAT_SIZE, type CatPosition, catSize, DEFAULT_CAT_POSITION, isCatPosition } from "../shared/kiwicat-place.ts";
+import { type CatVoiceId, DEFAULT_CAT_VOICE, isCatVoiceId } from "../shared/cat-voices.ts";
 import { folderPath } from "../notes/paths.ts";
 import { type AgentOnboarding, DEFAULT_AGENT_ONBOARDING, sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
 import type { AgentKind } from "../shared/ui-contract.ts";
@@ -86,6 +87,8 @@ export interface AppSettings {
     posicao: CatPosition;
     /** O tamanho dele, em vezes o de hoje (de 0,6 a 1,6). */
     tamanho: number;
+    /** A voz do gato (spec #27531): um id de `src/shared/cat-voices.ts`. Trocar não baixa nada. */
+    voz: CatVoiceId;
   };
   /**
    * A primeira abertura (T20796, spec #20780): `pending` só numa instalação nova (sem settings.json), até o fim do passo
@@ -271,7 +274,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR, posicao: DEFAULT_CAT_POSITION, tamanho: CAT_SIZE.default }, firstRun: "done" };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR, posicao: DEFAULT_CAT_POSITION, tamanho: CAT_SIZE.default, voz: DEFAULT_CAT_VOICE }, firstRun: "done" };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -343,6 +346,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
       cor: o.kiwicat && typeof o.kiwicat === "object" && isCatColorChoice((o.kiwicat as Record<string, unknown>).cor) ? (o.kiwicat as { cor: CatColorChoice }).cor : DEFAULT_CAT_COLOR,
       posicao: o.kiwicat && typeof o.kiwicat === "object" && isCatPosition((o.kiwicat as Record<string, unknown>).posicao) ? (o.kiwicat as { posicao: CatPosition }).posicao : DEFAULT_CAT_POSITION,
       tamanho: catSize(o.kiwicat && typeof o.kiwicat === "object" ? (o.kiwicat as Record<string, unknown>).tamanho : undefined),
+      voz: o.kiwicat && typeof o.kiwicat === "object" && isCatVoiceId((o.kiwicat as Record<string, unknown>).voz) ? (o.kiwicat as { voz: CatVoiceId }).voz : DEFAULT_CAT_VOICE,
     },
     firstRun: o.firstRun === "pending" ? "pending" : "done",
   });

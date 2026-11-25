@@ -18,6 +18,7 @@ import { NOTE_WIDTH } from "../shared/note-width.ts";
 import { ONBOARDING_STEPS } from "../shared/agent-onboarding.ts";
 import { isCatColorChoice } from "../shared/kiwicat-colors.ts";
 import { catSize, isCatPosition, isCatSize } from "../shared/kiwicat-place.ts";
+import { type CatVoiceId, isCatVoiceId } from "../shared/cat-voices.ts";
 import { isCustomRoutineId, isRoutineKind, isRoutineTime, ROUTINE_KINDS, routineFolder } from "../shared/agent-routines.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch,
 } from "../store/settings.ts";
@@ -210,6 +211,8 @@ export interface CapabilityDeps {
     cancel(): Promise<void>;
     remove(): Promise<void>;
   };
+  /** O Ouvir (T27778, `cat-voice-preview.ts`). Sem ele (sem a saída de som), o `catVoice.preview` dá E_UNAVAILABLE. */
+  catVoicePreview?: { ouvir(id: CatVoiceId): Promise<void>; parar(): void };
   /**
    * O passo da primeira abertura (T20796), da sessão com o helper: as permissões e o modelo agora, o botão de uma
    * permissão e o fim do passo. Sem ela (o headless sem helper, testes antigos): permissões `null`, o modelo `starting`,
@@ -751,9 +754,9 @@ export function uiCapabilities(deps: CapabilityDeps,
           // `cor` (spec #14963): só o id de uma das 5 paletas do pacote; nada de cor livre.
           // `posicao` e `tamanho` (spec #12949): uma das seis posições, e de 0,6 a 1,6 (guardado em passos de 0,1).
           const valid = (k: string) =>
-            k === "cor" ? isCatColorChoice(cat[k]) : k === "posicao" ? isCatPosition(cat[k]) : k === "tamanho" ? isCatSize(cat[k]) : (k === "show" || k === "overlay") && typeof cat[k] === "boolean";
+            k === "cor" ? isCatColorChoice(cat[k]) : k === "posicao" ? isCatPosition(cat[k]) : k === "tamanho" ? isCatSize(cat[k]) : k === "voz" ? isCatVoiceId(cat[k]) : (k === "show" || k === "overlay") && typeof cat[k] === "boolean";
           if (!keys.length || !keys.every(valid))
-            throw bad("kiwicat.show and kiwicat.overlay must be true or false; kiwicat.cor one of the 5 palettes; kiwicat.posicao one of the six positions; kiwicat.tamanho from 0.6 to 1.6");
+            throw bad("kiwicat.show and kiwicat.overlay must be true or false; kiwicat.cor one of the 5 palettes; kiwicat.posicao one of the six positions; kiwicat.tamanho from 0.6 to 1.6; kiwicat.voz one of the cat voices");
           if (typeof cat.tamanho === "number") cat.tamanho = catSize(cat.tamanho);
           const current = (await deps.settings.load()).kiwicat;
           patch.kiwicat = { ...current, ...(cat as Partial<AppSettings["kiwicat"]>) };
@@ -1520,7 +1523,24 @@ export function uiCapabilities(deps: CapabilityDeps,
     "catVoice.remove": async (args) => {
       noArgs(args, "catVoice.remove");
       const v = await catVoice();
+      deps.catVoicePreview?.parar();
       await v.remove();
+      return v.status();
+    },
+    "catVoice.preview": async (args) => {
+      const { id } = fields(args, "catVoice.preview", ["id"]);
+      const v = await catVoice();
+      if (id === null) {
+        deps.catVoicePreview?.parar();
+        return v.status();
+      }
+      if (!isCatVoiceId(id)) throw bad("catVoice.preview: id must be one of the cat voices, or null");
+      if (!deps.catVoicePreview) throw new CapabilityError("E_UNAVAILABLE", "cat voice preview unavailable");
+      // Só a voz que está no disco: o Ouvir nunca baixa (sem o modelo, a linha mostra o botão de baixar).
+      const s = await v.refresh();
+      if (!s.model || s.voices.find((x) => x.id === id)?.state !== "ready") throw new CapabilityError("E_UNAVAILABLE", `the voice ${id} isn't downloaded`);
+      // Volta na hora: a prévia toca por segundos, e o `preview` do status diz qual está tocando.
+      void deps.catVoicePreview.ouvir(id).catch(() => {});
       return v.status();
     },
     "notes.backlinks": async (args) => (await vault()).backlinks(fields(args, "notes.backlinks", ["path"]).path),

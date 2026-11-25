@@ -202,3 +202,48 @@ describe("VoiceProcess", () => {
     expect((await slow).length).toBe(13);
   });
 });
+
+describe("a voz de cada fala (T27778)", () => {
+  const ANA: VoiceAssets = { ...ASSETS, refAudio: "/tmp/exemplo/ana.wav", refText: "Oi, eu sou a Ana.", language: "english" };
+  const BIA: VoiceAssets = { ...ASSETS, refAudio: "/tmp/exemplo/bia.wav", refText: "Oi, eu sou a Bia.", language: "english" };
+  const speaks = (cmds: () => { type: string; text?: string; voice?: { refAudio: string } }[]) =>
+    cmds().filter((c) => c.type === "speak").map((c) => `${c.text}:${c.voice!.refAudio.split("/").at(-1)}`);
+
+  test("cada speak leva a voz; trocar no meio da fala só vale na próxima, sem subir outro processo", async () => {
+    let voz = ANA;
+    const { v, cmds, spawns } = make({ assets: () => voz });
+    const turno1 = new AbortController();
+    await collect(v.sintetizar("um", turno1.signal));
+    voz = BIA;
+    // A mesma fala (o mesmo signal): a 2ª frase sai na voz em que a fala começou.
+    await collect(v.sintetizar("dois", turno1.signal));
+    const turno2 = new AbortController();
+    await collect(v.sintetizar("três", turno2.signal));
+    expect(speaks(cmds)).toEqual(["um:ana.wav", "dois:ana.wav", "três:bia.wav"]);
+    expect(cmds().find((c) => c.type === "speak")!.voice).toEqual({ refAudio: ANA.refAudio, refText: ANA.refText, language: "english" });
+    expect(spawns()).toBe(1);
+    expect(cmds().filter((c) => c.type === "load").length).toBe(1);
+  });
+
+  test("o com() fala numa voz fixa, sem mexer na escolhida", async () => {
+    const { v, cmds } = make({ assets: () => ANA });
+    await collect(v.com(() => BIA).sintetizar("prévia", new AbortController().signal));
+    await collect(v.sintetizar("fala", new AbortController().signal));
+    expect(speaks(cmds)).toEqual(["prévia:bia.wav", "fala:ana.wav"]);
+  });
+
+  test("a voz que não carrega falha só aquela frase", async () => {
+    const { v, cmds } = make({ assets: () => ANA });
+    const quebrada = { ...BIA, refAudio: "/tmp/exemplo/quebrada.wav" };
+    await expect(collect(v.com(() => quebrada).sintetizar("x", new AbortController().signal))).rejects.toThrow(VoiceError);
+    expect((await collect(v.sintetizar("depois", new AbortController().signal))).length).toBeGreaterThan(0);
+    expect(speaks(cmds).at(-1)).toBe("depois:ana.wav");
+  });
+
+  test("sem a voz no disco, a frase falha antes do speak", async () => {
+    const { v, cmds } = make({ assets: () => ANA });
+    await expect(collect(v.com(() => Promise.reject(new Error("a voz en-b não foi baixada"))).sintetizar("x", new AbortController().signal))).rejects.toThrow(/sem a voz/);
+    expect(speaks(cmds)).toEqual([]);
+  });
+});
+

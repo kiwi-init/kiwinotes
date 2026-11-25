@@ -33,8 +33,9 @@
 //   `aviso-negado`, spec #9839), com o aviso falso.
 // - `ajustes-gato-fala.json` (spec #26687, T26736): "O gato fala" desligado por padrão; abrir os Ajustes e ligar não
 //   baixam nada; o botão com o tamanho, o andamento, cancelar, baixar de novo, "Preparando" e "Pronta", desligar e
-//   remover. A voz vem de um servidor falso e local (a chave `KIWI_CAT_VOICE_MANIFEST`), com um modelo e uma voz
-//   inventados, e o `kiwi-voice` é o falso: nada fala.
+//   remover. A voz vem de um servidor falso e local (a chave `KIWI_CAT_VOICE_MANIFEST`), com um modelo e duas vozes
+//   inventados, e o `kiwi-voice` é o falso: nada fala. As vozes (T27778): o idioma, só as vozes dele, o "Usar" que grava
+//   o `kiwicat.voz`, o Ouvir (Parar enquanto toca, numa saída muda) sem mudar a escolhida, e a pt-a "em breve".
 // Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
 import { createHash } from "node:crypto";
@@ -72,6 +73,7 @@ const voiceFiles: Record<string, Uint8Array> = {
   "/exemplo/voz-modelo/resolve/rev-exemplo/config.json": new TextEncoder().encode('{"exemplo":true}'),
   "/exemplo/voz-modelo/resolve/rev-exemplo/model.safetensors": random(3_000_000),
   "/vozes/ana-exemplo.wav": random(200_000),
+  "/vozes/bia-exemplo.wav": random(150_000),
 };
 const voiceServer = Bun.serve({
   port: 0,
@@ -107,15 +109,23 @@ writeFileSync(
         { name: "model.safetensors", ...voiceFile("/exemplo/voz-modelo/resolve/rev-exemplo/model.safetensors") },
       ],
     },
-    voice: {
-      manifest: {
-        id: "voz-exemplo",
-        repo: "-",
-        revision: "v1",
-        files: [{ name: "ana-exemplo.wav", ...voiceFile("/vozes/ana-exemplo.wav"), url: `http://127.0.0.1:${voiceServer.port}/vozes/ana-exemplo.wav` }],
-      },
-      text: "Oi, eu sou a Ana, uma voz inventada.",
-    },
+    // As vozes (T27778): duas inventadas no lugar da en-a e da en-b, e a pt-a "em breve".
+    voices: Object.fromEntries(
+      (["ana", "bia"] as const).map((nome, i) => [
+        i === 0 ? "en-a" : "en-b",
+        {
+          manifest: {
+            id: `voz-${nome}-exemplo`,
+            repo: "-",
+            revision: "v1",
+            files: [{ name: `${nome}-exemplo.wav`, ...voiceFile(`/vozes/${nome}-exemplo.wav`), url: `http://127.0.0.1:${voiceServer.port}/vozes/${nome}-exemplo.wav` }],
+          },
+          text: `Oi, eu sou a ${nome === "ana" ? "Ana" : "Bia"}, uma voz inventada.`,
+          language: "english",
+          preview: ["Uma frase de exemplo.", "Outra frase de exemplo."],
+        },
+      ]),
+    ),
   }),
 );
 const fakeVoice = path.join(work, "kiwi-voice-falso");

@@ -3,6 +3,7 @@
 // `window.engine`: as chamadas falham e as telas mostram o estado vazio.
 
 import type { CustomRoutineInput, HistoryEntry, UiCapabilities, UiCapability, UiEvents } from "../../src/shared/ui-contract.ts";
+import type { CatVoiceId } from "../../src/shared/cat-voices.ts";
 
 export type { DictionaryTerm, HistoryEntry, HistoryPage, NoteMeta, SearchHit, Snippet } from "../../src/shared/ui-contract.ts";
 
@@ -68,6 +69,8 @@ export const api = {
     download: () => invoke("catVoice.download", {}),
     cancel: () => invoke("catVoice.cancel", {}),
     remove: () => invoke("catVoice.remove", {}),
+    /** O Ouvir (T27778): toca o texto fixo da voz, sem mudar a escolhida; `null` para. */
+    preview: (id: CatVoiceId | null) => invoke("catVoice.preview", { id }),
   },
   dictionary: {
     get: () => invoke("dictionary.get", {}),

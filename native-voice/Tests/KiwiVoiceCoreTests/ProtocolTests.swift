@@ -19,6 +19,18 @@ final class ProtocolTests: XCTestCase {
         XCTAssertThrowsError(try decodeCommand(#"{"type":"tocar"}"#)) { XCTAssertEqual($0 as? VoiceProtocolError, .unknownType("tocar")) }
     }
 
+    func testDecodeSpeakWithAVoice() throws {
+        XCTAssertEqual(
+            try decodeCommand(#"{"type":"speak","id":"t2","text":"Oi.","voice":{"refAudio":"/tmp/a.wav","refText":"Olá.","language":"english"}}"#),
+            .speak(id: "t2", text: "Oi.", voice: VoiceRef(refAudio: "/tmp/a.wav", refText: "Olá.", language: "english")))
+        XCTAssertEqual(
+            try decodeCommand(#"{"type":"speak","id":"t2","text":"Oi.","voice":{"refAudio":"/tmp/a.wav","refText":"Olá."}}"#),
+            .speak(id: "t2", text: "Oi.", voice: VoiceRef(refAudio: "/tmp/a.wav", refText: "Olá.", language: "portuguese")))
+        XCTAssertThrowsError(try decodeCommand(#"{"type":"speak","id":"t2","text":"Oi.","voice":{"refAudio":"/tmp/a.wav"}}"#)) {
+            XCTAssertEqual($0 as? VoiceProtocolError, .missing("voice"))
+        }
+    }
+
     func testPcmIsInt16LittleEndianBase64() throws {
         let line = encodeEvent(.pcm(id: "t1", seq: 2, samples: [0, 1, -1, 32767]))
         let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])

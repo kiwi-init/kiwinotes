@@ -184,7 +184,7 @@ describe("o gato no overlay ligado ao app", () => {
     const readyFns = new Set<() => void>();
     const status = (enabled: boolean) => ({ enabled }) as AgentStatus;
     const settings = (overlay: boolean, cor: AppSettings["kiwicat"]["cor"] = "prisma-original", posicao: AppSettings["kiwicat"]["posicao"] = "center", tamanho = 1): AppSettings =>
-      ({ ...DEFAULT_SETTINGS, kiwicat: { show: true, overlay, cor, posicao, tamanho } });
+      ({ ...DEFAULT_SETTINGS, kiwicat: { show: true, overlay, cor, posicao, tamanho, voz: "en-a" as const } });
     const attached = attachCatOverlay({
       agent: {
         status: async () => status(o.enabled ?? true),

@@ -3,6 +3,8 @@
 // amostra vale o número do bloco. Frases especiais:
 //   "cai"   → o processo sai com o código 3 no meio da frase
 //   "erro"  → um `error` com o id da frase
+// Um `speak` com a voz (T27778) cujo `refAudio` termina em "quebrada.wav" responde um `error` com o id, como o de verdade
+// quando a referência não carrega: só aquela frase falha.
 // O `load` com refText "sem-modelo" responde com um `error` sem id. O `warmup` responde `warm` em 20 ms, ou, com o refText
 // "frio-falha", um `error` sem id (o Metal que não compila). `FAKE_WARM_MS` muda os 20 ms (o roteiro de tela, T26736). Cada comando recebido vai para o arquivo do 1º
 // argumento, uma linha por comando, para o teste conferir o `cancel` e o `quit`.
@@ -61,6 +63,10 @@ for await (const chunk of Bun.stdin.stream()) {
       const ms = Number(process.env.FAKE_WARM_MS ?? 20);
       setTimeout(() => send(failWarm ? { type: "error", message: "warmup: falha inventada" } : { type: "warm", ms }), ms);
     } else if (m.type === "speak") {
+      if (typeof m.voice?.refAudio === "string" && m.voice.refAudio.endsWith("quebrada.wav")) {
+        send({ type: "error", id: m.id, message: "voice: a referência não carregou" });
+        continue;
+      }
       queue.push({ id: m.id, text: m.text });
       void pump();
     } else if (m.type === "cancel") {
