@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { EN_PARTS } from "./en.ts";
-import { AUTO_FOLLOWS_SYSTEM, appLocale, LANGUAGE_CHOICE, languageChoice, CATALOGS, formatDate, formatDateTime, formatNumber, formatTime, isLanguageSetting, localeFromSystem, LOCALES, placeholders, resolveLocale, type TextKey, translate } from "./index.ts";
+import { AUTO_FOLLOWS_SYSTEM, appLocale, LANGUAGE_CHOICE, languageChoice, CATALOGS, formatDate, formatDateTime, formatNumber, formatTime, isLanguageSetting, type Entry, localeFromSystem, LOCALES, placeholders, resolveLocale, type TextKey, translate } from "./index.ts";
 import { PT_PARTS } from "./pt.ts";
 
 describe("catálogo", () => {
@@ -48,6 +48,55 @@ describe("catálogo", () => {
         const texts = typeof e === "string" ? [e] : [e.one, e.other];
         for (const s of texts) expect({ key, l, empty: !s.trim() }).toEqual({ key, l, empty: false });
       }
+  });
+
+  // Uma tradução esquecida (o português copiado no `en`) passava em tudo: o `agent-english-check` pula, de propósito, o
+  // texto igual nas duas línguas (T30218, revisão #30216). Aqui o igual só passa se estiver nesta lista, com o motivo.
+  // Chave nova que fica igual de propósito entra aqui; uma que deixou de ser igual sai.
+  const SAME_ON_PURPOSE: Record<string, string> = {
+    "language.pt": "o nome da língua nela mesma",
+    "language.en": "o nome da língua nela mesma",
+    "app.name": "nome próprio",
+    "about.window.hub": "nome próprio (o app)",
+    "hub.cat.name": "nome próprio (o gato)",
+    "shortcuts.group.Kiwi Cat": "nome próprio (o gato)",
+    "agent.cat.color.soul-claro": "nome da cor, igual nas duas",
+    "notes.draft.when": "só o parâmetro",
+    "editor.attach.refused": "só os parâmetros",
+    "agent.usage.sub.part": "só os parâmetros e o %",
+    "agent.adapter.mb": "unidade",
+    "meetings.duration.minutes": "unidade",
+    "home.minutes": "unidade",
+    "files.image.size": "só os parâmetros e a unidade (px)",
+    "agent.usage.tokens": "palavra igual nas duas",
+    "agent.placar.tokens": "palavra igual nas duas",
+    "agent.placar.col.tokens": "palavra igual nas duas",
+    "notes.export.pdf": "nome do formato",
+    "notes.prop.link": "palavra igual nas duas",
+    "editor.fmt.link": "palavra igual nas duas",
+    "proposal.refs.links": "palavra igual nas duas",
+    "notes.side.tags": "palavra igual nas duas",
+    "snippets.section": "palavra igual nas duas",
+    "agent.onboarding": "palavra igual nas duas",
+    "onb.tone.formal": "palavra igual nas duas",
+    "editor.menu.callout": "o nome do bloco do Obsidian",
+    "editor.slash.callout": "o nome do bloco do Obsidian",
+    "editor.slash.todo": "palavra igual nas duas",
+    "editor.callout.info": "o nome do tipo do Obsidian",
+    "editor.callout.bug": "o nome do tipo do Obsidian",
+  };
+
+  test("o inglês igual ao português só passa na lista de propósito (T30218)", () => {
+    // No plural, forma por forma: o `other` esquecido com o `one` traduzido também conta (revisão #30448).
+    const forms = (e: Entry) => (typeof e === "string" ? { text: e } : { ...e });
+    const same = (Object.keys(CATALOGS.pt) as TextKey[]).filter((key) => {
+      const pt = forms(CATALOGS.pt[key]), en = forms(CATALOGS.en[key]);
+      return Object.entries(pt).some(([form, text]) => en[form as keyof typeof en] === text);
+    });
+    // A tradução esquecida aparece aqui pela chave: traduza no `<área>.en.ts`, ou, se for igual de propósito, ponha na lista.
+    expect(same.filter((key) => !(key in SAME_ON_PURPOSE)).sort()).toEqual([]);
+    // Uma chave da lista que já não é igual (ou sumiu) sai da lista, para ela não virar um buraco.
+    expect(Object.keys(SAME_ON_PURPOSE).filter((key) => !same.includes(key as TextKey)).sort()).toEqual([]);
   });
 });
 

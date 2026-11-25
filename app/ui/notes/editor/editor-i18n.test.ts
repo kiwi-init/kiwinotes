@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { type Completion, CompletionContext } from "@codemirror/autocomplete";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
@@ -15,7 +16,7 @@ import type { MenuItem } from "../ContextMenu.tsx";
 import { CALLOUT_KINDS, parseCallout } from "./callouts.ts";
 import { editorMenu } from "./context-menu.ts";
 import { footnoteText, footnotesOf } from "./footnotes.ts";
-import { FORMAT_KEYS } from "./index.ts";
+import { FORMAT_KEYS, slashCompletion } from "./index.ts";
 import { editorPhrases } from "./search-fold.ts";
 import { SLASH_ITEMS, slashMatches } from "./slash.ts";
 import { spellingMenu } from "./spelling.ts";
@@ -94,5 +95,26 @@ describe("os menus do editor em inglês (T29842)", () => {
     expect(slashMatches("table")[0]?.id).toBe("table");
     expect(slashMatches("tabela")[0]?.id).toBe("table");
     expect(slashMatches("divider")[0]?.id).toBe("divider");
+  });
+
+  // As duas seções do "/" (revisão da T29842, #30385): só aparecem com algum item já usado, fora do `shown()`.
+  test("as seções do / trocam de língua (T30218)", () => {
+    const g = globalThis as { localStorage?: unknown };
+    const before = g.localStorage;
+    const store = new Map([["kn.slash.usage.v1", JSON.stringify({ [SLASH_ITEMS[0]!.id]: 3 })]]);
+    g.localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) };
+    try {
+      const sections = () => {
+        const state = EditorState.create({ doc: "/", extensions: [markdown({ base: markdownLanguage })] });
+        const r = slashCompletion({})(new CompletionContext(state, 1, false));
+        return [...new Set(r!.options.map((o: Completion) => (o.section as { name: string }).name))];
+      };
+      lang("en");
+      expect(sections()).toEqual(["Most used", "Other commands"]);
+      lang("pt");
+      expect(sections()).toEqual(["Mais usados", "Outros comandos"]);
+    } finally {
+      g.localStorage = before;
+    }
   });
 });
