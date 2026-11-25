@@ -26,12 +26,15 @@ export interface SinteseFala {
 
 export interface SaidaFala {
   /**
-   * Toca um pedaço; resolve quando ele terminou ou foi limpo. `aoTocar` é chamado quando ele começa a sair, com o
-   * volume aplicado pela saída (0 a 1).
+   * Toca um pedaço; resolve quando ele terminou ou foi limpo, ou, numa saída com fila (`drenar`), quando ele começou a
+   * sair, para o próximo entrar na fila sem buraco. `aoTocar` é chamado quando ele começa a sair, com o volume
+   * aplicado pela saída (0 a 1).
    */
   tocar(pcm: Pcm, aoTocar: (volume: number) => void): Promise<void>;
   /** Esvazia o que está na fila da saída, na hora. */
   limpar(): void;
+  /** Numa saída com fila (T27825): resolve quando tudo o que entrou acabou de tocar ou foi limpo. */
+  drenar?(): Promise<void>;
 }
 
 /** Abaixa os outros sons durante a fala (spec #17697), sem abaixar a voz do gato. */
@@ -78,6 +81,11 @@ export class FalaPlayer {
   private emReuniao = false;
 
   constructor(private readonly o: FalaPlayerOpts) {}
+
+  /** A fala em andamento, se alguma: resolve quando ela acaba (o Ouvir dos Ajustes espera, T27778). */
+  get falaAtual(): Promise<void> | undefined {
+    return this.atual?.fim;
+  }
 
   /** O turno que está falando, se algum. */
   get falando(): string | undefined {
@@ -191,6 +199,8 @@ export class FalaPlayer {
           if (this.vale(t)) this.emitir({ tipo: "nivel", turnId: t.id, nivel: nivelRms(pcm) * Math.max(0, Math.min(1, volume)) });
         });
       }
+      // O fim da fala é o fim do som, não o começo do último pedaço.
+      if (this.vale(t) && erroSintese === undefined) await this.o.saida.drenar?.();
     } catch (e) {
       // A saída caiu (o fone desconectou, o dispositivo sumiu): para a síntese e limpa o que ficou.
       if (this.atual === t) {

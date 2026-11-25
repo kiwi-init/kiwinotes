@@ -175,6 +175,12 @@ export type Command =
    */
   | { type: "catOverlay.bubble"; text: string | null; error?: boolean; ask?: boolean; links?: BubbleLink[]; summary?: string }
   /**
+   * A voz do gato no alto-falante (T27825): um pedaço de PCM Int16 mono a 24 kHz, em base64, que entra na fila da
+   * saída. O `speech.played` com o mesmo `seq` diz que ele acabou (ou foi limpo). `speech.stop` corta na hora.
+   */
+  | { type: "speech.play"; seq: number; pcm: string }
+  | { type: "speech.stop" }
+  /**
    * `dryRun: true` (os testes de agente, #490): o sidecar não toca no clipboard nem no teclado e responde
    * `{pasted: false, restored: false, dryRun: true, app?}`. O app conta isso como colado.
    * `autoSpace` (padrão `true`, T733): se o cursor está logo depois de um texto (letra, número, pontuação), o sidecar
@@ -268,6 +274,9 @@ export interface CommandResults {
   "catOverlay.color": Record<string, never>;
   "catOverlay.place": Record<string, never>;
   "catOverlay.bubble": Record<string, never>;
+  /** O volume com que a voz sai (0 a 1): a boca do gato acompanha. */
+  "speech.play": { volume: number };
+  "speech.stop": Record<string, never>;
   /**
    * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
    * `no_focus` (nenhum app na frente) ou `no_accessibility` (falta a permissão). Com um app na frente o ⌘V vai sempre,
@@ -339,6 +348,8 @@ export type Event =
   /** Spec #13380: clicou ou rolou no balão (a espera recomeça), ou fechou no × do balão ou da cabeça. */
   | { type: "catOverlay.touch" }
   | { type: "catOverlay.close" }
+  /** T27825: o pedaço `seq` da voz do gato acabou de tocar, ou o `speech.stop` o limpou. */
+  | { type: "speech.played"; seq: number }
   /** Spec #17683: clicou num link `kiwi-file:` do balão; `path` é relativo à pasta, e o main confere de novo. */
   | { type: "catOverlay.openPath"; path: string }
   /**
@@ -562,6 +573,8 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "catOverlay.color",
   "catOverlay.place",
   "catOverlay.bubble",
+  "speech.play",
+  "speech.stop",
   "insert.text",
   "notify",
   "permissions.request",
@@ -582,6 +595,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "catOverlay.hold",
   "catOverlay.touch",
   "catOverlay.close",
+  "speech.played",
   "catOverlay.openPath",
   "meeting.minePaused",
   "meeting.segment",
