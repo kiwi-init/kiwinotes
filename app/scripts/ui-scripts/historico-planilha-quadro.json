@@ -131,13 +131,13 @@
       "name": "a original e a editada"
     },
     {
-      "click": ".kn-versions-it >> nth=1",
-      "name": "a mais velha"
+      "click": ".kn-versions-it >> nth=-1",
+      "name": "a mais velha: a última da lista (T30142). Num runner lento, o quadro grava o cartão vazio antes de a pessoa digitar, e essa vira uma 3ª versão no meio"
     },
     {
       "expectText": ".kn-versions-stats",
-      "text": "tira 1 linha",
-      "name": "o diff dos cartões, não do JSON"
+      "text": "traz 0 e tira 1 linha",
+      "name": "o diff dos cartões, não do JSON: só tira o cartão novo"
     },
     {
       "expectText": ".kn-diff-del",

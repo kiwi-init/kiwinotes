@@ -495,8 +495,10 @@ test("one lost ping does not kill the helper, and a pong resets the consecutive 
     return pings === 3 || pings >= 6 ? { ok: true, data: {} } : undefined;
   });
   const logs: string[] = [];
+  // O prazo de 100 ms (T30142): com 5, o pong do ping 3 chegava tarde sob carga (a suíte inteira), virava a 3ª perda
+  // seguida e o helper morria. As perdas de propósito custam o prazo cada, umas 400 ms no total.
   const s = make(helper, undefined, {
-    supervision: { pingIntervalMs: 5, pingTimeoutMs: 5 },
+    supervision: { pingIntervalMs: 5, pingTimeoutMs: 100 },
     log: (m) => logs.push(m),
   });
   await until(() => pings >= 6);
