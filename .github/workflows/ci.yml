@@ -316,6 +316,9 @@ jobs:
         run: bun scripts/docs-links-check.ts
       - name: privacy
         run: bun scripts/privacy-check.ts
+      # Os textos fixos nas telas, fora do catálogo do i18n (spec #28171): só aviso, e barra nas telas já migradas.
+      - name: i18n
+        run: bun scripts/i18n-check.ts
 
   swift-test:
     name: swift test

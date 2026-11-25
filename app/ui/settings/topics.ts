@@ -1,14 +1,31 @@
-// As Configurações por assunto (spec #11966, T12115): a barra lateral com os 8 assuntos e, em cada um, os blocos de
+// As Configurações por assunto (spec #11966, T12115): a barra lateral com os 9 assuntos e, em cada um, os blocos de
 // Ajustes que ele mostra. Os blocos são as seções de antes do spec, só mudadas de lugar: nenhuma linha muda por dentro.
 // Toda linha está em exatamente um assunto (o teste confere a lista).
 
+import type { TextKey } from "../../src/shared/i18n/index.ts";
 import { SHORTCUTS, type ShortcutDef } from "../../src/shared/shortcuts.ts";
 
-export const SETTINGS_TOPICS = ["appearance", "dictation", "notes", "meetings", "agent", "activity", "privacy", "about"] as const;
+// "Geral" (T28190, spec #28171) é o primeiro, como nos Ajustes do macOS: o idioma do app.
+export const SETTINGS_TOPICS = ["general", "appearance", "dictation", "notes", "meetings", "agent", "activity", "privacy", "about"] as const;
 export type SettingsTopic = (typeof SETTINGS_TOPICS)[number];
 export const isSettingsTopic = (v: unknown): v is SettingsTopic => (SETTINGS_TOPICS as readonly unknown[]).includes(v);
 
+/** O nome de cada assunto no catálogo (spec #28171): a tela mostra `t(TOPIC_LABEL_KEYS[t])`. */
+export const TOPIC_LABEL_KEYS: Record<SettingsTopic, TextKey> = {
+  general: "settings.topic.general",
+  appearance: "settings.topic.appearance",
+  dictation: "settings.topic.dictation",
+  notes: "settings.topic.notes",
+  meetings: "settings.topic.meetings",
+  agent: "settings.topic.agent",
+  activity: "settings.topic.activity",
+  privacy: "settings.topic.privacy",
+  about: "settings.topic.about",
+};
+
+/** Os nomes em português: os links de dentro do hub e os scripts de tela procuram por eles. */
 export const TOPIC_LABELS: Record<SettingsTopic, string> = {
+  general: "Geral",
   appearance: "Aparência",
   dictation: "Ditado",
   notes: "Notas",
@@ -23,6 +40,7 @@ type ShortcutGroup = ShortcutDef["group"];
 
 /** Os blocos de Ajustes: cada um é uma seção de hoje (os atalhos, um bloco por grupo). */
 export const SETTINGS_BLOCKS = [
+  "language",
   "appearance",
   "shortcuts:Ditado",
   "transcription",
@@ -46,6 +64,7 @@ export type SettingsBlock = (typeof SETTINGS_BLOCKS)[number];
 
 /** O que cada assunto mostra, na ordem da tela. */
 export const TOPIC_BLOCKS: Record<SettingsTopic, readonly SettingsBlock[]> = {
+  general: ["language"],
   appearance: ["appearance"],
   // O microfone, o atalho Fn, a transcrição, o dicionário, os snippets e os sons (o som fica na Transcrição).
   dictation: ["shortcuts:Ditado", "transcription", "dictionary", "snippets"],

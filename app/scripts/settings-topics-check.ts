@@ -1,4 +1,4 @@
-// Configurações por assunto (spec #11966, T12115–T12118): a barra lateral dos 8 assuntos no claro e no escuro, cada
+// Configurações por assunto (spec #11966, T12115–T12118): a barra lateral dos 9 assuntos no claro e no escuro, cada
 // seção num assunto só, a aba Sobre fora do topo, o teclado, o último assunto, o link "Abrir a memória" do balão e a
 // janela estreita com "‹ Voltar". No hub de verdade, com o AppEngine headless e o agente falso, num WebKit headless.
 // Nada na tela de ninguém.
@@ -61,6 +61,8 @@ async function idle() {
  * reunião", que era só da aba Reuniões, e "Suas reuniões", que estava dentro do Agente). O Sobre não tem título de seção.
  */
 const EXPECTED: Record<SettingsTopic, string[]> = {
+  // O Geral (T28190): o idioma do app.
+  general: ["Idioma"],
   appearance: ["Aparência"],
   dictation: ["Atalhos · Ditado", "Transcrição", "Dicionário", "Snippets"],
   notes: ["Notas", "Atalhos · Notas", "Atalhos · Barra lateral das Notas"],
@@ -92,7 +94,7 @@ try {
   await invoke("agent.download");
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
 
-  // 1. Os 8 assuntos, no claro e no escuro: só o painel do assunto aparece, e cada seção está num assunto só.
+  // 1. Os 9 assuntos, no claro e no escuro: só o painel do assunto aparece, e cada seção está num assunto só.
   const videoDir = join(out, "video");
   for (const theme of ["light", "dark"] as const) {
     const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme, width: 1100, height: 720, motion: false, browser: "webkit", query: { section: "settings", topic: "appearance" }, ...(theme === "light" ? { video: videoDir } : {}) });
@@ -121,7 +123,7 @@ try {
     for (const title of SECTIONS) assert.equal(seen.get(title)?.length, 1, `"${title}" num assunto só: ${JSON.stringify(seen.get(title))}`);
     for (const [title, where] of seen) assert.equal(where.length, 1, `"${title}" repetida em ${where.join(", ")}`);
     if (theme === "light") {
-      report.checks.push(`the sidebar shows the 8 topics and the top bar has the 5 tabs (Início first) and no Sobre tab; each topic shows only its panel; the ${SECTIONS.length} sections are each in exactly one topic`);
+      report.checks.push(`the sidebar shows the 9 topics and the top bar has the 5 tabs (Início first) and no Sobre tab; each topic shows only its panel; the ${SECTIONS.length} sections are each in exactly one topic`);
 
       // 2. O teclado: ↑ e ↓ andam pela lista, Enter abre o assunto, Tab entra no painel.
       await p.locator(".kn-prefs-item[data-topic=appearance]").click();

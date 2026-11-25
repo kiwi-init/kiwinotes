@@ -8,6 +8,7 @@ export const en: Catalog = {
   "language.en": "English",
 
   "common.notes": { one: "{n} note", other: "{n} notes" },
+  "common.saveFailed": "Couldn't save. Try again.",
 
   "settings.window.title": "Settings",
   "settings.topics.aria": "Settings topics",

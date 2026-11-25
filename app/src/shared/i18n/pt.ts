@@ -8,6 +8,7 @@ export const pt = {
 
   // Comuns.
   "common.notes": { one: "{n} nota", other: "{n} notas" },
+  "common.saveFailed": "Não deu para salvar. Tente de novo.",
 
   // Ajustes: a casca e os assuntos (spec #11966).
   "settings.window.title": "Configurações",
