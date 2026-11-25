@@ -1267,7 +1267,7 @@ export type AgentTurnEvent = { id: string } & (
   | { type: "status"; status: "running"; tool: string; target?: string }
   | { type: "text"; text: string }
   /**
-   * A fala do `cat_speak` (1.102.0, spec #27881): 1 ou 2 frases, como o agente escreveu. É o resumo do balão; com "O
+   * A fala do `cat_speak` (1.103.0, spec #27881): 1 ou 2 frases, como o agente escreveu. É o resumo do balão; com "O
    * gato fala" ligado num pedido por voz, a voz lê a mesma fala.
    */
   | { type: "speech"; text: string }
