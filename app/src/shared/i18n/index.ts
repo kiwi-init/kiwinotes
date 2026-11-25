@@ -45,7 +45,29 @@ export function localeFromSystem(languages: readonly string[]): Locale {
  */
 export const AUTO_FOLLOWS_SYSTEM = false;
 
-export function resolveLocale(setting: LanguageSetting, systemLanguages: readonly string[], followSystem = AUTO_FOLLOWS_SYSTEM): Locale {
+/**
+ * O harry (#29311, #29314): o app em inglês não entra na v2026.11.14 (T29319). Com esta chave desligada, os Ajustes não
+ * mostram o Idioma do app, e o app fica em português qualquer que seja a escolha salva: quem escolheu English num
+ * build de antes volta ao português, e não fica num app misturado sem o menu para voltar. A última parte do spec
+ * #28171 liga esta chave junto com a `AUTO_FOLLOWS_SYSTEM`.
+ *
+ * `KIWI_LANGUAGE_CHOICE=1` no ambiente liga a escolha só no main e no headless, nunca no app de release: o `bun test`
+ * (o preload põe) e os prints em inglês das partes do spec, pelo `settings.set`.
+ */
+export const LANGUAGE_CHOICE = false;
+
+/** A escolha da língua vale agora: a chave, ou o `KIWI_LANGUAGE_CHOICE=1` do main e do headless. */
+export function languageChoice(): boolean {
+  return LANGUAGE_CHOICE || (typeof process !== "undefined" && process.env?.KIWI_LANGUAGE_CHOICE === "1");
+}
+
+export function resolveLocale(
+  setting: LanguageSetting,
+  systemLanguages: readonly string[],
+  followSystem = AUTO_FOLLOWS_SYSTEM,
+  choice = languageChoice(),
+): Locale {
+  if (!choice) return "pt";
   if (setting !== "auto") return setting;
   return followSystem ? localeFromSystem(systemLanguages) : "pt";
 }
@@ -116,7 +138,12 @@ export interface AppLocale {
   system: Locale;
 }
 
-export function appLocale(setting: LanguageSetting, systemLanguages: readonly string[], followSystem = AUTO_FOLLOWS_SYSTEM): AppLocale {
-  return { setting, locale: resolveLocale(setting, systemLanguages, followSystem), system: localeFromSystem(systemLanguages) };
+export function appLocale(
+  setting: LanguageSetting,
+  systemLanguages: readonly string[],
+  followSystem = AUTO_FOLLOWS_SYSTEM,
+  choice = languageChoice(),
+): AppLocale {
+  return { setting, locale: resolveLocale(setting, systemLanguages, followSystem, choice), system: localeFromSystem(systemLanguages) };
 }
 

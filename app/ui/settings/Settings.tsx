@@ -31,7 +31,7 @@ import { ShortcutsSection, SidebarKeysSection } from "./Shortcuts.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
 import { TopicIcon } from "./topicIcons.tsx";
 import { TrailsSection } from "./Trails.tsx";
-import { isSettingsTopic, NARROW_PX, readLastTopic, saveLastTopic, SETTINGS_TOPICS, type SettingsBlock, type SettingsTopic, stepTopic, TOPIC_BLOCKS, TOPIC_LABEL_KEYS } from "./topics.ts";
+import { isSettingsTopic, NARROW_PX, readLastTopic, saveLastTopic, SHOWN_TOPICS, type SettingsBlock, type SettingsTopic, stepTopic, TOPIC_BLOCKS, TOPIC_LABEL_KEYS } from "./topics.ts";
 import { UsageMeter } from "./UsageMeter.tsx";
 
 /** A Transcrição de antes: o idioma e o "Guardar o áudio" ainda só guardam estado local. */
@@ -133,7 +133,8 @@ function reveal(panel: HTMLElement, row: string): () => void {
 export function Settings({ request = null }: { request?: SettingsRequest | null } = {}) {
   const { t: tr } = useT();
   const label = (t: SettingsTopic) => tr(TOPIC_LABEL_KEYS[t]);
-  const [topic, setTopic] = useState<SettingsTopic>(() => request?.topic ?? initialTopic());
+  // Um pedido para um assunto escondido (o Geral, T29319) abre o de sempre.
+  const [topic, setTopic] = useState<SettingsTopic>(() => (request && isSettingsTopic(request.topic) ? request.topic : initialTopic()));
   /** Os assuntos já abertos ficam montados (só escondidos): a edição no Dicionário e nos Snippets não se perde. */
   const [visited, setVisited] = useState<Set<SettingsTopic>>(() => new Set([topic]));
   /** O assunto com o foco do teclado na lista (o único com `tabIndex` 0). */
@@ -168,7 +169,7 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
   const pendingRow = useRef<{ topic: SettingsTopic; row: string } | null>(null);
   const stopReveal = useRef<(() => void) | null>(null);
   useEffect(() => {
-    if (!request) return;
+    if (!request || !isSettingsTopic(request.topic)) return;
     open(request.topic);
     stopReveal.current?.();
     stopReveal.current = null;
@@ -206,7 +207,7 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
       <div className="kn-prefs" ref={root} data-narrow={narrow || undefined}>
         {showList ? (
           <nav className="kn-prefs-side" aria-label={tr("settings.topics.aria")} ref={list} onKeyDown={onListKey}>
-            {SETTINGS_TOPICS.map((t) => (
+            {SHOWN_TOPICS.map((t) => (
               <button
                 type="button"
                 key={t}
@@ -226,7 +227,7 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
         ) : null}
         {showPanel ? (
           <div className="kn-prefs-panel">
-            {SETTINGS_TOPICS.filter((t) => visited.has(t)).map((t) => (
+            {SHOWN_TOPICS.filter((t) => visited.has(t)).map((t) => (
               <div
                 key={t}
                 className="kn-prefs-topic"

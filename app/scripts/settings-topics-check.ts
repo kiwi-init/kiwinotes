@@ -14,7 +14,7 @@ import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
 import { openWindow, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
-import { SETTINGS_TOPICS, TOPIC_LABELS, type SettingsTopic } from "../ui/settings/topics";
+import { SHOWN_TOPICS, TOPIC_LABELS, type SettingsTopic } from "../ui/settings/topics";
 
 const app = resolve(import.meta.dir, "..");
 const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T11966-settings"));
@@ -72,7 +72,8 @@ const EXPECTED: Record<SettingsTopic, string[]> = {
   privacy: ["Privacidade"],
   about: [],
 };
-const SECTIONS = Object.values(EXPECTED).flat();
+// O Geral fica escondido nesta release (T29319): só os assuntos que a lista mostra.
+const SECTIONS = SHOWN_TOPICS.flatMap((t) => EXPECTED[t]);
 
 const shots: { file: string; caption: string }[] = [];
 async function shot(p: Page, file: string, caption: string) {
@@ -104,9 +105,9 @@ try {
     // muda com a vista dela (o menu da seta).
     assert.deepEqual(await p.locator(".kn-tab").evaluateAll((els) => els.map((e) => e.getAttribute("data-section"))), ["home", "notes", "meetings", "dictation", "settings"]);
     assert.deepEqual((await p.locator(".kn-tab").allTextContents()).slice(1), ["Notas", "Reuniões", "Ditado", "Configurações"]);
-    assert.deepEqual(await p.locator(".kn-prefs-item").allTextContents(), SETTINGS_TOPICS.map((t) => TOPIC_LABELS[t]));
+    assert.deepEqual(await p.locator(".kn-prefs-item").allTextContents(), SHOWN_TOPICS.map((t) => TOPIC_LABELS[t]));
     const seen = new Map<string, SettingsTopic[]>();
-    for (const [i, t] of SETTINGS_TOPICS.entries()) {
+    for (const [i, t] of SHOWN_TOPICS.entries()) {
       await p.locator(`.kn-prefs-item[data-topic=${t}]`).click();
       await shown(p, t);
       assert.equal(await p.locator(`.kn-prefs-item[data-topic=${t}]`).getAttribute("aria-current"), "page");

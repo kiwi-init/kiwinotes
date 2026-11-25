@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 
 import { translate } from "../../src/shared/i18n/index.ts";
 import { HUB_SECTIONS } from "../../src/shared/ui-contract.ts";
-import { LAST_TOPIC_KEY, readLastTopic, saveLastTopic, SETTINGS_BLOCKS, SETTINGS_TOPICS, shortcutBlock, shortcutGroups, stepTopic, TOPIC_BLOCKS, TOPIC_LABEL_KEYS, TOPIC_LABELS, topicOf } from "./topics.ts";
+import { isSettingsTopic, LAST_TOPIC_KEY, readLastTopic, saveLastTopic, SETTINGS_BLOCKS, SETTINGS_TOPICS, SHOWN_TOPICS, shortcutBlock, shownTopics, shortcutGroups, stepTopic, TOPIC_BLOCKS, TOPIC_LABEL_KEYS, TOPIC_LABELS, topicOf } from "./topics.ts";
 
 test("os 9 assuntos, na ordem, cada um com nome (o Geral do T28190 na frente)", () => {
   expect(SETTINGS_TOPICS.map((t) => TOPIC_LABELS[t])).toEqual(["Geral", "Aparência", "Ditado", "Notas", "Reuniões", "Agente", "Atividade do agente", "Privacidade", "Sobre"]);
@@ -42,9 +42,19 @@ test("o que mudou de lugar: o Sobre virou assunto, e Suas reuniões foi para Reu
   expect(HUB_SECTIONS).toContain("about");
 });
 
+test("T29319: nesta release, o Geral (o Idioma do app) não aparece: nem na lista, nem pelo ?topic=, nem como o último aberto", () => {
+  expect(SHOWN_TOPICS).toEqual(["appearance", "dictation", "notes", "meetings", "agent", "activity", "privacy", "about"]);
+  expect(isSettingsTopic("general")).toBe(false);
+  const storage = { getItem: () => "general" };
+  expect(readLastTopic(storage)).toBe("appearance");
+  expect(stepTopic("appearance", -1)).toBe("appearance");
+  // Com a chave ligada (a última parte do spec #28171), ele volta na frente.
+  expect(shownTopics(true)).toEqual(SETTINGS_TOPICS);
+});
+
 test("↑ e ↓ param no primeiro e no último assunto", () => {
-  expect(stepTopic("general", -1)).toBe("general");
-  expect(stepTopic("general", 1)).toBe("appearance");
+  expect(stepTopic("general", -1, SETTINGS_TOPICS)).toBe("general");
+  expect(stepTopic("general", 1, SETTINGS_TOPICS)).toBe("appearance");
   expect(stepTopic("appearance", 1)).toBe("dictation");
   expect(stepTopic("about", 1)).toBe("about");
   expect(stepTopic("about", -1)).toBe("privacy");
