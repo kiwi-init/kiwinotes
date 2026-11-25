@@ -1,10 +1,12 @@
 // Histórico: cada ditado (texto final e original), do mais novo para o mais velho, com busca.
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
+import { INTL_TAG, type Locale, translate } from "../../src/shared/i18n/index.ts";
 import { fold, foldWithMap } from "../../src/store/text.ts";
 import { api, has, type HistoryEntry, type NoteMeta, type SearchHit } from "../src/api.ts";
 import { CopyIcon, TrashIcon } from "../src/kit/editable.tsx";
 import { Button, Empty, Window } from "../src/kit/index.tsx";
+import { useT, withStrong } from "../src/i18n.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import { INBOX_LABEL, sentText, targetItems } from "./toNote.ts";
 
@@ -34,6 +36,7 @@ function NoteIcon() {
  * ⌘K. Um envio por vez: o botão trava até a resposta, e o engine não duplica um trecho mandado de novo.
  */
 function SendToNote({ entry, onClose, onSent }: { entry: HistoryEntry; onClose: () => void; onSent: (message: string) => void }) {
+  const { t, locale } = useT();
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState<NoteMeta[]>([]);
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -44,7 +47,7 @@ function SendToNote({ entry, onClose, onSent }: { entry: HistoryEntry; onClose: 
   useEffect(() => {
     api.notes.list().then(
       (l) => setNotes(l.notes),
-      () => setError("Não deu para abrir as notas"),
+      () => setError(t("history.toNote.notesFailed")),
     );
   }, []);
 
@@ -52,13 +55,13 @@ function SendToNote({ entry, onClose, onSent }: { entry: HistoryEntry; onClose: 
   useEffect(() => {
     const my = ++seq.current;
     if (!query.trim()) return setHits([]);
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api.notes.search(query).then(
         (h) => my === seq.current && setHits(h),
         () => my === seq.current && setHits([]),
       );
     }, 150);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [query]);
 
   const send = async (path?: string) => {
@@ -66,21 +69,21 @@ function SendToNote({ entry, onClose, onSent }: { entry: HistoryEntry; onClose: 
     setBusy(true);
     setError(null);
     try {
-      onSent(sentText(await api.history.toNote(entry.id, path)));
+      onSent(sentText(await api.history.toNote(entry.id, path), locale));
     } catch {
-      setError("Não deu para enviar. Tente de novo");
+      setError(t("history.toNote.sendFailed"));
       setBusy(false);
     }
   };
 
   return (
-    <div className="kn-tonote" role="dialog" aria-label="Enviar para nota" onKeyDown={(e) => e.key === "Escape" && onClose()}>
+    <div className="kn-tonote" role="dialog" aria-label={t("history.toNote.dialog")} onKeyDown={(e) => e.key === "Escape" && onClose()}>
       <input
         className="kn-search"
         type="search"
         {...NO_TEXT_ASSIST}
-        placeholder="Buscar nota"
-        aria-label="Buscar nota"
+        placeholder={t("history.toNote.search")}
+        aria-label={t("history.toNote.search")}
         autoFocus
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -90,8 +93,8 @@ function SendToNote({ entry, onClose, onSent }: { entry: HistoryEntry; onClose: 
           item.kind === "new" ? (
             <li key="new">
               <button type="button" className="kn-tonote-item" data-kind="new" disabled={busy} onClick={() => send()}>
-                <span>＋ Nota nova</span>
-                <small>em {INBOX_LABEL}</small>
+                <span>{t("history.toNote.new")}</span>
+                <small>{t("history.toNote.in", { folder: INBOX_LABEL })}</small>
               </button>
             </li>
           ) : (
@@ -111,17 +114,23 @@ function SendToNote({ entry, onClose, onSent }: { entry: HistoryEntry; onClose: 
 
 const dayKey = (iso: string) => new Date(iso).toDateString();
 
-function dayLabel(iso: string): string {
+/** "Hoje", "Ontem" ou "quinta-feira, 6 de novembro" ("Thursday, November 6"), na língua das telas (T29247). */
+export function dayLabel(iso: string, locale: Locale = "pt", today = new Date()): string {
   const d = new Date(iso);
-  const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString()) return "Hoje";
-  if (d.toDateString() === yesterday.toDateString()) return "Ontem";
-  return d.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  if (d.toDateString() === today.toDateString()) return translate(locale, "history.today");
+  if (d.toDateString() === yesterday.toDateString()) return translate(locale, "history.yesterday");
+  return d.toLocaleDateString(INTL_TAG[locale], { weekday: "long", day: "numeric", month: "long" });
 }
 
-const time = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+/** "09:05" em português, "9:05 AM" em inglês. */
+export const time = (iso: string, locale: Locale = "pt") =>
+  new Date(iso).toLocaleTimeString(INTL_TAG[locale], { hour: locale === "pt" ? "2-digit" : "numeric", minute: "2-digit" });
+
+/** O dia até quando o áudio fica: "6 de nov." ("Nov 6"). */
+export const audioUntil = (iso: string, locale: Locale = "pt") =>
+  new Date(iso).toLocaleDateString(INTL_TAG[locale], { day: "numeric", month: "short" });
 
 /** Marca as palavras da busca no texto, sem olhar acento nem maiúscula. */
 function Highlight({ text, words }: { text: string; words: string[] }) {
@@ -149,6 +158,7 @@ function matches(e: HistoryEntry, words: string[]): boolean {
 }
 
 export function History() {
+  const { t, locale } = useT();
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [nextBefore, setNextBefore] = useState<string | undefined>();
@@ -201,8 +211,8 @@ export function History() {
 
   // Busca 200 ms depois de parar de digitar.
   useEffect(() => {
-    const t = setTimeout(() => load(query), query ? 200 : 0);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => load(query), query ? 200 : 0);
+    return () => clearTimeout(timer);
   }, [query, load]);
 
   // Ditado novo entra no topo, se casar com a busca.
@@ -231,8 +241,8 @@ export function History() {
       className="kn-search"
       type="search"
       {...NO_TEXT_ASSIST}
-      placeholder="Buscar nos ditados"
-      aria-label="Buscar nos ditados"
+      placeholder={t("history.search")}
+      aria-label={t("history.search")}
       value={query}
       onChange={(e) => setQuery(e.target.value)}
     />
@@ -240,9 +250,9 @@ export function History() {
 
   if (state === "error") {
     return (
-      <Window title="Histórico" end={search}>
-        <Empty title="Não deu para abrir o histórico">
-          <Button onClick={() => load(query)}>Tentar de novo</Button>
+      <Window title={t("history.title")} end={search}>
+        <Empty title={t("history.loadFailed")}>
+          <Button onClick={() => load(query)}>{t("history.retry")}</Button>
         </Empty>
       </Window>
     );
@@ -250,12 +260,12 @@ export function History() {
 
   if (state !== "loading" && entries.length === 0 && !nextBefore) {
     return (
-      <Window title="Histórico" end={search}>
+      <Window title={t("history.title")} end={search}>
         {query ? (
-          <Empty title="Nada encontrado">Nenhum ditado tem “{query}”. A busca ignora acentos e maiúsculas.</Empty>
+          <Empty title={t("history.notFound")}>{t("history.notFoundHint", { query })}</Empty>
         ) : (
-          <Empty icon={<WaveIcon />} title="Nenhum ditado ainda">
-            Segure <strong>Fn</strong> em qualquer app e fale. Cada ditado aparece aqui, com o texto limpo e o original.
+          <Empty icon={<WaveIcon />} title={t("history.empty")}>
+            {withStrong((key) => t("history.emptyHint", { key }), "Fn")}
           </Empty>
         )}
       </Window>
@@ -270,7 +280,7 @@ export function History() {
       await api.history.retry(id);
       load(query);
     } catch {
-      setRetryErrors((old) => new Map(old).set(id, "Não foi possível transcrever. Tente novamente."));
+      setRetryErrors((old) => new Map(old).set(id, t("history.retryFailed")));
     } finally {
       setRetrying((old) => { const next = new Set(old); next.delete(id); return next; });
     }
@@ -279,12 +289,12 @@ export function History() {
   const groups: { day: string; label: string; items: HistoryEntry[] }[] = [];
   for (const e of entries) {
     const day = dayKey(e.at);
-    if (groups.at(-1)?.day !== day) groups.push({ day, label: dayLabel(e.at), items: [] });
+    if (groups.at(-1)?.day !== day) groups.push({ day, label: dayLabel(e.at, locale), items: [] });
     groups.at(-1)!.items.push(e);
   }
 
   return (
-    <Window title="Histórico" end={search}>
+    <Window title={t("history.title")} end={search}>
       {groups.map((g) => (
         <section key={g.day}>
           <h2 className="kn-day">{g.label}</h2>
@@ -292,39 +302,39 @@ export function History() {
             {g.items.map((e) => (
               <article className="kn-entry" key={e.id} data-new={fresh.has(e.id)}>
                 <div className="kn-entry-meta">
-                  <span className="kn-entry-time">{time(e.at)}</span>
+                  <span className="kn-entry-time">{time(e.at, locale)}</span>
                   {e.app?.name ? <span>· {e.app.name}</span> : null}
                   <span className="kn-entry-actions">
                     {canSend && e.text.trim() ? (
                       <button
                         type="button"
                         className="kn-icon-button"
-                        aria-label="Enviar para nota…"
+                        aria-label={t("history.sendToNote")}
                         aria-expanded={picking === e.id}
                         onClick={() => setPicking((p) => (p === e.id ? null : e.id))}
                       >
                         <NoteIcon />
                       </button>
                     ) : null}
-                    {e.text.trim() ? <button type="button" className="kn-icon-button" aria-label="Copiar o texto" onClick={() => api.copy(e.text)}>
+                    {e.text.trim() ? <button type="button" className="kn-icon-button" aria-label={t("history.copy")} onClick={() => api.copy(e.text)}>
                       <CopyIcon />
                     </button> : null}
-                    <button type="button" className="kn-icon-button" data-tone="danger" aria-label="Apagar do histórico" onClick={() => remove(e.id)}>
+                    <button type="button" className="kn-icon-button" data-tone="danger" aria-label={t("history.delete")} onClick={() => remove(e.id)}>
                       <TrashIcon />
                     </button>
                   </span>
                 </div>
                 <div className="kn-entry-text">
-                  {e.text.trim() ? <Highlight text={e.text} words={words} /> : "O ditado não foi concluído"}
+                  {e.text.trim() ? <Highlight text={e.text} words={words} /> : t("history.unfinished")}
                 </div>
                 {canRetry && e.recoveryId ? (
                   <div className="kn-entry-recovery">
                     <Button disabled={retrying.has(e.id)} onClick={() => void retry(e.id)}>
-                      {retrying.has(e.id) ? "Transcrevendo…" : "Transcrever de novo"}
+                      {retrying.has(e.id) ? t("history.retrying") : t("history.retryAudio")}
                     </Button>
                     <small>{e.expiresAt
-                      ? `Áudio guardado neste Mac até ${new Date(e.expiresAt).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}.`
-                      : "Áudio guardado neste Mac."}</small>
+                      ? t("history.audioUntil", { date: audioUntil(e.expiresAt, locale) })
+                      : t("history.audioKept")}</small>
                     {retryErrors.has(e.id) ? <p role="alert">{retryErrors.get(e.id)}</p> : null}
                   </div>
                 ) : null}
@@ -352,7 +362,7 @@ export function History() {
       {nextBefore ? (
         <div className="kn-more">
           <Button disabled={more === "loading"} onClick={() => load(query, nextBefore)}>
-            {more === "error" ? "Não deu para carregar. Tentar de novo" : "Mostrar mais"}
+            {more === "error" ? t("history.moreFailed") : t("history.more")}
           </Button>
         </div>
       ) : null}

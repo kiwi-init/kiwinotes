@@ -71,6 +71,10 @@ export const MIGRATED = [
   "ui/settings/NoticeRow.tsx",
   "ui/settings/Placar.tsx",
   "ui/settings/UsageMeter.tsx",
+  // Reuniões e Histórico (T29247).
+  "ui/meetings/Meetings.tsx",
+  "ui/meetings/MeetingSettings.tsx",
+  "ui/history/History.tsx",
 ];
 
 /** O main e a notificação já no catálogo (T28192): menu, bandeja, status, diálogo do link, pílula e notificação. */

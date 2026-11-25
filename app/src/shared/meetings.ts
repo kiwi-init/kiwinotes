@@ -6,9 +6,13 @@
 //
 // Puro (sem disco nem helper), para o `bun test`.
 
-/** Uma nota de reunião, como a lista mostra. */
+import { type Locale, translate } from "./i18n/index.ts";
 import { canonicalShortcut, isShortcutFor } from "./shortcuts.ts";
 
+/** A pasta das reuniões no disco, a mesma do `MEETINGS_FOLDER` de src/notes/meetings.ts: o nome não muda com a língua. */
+export const MEETINGS_FOLDER_LABEL = "Reuniões";
+
+/** Uma nota de reunião, como a lista mostra. */
 export interface MeetingNote {
   path: string;
   title: string;
@@ -207,12 +211,12 @@ export function sortMeetings(list: MeetingNote[]): MeetingNote[] {
   return [...list].sort((a, b) => Date.parse(key(b)) - Date.parse(key(a)) || b.mtime.localeCompare(a.mtime));
 }
 
-/** "38 min", "1 h 05", "menos de 1 min". */
-export function durationLabel(seconds: number): string {
+/** "38 min", "1 h 05", "menos de 1 min" ("1 h 05 min", "under 1 min" em inglês, T29247). */
+export function durationLabel(seconds: number, locale: Locale = "pt"): string {
   const minutes = Math.round(seconds / 60);
-  if (minutes < 1) return "menos de 1 min";
-  if (minutes < 60) return `${minutes} min`;
-  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}`;
+  if (minutes < 1) return translate(locale, "meetings.duration.short");
+  if (minutes < 60) return translate(locale, "meetings.duration.minutes", { n: minutes });
+  return translate(locale, "meetings.duration.hours", { h: Math.floor(minutes / 60), m: String(minutes % 60).padStart(2, "0") });
 }
 
 /** O relógio do card ao vivo: "0:42", "12:05", "1:02:03" (como a pílula do helper). */
@@ -225,12 +229,12 @@ export function elapsedLabel(seconds: number): string {
   return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${m}:${two(s)}`;
 }
 
-/** Os participantes numa linha curta: "Você, Pessoa 1 e Pessoa 2", "Você e mais 4". */
-export function participantsLabel(people: string[]): string {
+/** Os participantes numa linha curta: "Você, Pessoa 1 e Pessoa 2", "Você e mais 4". Os nomes vêm da nota, como estão. */
+export function participantsLabel(people: string[], locale: Locale = "pt"): string {
   if (people.length === 0) return "";
   if (people.length === 1) return people[0]!;
-  if (people.length <= 3) return `${people.slice(0, -1).join(", ")} e ${people.at(-1)}`;
-  return `${people.slice(0, 2).join(", ")} e mais ${people.length - 2}`;
+  if (people.length <= 3) return translate(locale, "meetings.people.and", { list: people.slice(0, -1).join(", "), last: people.at(-1)! });
+  return translate(locale, "meetings.people.more", { list: people.slice(0, 2).join(", "), n: people.length - 2 });
 }
 
 /**

@@ -4,8 +4,10 @@
 import { enCatOverlay } from "./catoverlay.en.ts";
 import { enAgent } from "./agent.en.ts";
 import { enCommon } from "./common.en.ts";
+import { enHistory } from "./history.en.ts";
 import type { Catalog, Entry } from "./index.ts";
 import { enMeetingsSettings } from "./meetings-settings.en.ts";
+import { enMeetings } from "./meetings.en.ts";
 import { enNotes } from "./notes.en.ts";
 import type { PT_PARTS } from "./pt.ts";
 import { enSettings } from "./settings.en.ts";
@@ -114,6 +116,8 @@ export const EN_PARTS = {
   meetingsSettings: enMeetingsSettings,
   catOverlay: enCatOverlay,
   agent: enAgent,
+  meetings: enMeetings,
+  history: enHistory,
 } as const;
 
 export const en: Catalog = {
@@ -124,4 +128,6 @@ export const en: Catalog = {
   ...enMeetingsSettings,
   ...enCatOverlay,
   ...enAgent,
+  ...enMeetings,
+  ...enHistory,
 };
