@@ -202,7 +202,7 @@ export async function directInvoke(
   args: unknown,
 ): Promise<{ ok: true; value: unknown } | { ok: false; code: string; message: string }> {
   const handler = Object.hasOwn(handlers, cap) ? handlers[cap] : undefined;
-  if (!handler) return { ok: false, code: "E_NO_CAPABILITY", message: `contract ${UI_CONTRACT_VERSION} has no capability ${JSON.stringify(cap)}` };
+  if (!handler) return { ok: false, code: "E_NO_CAPABILITY", message: `contract ${UI_CONTRACT_VERSION} has no capability ${JSON.stringify(cap)}` }; // i18n-ok: a resposta do agent control, não aparece
   try {
     return { ok: true, value: await handler(args) };
   } catch (error) {

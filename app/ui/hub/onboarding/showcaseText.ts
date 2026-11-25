@@ -1,3 +1,4 @@
+// i18n-ok-file: as duas línguas lado a lado no SHOWCASE (pt e en), que a tela escolhe pela língua do app.
 // A tela do que o Kiwi faz (T20838, spec #20828): os 4 exemplos encenados, com dados inventados, e a linha do tempo de
 // cada um. Nada aqui chama o agente: é texto e tempo. Cada exemplo corresponde a uma função que o agente já tem
 // (escrever na nota, criar arquivo, a proposta depois da reunião, a busca).

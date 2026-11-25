@@ -164,7 +164,7 @@ const linkTarget = (link: string) => /^\s*\[\[([^\]|#]*)/.exec(link)?.[1]?.trim(
 /** Até 3 itens do "Resumo" da ata (em tópicos ou em frases), ou das "Decisões" quando não há resumo. */
 export function summaryOf(content: string): string[] {
   const body = splitMeetingNote(content).body;
-  for (const title of ["Resumo", "Decisões"]) {
+  for (const title of ["Resumo", "Decisões"]) { // i18n-ok: os títulos que a ata da reunião tem no vault
     const items = itemsOf(sectionText(body, title));
     if (items.length) return items.slice(0, HOME_LIMITS.summary);
   }

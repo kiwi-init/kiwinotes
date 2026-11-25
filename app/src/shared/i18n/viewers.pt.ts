@@ -5,6 +5,7 @@
 export const ptViewers = {
   // O topo e o cartão do arquivo (`FileView`, `fileCard.ts`).
   "files.preview": "Prévia",
+  "files.previewOf": "Prévia de {name}",
   "files.card.type": "Tipo",
   "files.card.size": "Tamanho",
   "files.card.modified": "Modificado",
@@ -167,6 +168,8 @@ export const ptViewers = {
   "files.drawio.prevPage": "Página anterior",
   "files.drawio.nextPage": "Próxima página",
   "files.drawio.layers": "Camadas",
+  "files.drawio.tooLarge": "Este diagrama é grande demais para abrir aqui. Abra no app padrão.",
+  "files.drawio.failed": "Não deu para abrir este diagrama. Abra no app padrão.",
 
   // O quadro branco (.canvas).
   "canvas.name": "Nome do quadro",
@@ -219,6 +222,12 @@ export const ptViewers = {
   "editor.mermaid.diagram": "Diagrama",
   "editor.mermaid.label": "Diagrama Mermaid",
   "editor.mermaid.code": "Código",
+  "editor.mermaid.invalid": "não é um Mermaid válido",
+  "editor.mermaid.tooLarge": "grande demais para desenhar (mais de {n} caracteres)",
+  "editor.image.alt": "imagem",
+  "editor.image.loading": "carregando…",
+  "editor.image.retry": "não deu para carregar · tentar de novo",
+  "editor.image.load": "carregar",
   "editor.embed.open": "Abrir a nota",
   "editor.embed.block": " · bloco",
   "editor.embed.noNote": "Essa nota não existe.",

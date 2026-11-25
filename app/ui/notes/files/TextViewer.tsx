@@ -353,7 +353,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
         />
         {showPreview ? (
           // Isolada (htmlPreview.ts): sem script, sem rede, sem sair dali.
-          <iframe className="kn-file-preview" sandbox="" srcDoc={previewDocument(previewText)} title={`Prévia de ${path.split("/").at(-1)}`} />
+          <iframe className="kn-file-preview" sandbox="" srcDoc={previewDocument(previewText)} title={tr("files.previewOf", { name: path.split("/").at(-1)! })} />
         ) : null}
       </div>
       {menu ? <ContextMenu {...menu} onClose={() => setMenu(null)} onRestoreFocus={() => view.current?.focus()} /> : null}

@@ -31,7 +31,7 @@ export function MeetingsRows({ status, run }: { status: AgentStatus; run: (call:
     if (m.folder.kind !== "single" || folders || !load) return;
     let alive = true;
     void load().then(
-      (r) => alive && setFolders(r.folders.filter((f) => f !== "Reuniões" && !f.startsWith("Reuniões/"))),
+      (r) => alive && setFolders(r.folders.filter((f) => f !== "Reuniões" && !f.startsWith("Reuniões/"))), // i18n-ok: o nome da pasta das reuniões no vault
       () => alive && setFolders([]),
     );
     return () => {

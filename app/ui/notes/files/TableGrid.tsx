@@ -86,7 +86,7 @@ interface GridProps {
 const MIN_NUM = 44;
 
 /** Um texto de régua: letras, números e acentos, para comparar o canvas com a página. */
-const RULER = "Código Produto Observação R$ 1.234,56 0123456789 ABCDEFGHIJ abcdefghij";
+const RULER = "Código Produto Observação R$ 1.234,56 0123456789 ABCDEFGHIJ abcdefghij"; // i18n-ok: a régua que mede a fonte, não aparece
 
 /**
  * A medida do texto na fonte da grade: um canvas, sem montar nada, acertado por uma régua medida uma vez na página (o

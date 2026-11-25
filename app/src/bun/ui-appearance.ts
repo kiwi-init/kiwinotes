@@ -26,7 +26,7 @@ export interface BuiltInVersion {
 }
 
 /** O motivo gravado no `bad` do engine.json quando a pessoa volta à aparência anterior. */
-export const REVERT_REASON = "a pessoa voltou à aparência anterior (Ajustes › Sobre)";
+export const REVERT_REASON = "a pessoa voltou à aparência anterior (Ajustes › Sobre)"; // i18n-ok: o motivo gravado no engine.json, não aparece
 
 const engineFile = (dir: string) => path.join(dir, "engine.json");
 

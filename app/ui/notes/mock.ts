@@ -435,7 +435,7 @@ export class MockVault implements NotesApi {
   readonly extras: ExtrasApi = {
     daily: async (date) => {
       const d = date ?? this.clock().toISOString().slice(0, 10);
-      const path = `Diário/${d}.md`;
+      const path = `Diário/${d}.md`; // i18n-ok: o vault de exemplo do Vite, inventado
       if (!this.notes.has(path)) {
         this.write(path, "");
         this.emit([path]);
@@ -517,12 +517,12 @@ export function snippetAround(text: string, at: number): string {
 
 /** O vault de exemplo do Vite no navegador. Inventado. */
 export const SAMPLE: Record<string, string> = {
-  "Caixa de entrada.md": "Ideias soltas e ditados que ainda não têm lugar.\n\n- Ver o orçamento da [[Mudança de escritório]]\n- Ligar para a [[Ana]] sobre o contrato\n",
+  "Caixa de entrada.md": "Ideias soltas e ditados que ainda não têm lugar.\n\n- Ver o orçamento da [[Mudança de escritório]]\n- Ligar para a [[Ana]] sobre o contrato\n", // i18n-ok: o vault de exemplo do Vite, inventado
   "Projetos/Mudança de escritório.md":
-    "---\ntags: [projeto]\n---\nLevar o time para o novo andar sem parar o atendimento. A ordem foi combinada na [[2026-11-02 Planejamento|reunião de planejamento]].\n\n## Próximos passos\n\n- [x] Medir as salas\n- [ ] Pedir o orçamento da mudança\n- [ ] Marcar o fim de semana da mudança\n\n## Custos\n\n| Item | Fornecedor | Valor |\n| --- | --- | --- |\n| Mudança | Leva e Traz | 4.200 |\n| Rede | Fio Certo | 1.800 |\n| Móveis | Casa Nova | 9.500 |\n",
-  "Projetos/Site novo.md": "---\ntags: [projeto]\n---\nRefazer o site com as fotos novas. Quem cuida do texto é a [[Ana]].\n\n```\nnpm run build\n```\n",
+    "---\ntags: [projeto]\n---\nLevar o time para o novo andar sem parar o atendimento. A ordem foi combinada na [[2026-11-02 Planejamento|reunião de planejamento]].\n\n## Próximos passos\n\n- [x] Medir as salas\n- [ ] Pedir o orçamento da mudança\n- [ ] Marcar o fim de semana da mudança\n\n## Custos\n\n| Item | Fornecedor | Valor |\n| --- | --- | --- |\n| Mudança | Leva e Traz | 4.200 |\n| Rede | Fio Certo | 1.800 |\n| Móveis | Casa Nova | 9.500 |\n", // i18n-ok: o vault de exemplo do Vite, inventado
+  "Projetos/Site novo.md": "---\ntags: [projeto]\n---\nRefazer o site com as fotos novas. Quem cuida do texto é a [[Ana]].\n\n```\nnpm run build\n```\n", // i18n-ok: o vault de exemplo do Vite, inventado
   "Reuniões/2026-11-02 Planejamento.md":
-    "Com a [[Ana]] e o Bruno.\n\n## Decisões\n\n- Começar pela [[Mudança de escritório]] e deixar o [[Site novo]] para dezembro.\n- O orçamento passa por mim antes de fechar.\n",
+    "Com a [[Ana]] e o Bruno.\n\n## Decisões\n\n- Começar pela [[Mudança de escritório]] e deixar o [[Site novo]] para dezembro.\n- O orçamento passa por mim antes de fechar.\n", // i18n-ok: o vault de exemplo do Vite, inventado
   "Pessoas/Ana.md": "Cuida do financeiro e do texto do site.\n\n#pessoa\n",
-  "Diário/2026-11-03.md": "Ditei a lista de compras e ela já entrou na [[Caixa de entrada]].\n",
+  "Diário/2026-11-03.md": "Ditei a lista de compras e ela já entrou na [[Caixa de entrada]].\n", // i18n-ok: o vault de exemplo do Vite, inventado
 };

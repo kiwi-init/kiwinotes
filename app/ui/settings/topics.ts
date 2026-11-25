@@ -35,10 +35,10 @@ export const TOPIC_LABEL_KEYS: Record<SettingsTopic, TextKey> = {
 /** Os nomes em português: os links de dentro do hub e os scripts de tela procuram por eles. */
 export const TOPIC_LABELS: Record<SettingsTopic, string> = {
   general: "Geral",
-  appearance: "Aparência",
+  appearance: "Aparência", // i18n-ok: o nome em pt que os links do hub e os roteiros procuram; a tela usa a chave do TOPIC_KEYS
   dictation: "Ditado",
   notes: "Notas",
-  meetings: "Reuniões",
+  meetings: "Reuniões", // i18n-ok: o nome em pt que os links do hub e os roteiros procuram; a tela usa a chave do TOPIC_KEYS
   agent: "Agente",
   activity: "Atividade do agente",
   privacy: "Privacidade",
@@ -59,7 +59,7 @@ export const SETTINGS_BLOCKS = [
   "shortcuts:Notas",
   "sidebarKeys",
   "meetingSettings",
-  "shortcuts:Reuniões",
+  "shortcuts:Reuniões", // i18n-ok: o id do grupo de atalhos, não aparece
   "agentMeetings",
   "agent",
   "usage",
@@ -80,7 +80,7 @@ export const TOPIC_BLOCKS: Record<SettingsTopic, readonly SettingsBlock[]> = {
   // A pasta de notas, as opções das notas e os atalhos (os do app e os da barra lateral).
   notes: ["notes", "shortcuts:Notas", "sidebarKeys"],
   // A gravação (os ajustes de reunião e os atalhos) e "Suas reuniões" (o resumo do agente).
-  meetings: ["meetingSettings", "shortcuts:Reuniões", "agentMeetings"],
+  meetings: ["meetingSettings", "shortcuts:Reuniões", "agentMeetings"], // i18n-ok: o id do grupo de atalhos, não aparece
   // Ligar e testar, a cor, o Control, o aviso, o modo econômico e o gasto, a memória, as instruções, o Modelo, as trilhas e as respostas.
   agent: ["agent", "usage", "trails", "doubtAnswers"],
   activity: ["activity"],

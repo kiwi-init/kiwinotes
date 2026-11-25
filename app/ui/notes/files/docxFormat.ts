@@ -39,11 +39,11 @@ export interface DocxFormatState {
 
 /** `title` é a chave do catálogo (`viewers.*.ts`): a barra traduz na língua da tela. */
 export const DOCX_FORMAT_BUTTONS: readonly { action: DocxFormatAction; label: string; title: TextKey; group: number }[] = [
-  { action: "bold", label: "B", title: "files.docx.format.bold", group: 0 },
-  { action: "italic", label: "I", title: "files.docx.format.italic", group: 0 },
-  { action: "underline", label: "U", title: "files.docx.format.underline", group: 0 },
-  { action: "strike", label: "S", title: "files.docx.format.strike", group: 0 },
-  { action: "heading", label: "H", title: "files.docx.format.heading", group: 1 },
+  { action: "bold", label: "B", title: "files.docx.format.bold", group: 0 }, // i18n-ok: a letra do botão (o title vem do catálogo)
+  { action: "italic", label: "I", title: "files.docx.format.italic", group: 0 }, // i18n-ok: a letra do botão (o title vem do catálogo)
+  { action: "underline", label: "U", title: "files.docx.format.underline", group: 0 }, // i18n-ok: a letra do botão (o title vem do catálogo)
+  { action: "strike", label: "S", title: "files.docx.format.strike", group: 0 }, // i18n-ok: a letra do botão (o title vem do catálogo)
+  { action: "heading", label: "H", title: "files.docx.format.heading", group: 1 }, // i18n-ok: a letra do botão (o title vem do catálogo)
   { action: "bullet", label: "•", title: "files.docx.format.bullet", group: 1 },
   { action: "ordered", label: "1.", title: "files.docx.format.ordered", group: 1 },
   { action: "left", label: "", title: "files.docx.format.left", group: 2 },

@@ -26,7 +26,7 @@ export function slowLog(write: (line: string) => void = (l) => console.warn(l), 
     line(text) {
       const m = Math.floor(now() / 60_000);
       if (m !== minute) {
-        if (dropped) write(`[slow] mais ${dropped} linhas no último minuto, fora do log`);
+        if (dropped) write(`[slow] mais ${dropped} linhas no último minuto, fora do log`); // i18n-ok: a linha do log
         minute = m;
         used = 0;
         dropped = 0;
