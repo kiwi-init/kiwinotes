@@ -1,6 +1,7 @@
 // O catálogo em português (spec #28171): a fonte dos textos. Cada chave nova entra aqui e em `en.ts`, ou no catálogo da
 // área (`<área>.pt.ts` e `<área>.en.ts`), que entra com uma linha só em `PT_PARTS`. Duas partes com a mesma chave
 // quebram o `i18n.test.ts`: no espalhar, a última ganharia calada.
+import { ptCatOverlay } from "./catoverlay.pt.ts";
 import { ptCommon } from "./common.pt.ts";
 import { ptMeetingsSettings } from "./meetings-settings.pt.ts";
 import { ptNotes } from "./notes.pt.ts";
@@ -115,6 +116,7 @@ export const PT_PARTS = {
   notes: ptNotes,
   settings: ptSettings,
   meetingsSettings: ptMeetingsSettings,
+  catOverlay: ptCatOverlay,
 } as const;
 
 export const pt = {
@@ -123,4 +125,5 @@ export const pt = {
   ...ptNotes,
   ...ptSettings,
   ...ptMeetingsSettings,
+  ...ptCatOverlay,
 } as const;

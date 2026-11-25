@@ -314,6 +314,19 @@ public struct CatOverlayGate: Equatable {
     }
 }
 
+/// A língua da página do gato (T29351, spec #28171): a do helper (`HelperLocale`, que o app manda no `app.locale`), na
+/// URL do `load` (`lang=en`) e no script quando ela muda. Só `pt` ou `en` saem daqui: qualquer outra coisa é português,
+/// e o valor nunca vem de fora do helper sem passar por esta lista.
+public enum CatOverlayLang {
+    public static func page(_ code: String) -> String {
+        HelperLocale.supported.contains(code) ? code : HelperLocale.fallback
+    }
+
+    public static func query(_ code: String) -> String { "lang=\(page(code))" }
+
+    public static func script(_ code: String) -> String { "window.kiwiOverlay?.set({lang: '\(page(code))'})" }
+}
+
 /// A paleta do gato (spec #14963): só um id, letras minúsculas em pedaços separados por `-` (`kiwi-neon`), até 32
 /// caracteres, que serve tanto na URL (`cor=kiwi-neon`) quanto no script. A página confere que é uma das 5. Qualquer
 /// outra coisa é recusada.

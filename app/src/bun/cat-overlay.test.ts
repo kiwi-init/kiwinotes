@@ -6,6 +6,7 @@ import type { AgentTurnEvent, BubbleLink } from "../shared/ui-contract.ts";
 import type { Command } from "../shared/ipc.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import type { AgentStatus, AppSettings } from "../shared/ui-contract.ts";
+import { mainLocale } from "./locale.ts";
 import { ASK_LINE, attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_TIMES, plainBubbleText, shiftLinks, voiceErrorLine } from "./cat-overlay.ts";
 
 function rig() {
@@ -637,12 +638,30 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(openFn).toBeNull();
   });
 
+  test("com o app em English, o balão do erro sai em inglês (T29351)", () => {
+    mainLocale.set("en");
+    try {
+      const r = rig();
+      talk(r);
+      r.cat.turn({ type: "error", id: "r1", code: "E_NETWORK", message: "offline." } as AgentTurnEvent);
+      expect(r.take()).toEqual([
+        { type: "catOverlay.state", estado: "erro" },
+        { type: "catOverlay.bubble", text: "I couldn't reach the agent: offline.", error: true },
+      ]);
+    } finally {
+      mainLocale.set("pt");
+    }
+  });
+
   test("um erro do agente: o balão diz o erro em palavras, e o gato fica como numa resposta", () => {
     const r = rig();
     talk(r);
     r.cat.turn({ type: "error", id: "r1", code: "E_NETWORK", message: "sem internet." } as AgentTurnEvent);
     const line = voiceErrorLine("sem internet.");
     expect(line).toBe("Não consegui falar com o agente: sem internet.");
+    expect(voiceErrorLine("no internet.", "en")).toBe("I couldn't reach the agent: no internet.");
+    expect(voiceErrorLine("  ", "en")).toBe("I couldn't reach the agent: unknown error");
+    expect(voiceErrorLine("")).toBe("Não consegui falar com o agente: erro desconhecido");
     expect(r.take()).toEqual([
       { type: "catOverlay.state", estado: "erro" },
       { type: "catOverlay.bubble", text: line, error: true },

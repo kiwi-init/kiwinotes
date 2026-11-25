@@ -77,7 +77,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         parts.scheme = CatPageScheme.scheme
         parts.host = CatPageScheme.host
         parts.path = "/index.html"
-        parts.query = [query, cor.map { "cor=\($0)" }, placement.query].compactMap { $0 }.joined(separator: "&").nilIfEmpty
+        parts.query = [query, cor.map { "cor=\($0)" }, placement.query, CatOverlayLang.query(HelperLocale.code)].compactMap { $0 }.joined(separator: "&").nilIfEmpty
         guard let index = parts.url else { return "not_found" }
         if web != nil { unload() }
         let config = WKWebViewConfiguration()
@@ -153,6 +153,11 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         cor = id
         script("window.kiwiOverlay?.set({cor: '\(id)'})")
         return true
+    }
+
+    /// A língua do app mudou (T29351): a página aberta troca o "Ver mais", a pergunta e os ×; a próxima já carrega nela.
+    func localeChanged() {
+        script(CatOverlayLang.script(HelperLocale.code))
     }
 
     /// O balão da resposta (spec #12938): `nil` tira. Com o gato esperando a pílula, ele aparece junto com o gato.
@@ -425,6 +430,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
             script("window.kiwiOverlay?.set({visible: false})")
             // Uma paleta que chegou enquanto a página carregava (a URL leva a de antes).
             if let cor { script("window.kiwiOverlay?.set({cor: '\(cor)'})") }
+            // E uma língua que mudou enquanto ela carregava (T29351).
+            script(CatOverlayLang.script(HelperLocale.code))
             if gate.shows { present() }
             onLoaded?()
         }
