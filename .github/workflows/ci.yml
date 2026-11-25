@@ -20,10 +20,12 @@ on:
 permissions:
   contents: read
 
-# Num PR, um push novo cancela o run antigo. Na `main`, cada commit roda até o fim.
+# Um push novo cancela o run antigo: num PR, e também na `main` (spec #29579). Três merges seguidos eram três suítes
+# inteiras nos Macs que todos dividem; agora só o último commit roda até o fim. O commit cancelado fica sem resultado, e
+# o tag vai no último sha com o run completo e verde (`bun scripts/main-green.ts`).
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # O que o PR mexeu, em todos os commits dele e sem esconder renomeação (scripts/ci-changes.ts, changedFiles).
