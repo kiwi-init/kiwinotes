@@ -20,6 +20,20 @@
   --accent: #8ab4ff;
   --accent-text: #8ab4ff;
   --danger: #ff6259;
+  --on-accent: #000000;
+  /* Os tokens novos do tema (appearance.ts) também, nos valores do OLED Black: os botões do kit (`.kn-button`) pintam o
+     fundo com `--float` e herdam a cor do texto. Sem isto, no tema claro o botão ficava branco com o texto branco do
+     balão (T28460). O `--float-2` é redeclarado aqui porque o `var()` dele resolve onde foi declarado (no <html>). */
+  --ink: var(--kn-bubble-ink);
+  --ink-2: #a3a3ab;
+  --line: rgb(255 255 255 / 0.08);
+  --line-2: rgb(255 255 255 / 0.11);
+  --line-3: rgb(255 255 255 / 0.15);
+  --float: #18181a;
+  --float-2: color-mix(in srgb, var(--float) 90%, var(--ink));
+  --float-3: color-mix(in srgb, var(--float) 80%, var(--ink));
+  --float-highlight: var(--line);
+  --shadow-float: 0 0 0 1px var(--line-2), inset 0 1px 0 var(--line), 0 1px 2px rgb(0 0 0 / 0.5), 0 4px 12px rgb(0 0 0 / 0.3);
   color-scheme: dark;
   box-sizing: border-box;
   min-width: 96px;
