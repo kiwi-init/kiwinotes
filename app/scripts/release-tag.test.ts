@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Verdict } from "./main-green.ts";
+import { judge, type Verdict } from "./main-green.ts";
 import { formatDuration, monthOf, pickSha, remoteTags, stageTable, stageTimes, type RunJob } from "./release-tag.ts";
 
 const at = (min: number) => new Date(Date.UTC(2026, 10, 25, 12, min)).toISOString();
@@ -58,5 +58,15 @@ describe("release-tag (T29584)", () => {
     expect(() => pickSha("bbbb", () => red, () => green)).toThrow("bun test: failure (https://exemplo/run/1)");
     expect(pickSha(undefined, () => red, () => green)).toBe(green.sha);
     expect(() => pickSha(undefined, () => green, () => undefined)).toThrow("nenhum commit verde");
+  });
+
+  test("as frases de espera do judge() que o ci-green do release.yml espera (o case: ainda está, sem run)", async () => {
+    const pending = (v: Verdict) => (v.green ? "" : v.reason);
+    expect(pending(judge("a".repeat(40), undefined, undefined))).toContain("sem run");
+    const run = { id: 1, head_sha: "a".repeat(40), status: "queued", conclusion: null, html_url: "https://exemplo/run/1" };
+    expect(pending(judge("a".repeat(40), run as never, undefined))).toContain("ainda está");
+    // E o release.yml ainda espera exatamente essas duas.
+    const yml = await Bun.file(new URL("../../.github/workflows/release.yml", import.meta.url)).text();
+    expect(yml).toContain(`*"ainda está"*|*"sem run"*) sleep 30 ;;`);
   });
 });

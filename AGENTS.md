@@ -34,7 +34,8 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 - **Check vermelho por instabilidade:** `gh run rerun <run> --failed`, só os jobs que falharam, nunca o run inteiro (cada job de novo pega outra máquina macOS).
 
 ## Releases
-- **Só com o ok do harry**, e quem solta é o lead.
+- **Só com o ok do harry**, e quem solta é o releaser (harry #24906), falando antes com o lead.
+- **Tag só pelo `release-tag.ts`.** Ele só tagueia um sha com o CI verde. Um tag à mão num sha com o CI rodando cai vermelho se outro merge cancelar esse run, e já terá gastado os ~30 min do build.
 - **A versão é `vANO.MÊS.N`**, no formato do Channels (spec #13879). O N conta os releases do mês: `v2026.11.1`, `v2026.11.2`, `v2026.12.1`. Não há mais rc.
 - **Congelamento** (spec #29579): do "pode soltar" do harry até o tag, só entram na `main` os PRs que o release precisa. O lead avisa no #general quando congela e quando solta; os outros PRs esperam, aprovados. Depois do tag, os merges voltam um por vez: o próximo só quando o CI da `main` do anterior ficar verde.
 - **O tag vai num sha verde da `main`.** O CI da `main` cancela a suíte do commit anterior quando entra outro merge, então um commit cancelado não tem resultado. O último verde: `cd app && bun scripts/main-green.ts`; um sha certo: `bun scripts/main-green.ts <sha>`.
