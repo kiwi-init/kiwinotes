@@ -928,7 +928,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "kind" | "enabled" | "consented" | "model" | "effort" | "effortByModel" | "economy" | "controlShortcut" | "showSpokenText" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
+  private snapshot(): Omit<AgentStatus, "name" | "kind" | "enabled" | "consented" | "model" | "effort" | "effortByModel" | "economy" | "controlShortcut" | "showSpokenText" | "catSpeaks" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.currentHost?.configValues ?? null;
     return {
@@ -1036,6 +1036,7 @@ export class AgentService {
       economy: s.economy === true,
       controlShortcut: s.controlShortcut === true,
       showSpokenText: s.showSpokenText === true,
+      catSpeaks: s.catSpeaks === true,
       meetings: s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS,
       summary: s.summary ?? DEFAULT_SUMMARY_SETTINGS,
       instructions: s.instructions ?? "",
@@ -2596,7 +2597,7 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { kind?: AgentKind; model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; showSpokenText?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean; onboarding?: unknown; routines?: unknown }): Promise<AgentStatus> {
+  async configure(o: { kind?: AgentKind; model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; showSpokenText?: boolean; catSpeaks?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean; onboarding?: unknown; routines?: unknown }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
     // O onboarding (spec #11955): o passo em que a pessoa está, fechar (`done`) e o "Refazer" (`open` no passo 1).
     // As rotinas (spec #12150): ligar ou mudar a hora arma a rotina agora (um horário de antes não dispara).
@@ -2642,6 +2643,8 @@ export class AgentService {
     if (o.controlShortcut !== undefined) patch.controlShortcut = o.controlShortcut;
     // Spec #26055: "Mostrar o que eu falei".
     if (o.showSpokenText !== undefined) patch.showSpokenText = o.showSpokenText;
+    // "O gato fala" (spec #26687, T26736): vale no próximo pedido por voz. Ligar não baixa nada; o download é o clique.
+    if (o.catSpeaks !== undefined) patch.catSpeaks = o.catSpeaks;
     // Trocar de agente (spec #24666): o aberto fecha antes de gravar, e o próximo pedido abre o escolhido, na sessão dele.
     // O modelo é de cada agente: o de agora fica guardado, e volta o que o outro tinha.
     if (o.kind !== undefined) {

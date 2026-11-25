@@ -11,6 +11,7 @@
 // - **Cancelar** para o download no meio: o `.part` sai junto, e o que já conferiu fica. **Remover** apaga o modelo e a
 //   voz, e derruba o processo que os usava.
 
+import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
@@ -250,10 +251,39 @@ export class CatVoiceModel {
  * O modelo da voz e o processo que o usa, ligados: o processo carrega o que o modelo baixou, o fim do download aquece o
  * processo, e remover derruba o processo antes de apagar. O app e o headless criam um par só.
  */
-export function createCatVoice(o: { modelsDir: string; bin: string; download: boolean }): { model: CatVoiceModel; voice: VoiceProcess } {
+export function createCatVoice(
+  o: { modelsDir: string; bin: string; download: boolean } & Pick<CatVoiceModelOptions, "manifest" | "voice" | "fetch">,
+): { model: CatVoiceModel; voice: VoiceProcess } {
   const log = (m: string) => console.log(`[cat-voice] ${m}`);
   let model: CatVoiceModel | undefined;
   const voice = new VoiceProcess({ bin: o.bin, assets: () => model!.assets(), log });
-  model = new CatVoiceModel({ modelsDir: o.modelsDir, download: o.download, warm: () => voice.warmup(), stopVoice: () => voice.stop(), log });
+  model = new CatVoiceModel({
+    modelsDir: o.modelsDir,
+    download: o.download,
+    ...(o.manifest ? { manifest: o.manifest } : {}),
+    ...(o.voice !== undefined ? { voice: o.voice } : {}),
+    ...(o.fetch ? { fetch: o.fetch } : {}),
+    warm: () => voice.warmup(),
+    stopVoice: () => voice.stop(),
+    log,
+  });
   return { model, voice };
+}
+
+/**
+ * A chave de teste do headless (T26736), como o `KIWI_ADAPTER_REGISTRY` do agente: `KIWI_CAT_VOICE_MANIFEST` aponta
+ * um JSON `{ host, model, voice }` com um modelo e uma voz inventados, servidos por um servidor falso e local. Com ela, o
+ * headless baixa só desse `host` (o roteiro de tela mostra o andamento); sem ela, não baixa nunca. O app não lê a chave.
+ */
+export function headlessCatVoiceSource(env: Record<string, string | undefined>): Pick<CatVoiceModelOptions, "manifest" | "voice" | "fetch"> | null {
+  if (!env.KIWI_CAT_VOICE_MANIFEST) return null;
+  const t = JSON.parse(readFileSync(env.KIWI_CAT_VOICE_MANIFEST, "utf8")) as { host: string; model: ModelManifest; voice: CatVoiceRef | null };
+  const host = new URL(t.host);
+  if (host.hostname !== "127.0.0.1" && host.hostname !== "localhost") throw new Error("KIWI_CAT_VOICE_MANIFEST: o host de teste tem de ser local");
+  const local = (url: string) => {
+    const u = new URL(url.replace("https://huggingface.co", host.origin));
+    if (u.origin !== host.origin) throw new Error(`KIWI_CAT_VOICE_MANIFEST: ${u.origin} não é o host de teste`);
+    return u.href;
+  };
+  return { manifest: t.model, voice: t.voice, fetch: async (url, init) => fetch(local(url), init?.signal ? { signal: init.signal } : {}) };
 }

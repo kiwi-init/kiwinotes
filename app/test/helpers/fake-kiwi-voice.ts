@@ -4,7 +4,7 @@
 //   "cai"   → o processo sai com o código 3 no meio da frase
 //   "erro"  → um `error` com o id da frase
 // O `load` com refText "sem-modelo" responde com um `error` sem id. O `warmup` responde `warm` em 20 ms, ou, com o refText
-// "frio-falha", um `error` sem id (o Metal que não compila). Cada comando recebido vai para o arquivo do 1º
+// "frio-falha", um `error` sem id (o Metal que não compila). `FAKE_WARM_MS` muda os 20 ms (o roteiro de tela, T26736). Cada comando recebido vai para o arquivo do 1º
 // argumento, uma linha por comando, para o teste conferir o `cancel` e o `quit`.
 
 import { appendFileSync } from "node:fs";
@@ -58,7 +58,8 @@ for await (const chunk of Bun.stdin.stream()) {
       if (m.refText === "sem-modelo") send({ type: "error", message: "load: sem o modelo" });
       else setTimeout(() => send({ type: "ready", sampleRate: 24000, loadMs: 5 }), 20);
     } else if (m.type === "warmup") {
-      setTimeout(() => send(failWarm ? { type: "error", message: "warmup: falha inventada" } : { type: "warm", ms: 20 }), 20);
+      const ms = Number(process.env.FAKE_WARM_MS ?? 20);
+      setTimeout(() => send(failWarm ? { type: "error", message: "warmup: falha inventada" } : { type: "warm", ms }), ms);
     } else if (m.type === "speak") {
       queue.push({ id: m.id, text: m.text });
       void pump();

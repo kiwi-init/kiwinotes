@@ -488,6 +488,16 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     await until(() => m.statuses.at(-1)?.showSpokenText === false);
   });
 
+  test("\"O gato fala\" (spec #26687, T26736): desligado por padrão, o configure grava e o status avisa", async () => {
+    const m = make();
+    expect((await m.svc.status()).catSpeaks).toBe(false);
+    expect((await m.svc.configure({ catSpeaks: true })).catSpeaks).toBe(true);
+    expect((await new SettingsStore(m.data).load()).agent.catSpeaks).toBe(true);
+    await until(() => m.statuses.at(-1)?.catSpeaks === true);
+    expect((await m.svc.configure({ catSpeaks: false })).catSpeaks).toBe(false);
+    await until(() => m.statuses.at(-1)?.catSpeaks === false);
+  });
+
   test("um ajuste antigo, só com o effort, vale para todos os modelos até cada um ter o seu", async () => {
     const data = tmp();
     await new SettingsStore(data).save({ agent: { ...DEFAULT_AGENT_SETTINGS, model: "opus", effort: "medium" } as never });
