@@ -179,13 +179,8 @@ try {
     await invoke("agent.ask", { text: "lembra que tenho um gato chamado Kiwi" });
     await idle();
     // O aviso volta depois da resposta do agente (o agente falso responde com o erro cru da ferramenta, "Não deu:
-    // E_MEMORY_FULL…"). Desde o balão único (spec #27881, #348) a resposta não sai sozinha: fica até o clique, e o aviso
-    // espera atrás dela. O clique fecha a resposta, como a pessoa faria (T28350).
-    const answer = p.locator(".kn-bubble-slot .kn-bubble-shell.kn-bubble:not(.kn-memory-bubble)", { hasText: "E_MEMORY_FULL" });
-    await answer.waitFor({ timeout: 15000 });
-    await answer.click();
-    // Com a troca entre os balões (#480), o aviso que sai fica 180 ms na tela: o print espera o aviso vivo e cheio, sem
-    // outro balão (#12536).
+    // E_MEMORY_FULL…"). Com a troca entre os balões (#480), o aviso que sai fica 180 ms na tela: o print espera o aviso
+    // vivo e cheio, sem outro balão (#12536).
     await p.waitForFunction(() => {
       const live = [...document.querySelectorAll(".kn-bubble-slot")].filter((s) => s.getAttribute("data-phase") !== "exit");
       const slot = live.find((s) => s.querySelector(".kn-memory-bubble")?.textContent?.includes("A memória está cheia"));

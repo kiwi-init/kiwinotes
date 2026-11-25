@@ -14,7 +14,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { BubbleLink } from "../../src/shared/ui-contract";
 import { api } from "../src/api";
-import { BUBBLE_LINES, BubbleFeed, type BubbleView, type ChunkLink } from "./bubble-state";
+import { BUBBLE_LINES, BubbleFeed, type BubbleView, type ChunkLink, readingMs } from "./bubble-state";
 import { BubblePresence } from "./BubblePresence";
 import { BubbleTail } from "./BubbleTail";
 import { MdView, openMdLink } from "./bubbleMd";
@@ -68,8 +68,12 @@ function measurer(): { fits: (s: string) => boolean; dispose: () => void } {
 /**
  * `drop`: o pedido mandado pelo campo tira do canto a resposta de antes, no mesmo render em que a pergunta fica (T15377).
  * Sem isso, ela voltava ao lado da pergunta (o `hidden` cai quando o campo fecha) e ainda ficava à espera do pedido novo.
+ *
+ * `yieldTo` (T28350): um balão com ação (a memória, a rotina, a proposta) espera a resposta sair. Desde o balão único ela
+ * só saía no clique, e o resultado do pedido ficava escondido. Agora ela fica o tempo de leitura (`readingMs`) e dá
+ * lugar a ele. Com o [Ver mais] aberto, espera fechar.
  */
-export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced: boolean; hidden?: boolean; onShown?: (shown: boolean) => void; drop?: { current: (() => void) | null } }) {
+export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = false }: { reduced: boolean; hidden?: boolean; onShown?: (shown: boolean) => void; drop?: { current: (() => void) | null }; yieldTo?: boolean }) {
   const [view, setView] = useState<BubbleView | null>(null);
   /** O balão grande do [Ver mais], aberto. Ele mostra o texto inteiro do pedido, e acompanha o que ainda chega. */
   const [bigOpen, setBigOpen] = useState(false);
@@ -155,6 +159,17 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
   // na mesma pintura em que a resposta começa a sair. Com o `useEffect`, ela vinha numa tarefa depois, e com a máquina
   // ocupada a resposta esmaecia sozinha antes (o canto chegava a 0,12 de opacidade).
   useLayoutEffect(() => onShown?.(showing), [showing]);
+  // Um balão com ação esperando (T28350): a resposta fica o tempo de leitura e sai. O relógio conta da resposta na tela,
+  // ou da hora em que o balão com ação chegou, se ela já estava lá.
+  const viewFull = view?.full ?? "";
+  useEffect(() => {
+    if (!yieldTo || !view || bigOpen || hidden) return;
+    const t = setTimeout(() => {
+      feed.current?.close();
+      tick.current();
+    }, readingMs(viewFull));
+    return () => clearTimeout(t);
+  }, [yieldTo, view?.key, bigOpen, hidden]);
 
   return (
     <>

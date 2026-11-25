@@ -12,7 +12,8 @@ import { onAdjust } from "../settings/routineAdjust.ts";
 import { BubblePresence } from "./BubblePresence";
 import { BubbleTail } from "./BubbleTail";
 
-export function ProposalBubble({ hidden, reduced = false }: { hidden: boolean; reduced?: boolean }) {
+/** `onPending` (T28350): há uma proposta para o balão, mesmo escondida; o balão da resposta dá lugar a ela. */
+export function ProposalBubble({ hidden, reduced = false, onPending }: { hidden: boolean; reduced?: boolean; onPending?: (has: boolean) => void }) {
   const list = useProposals();
   const [later, setLater] = useState<ReadonlySet<string>>(new Set());
   /** A proposta que o balão mostrava: aplicada ali, ela fica com o [Desfazer] até o [Depois]. */
@@ -26,6 +27,7 @@ export function ProposalBubble({ hidden, reduced = false }: { hidden: boolean; r
   const open = openProposals(list ?? []).filter((p) => !later.has(p.id));
   const kept = list?.find((p) => p.id === shown && p.status === "applied" && !later.has(p.id));
   const p = open[0] ?? kept ?? null;
+  useEffect(() => onPending?.(p !== null), [p !== null]);
 
   useEffect(() => {
     if (p && p.id !== shown) setShown(p.id);
