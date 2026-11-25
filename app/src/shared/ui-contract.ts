@@ -321,7 +321,9 @@ export type { NoteModel };
 // 1.102.0 (T27778, spec #27531): as vozes do gato. O `CatVoiceStatus` ganha o `model`, as `voices` (o estado de cada
 //   uma), a `selected` e a `preview`; o `kiwicat.voz` nas settings (a voz escolhida, um id de `cat-voices.ts`); e o
 //   `catVoice.preview` (o Ouvir: fala o texto fixo numa voz, sem mudar a escolha). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.102.0";
+// 1.103.0 (T27897, spec #27881): o balão único. O evento `speech` no `agent.turn`: a fala do `cat_speak`, em todo
+//   pedido (com a voz ligada ou não), que vira o resumo do balão. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.103.0";
 /** O `reason` do `updates` desligado quando foi a pessoa, em Ajustes (1.97.0, T25110), e não o build. */
 export const UPDATES_OFF_BY_SETTING = "desligado em Buscar atualizações";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
@@ -1264,6 +1266,11 @@ export type AgentTurnEvent = { id: string } & (
   /** `tool` é o nome da ferramenta; numa do Kiwi (spec #7496), `target` é o que ela leu ou procurou. */
   | { type: "status"; status: "running"; tool: string; target?: string }
   | { type: "text"; text: string }
+  /**
+   * A fala do `cat_speak` (1.103.0, spec #27881): 1 ou 2 frases, como o agente escreveu. É o resumo do balão; com "O
+   * gato fala" ligado num pedido por voz, a voz lê a mesma fala.
+   */
+  | { type: "speech"; text: string }
   | { type: "permission"; tool: string; decision: "denied" }
   /** `links` (spec #17683): as notas e os arquivos da pasta que a resposta cita, conferidos no main (ver `BubbleLink`). */
   | { type: "done"; stopReason: string; text: string; links?: BubbleLink[] }

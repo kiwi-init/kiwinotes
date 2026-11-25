@@ -2366,14 +2366,17 @@ describe("o gato fala (spec #26687, T26709)", () => {
     // A fala não troca a resposta: o balão recebe o texto inteiro, como sempre.
     expect(voz.turn.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining('Você disse: "resuma a nota de ontem"') });
     expect(voz.turn).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "cat_speak" }));
+    // A mesma fala vai ao balão, como o agente escreveu (o resumo, spec #27881).
+    expect(voz.turn).toContainEqual({ id: voz.id, type: "speech", text: expect.stringMatching(/^Pronto: o \*\*pedido\*\* tinha \d+ palavras\.$/) });
     // Uma fala por pedido: a segunda volta como erro ao agente, e nada mais é falado.
     const again = await voiceAsk(m, '/tool cat_speak {"texto":"De novo."}', true);
     expect(again.turn.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining("E_ALREADY_SPOKEN") });
     expect(falas.map((f) => f.turnId)).toEqual([voz.id, again.id]);
-    // O pedido escrito não leva a linha nem fala, mesmo que o agente tente.
+    // O pedido escrito não leva a linha nem toca a voz; a fala do agente só vira o resumo do balão (spec #27881).
     const escrito = await voiceAsk(m, '/tool cat_speak {"texto":"Oi."}', false);
     expect(escrito.prompt).not.toContain("[Pedido feito por voz");
-    expect(escrito.turn.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining("E_NOT_ALLOWED") });
+    expect(escrito.turn.at(-1)).toMatchObject({ type: "done", text: expect.not.stringContaining("E_NOT_ALLOWED") });
+    expect(escrito.turn).toContainEqual({ id: escrito.id, type: "speech", text: "Oi." });
     expect(falas).toHaveLength(2);
   });
 
@@ -2386,6 +2389,11 @@ describe("o gato fala (spec #26687, T26709)", () => {
     expect(voz.prompt).not.toContain("[Pedido feito por voz");
     expect(voz.turn.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining('Você disse: "resuma a nota de ontem"') });
     expect(voz.turn.some((e) => e.type === "status" && e.status === "running" && e.tool === "cat_speak")).toBe(false);
+    expect(falas).toEqual([]);
+    // A instrução de sempre (spec #27881): o agente manda a fala mesmo com a voz desligada; ela vai só ao balão.
+    const resumo = await voiceAsk(m, '/tool cat_speak {"texto":"Achei a nota."}', true);
+    expect(resumo.turn).toContainEqual({ id: resumo.id, type: "speech", text: "Achei a nota." });
+    expect(resumo.turn.at(-1)).toMatchObject({ type: "done", text: expect.not.stringContaining("E_NOT_ALLOWED") });
     expect(falas).toEqual([]);
   });
 });

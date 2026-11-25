@@ -198,7 +198,8 @@ try {
         what = `hub ${size.name} (${size.width}×${size.height}), ${lugar}, resposta`;
         checkTip(m, what);
         await clipShot(p, m, `hub-${size.width}-${where}-resposta.png`, `Hub ${size.width}×${size.height}, ${lugar}: a resposta`);
-        await p.keyboard.press("Escape");
+        // A resposta fica até o clique (spec #27881).
+        await p.locator(".kn-bubble-slot:not([data-phase='exit']) .kn-bubble").click();
         await p.waitForSelector(".kn-bubble-slot .kn-bubble", { state: "detached" });
       }
       assert.deepEqual(w.report.problems, [], "problemas na página");

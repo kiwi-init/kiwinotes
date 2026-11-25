@@ -796,7 +796,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "cat_speak",
     title: "Falar pelo gato",
-    description: `Num pedido feito por voz, o que o gato fala em voz alta: 1 ou 2 frases curtas, escritas para ouvir, com o essencial da resposta. Sem Markdown, sem links, sem código e sem listas: o Kiwi lê números, datas e horas por extenso. Uma vez por pedido, antes da resposta. A resposta completa vai no texto, como sempre: a fala não a substitui.`,
+    description: `O resumo da resposta, que o gato mostra no balão e, com a voz ligada, fala em voz alta: 1 ou 2 frases curtas, escritas para ouvir, com o essencial. Sem Markdown, sem links, sem código e sem listas: o Kiwi lê números, datas e horas por extenso. Uma vez por pedido, antes da resposta. A resposta completa vai no texto, como sempre: a fala não a substitui.`,
     inputSchema: {
       type: "object",
       properties: { texto: { type: "string", minLength: 1, maxLength: SPEAK_MAX_CHARS, description: "A fala, 1 ou 2 frases (ex.: Anotei na nota Ideias. A reunião é amanhã às dez)." } },
@@ -878,7 +878,7 @@ export interface KiwiToolContext {
   proposals?: ProposalSink;
   /** Quem guarda a memória do agente (spec #11469). Sem ele, as ferramentas da memória não existem. */
   memory?: MemorySink;
-  /** Quem toca a fala do gato (T26709): só num pedido por voz com "O gato fala" ligado. Sem ele, o `cat_speak` não existe. */
+  /** Quem recebe a fala do gato (T26709, spec #27881): o pedido em andamento. Sem ele, o `cat_speak` não existe. */
   speech?: SpeechSink;
   /** O relógio do diário do projeto (T11670), para os testes. Sem ele, a hora do Mac. */
   now?: () => Date;
@@ -887,9 +887,12 @@ export interface KiwiToolContext {
 }
 
 /** A memória do agente: anotar e esquecer, com o total de fatos depois. */
-/** A fala do gato (T26709): recebe as frases já por extenso, na ordem. Um erro dela (a fala já saiu) vai ao agente. */
+/**
+ * A fala do gato (T26709): recebe as frases já por extenso, na ordem, para a voz, e o texto como o agente escreveu, para
+ * o resumo do balão (spec #27881). Um erro dela (a fala já saiu) vai ao agente.
+ */
 export interface SpeechSink {
-  falar(frases: string[]): void;
+  falar(frases: string[], texto: string): void;
 }
 
 export interface MemorySink {
@@ -2379,8 +2382,8 @@ function speak(sink: SpeechSink, raw: unknown): ToolResult {
   const frases = frasesParaFala(texto);
   if (!frases.length) throw new ToolError("E_BAD_ARGS", "nada para falar: mande frases, sem código nem links");
   if (frases.length > SPEAK_MAX_FRASES) throw new ToolError("E_BAD_ARGS", `a fala tem ${frases.length} frases: mande 1 ou 2 frases curtas; o resto vai na resposta`);
-  sink.falar(frases);
-  return { value: { falado: frases.join(" "), aviso: "A pessoa ouve isto. Escreva a resposta completa no texto, como sempre." } };
+  sink.falar(frases, texto);
+  return { value: { falado: frases.join(" "), aviso: "Isto é o resumo do balão (e o que a voz diz, se estiver ligada). Escreva a resposta completa no texto, como sempre." } };
 }
 
 /**

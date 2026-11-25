@@ -303,6 +303,9 @@ export function applyTurn(t: TestState, e: AgentTurnEvent, name: string): TestSt
       return { ...t, status: "tool" in e ? toolStatus(e.tool, e.target) : "Usando uma ferramenta…" };
     case "permission":
       return { ...t, status: `Recusei o ${e.tool}: o agente só usa as suas notas e reuniões, pelo Kiwi.` };
+    // A fala do `cat_speak` (spec #27881) é o resumo do balão; o "Testar" mostra a resposta inteira.
+    case "speech":
+      return t;
     case "limit":
       // O limite (spec #11084) aparece no balão e no medidor; o "Testar" mostra o erro, que vem logo depois.
       return t;

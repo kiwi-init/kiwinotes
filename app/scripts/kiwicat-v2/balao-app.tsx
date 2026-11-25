@@ -10,7 +10,6 @@ import bubbleCss from "../../ui/kiwicat-v2/bubble.css" with { type: "text" };
 import bubbleMdCss from "../../ui/kiwicat-v2/bubble-md.css" with { type: "text" };
 import hubCss from "../../ui/hub/hub.css" with { type: "text" };
 import { CatBubble } from "../../ui/hub/CatBubble";
-import { TYPE_MS } from "../../ui/hub/bubble-state";
 
 const q = new URLSearchParams(location.search);
 const texto = q.get("texto") ?? "";
@@ -55,7 +54,7 @@ if ((q.get("rabo") ?? "right") !== "right") {
     emit("agent.turn", { id, type: "done", stopReason: "end_turn", text: texto });
   }, 50);
   if (q.get("abrir") === "1") {
-    setTimeout(() => (document.querySelector(".kn-bubble-more") as HTMLButtonElement | null)?.click(), 50 + TYPE_MS * [...texto].length + 300);
+    setTimeout(() => (document.querySelector(".kn-bubble-more") as HTMLButtonElement | null)?.click(), 350); // O balão entra inteiro, sem digitar (spec #27881).
   }
   ready();
 }

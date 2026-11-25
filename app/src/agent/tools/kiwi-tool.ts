@@ -323,7 +323,7 @@ export interface KiwiAllowed {
   writes: boolean;
   proposes: boolean;
   memory: boolean;
-  /** A fala do gato (T26709): só num pedido por voz, com "O gato fala" ligado. */
+  /** A fala do gato (T26709, spec #27881): só dentro de um pedido em andamento. */
   speech?: boolean;
 }
 
@@ -370,7 +370,7 @@ export async function runKiwiCall(ctx: KiwiToolContext, raw: unknown, allowed: K
   const { acao } = call;
   const def = KIWI_TOOLS.find((t) => t.name === acao.tool)!;
   if (def.speech && !allowed.speech) {
-    throw Object.assign(new ToolError("E_NOT_ALLOWED", `${acaoLabel(acao)} só vale num pedido feito por voz, com "O gato fala" ligado: responda só no texto`), { tool: acao.tool });
+    throw Object.assign(new ToolError("E_NOT_ALLOWED", `${acaoLabel(acao)} só vale dentro de um pedido: responda só no texto`), { tool: acao.tool });
   }
   if ((def.writes && !allowed.writes) || (def.proposes && !allowed.proposes) || (def.memory && !allowed.memory)) {
     throw Object.assign(new ToolError("E_NOT_ALLOWED", `${acaoLabel(acao)} não está ligado nesta sessão: ${def.writes ? "o Kiwi só lê" : def.proposes ? "sem propostas" : "sem a memória"}`), { tool: acao.tool });

@@ -13,7 +13,6 @@ import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
 import { fakeRegistry } from "../src/agent/fake/registry";
-import { readingMs } from "../ui/hub/bubble-state";
 import { OVERLAY_TIMES } from "../src/bun/cat-overlay";
 
 const app = resolve(import.meta.dir, "..");
@@ -139,12 +138,13 @@ try {
     const h = at((c) => c.type === "catOverlay.hide", b);
     const texts = log.slice(from, h).filter((l) => l.cmd.type === "catOverlay.bubble").map((l) => l.cmd.text!);
     const shownMs = log[h]!.at - log[b]!.at;
-    const minMs = texts.reduce((sum, t, i) => sum + Math.max(i === 0 ? OVERLAY_TIMES.pronto : 0, readingMs(t)), 0);
+    // O balão do overlay fica até a pergunta (`idleAsk`): ao menos o `pronto`, nunca sai antes (spec #13378).
+    const minMs = texts.length ? OVERLAY_TIMES.pronto : 0;
     // O relógio do teste vê o evento um pouco depois do app: uma folga de 100 ms para baixo.
     assert.ok(shownMs >= minMs - 100, `o balão ficou ${shownMs} ms, o tempo de leitura é ${minMs} ms`);
     await p.waitForFunction(() => (window as any).kiwiOverlayStats.bubble === null && (window as any).kiwiOverlayStats.visible === false);
     const states = log.slice(from, h).filter((l) => l.cmd.type === "catOverlay.state").map((l) => l.cmd.estado);
-    report.talks.push({ spoken, states, bubbles: texts, shownMs, readingMs: minMs, error: log[b]!.cmd.error });
+    report.talks.push({ spoken, states, bubbles: texts, shownMs, minMs, error: log[b]!.cmd.error });
     return { texts, states, error: log[b]!.cmd.error };
   }
 

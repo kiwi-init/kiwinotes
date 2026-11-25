@@ -20,8 +20,8 @@ import { BubbleTail } from "./BubbleTail";
 import { MdView, openMdLink } from "./bubbleMd";
 
 /**
- * O texto do trecho com as notas e os arquivos (spec #17683) clicáveis. Enquanto o trecho se digita, só o pedaço do
- * link que já apareceu. O clique abre no app e não fecha o balão.
+ * O resumo com as notas e os arquivos (spec #17683) clicáveis; um link cortado pelo "…", só o pedaço que aparece. O
+ * clique abre no app e não fecha o balão.
  */
 function withLinks(text: string, links: readonly ChunkLink[] | undefined): React.ReactNode {
   if (!links?.length) return text;
@@ -159,7 +159,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
   return (
     <>
       {/* Com o balão grande aberto, o pequeno espera embaixo dele (não é fechado) e volta quando o grande fecha. */}
-      {/* A troca entre os trechos e os balões (spec #11652): cada trecho novo é um balão novo (`view.key`). */}
+      {/* A troca entre os balões (spec #11652): a linha de estado, a resposta e o erro têm cada um a sua `view.key`. */}
       <BubblePresence itemKey={view && !bigOpen && !hidden ? `resposta-${view.key}` : null} reduced={reduced}>
         {view ? (
           <div
@@ -173,7 +173,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
               tick.current();
             }}
           >
-            {/* O trecho inteiro, invisível, segura o tamanho do balão enquanto a digitação anda. */}
+            {/* O resumo entra inteiro, sem digitar (spec #27881): o fantasma e o texto são o mesmo, e o fantasma segura o tamanho. */}
             <div className="kn-bubble-text" aria-hidden="true">
               <div className="kn-bubble-ghost">{view.full}</div>
               <div className="kn-bubble-typed">{withLinks(view.text, view.links)}</div>
