@@ -58,6 +58,9 @@ export const MIGRATED = [
   "ui/settings/topicIcons.tsx",
   "ui/notes/NotesFolder.tsx",
   "ui/src/kit/editable.tsx",
+  // Ajustes de Reuniões (T29273).
+  "ui/settings/AgentMeetings.tsx",
+  "ui/settings/MeetingsRows.tsx",
 ];
 
 /** O main e a notificação já no catálogo (T28192): menu, bandeja, status, diálogo do link, pílula e notificação. */
