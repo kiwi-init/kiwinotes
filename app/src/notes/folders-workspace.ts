@@ -15,6 +15,7 @@ import { Vault, type IndexProgress, type ListingPatch } from "./vault.ts";
 import { NoteVersions } from "./versions.ts";
 import { DictationNotes } from "./fromDictation.ts";
 import { MeetingNotes } from "./meetings.ts";
+import type { Locale } from "../shared/i18n/index.ts";
 import { Attachments } from "./attachments.ts";
 import { OcrIndex, type OcrRunner } from "./ocr.ts";
 import { createTextIndex, type TextIndexApi } from "./text-index-client.ts";
@@ -193,6 +194,8 @@ interface Options {
   gate?: Pick<BackgroundGate, "wait">;
   /** Para onde vai o apagado de cada pasta (T7681: o headless passa o dele); sem, o Lixo do macOS. */
   trash?: (abs: string) => Promise<void>;
+  /** A língua do app (T30631): o título da nota de reunião sai nela. */
+  locale?: () => Locale;
 }
 /** Root-bound bundles never mutate their root during an in-flight save. The UI's id rejects calls from an old view. */
 export class NotesFolders {
@@ -288,6 +291,7 @@ export class NotesFolders {
       }),
       dictationNotes: new DictationNotes(notes),
       meetingNotes: new MeetingNotes(notes, {
+        locale: this.options.locale,
         onError: () =>
           console.error("[meetings] note write failed; pending text retained"),
       }),

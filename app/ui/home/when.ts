@@ -33,11 +33,12 @@ export function weekRange(first: string, last: string): string {
   return `De ${a.getDate()} a ${b.getDate()} de ${MONTH[b.getMonth()]}`;
 }
 
-/** "42 min", "3 h 12", "2 h". */
+/** "42 min", "3 h 12", "2 h"; em inglês, "3h 12m" e "2h" (T30631). */
 export function hours(min: number): string {
   if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60);
   const m = min % 60;
+  if (en()) return m ? `${h}h ${m}m` : `${h}h`;
   return m ? `${h} h ${String(m).padStart(2, "0")}` : `${h} h`;
 }
 

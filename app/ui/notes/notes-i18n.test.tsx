@@ -15,6 +15,7 @@ import { checkOp, SheetOpError } from "../../src/shared/sheet/ops.ts";
 import { why, whyText } from "../../src/shared/sheet/why.ts";
 import { partText, readZip, writeZip } from "../../src/shared/sheet/zip.ts";
 import { setAppLocale } from "../src/i18n.ts";
+import { MockVault } from "./mock.ts";
 import { DocxFormatBar } from "./files/DocxFormatBar.tsx";
 import { CHANGED_OUTSIDE, SAVE_FAILED } from "./files/docxSaver.ts";
 import { modified, typeLabel } from "./files/fileCard.ts";
@@ -67,6 +68,10 @@ const sidebar: SidebarProps = {
 };
 
 describe("a casca das Notas em inglês", () => {
+  test("a nota nova sem nome no vault de mentira (T30631): \"Untitled\"", async () => {
+    english();
+    expect((await new MockVault({}).create("  ")).path).toBe("Untitled.md");
+  });
   test("a árvore: busca, botões do topo, seções e Lixeira", () => {
     const pt = renderToStaticMarkup(<Sidebar {...sidebar} />);
     expect(pt).toContain('placeholder="Ir para uma nota ou pasta"');

@@ -11,6 +11,7 @@ import { type AppSettings, type SettingsPatch, SettingsStore } from "../store/se
 import { SnippetStore } from "../store/snippets.ts";
 import { DictationNotes } from "../notes/fromDictation.ts";
 import { NotesFolders } from "../notes/folders-workspace.ts";
+import { mainLocale } from "./locale.ts";
 import { assertHeadlessNotesFolder, resolveReal } from "../headless/guard.ts";
 import { headlessTrash } from "../headless/trash.ts";
 import { Vault } from "../notes/vault.ts";
@@ -43,6 +44,7 @@ let folders: NotesFolders;
 const trash = process.env.KIWI_HEADLESS === "1" ? headlessTrash(path.join(dir, "trash")) : undefined;
 const internalNotes = new Vault({ root: defaultRoot, watch: true, onIndexProgress: p => folders?.indexProgress(defaultRoot,p), ...(trash ? { trash } : {}) });
 folders = new NotesFolders({dir,defaultRoot,globalSettings,internalNotes,semantic,gate,
+  locale: () => mainLocale.get(),
   guard: process.env.KIWI_HEADLESS === "1" ? root => assertHeadlessNotesFolder(root) : undefined,
   ...(trash ? { trash } : {}),
 });

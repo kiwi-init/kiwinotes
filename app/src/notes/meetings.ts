@@ -16,6 +16,7 @@ import {
   transcriptSection,
 } from "../shared/meeting-note.ts";
 import { mergeNoteEdit } from "../shared/merge3.ts";
+import { type Locale, translate } from "../shared/i18n/index.ts";
 
 /** One turn of the VBx at the end of the meeting (R3): a speaker cluster, in seconds since the meeting began. */
 export interface MeetingTurn {
@@ -231,6 +232,8 @@ export class MeetingNotes {
       flushMs?: number;
       onError?: (e: unknown) => void;
       onCommitted?: (session: string, segments: MeetingSegment[]) => void;
+      /** A língua do app na hora em que a reunião começa (T30631): o título da nota sai nela. Sem, português. */
+      locale?: () => Locale;
     } = {},
   ) {}
   private serialize<T>(fn: () => Promise<T>): Promise<T> {
@@ -245,6 +248,7 @@ export class MeetingNotes {
   ): Promise<Note> {
     return this.serialize(async () => {
       validateSession(session);
+      const locale = this.options.locale?.() ?? "pt";
       if (
         typeof app !== "string" ||
         app.length > 200 ||
@@ -254,7 +258,7 @@ export class MeetingNotes {
       await this.vault.open();
       const existing = await this.find(session);
       if (existing) return existing;
-      const title = `${localDate(at.getTime())} ${clock(at).replace(":", "h")} ${app === "Reunião" ? app : `Reunião do ${app}`}`;
+      const title = `${localDate(at.getTime())} ${clock(at).replace(":", "h")} ${app === "Reunião" ? translate(locale, "meetings.note.title") : translate(locale, "meetings.note.titleApp", { app })}`;
       const note = await this.vault.create(MEETINGS_FOLDER, title, newMeetingNote(session, app, at));
       this.states.set(session, {
         session,

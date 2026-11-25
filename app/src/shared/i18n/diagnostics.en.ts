@@ -1,0 +1,43 @@
+// The "Save diagnostics" file in English (T30631, spec #28171): `diagnostics.pt.ts` is the source.
+
+import type { ptDiagnostics } from "./diagnostics.pt.ts";
+import type { Entry } from "./index.ts";
+
+export const enDiagnostics: { readonly [K in keyof typeof ptDiagnostics]: Entry } = {
+  "diag.title": "Kiwi Notes · diagnostics",
+  "diag.generated": "Generated at {at}",
+  "diag.private": "No dictation text, notes or audio.",
+  "diag.version": "version: {version} ({channel})",
+  "diag.contract": "UI contract: {contract}",
+  "diag.system": "== System",
+  "diag.arch": "architecture: {arch}",
+  "diag.cpu": "processor: {cpu}",
+  "diag.memory": "memory: {gb} GB",
+  "diag.helperOff": "off in this app (no helper)",
+  "diag.running": "running: {yes}",
+  "diag.yes": "yes",
+  "diag.no": "no",
+  "diag.supervisor": "supervisor: {state} · crashes in the window: {crashes}",
+  "diag.reason": " · reason: {reason}",
+  "diag.helperVersion": "version: {version} · pid {pid}",
+  "diag.hotkey": "shortcut receiving keys: {yes}",
+  "diag.exits": "crashes since the app opened: {count}",
+  "diag.signal": "signal {signal}",
+  "diag.code": "code {code}",
+  "diag.permissions": "== Permissions (state only; nothing is requested)",
+  "diag.missing": "missing: {list}",
+  "diag.llmReady": "Local LLM: ready",
+  "diag.llmOff": "Local LLM: unavailable ({reason})",
+  "diag.unknown": "the helper isn't running, so the state is unknown",
+  "diag.dictation": "== Dictation",
+  "diag.noHelper": "no helper",
+  "diag.boosting": "vocabulary (boosting): {words}",
+  "diag.microphone": "chosen microphone: {mic}",
+  "diag.notesShortcut": "Notes shortcut: {shortcut}",
+  "diag.off": "off",
+  "diag.crashes": "== macOS crashes (name and date only)",
+  "diag.none": "none",
+  "diag.log": "== Log (last {count} lines)",
+  "diag.empty": "(empty)",
+  "diag.fileName": "Kiwi Notes diagnostics {date} {time}.txt",
+};

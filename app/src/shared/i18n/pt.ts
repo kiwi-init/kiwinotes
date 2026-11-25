@@ -4,6 +4,7 @@
 import { ptCatOverlay } from "./catoverlay.pt.ts";
 import { ptAgent } from "./agent.pt.ts";
 import { ptCommon } from "./common.pt.ts";
+import { ptDiagnostics } from "./diagnostics.pt.ts";
 import { ptActivity } from "./activity.pt.ts";
 import { ptHistory } from "./history.pt.ts";
 import { ptHub } from "./hub.pt.ts";
@@ -131,6 +132,7 @@ export const PT_PARTS = {
   history: ptHistory,
   hub: ptHub,
   activity: ptActivity,
+  diagnostics: ptDiagnostics,
 } as const;
 
 export const pt = {
@@ -149,4 +151,6 @@ export const pt = {
   ...ptEditor,
   // Os visualizadores das Notas (T29245): `viewers.pt.ts`.
   ...ptViewers,
+  // O arquivo do Salvar diagnóstico (T30631): `diagnostics.pt.ts`.
+  ...ptDiagnostics,
 } as const;

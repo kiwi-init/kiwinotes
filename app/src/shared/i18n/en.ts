@@ -5,6 +5,7 @@ import { enCatOverlay } from "./catoverlay.en.ts";
 import { enAgent } from "./agent.en.ts";
 import { enActivity } from "./activity.en.ts";
 import { enCommon } from "./common.en.ts";
+import { enDiagnostics } from "./diagnostics.en.ts";
 import { enHistory } from "./history.en.ts";
 import { enHub } from "./hub.en.ts";
 import { enEditor } from "./editor.en.ts";
@@ -126,6 +127,7 @@ export const EN_PARTS = {
   history: enHistory,
   hub: enHub,
   activity: enActivity,
+  diagnostics: enDiagnostics,
 } as const;
 
 export const en: Catalog = {
@@ -144,4 +146,6 @@ export const en: Catalog = {
   ...enEditor,
   // Os visualizadores das Notas (T29245): `viewers.en.ts`.
   ...enViewers,
+  // O arquivo do Salvar diagnóstico (T30631): `diagnostics.en.ts`.
+  ...enDiagnostics,
 };

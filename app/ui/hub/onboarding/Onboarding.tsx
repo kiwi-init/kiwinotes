@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentChangeView, AgentStatus, AppSettings, ProjectSearchView } from "../../../src/shared/ui-contract.ts";
 import type { ProjectInfo } from "../../../src/notes/projects.ts";
 import { catColorOptions } from "../../../src/shared/kiwicat-colors.ts";
+import type { TextKey } from "../../../src/shared/i18n/index.ts";
 import { api, has } from "../../src/api.ts";
 import { Button, Kbd, Segmented, Select } from "../../src/kit/index.tsx";
 import { t, useT } from "../../src/i18n.ts";
@@ -129,13 +130,13 @@ async function askWhenFree(text: string, onWait: () => void): Promise<string> {
 
 /** Passo 1: o agente escolhido instalado e logado, a ponte baixada no clique (só o Claude Code), e um oi para testar. */
 function ClaudeStep({ status }: { status: AgentStatus }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const [checking, setChecking] = useState(false);
   const [test, setTest] = useState<TestState>(IDLE_TEST);
   const [failure, setFailure] = useState<string | null>(null);
-  useEffect(() => api.agent.onTurn((e) => setTest((t) => applyTurn(t, e, status.name))), [status.name]);
+  useEffect(() => api.agent.onTurn((e) => setTest((t) => applyTurn(t, e, status.name, locale))), [status.name, locale]);
   const kind = kindOf(status);
-  const claude = agentLine(kind, status.name, programOf(status));
+  const claude = agentLine(kind, status.name, programOf(status), locale);
   // O Gemini fala ACP sozinho (spec #24666): sem a linha da ponte, e ela conta como pronta.
   const needsAdapter = AGENTS[kind].adapter;
   const phase = needsAdapter ? status.adapter.phase : "ready";
@@ -187,7 +188,7 @@ function ClaudeStep({ status }: { status: AgentStatus }) {
       </div>
       {needsAdapter ? (
         <div className="kn-onb-check" data-ok={phase === "ready"}>
-          <span className="kn-onb-check-text">{adapterLine(status)}</span>
+          <span className="kn-onb-check-text">{adapterLine(status, locale)}</span>
           {phase === "missing" || phase === "error" ? (
             <Button variant="primary" onClick={() => void call(() => api.agent.download())} disabled={!claude.ok}>
               {phase === "error" ? t("onb.claude.retry") : t("onb.claude.download")}
@@ -578,7 +579,7 @@ function DoneStep({ status, settings }: { status: AgentStatus; settings: AppSett
   }, []);
   const color = catColorOptions().find((c) => c.id === settings.kiwicat.cor) ?? catColorOptions()[0]!;
   const rows: [string, string][] = [
-    [t("onb.card.color"), color.label],
+    [t("onb.card.color"), t(`agent.cat.color.${color.id}` as TextKey)],
     [t("onb.card.tone"), toneSummary(status.instructions)],
     [t("onb.card.projects"), projects === null ? "…" : projectsSummary(projects)],
     [t("onb.card.shortcut"), shortcutSummary(status.controlShortcut, holdName(settings.shortcuts.agent))],
