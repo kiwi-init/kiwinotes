@@ -41,7 +41,7 @@ import { readNoteModel } from "../agent/note-model.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { HomeChanges } from "./home.ts";
-import { FalaPlayer, ligarFalaPlayer } from "../agent/fala-player.ts";
+import { ligarVozDoGato } from "./cat-voice-output.ts";
 import { CatVoicePreview, createCatVoicePreview } from "./cat-voice-preview.ts";
 import { saidaHelper } from "./speech-output.ts";
 import { hubFrame, type IntroLayout, introWindow, parseHubFrame, type Rect } from "../shared/intro-layout.ts";
@@ -171,18 +171,25 @@ export function startCatVoiceOutput(sidecar: Sidecar): void {
     },
     { log },
   );
-  // `midia` fica para o T26830: abaixar os outros apps sem abaixar o gato (#17697), nunca o volume do Mac.
-  // A saída é uma só: a fala do gato para o Ouvir antes de tocar, e o Ouvir espera a fala do gato acabar.
-  let preview: CatVoicePreview | undefined;
-  const player = new FalaPlayer({ sintese: catVoice.voice, saida, antesDeFalar: () => preview?.parar(), log });
-  const off = ligarFalaPlayer(player, { agent: stores.agent, helper: { on: (t, fn) => sidecar.on(t, fn) }, log });
-  preview = createCatVoicePreview(catVoice, { saida, falaDoGato: () => player.falaAtual, log });
-  const p = preview;
+  // `midia` fica para o T26830: abaixar os outros apps sem abaixar o gato (#17697).
+  const voz = ligarVozDoGato({
+    sintese: catVoice.voice,
+    saida,
+    agent: stores.agent,
+    helper: { on: (t, fn) => sidecar.on(t, fn) },
+    // A boca do gato (T28675): o nível vai às janelas e ao gato do overlay, como no headless.
+    naTela: (e) => {
+      for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.speech", payload: e });
+      catOverlay?.overlay.speech(e);
+    },
+    previa: (falaDoGato) => createCatVoicePreview(catVoice, { saida, falaDoGato, log }),
+    log,
+  });
+  const p = voz.previa!;
   catVoiceOutput = {
     preview: p,
     stop: () => {
-      p.parar();
-      off();
+      voz.stop();
       saida.dispose();
     },
   };
