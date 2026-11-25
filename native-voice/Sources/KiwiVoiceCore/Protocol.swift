@@ -3,6 +3,8 @@
 // Entra:
 //   {"type":"load","modelDir":"…","refAudio":"…","refText":"…","language":"portuguese","cacheMB":512}
 //   {"type":"speak","id":"t1","text":"…"}   uma frase por vez; uma nova espera a anterior acabar
+//   {"type":"speak","id":"t1","text":"…","voice":{"refAudio":"…","refText":"…","language":"english"}}
+//                                           a frase numa voz do catálogo (T27778); sem `voice`, a do `load`
 //   {"type":"cancel","id":"t1"}             corta a geração no próximo passo do codec, ou tira da fila
 //   {"type":"warmup"}                       uma frase curta, jogada fora: compila os kernels Metal
 //   {"type":"quit"}
@@ -14,9 +16,21 @@
 
 import Foundation
 
+/// A voz de uma frase (T27778): o áudio de referência, o texto dele e o idioma. O modelo é o mesmo para todas.
+public struct VoiceRef: Equatable, Sendable {
+    public let refAudio: String
+    public let refText: String
+    public let language: String
+    public init(refAudio: String, refText: String, language: String) {
+        self.refAudio = refAudio
+        self.refText = refText
+        self.language = language
+    }
+}
+
 public enum VoiceCommand: Equatable, Sendable {
     case load(modelDir: String, refAudio: String, refText: String, language: String, cacheMB: Int)
-    case speak(id: String, text: String)
+    case speak(id: String, text: String, voice: VoiceRef? = nil)
     case cancel(id: String)
     case warmup
     case quit
@@ -43,7 +57,14 @@ public func decodeCommand(_ line: String) throws -> VoiceCommand {
         let cache = (obj["cacheMB"] as? NSNumber)?.intValue ?? defaultCacheMB
         return .load(modelDir: try str("modelDir"), refAudio: try str("refAudio"), refText: try str("refText"),
                      language: (obj["language"] as? String) ?? "portuguese", cacheMB: cache > 0 ? cache : defaultCacheMB)
-    case "speak": return .speak(id: try str("id"), text: try str("text"))
+    case "speak":
+        var voice: VoiceRef?
+        if let v = obj["voice"] {
+            guard let v = v as? [String: Any], let audio = v["refAudio"] as? String, !audio.isEmpty,
+                  let text = v["refText"] as? String, !text.isEmpty else { throw VoiceProtocolError.missing("voice") }
+            voice = VoiceRef(refAudio: audio, refText: text, language: (v["language"] as? String) ?? "portuguese")
+        }
+        return .speak(id: try str("id"), text: try str("text"), voice: voice)
     case "cancel": return .cancel(id: try str("id"))
     case "warmup": return .warmup
     case "quit": return .quit
@@ -93,10 +114,10 @@ public func int16Base64(_ samples: [Int16]) -> String {
 
 /// A fila das frases: uma toca por vez, na ordem; o `cancel` tira a que ainda não começou.
 public struct SpeakQueue: Sendable {
-    public private(set) var pending: [(id: String, text: String)] = []
+    public private(set) var pending: [(id: String, text: String, voice: VoiceRef?)] = []
     public init() {}
-    public mutating func push(id: String, text: String) { pending.append((id, text)) }
-    public mutating func next() -> (id: String, text: String)? { pending.isEmpty ? nil : pending.removeFirst() }
+    public mutating func push(id: String, text: String, voice: VoiceRef? = nil) { pending.append((id, text, voice)) }
+    public mutating func next() -> (id: String, text: String, voice: VoiceRef?)? { pending.isEmpty ? nil : pending.removeFirst() }
     /// Verdadeiro se a frase estava na fila (e saiu dela).
     public mutating func remove(id: String) -> Bool {
         guard let i = pending.firstIndex(where: { $0.id == id }) else { return false }

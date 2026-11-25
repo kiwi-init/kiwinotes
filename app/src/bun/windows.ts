@@ -136,7 +136,13 @@ export const appSlowLog = slowLog();
  * A voz do gato (T26729): o modelo baixado no clique e o processo `kiwi-voice` que o usa. O player (T26734) fala pelo
  * `catVoice.voice`. Sem o clique, nada baixa; no headless, nada baixa nunca.
  */
-export const catVoice = createCatVoice({ modelsDir: stores.modelsDir, bin: voicePath(PATHS.VIEWS_FOLDER), download: process.env.KIWI_HEADLESS !== "1" });
+export const catVoice = createCatVoice({
+  modelsDir: stores.modelsDir,
+  bin: voicePath(PATHS.VIEWS_FOLDER),
+  download: process.env.KIWI_HEADLESS !== "1",
+  // A voz escolhida nos Ajustes (T27778): lida no começo de cada fala, então a troca vale da próxima em diante.
+  selected: async () => (await stores.settings.load()).kiwicat.voz,
+});
 const capabilities = uiCapabilities({
   introDone: () => {
     for (const fn of introDoneListeners) fn();

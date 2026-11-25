@@ -34,6 +34,8 @@ actor Engine {
     var refAudio: MaterializedArray?
     var refText = ""
     var language = "portuguese"
+    /// As vozes do catálogo já lidas (T27778), pelo caminho do áudio: trocar de voz não relê o arquivo nem o modelo.
+    var refs: [String: MaterializedArray] = [:]
     var queue = SpeakQueue()
     var current: (id: String, task: Task<Void, Never>)?
 
@@ -43,8 +45,8 @@ actor Engine {
         switch cmd {
         case let .load(modelDir, ref, text, lang, cacheMB):
             await load(modelDir: modelDir, ref: ref, text: text, language: lang, cacheMB: cacheMB)
-        case let .speak(id, text):
-            queue.push(id: id, text: text)
+        case let .speak(id, text, voice):
+            queue.push(id: id, text: text, voice: voice)
             pump()
         case let .cancel(id):
             if current?.id == id { current?.task.cancel() } // o `cancelled` sai quando a geração para
@@ -66,6 +68,7 @@ actor Engine {
             let m = try await TTS.loadModel(modelRepo: modelDir)
             let (_, audio) = try loadAudioArray(from: URL(fileURLWithPath: ref), sampleRate: m.sampleRate)
             model = m; refAudio = audio; refText = text; self.language = language
+            refs = [ref: audio]
             out.send(.ready(sampleRate: m.sampleRate, loadMs: Int(Date().timeIntervalSince(t0) * 1000)))
         } catch {
             out.send(.error(id: nil, message: "load: \(error)"))
@@ -78,12 +81,29 @@ actor Engine {
             if !next.id.isEmpty { out.send(.error(id: next.id, message: "not loaded")) }
             return pump()
         }
-        let (id, text, refText, language, out) = (next.id, next.text, self.refText, self.language, self.out)
+        // A voz da frase (T27778): a do `speak`, lida uma vez por arquivo; sem ela, a do `load`. Um áudio que não abre é o
+        // erro só desta frase.
+        var (vAudio, vText, vLanguage): (MaterializedArray, String, String) = (refAudio, self.refText, self.language)
+        if let v = next.voice {
+            if let cached = refs[v.refAudio] { vAudio = cached }
+            else {
+                do {
+                    let (_, audio) = try loadAudioArray(from: URL(fileURLWithPath: v.refAudio), sampleRate: model.sampleRate)
+                    refs[v.refAudio] = audio
+                    vAudio = audio
+                } catch {
+                    if !next.id.isEmpty { out.send(.error(id: next.id, message: "voice: \(error)")) }
+                    return pump()
+                }
+            }
+            (vText, vLanguage) = (v.refText, v.language)
+        }
+        let (id, text, out, voiceAudio, refText, language) = (next.id, next.text, self.out, vAudio, vText, vLanguage)
         let task = Task {
             let t0 = Date()
             var seq = 0
             do {
-                for try await ev in model.generateStream(text: text, voice: nil, refAudio: refAudio, refText: refText,
+                for try await ev in model.generateStream(text: text, voice: nil, refAudio: voiceAudio, refText: refText,
                                                          language: language, generationParameters: model.defaultGenerationParameters,
                                                          streamingInterval: 0.5) {
                     try Task.checkCancellation()

@@ -104,7 +104,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: "prisma-original", posicao: "center", tamanho: 1 }, firstRun: "done" };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: "prisma-original", posicao: "center", tamanho: 1, voz: "en-a" }, firstRun: "done" };
   let t = 0;
   return {
     calls,
@@ -280,12 +280,12 @@ describe("contrato 1.0.0 (T1192)", () => {
     for (const cor of ["#ffffff", "branco", "", null, 1, "padrao", "agente", "azul"])
       expect(await directInvoke(caps, "settings.set", { kiwicat: { cor } })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect(await directInvoke(caps, "settings.set", { kiwicat: { overlay: false } })).toMatchObject({ ok: true });
-    expect(await directInvoke(caps, "settings.set", { kiwicat: { cor: "soul-claro" } })).toMatchObject({ ok: true, value: { kiwicat: { show: true, overlay: false, cor: "soul-claro", posicao: "center", tamanho: 1 } } });
+    expect(await directInvoke(caps, "settings.set", { kiwicat: { cor: "soul-claro" } })).toMatchObject({ ok: true, value: { kiwicat: { show: true, overlay: false, cor: "soul-claro", posicao: "center", tamanho: 1, voz: "en-a" } } });
     expect(await directInvoke(caps, "settings.set", { kiwicat: { cor: "prisma-original" } })).toMatchObject({ ok: true, value: { kiwicat: { cor: "prisma-original" } } });
     // A posição e o tamanho (spec #12949): uma das seis, e de 0,6 a 1,6, guardado em passos de 0,1; o resto fica.
-    for (const kiwicat of [{ posicao: "meio" }, { posicao: 1 }, { tamanho: 0.5 }, { tamanho: 1.7 }, { tamanho: "1" }, { tamanho: Number.NaN }])
+    for (const kiwicat of [{ posicao: "meio" }, { posicao: 1 }, { tamanho: 0.5, voz: "en-a" }, { tamanho: 1.7, voz: "en-a" }, { tamanho: "1" }, { tamanho: Number.NaN }])
       expect(await directInvoke(caps, "settings.set", { kiwicat })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
-    expect(await directInvoke(caps, "settings.set", { kiwicat: { posicao: "bottom-left", tamanho: 1.33 } })).toMatchObject({ ok: true, value: { kiwicat: { cor: "prisma-original", posicao: "bottom-left", tamanho: 1.3 } } });
+    expect(await directInvoke(caps, "settings.set", { kiwicat: { posicao: "bottom-left", tamanho: 1.33, voz: "en-a" } })).toMatchObject({ ok: true, value: { kiwicat: { cor: "prisma-original", posicao: "bottom-left", tamanho: 1.3, voz: "en-a" } } });
   });
 
   test("settings: a largura da nota, em px dentro dos limites (T5299)", async () => {

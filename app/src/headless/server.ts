@@ -219,17 +219,21 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     audioInputs: async () => headlessAudioInputs((await stores.settings.load()).microphone),
     precise: () => session?.precise.status() ?? null,
     // A voz do gato (T26729): o headless não vai à internet. Só o que já estiver no KIWI_MODELS_DIR conta, ou, com a
-    // chave de teste `KIWI_CAT_VOICE_MANIFEST` (T26736), o que um servidor falso e local serve.
-    catVoice: await (async () => {
+    // chave de teste `KIWI_CAT_VOICE_MANIFEST` (T26736), o que um servidor falso e local serve. O Ouvir (T27778) toca
+    // numa saída muda: nada sai no alto-falante.
+    ...(await (async () => {
       const { createCatVoice, headlessCatVoiceSource } = await import("../bun/cat-voice-model.ts");
+      const { createCatVoicePreview, saidaMuda } = await import("../bun/cat-voice-preview.ts");
       const test = headlessCatVoiceSource(process.env);
-      return createCatVoice({
+      const pair = createCatVoice({
         modelsDir: stores.modelsDir,
         bin: (await import("../bun/voice-process.ts")).voicePath(path.join(data, "views")),
         download: test !== null,
+        selected: async () => (await stores.settings.load()).kiwicat.voz,
         ...(test ?? {}),
-      }).model;
-    })(),
+      });
+      return { catVoice: pair.model, catVoicePreview: createCatVoicePreview(pair, { saida: saidaMuda() }) };
+    })()),
     ocr: stores.ocr,
     textIndex: stores.textIndex,
     semanticEngine: stores.semantic,

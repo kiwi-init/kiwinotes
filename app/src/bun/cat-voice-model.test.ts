@@ -1,16 +1,18 @@
-// A voz do gato baixada no clique (T26729), contra um servidor HTTP falso: nada vai ao Hugging Face. O modelo e a voz
-// daqui são inventados (arquivos pequenos com bytes de mentira); o manifesto de verdade só é conferido por fora.
+// A voz do gato baixada no clique (T26729), contra um servidor HTTP falso: nada vai ao Hugging Face. O modelo e as vozes
+// daqui são inventados (arquivos pequenos com bytes de mentira); o manifesto de verdade só é conferido por fora. O
+// catálogo (T27778): duas vozes inventadas no lugar da en-a e da en-b, e a pt-a "em breve".
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type { Fetcher, ModelManifest } from "../notes/semantic/model.ts";
 import { modelDir } from "../notes/semantic/model.ts";
 import { tempDir } from "../../test/tmp.ts";
 import type { CatVoiceStatus } from "../shared/ui-contract.ts";
-import { CAT_VOICE_REF, CatVoiceModel, type CatVoiceRef, headlessCatVoiceSource, QWEN3_TTS } from "./cat-voice-model.ts";
+import { CAT_VOICE_IDS, CAT_VOICES, type CatVoiceId } from "../shared/cat-voices.ts";
+import { CAT_VOICE_REFS, CatVoiceModel, type CatVoiceRef, headlessCatVoiceSource, QWEN3_TTS } from "./cat-voice-model.ts";
 import { spawnVoice, VoiceProcess } from "./voice-process.ts";
 
 const bytes = (n: number, seed: number) => Buffer.from(Array.from({ length: n }, (_, i) => (i * 31 + seed) % 251));
@@ -21,7 +23,10 @@ const FILES: Record<string, Buffer> = {
   "/exemplo/modelo-voz/resolve/rev-exemplo/config.json": bytes(300, 1),
   "/exemplo/modelo-voz/resolve/rev-exemplo/pesos/model.safetensors": bytes(200_000, 2),
   "/vozes/ana-exemplo.wav": bytes(50_000, 3),
+  "/vozes/bia-exemplo.wav": bytes(40_000, 4),
 };
+/** O modelo (200_300), a Ana (50_000) e a Bia (40_000). */
+const TOTAL = 290_300;
 const MODEL: ModelManifest = {
   id: "modelo-voz-exemplo",
   repo: "exemplo/modelo-voz",
@@ -71,15 +76,20 @@ afterEach(() => {
 });
 
 const base = () => `http://127.0.0.1:${server.port}`;
-const VOICE = (): CatVoiceRef => ({
+const wav = (nome: string, text: string, preview?: string[]): CatVoiceRef => ({
   manifest: {
-    id: "voz-exemplo",
+    id: `voz-${nome}`,
     repo: "-",
     revision: "v1",
-    files: [{ name: "ana-exemplo.wav", size: 50_000, sha256: sha(FILES["/vozes/ana-exemplo.wav"]!), url: `${base()}/vozes/ana-exemplo.wav` }],
+    files: [{ name: `${nome}.wav`, size: FILES[`/vozes/${nome}.wav`]!.length, sha256: sha(FILES[`/vozes/${nome}.wav`]!), url: `${base()}/vozes/${nome}.wav` }],
   },
-  text: "Oi, eu sou a Ana, uma voz inventada para os testes.",
+  text,
+  language: "english",
+  ...(preview ? { preview } : {}),
 });
+const VOICE = () => wav("ana-exemplo", "Oi, eu sou a Ana, uma voz inventada para os testes.", ["Uma frase de exemplo."]);
+const VOICE_B = () => wav("bia-exemplo", "Oi, eu sou a Bia, outra voz inventada.");
+const VOICES = () => ({ "en-a": VOICE(), "en-b": VOICE_B(), "pt-a": null });
 /** O fetch do app, mas o huggingface.co vira o servidor falso. */
 const fakeFetch: Fetcher = (url, init) => fetch(url.replace("https://huggingface.co", base()), init?.signal ? { signal: init.signal } : {});
 
@@ -91,7 +101,7 @@ function make(over: Partial<ConstructorParameters<typeof CatVoiceModel>[0]> = {}
   const m = new CatVoiceModel({
     modelsDir,
     manifest: MODEL,
-    voice: VOICE(),
+    voices: VOICES(),
     fetch: fakeFetch,
     warm: async () => {
       warms++;
@@ -110,14 +120,27 @@ function make(over: Partial<ConstructorParameters<typeof CatVoiceModel>[0]> = {}
 describe("CatVoiceModel", () => {
   test("começa desligado, mostra o tamanho e ler o estado não baixa nada", async () => {
     const { m } = make();
-    expect(await m.refresh()).toEqual({ phase: "off", size: 250_300, voice: true });
+    expect(await m.refresh()).toEqual({
+      phase: "off",
+      size: TOTAL,
+      voice: false,
+      model: false,
+      voices: [
+        { id: "en-a", state: "missing", size: 50_000 },
+        { id: "en-b", state: "missing", size: 40_000 },
+        { id: "pt-a", state: "soon" },
+      ],
+      selected: "en-a",
+      preview: null,
+    });
     expect(requests).toEqual([]);
   });
 
-  test("o clique baixa o modelo e a voz, confere, aquece e fica pronto", async () => {
+  test("o clique baixa o modelo e todas as vozes, confere, aquece e fica pronto", async () => {
     const { m, modelsDir, seen, warms } = make();
     await m.download();
-    expect(m.status()).toEqual({ phase: "ready", size: 250_300, voice: true });
+    expect(m.status()).toMatchObject({ phase: "ready", size: TOTAL, voice: true, model: true });
+    expect(m.status().voices.map((v) => v.state)).toEqual(["ready", "ready", "soon"]);
     expect(warms()).toBe(1);
     // O andamento sobe até o total, e o aquecimento vem depois do download.
     const phases = seen.map((s) => s.phase);
@@ -125,8 +148,8 @@ describe("CatVoiceModel", () => {
     expect(phases.slice(-2)).toEqual(["warming", "ready"]);
     const done = seen.filter((s) => s.phase === "downloading").map((s) => s.done!);
     expect(done).toEqual([...done].sort((a, b) => a - b));
-    expect(done.at(-1)).toBe(250_300);
-    expect(seen.every((s) => s.phase !== "downloading" || s.total === 250_300)).toBe(true);
+    expect(done.at(-1)).toBe(TOTAL);
+    expect(seen.every((s) => s.phase !== "downloading" || s.total === TOTAL)).toBe(true);
     // A voz veio da URL fixa dela, e o modelo da revisão fixa.
     expect(requests.sort()).toEqual(Object.keys(FILES).sort());
     const a = await m.assets();
@@ -138,7 +161,7 @@ describe("CatVoiceModel", () => {
   test("clicar de novo durante o download não baixa duas vezes", async () => {
     const { m, warms } = make();
     await Promise.all([m.download(), m.download(), m.download()]);
-    expect(requests.length).toBe(3);
+    expect(requests.length).toBe(4);
     expect(warms()).toBe(1);
   });
 
@@ -153,14 +176,92 @@ describe("CatVoiceModel", () => {
     await expect(m.assets()).rejects.toThrow(/não foi baixado/);
   });
 
-  test("o servidor que falha vira erro de download, e o clique seguinte tenta de novo", async () => {
+  test("o servidor que falha no modelo vira erro de download, e o clique seguinte tenta de novo", async () => {
     const { m } = make();
-    quirks["/vozes/ana-exemplo.wav"] = "500";
+    quirks["/exemplo/modelo-voz/resolve/rev-exemplo/config.json"] = "500";
     await m.download();
     expect(m.status()).toMatchObject({ phase: "error", error: "download" });
     quirks = {};
     await m.download();
     expect(m.status().phase).toBe("ready");
+  });
+
+  test("uma voz que falha no download é erro só dela: a outra fica pronta e o gato fala (spec #27531)", async () => {
+    const { m, warms } = make();
+    quirks["/vozes/bia-exemplo.wav"] = "500";
+    await m.download();
+    const s = m.status();
+    expect(s).toMatchObject({ phase: "noVoice", voice: true, model: true });
+    expect(s.error).toBeUndefined();
+    expect(s.voices.slice(0, 2)).toEqual([
+      { id: "en-a", state: "ready", size: 50_000 },
+      { id: "en-b", state: "error", error: "download", size: 40_000 },
+    ]);
+    expect(warms()).toBe(1);
+    expect((await m.assets()).refText).toBe(VOICE().text);
+  });
+
+  test("uma voz com o SHA-256 diferente é erro de hash só dela, e nada dela fica no disco", async () => {
+    const { m, modelsDir } = make();
+    quirks["/vozes/ana-exemplo.wav"] = "trocado";
+    await m.download();
+    expect(m.status().voices[0]).toEqual({ id: "en-a", state: "error", error: "hash", size: 50_000 });
+    expect(m.status().voices[1]!.state).toBe("ready");
+    const dir = modelDir(modelsDir, VOICE().manifest);
+    expect(existsSync(dir) ? readdirSync(dir).filter((f) => !f.startsWith(".")) : []).toEqual([]);
+    // A escolhida (en-a) quebrou: o gato fala na outra que está no disco.
+    expect((await m.assets()).refText).toBe(VOICE_B().text);
+  });
+
+  test("com o modelo e sem uma voz, o Completar baixa só a voz, sem os pesos de novo", async () => {
+    const { m, seen } = make();
+    quirks["/vozes/bia-exemplo.wav"] = "500";
+    await m.download();
+    expect(m.status().phase).toBe("noVoice");
+    quirks = {};
+    requests = [];
+    seen.length = 0;
+    await m.download();
+    expect(requests).toEqual(["/vozes/bia-exemplo.wav"]);
+    expect(m.status()).toMatchObject({ phase: "ready" });
+    expect(m.status().voices[1]).toEqual({ id: "en-b", state: "ready", size: 40_000 });
+    // O andamento começa do que já está no disco e vai até o total.
+    const done = seen.filter((s) => s.phase === "downloading").map((s) => s.done!);
+    expect(done[0]).toBe(TOTAL - 40_000);
+    expect(done.at(-1)).toBe(TOTAL);
+  });
+
+  test("uma referência apagada numa sessão anterior: o refresh diz noVoice, com o modelo", async () => {
+    const first = make();
+    await first.m.download();
+    rmSync(path.dirname(modelDir(first.modelsDir, VOICE_B().manifest)), { recursive: true, force: true });
+    const again = make({ modelsDir: first.modelsDir });
+    expect(await again.m.refresh()).toMatchObject({ phase: "noVoice", model: true, voice: true });
+    expect(again.m.status().voices[1]!.state).toBe("missing");
+  });
+
+  test("a escolhida vem dos Ajustes, e o assets segue a escolha a cada leitura", async () => {
+    let escolha: CatVoiceId = "en-b";
+    const { m } = make({ selected: () => escolha });
+    await m.download();
+    expect(m.status().selected).toBe("en-b");
+    expect((await m.assets()).refText).toBe(VOICE_B().text);
+    escolha = "en-a";
+    expect((await m.assets()).refText).toBe(VOICE().text);
+    // A "em breve" escolhida (ou um valor estranho) cai numa voz que está no disco.
+    escolha = "pt-a";
+    expect((await m.assets()).refText).toBe(VOICE().text);
+    expect((await m.voiceAssets("en-b")).language).toBe("english");
+    await expect(m.voiceAssets("pt-a")).rejects.toThrow(/ainda não tem referência/);
+  });
+
+  test("o setPreview sai no status, para a linha mostrar o que está tocando", async () => {
+    const { m, seen } = make();
+    m.setPreview("en-b");
+    expect(m.status().preview).toBe("en-b");
+    expect(seen.at(-1)!.preview).toBe("en-b");
+    m.setPreview(null);
+    expect(m.status().preview).toBeNull();
   });
 
   test("cancelar no meio para o download, apaga o .part e não aquece", async () => {
@@ -180,17 +281,18 @@ describe("CatVoiceModel", () => {
     quirks = {};
     requests = [];
     await m.download();
-    expect(requests.sort()).toEqual(["/exemplo/modelo-voz/resolve/rev-exemplo/pesos/model.safetensors", "/vozes/ana-exemplo.wav"]);
+    expect(requests.sort()).toEqual(["/exemplo/modelo-voz/resolve/rev-exemplo/pesos/model.safetensors", "/vozes/ana-exemplo.wav", "/vozes/bia-exemplo.wav"]);
     expect(m.status().phase).toBe("ready");
   });
 
-  test("sem a voz escolhida, o modelo baixa e o estado fica noVoice, sem aquecer", async () => {
-    const { m, warms } = make({ voice: null });
+  test("sem nenhuma voz no catálogo, o modelo baixa e o estado fica noVoice, sem aquecer", async () => {
+    const { m, warms } = make({ voices: {} });
     expect(m.status()).toMatchObject({ size: 200_300, voice: false });
+    expect(m.status().voices.map((v) => v.state)).toEqual(["soon", "soon", "soon"]);
     await m.download();
     expect(m.status().phase).toBe("noVoice");
     expect(warms()).toBe(0);
-    await expect(m.assets()).rejects.toThrow(/ainda não foi escolhida/);
+    await expect(m.assets()).rejects.toThrow(/nenhuma voz do gato tem referência/);
     expect(await m.refresh()).toMatchObject({ phase: "noVoice" });
   });
 
@@ -237,12 +339,14 @@ describe("CatVoiceModel", () => {
     expect(again.warms()).toBe(0);
   });
 
-  test("remover derruba o processo e apaga o modelo e a voz", async () => {
+  test("remover derruba o processo e apaga o modelo e todas as vozes", async () => {
     const { m, modelsDir, stops } = make();
     await m.download();
     await m.remove();
     expect(stops()).toBe(1);
     expect(m.status().phase).toBe("off");
+    expect(m.status().voices.map((v) => v.state)).toEqual(["missing", "missing", "soon"]);
+    expect(readdirSync(modelsDir)).toEqual([]);
     expect(existsSync(path.dirname(modelDir(modelsDir, MODEL)))).toBe(false);
     expect(await m.refresh()).toMatchObject({ phase: "off" });
   });
@@ -265,7 +369,7 @@ describe("CatVoiceModel", () => {
       expect(m.status().phase).toBe("ready");
       const cmds = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
       expect(cmds.map((c) => c.type)).toEqual(["load", "warmup"]);
-      expect(cmds[0]).toMatchObject({ modelDir: (await m.assets()).modelDir, refText: VOICE().text, cacheMB: 512 });
+      expect(cmds[0]).toMatchObject({ modelDir: (await m.assets()).modelDir, refText: VOICE().text, language: "english", cacheMB: 512 });
       // Remover derruba o processo.
       await m.remove();
       expect(voice.running).toBe(false);
@@ -287,12 +391,17 @@ describe("a chave de teste do headless (T26736)", () => {
   });
 
   test("com a chave, o modelo e a voz inventados vêm do servidor falso, e o download funciona", async () => {
-    const src = headlessCatVoiceSource({ KIWI_CAT_VOICE_MANIFEST: write({ host: base(), model: MODEL, voice: VOICE() }) })!;
+    const src = headlessCatVoiceSource({ KIWI_CAT_VOICE_MANIFEST: write({ host: base(), model: MODEL, voices: VOICES() }) })!;
     expect(src.manifest).toEqual(MODEL);
     const { m } = make({ ...src, fetch: src.fetch! });
     await m.download();
     expect(m.status().phase).toBe("ready");
     expect(requests.sort()).toEqual(Object.keys(FILES).sort());
+  });
+
+  test("o `voice` de antes (T26736) vale como a en-a sozinha", () => {
+    const src = headlessCatVoiceSource({ KIWI_CAT_VOICE_MANIFEST: write({ host: base(), model: MODEL, voice: VOICE() }) })!;
+    expect(src.voices).toEqual({ "en-a": VOICE() });
   });
 
   test("só um host local, e nenhum pedido sai para outro", async () => {
@@ -318,7 +427,21 @@ describe("o manifesto de verdade", () => {
     expect(total).toBeLessThan(2.1e9);
   });
 
-  test("a voz desenhada ainda não foi escolhida (#26939)", () => {
-    expect(CAT_VOICE_REF).toBeNull();
+  test("o catálogo (spec #27531): en-a e en-b com o WAV do release fixo e o SHA-256; a pt-a ainda em breve", () => {
+    expect(Object.keys(CAT_VOICE_REFS).sort()).toEqual([...CAT_VOICE_IDS].sort());
+    expect(CAT_VOICE_REFS["pt-a"]).toBeNull();
+    for (const id of ["en-a", "en-b"] as const) {
+      const r = CAT_VOICE_REFS[id]!;
+      expect(r.language).toBe(CAT_VOICES[id].language);
+      expect(r.manifest.files.length).toBe(1);
+      const f = r.manifest.files[0]!;
+      expect(f.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(f.size).toBeGreaterThan(100_000);
+      expect(f.url).toBe(`https://github.com/kiwi-init/kiwinotes/releases/download/cat-voices-1/${f.name}`);
+      expect(r.text.length).toBeGreaterThan(20);
+      expect(r.preview!.length).toBeGreaterThan(0);
+    }
+    // Um diretório por voz: apagar ou baixar uma não mexe na outra.
+    expect(new Set(Object.values(CAT_VOICE_REFS).flatMap((r) => (r ? [r.manifest.id] : []))).size).toBe(2);
   });
 });
