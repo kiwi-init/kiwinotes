@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import type { Page } from "playwright-core";
 import { startEnglish } from "./english-check-lib";
+import { settingsTab } from "./ui-page";
 
 // O português que já tem dono: some daqui no PR que o traduz.
 const KNOWN: [string, string][] = [];
@@ -26,7 +27,13 @@ try {
   for (const [i, topic] of topics.entries()) {
     await p.locator(`.kn-prefs-item[data-topic=${topic}]`).click();
     await p.waitForSelector(`.kn-prefs-topic[data-topic=${topic}]`, { timeout: 15000 });
-    await check(p, `${i + 1}-${topic}`);
+    // Cada aba do assunto (spec #31754): a escondida não entra no texto da tela.
+    const tabs = await p.locator(`.kn-prefs-topic[data-topic=${topic}] .kn-prefs-tab[data-tab]`).evaluateAll((els) => els.map((e) => e.getAttribute("data-tab")!));
+    if (!tabs.length) await check(p, `${i + 1}-${topic}`);
+    for (const tab of tabs) {
+      await settingsTab(p, topic, tab);
+      await check(p, `${i + 1}-${topic}-${tab}`);
+    }
   }
 } catch (e) {
   await s.fail(e, page);

@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, settingsTab, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 import { SCROLLBAR_AVOID_GAP as GAP, SCROLLBAR_AVOID_SIDE as SIDE } from "../ui/src/scrollbar";
 
@@ -146,10 +146,18 @@ try {
     for (const topic of topics) {
       await p.click(`.kn-prefs-item[data-topic="${topic}"]`);
       await p.waitForTimeout(150);
-      const areas = await scrollAll(p);
-      if (!areas.length) continue;
-      check(`Configurações › ${topic} (${theme})`, areas);
-      if (topic === "agent") await p.screenshot({ path: join(out, `configuracoes-agente-${theme}.png`) });
+      // Cada aba do assunto (spec #31754); um assunto sem a barra é uma aba só.
+      const tabs = await p.$$eval(`.kn-prefs-topic[data-topic="${topic}"] .kn-prefs-tab[data-tab]`, (els) => els.map((e) => (e as HTMLElement).dataset.tab ?? ""));
+      for (const tab of tabs.length ? tabs : [""]) {
+        if (tab) {
+          await settingsTab(p, topic, tab);
+          await p.waitForTimeout(150);
+        }
+        const areas = await scrollAll(p);
+        if (!areas.length) continue;
+        check(`Configurações › ${topic}${tab ? ` › ${tab}` : ""} (${theme})`, areas);
+        if (topic === "agent" && tab === "general") await p.screenshot({ path: join(out, `configuracoes-agente-${theme}.png`) });
+      }
     }
     if (w.report.problems.length) console.log("problemas:", w.report.problems.slice(0, 3));
     await w.close();

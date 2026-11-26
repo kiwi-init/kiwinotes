@@ -253,12 +253,24 @@ export function HoverLabel({ children }: { children: ReactNode }) {
     if (!label || !button) return;
     const place = () => placeHoverLabel(button, label);
     // Já no lado certo em repouso: fechada do lado errado, a camada passa da borda de quem corta e o deixa rolar (o
-    // cartão do Dicionário corria uns 50 px ao focar ou rolar até o ×, revisão #26404). Escondido (a árvore fechada),
-    // espera o primeiro hover.
-    if (button.getClientRects().length > 0) place();
+    // cartão do Dicionário corria uns 50 px ao focar ou rolar até o ×, revisão #26404). Escondido (a árvore fechada, ou
+    // uma aba dos Ajustes que ainda não abriu, spec #31754), assenta quando aparece: o ResizeObserver avisa quando a
+    // caixa sai do zero. Só nessa passagem: a cada mudança de tamanho, o assentar cortaria a transição do hover.
+    let shown = button.getClientRects().length > 0;
+    if (shown) place();
+    const seen =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            const now = button.getClientRects().length > 0;
+            if (now && !shown) place();
+            shown = now;
+          });
+    seen?.observe(button);
     button.addEventListener("pointerenter", place);
     button.addEventListener("focus", place);
     return () => {
+      seen?.disconnect();
       button.removeEventListener("pointerenter", place);
       button.removeEventListener("focus", place);
     };

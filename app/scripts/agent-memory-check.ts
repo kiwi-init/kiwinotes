@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, settingsTab, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const app = resolve(import.meta.dir, "..");
@@ -113,6 +113,7 @@ try {
   await idle();
   // Ajustes por assunto (spec #11966): a memória está no assunto Agente.
   await p.locator(".kn-prefs-item[data-topic=agent]").click();
+  await settingsTab(p, "agent", "memory"); // a memória fica na aba Memória (spec #31754)
   const box = ".kn-agent-memory";
   await p.waitForFunction((sel) => document.querySelectorAll(`${sel} .kn-memory-fact`).length === 2, box, { timeout: 15000 });
   const first = p.locator(`${box} .kn-memory-fact`).first();
