@@ -6,9 +6,13 @@
 	<string>com.kiwinotes.helper</string>
 	<key>CFBundleName</key>
 	<string>Kiwi Notes Helper</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>O Kiwi Notes usa o microfone quando você dita ou pede para gravar uma reunião. O áudio é transcrito no seu Mac e não sai dele.</string>
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>O Kiwi Notes captura o áudio da reunião só quando você pede. A transcrição acontece no Mac e o áudio é apagado depois de transcrito.</string>
+	<string>O Kiwi Notes captura o áudio da reunião só quando você pede. A transcrição acontece no Mac e o áudio é apagado depois de transcrito.
+
+Kiwi Notes captures meeting audio only when you ask. Transcription happens on your Mac and the audio is deleted once it's transcribed.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O Kiwi Notes usa o microfone quando você dita ou pede para gravar uma reunião, e transcreve tudo no seu Mac.
+
+Kiwi Notes uses the microphone when you dictate or ask it to record a meeting, and transcribes everything on your Mac.</string>
 </dict>
 </plist>

@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { tempDir } from "../test/tmp.ts";
-import { stringsFile, USAGE_KEYS, usageDescriptions, writeUsageStrings } from "./usage-strings.ts";
+import { HELPER_PLIST, helperUsageDescriptions, stringsFile, USAGE_KEYS, usageDescriptions, writeUsageStrings } from "./usage-strings.ts";
 
 const plistJson = (file: string): Record<string, string> => {
   const r = spawnSync("plutil", ["-convert", "json", "-o", "-", file], { encoding: "utf8" });
@@ -30,6 +30,19 @@ test("as duas línguas dizem coisas diferentes, e nenhuma fica vazia", () => {
     expect(pt[k].length).toBeGreaterThan(20);
     expect(en[k]).not.toBe(pt[k]);
   }
+});
+
+test("T31094: o Info.plist embutido no helper tem as frases do catálogo nas duas línguas", () => {
+  // Mudou uma frase no catálogo? Copie o `helperUsageDescriptions()` para o native/Sources/kiwi-helper/Info.plist
+  // (`plutil -replace <chave> -string "<frase>" <plist>`).
+  const helper = plistJson(HELPER_PLIST);
+  const want = helperUsageDescriptions();
+  for (const k of Object.keys(USAGE_KEYS) as (keyof typeof USAGE_KEYS)[]) {
+    expect(helper[k]).toBe(want[k]);
+    expect(helper[k]).toContain(usageDescriptions("pt")[k]);
+    expect(helper[k]).toContain(usageDescriptions("en")[k]);
+  }
+  expect(helper.CFBundleIdentifier).toBe("com.kiwinotes.helper");
 });
 
 test("aspas, barra e quebra de linha saem escapadas", () => {
