@@ -3,7 +3,7 @@
 // programas instalados (`agent.status` com `refresh`), sem baixar nem abrir nada. O texto da tela de aviso é o do
 // ADR 0011, com a empresa do agente escolhido.
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 import type { AgentKind } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
@@ -324,9 +324,22 @@ export function AgentSection({ part }: { part: AgentPart }) {
     ),
   };
 
+  // Com o agente desligado, Voz, Memória e Avançado não teriam linha nenhuma: uma linha leva à aba Geral (lead #31811).
+  const off = !status.enabled && part !== "general" && part !== "kiwi";
+  const openGeneral = (e: MouseEvent<HTMLElement>) =>
+    e.currentTarget.closest(".kn-prefs-topic")?.querySelector<HTMLElement>('.kn-prefs-tab[data-tab="general"]')?.click();
+
   return (
     <Section title={title}>
-      {rows[part]}
+      {off ? (
+        <Row label={part === "voice" ? t("agent.offTab.voice") : part === "memory" ? t("agent.offTab.memory") : t("agent.offTab")}>
+          <button type="button" className="kn-agent-link" onClick={openGeneral}>
+            {t("agent.offTab.open")}
+          </button>
+        </Row>
+      ) : (
+        rows[part]
+      )}
 
       {failure ? <Row label={t("agent.failed")} hint={failure} /> : null}
     </Section>

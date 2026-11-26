@@ -142,6 +142,15 @@ export function stepTab(topic: SettingsTopic, current: string, dir: 1 | -1): str
   return tabs[Math.max(0, Math.min(tabs.length - 1, i + dir))]!.id;
 }
 
+/**
+ * O que a busca por linha (`row=`) destaca: a linha com esse nome, senão a seção. A linha vem antes porque, com as abas,
+ * uma seção pode ter o nome de uma linha dela (Agente › Memória, #31832).
+ */
+export function pickNamed<T>(rows: Iterable<T>, sections: Iterable<T>, text: (e: T) => string | null | undefined, name: string): T | undefined {
+  const find = (list: Iterable<T>) => [...list].find((e) => text(e)?.trim() === name);
+  return find(rows) ?? find(sections);
+}
+
 /** A última aba aberta de cada assunto, no `localStorage` da janela, como o último assunto. */
 export const lastTabKey = (topic: SettingsTopic) => `kn-settings-tab:${topic}`;
 

@@ -146,6 +146,11 @@ export const enAgent: { readonly [K in keyof typeof ptAgent]: Entry } = {
   "agent.test.input": "Test request",
   "agent.test.prompt": "Say hi in one sentence.",
   "agent.failed": "Didn't work",
+  // A aba do Agente vazia com ele desligado (T31765, lead #31811).
+  "agent.offTab.voice": "Turn on the agent in the General tab for Kiwi to speak.",
+  "agent.offTab": "Turn on the agent in the General tab to use these settings.",
+  "agent.offTab.memory": "Turn on the agent in the General tab for memory, instructions and routines.",
+  "agent.offTab.open": "Open the General tab",
   "agent.saveFailed": "Couldn't save. Try again.",
   "agent.consent.goesTo": "What goes to {name}",
   "agent.consent.never": "What never goes",
