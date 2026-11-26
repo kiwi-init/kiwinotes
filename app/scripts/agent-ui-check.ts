@@ -594,6 +594,7 @@ async function doubtReady(data: string, env: Record<string, string>): Promise<vo
     { click: `${activity} .kn-activity-doubt button:has-text('É segredo')`, name: "responde depois: é segredo" },
     { expectText: `${activity} .kn-activity-doubt`, text: "Você disse que é segredo.", name: "a resposta fica" },
     { click: ".kn-prefs-item[data-topic=agent]", name: "as respostas ficam no assunto Agente (#11966)" },
+    { click: ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=memory]", name: "na aba Memória (spec #31754)" },
     { expectCount: `${answers} .kn-row`, count: 4, name: "a lista tem as quatro respostas" },
     { screenshot: "4-respostas.png", selector: answers },
     { click: `${answers} .kn-row:first-child button:has-text('Desfazer')`, name: "desfaz uma resposta" },
@@ -604,12 +605,14 @@ async function doubtReady(data: string, env: Record<string, string>): Promise<vo
 
 /** Os roteiros da linha do aviso (spec #9839), com o aviso falso (`KIWI_FAKE_NOTICES`): nada chama o macOS. */
 const NOTICE_ROW = ".kn-row:has(.kn-row-label:text-is('Avisar quando o agente esperar uma resposta'))";
-const AGENT_SECTION = ".kn-section:has(h2:text-is('Agente'))";
+// O aviso fica na aba Kiwi do Agente (spec #31754): o print é a seção dela.
+const AGENT_SECTION = ".kn-prefs-tabpanel[data-tab=kiwi] .kn-section";
 function noticeScript(denied: boolean): string {
   const open = [
     { waitFor: ".kn-tab", name: "o hub abre" },
     { click: ".kn-tab:has-text('Configurações')" },
     { click: ".kn-prefs-item[data-topic=agent]", name: "o assunto agent da barra lateral (#11966)" },
+    { click: ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=kiwi]", name: "a aba Kiwi (spec #31754)" },
     { waitFor: NOTICE_ROW, timeout: 10000, name: "a linha do aviso, com o agente ligado" },
     // A troca de aba anima: o print espera ela terminar.
     { wait: 1000 },

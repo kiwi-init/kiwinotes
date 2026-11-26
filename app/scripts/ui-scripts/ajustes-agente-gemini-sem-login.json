@@ -77,11 +77,11 @@
       "count": 0,
       "name": "ligado com o Gemini, sem a linha do adaptador"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "waitFor": ".kn-agent-test",
       "name": "o Testar aparece sem baixar nada"
     },
-    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "click": ".kn-agent-test button:has-text('Testar')",
       "name": "manda o pedido de teste ao Gemini falso"

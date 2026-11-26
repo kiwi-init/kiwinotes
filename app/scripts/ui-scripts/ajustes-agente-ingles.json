@@ -11,6 +11,7 @@
     { "expectText": ".kn-row:has(.kn-row-label:text-is('Adapter')) .kn-row-hint", "text": "downloaded", "name": "o adaptador pronto" },
     { "waitFor": ".kn-row:has(.kn-row-label:text-is('Model')) select", "name": "o Modelo" },
     { "waitFor": ".kn-row:has(.kn-row-label:text-is('Saver mode'))", "name": "o modo econômico" },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=kiwi]", "name": "a aba Kiwi (spec #31754)" },
     { "waitFor": ".kn-row:has(.kn-row-label:text-is(\"Kiwi's color\"))", "name": "a cor do Kiwi" },
     { "expectCount": ".kn-row:has(.kn-row-label:text-is(\"Kiwi's color\")) [role=radio][aria-label='Original Prism']", "count": 1, "name": "as paletas em inglês" },
     { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=voice]", "name": "a aba Voz (spec #31754)" },
