@@ -245,6 +245,26 @@ describe("a fala em inglês (T31029, harry #31028)", () => {
     expect(frasesComLingua("OK. I saved the note.").map((f) => f.lingua)).toEqual(["en", "en"]);
   });
 
+  test("frações simples e a meia-noite e meia (warm-newt #31080)", () => {
+    expect(textoParaFala("Mix 1/2 cup and 3/4 cup, 2/3 of it.", "en")).toBe("Mix one half cup and three quarters cup, two thirds of it.");
+    expect(textoParaFala("It ends at 0:30.", "en")).toBe("It ends at twelve thirty A M.");
+    expect(textoParaFala("See you on 4/3.", "en")).toBe("See you on April third.");
+  });
+
+  test("um número enorme nunca derruba a fala, em nenhum formato e em nenhuma língua (warm-newt #31080)", () => {
+    expect(textoParaFala("The total is $1,000,000,000,000 now.", "en")).toBe("The total is one zero zero zero zero zero zero zero zero zero zero zero zero dollars now.");
+    expect(textoParaFala("O total é R$ 1.234.567.890.123 agora.", "pt")).toBe("O total é um dois três quatro cinco seis sete oito nove zero um dois três reais agora.");
+    expect(textoParaFala("O total é US$ 1.234.567.890.123 agora.", "pt")).toEndWith("dólares agora.");
+    const enorme = ["1234567890123", "1,234,567,890,123", "1.234.567.890.123", "99999999999999999999"];
+    const formatos = ["$#", "US$ #", "R$ #", "€#", "#%", "#°C", "# km", "# GB", "-#", "#.5", "#,5", "#st", "#º", "#h", "# x 2", "## de", "#-#"];
+    for (const n of enorme)
+      for (const f of formatos)
+        for (const lingua of ["pt", "en"] as const) {
+          const texto = `Total ${f.replaceAll("#", n)} hoje.`;
+          expect(() => textoParaFala(texto, lingua), `${lingua}: ${texto}`).not.toThrow();
+        }
+  });
+
   test("uma abreviação com ponto não troca a língua no meio da frase", () => {
     expect(frasesParaFala("Call Dr. Ana at 9am.")).toEqual(["Call doctor Ana at nine A M."]);
   });

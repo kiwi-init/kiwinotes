@@ -76,6 +76,8 @@ function numero(escrito: string, fem = false): string {
 const comDe = (s: string) => (/(milhão|milhões|bilhão|bilhões)$/.test(s) ? `${s} de` : s);
 
 function dinheiro(inteiro: string, centavos: string | undefined): string {
+  // Longo demais para ler inteiro (mais de 12 dígitos): dígito por dígito, sem perder a fala (T31029).
+  if (inteiro.replace(/\./g, "").length > 12) return `${numero(inteiro)} reais`;
   const n = Number(inteiro.replace(/\./g, ""));
   const c = centavos ? Number(centavos.padEnd(2, "0").slice(0, 2)) : 0;
   const reais = n ? `${comDe(porExtenso(n))} ${n === 1 ? "real" : "reais"}` : "";
@@ -232,6 +234,7 @@ function emPortugues(texto: string): string {
   // Dinheiro: "R$ 1.234,50", "R$12", "US$ 30".
   t = t.replace(new RegExp(String.raw`(-)?R\$\s?(${N})(?:,(\d{1,2}))?`, "g"), (_, menos: string | undefined, i: string, c?: string) => `${menos ? "menos " : ""}${dinheiro(i, c)}`);
   t = t.replace(new RegExp(String.raw`US\$\s?(${N})(?:,(\d{1,2}))?`, "g"), (_, i: string, c?: string) => {
+    if (i.replace(/\./g, "").length > 12) return `${numero(i)} dólares`;
     const n = Number(i.replace(/\./g, ""));
     const cents = c ? Number(c.padEnd(2, "0")) : 0;
     return `${comDe(porExtenso(n))} ${n === 1 ? "dólar" : "dólares"}${cents ? ` e ${porExtenso(cents)} ${cents === 1 ? "centavo" : "centavos"}` : ""}`;

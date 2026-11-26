@@ -84,7 +84,10 @@ const CURRENCY: Record<string, [string, string]> = {
 function money(symbol: string, int: string, cents: string | undefined, scale: string | undefined): string {
   const [one, many] = CURRENCY[symbol]!;
   if (scale) return `${number(`${int}${cents ? `.${cents}` : ""}`)} ${scale} ${many}`;
-  const n = Number(int.replace(/,/g, ""));
+  const clean = int.replace(/,/g, "");
+  // Longo demais para ler inteiro: dígito por dígito, e a moeda depois (harry não perde a fala por um valor enorme).
+  if (clean.length > 12) return `${number(int)} ${many}`;
+  const n = Number(clean);
   const c = cents ? Number(cents.padEnd(2, "0").slice(0, 2)) : 0;
   const whole = n ? `${numberWords(n)} ${n === 1 ? one : many}` : "";
   const sub = c ? `${numberWords(c)} ${c === 1 ? "cent" : "cents"}` : "";
@@ -104,12 +107,20 @@ function slashDate(a: number, b: number, year?: number): string | null {
   return a > 12 ? date(b, a, year) : date(a, b, year);
 }
 
+const DENOMINATORS: Record<number, [string, string]> = { 2: ["half", "halves"], 3: ["third", "thirds"], 4: ["quarter", "quarters"] };
+
+/** "one half", "two thirds", "three quarters". */
+function fraction(a: number, b: number): string {
+  const [one, many] = DENOMINATORS[b]!;
+  return `${ONES[a]} ${a === 1 ? one : many}`;
+}
+
 /** A hora em 12 horas, como se fala: "two thirty PM", "nine oh five", "noon", "midnight", "nine o'clock". */
 function time(h: number, m: number, ampm?: string): string | null {
   if (h > 23 || m > 59 || (ampm && (h < 1 || h > 12))) return null;
   if (!ampm && m === 0 && h === 0) return "midnight";
   if (!ampm && m === 0 && h === 12) return "noon";
-  const suffix = ampm ? ampm.toUpperCase() : h > 12 ? "PM" : "";
+  const suffix = ampm ? ampm.toUpperCase() : h > 12 ? "PM" : h === 0 ? "AM" : "";
   const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
   const mins = m === 0 ? (suffix ? "" : "o'clock") : m < 10 ? `oh ${ONES[m]}` : upTo99(m);
   return [numberWords(h12), mins, suffix].filter(Boolean).join(" ");
@@ -164,6 +175,8 @@ export function convertEnglish(input: string): string {
   // Datas: "2026-11-24", "11/24/2026", "11/24", "Nov 24, 2026", "November 24th".
   t = t.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m, y: string, mo: string, d: string) => date(Number(mo), Number(d), Number(y)) ?? m);
   t = t.replace(/\b(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})\b/g, (m, a: string, b: string, y: string) => slashDate(Number(a), Number(b), y.length === 2 ? 2000 + Number(y) : Number(y)) ?? m);
+  // A fração simples ("1/2 cup", "3/4") antes da data sem ano: em inglês, é mais comum que o "January second".
+  t = t.replace(/(?<![\d/])([1-3])\/([2-4])(?![\d/])/g, (m, a: string, b: string) => (Number(a) < Number(b) ? fraction(Number(a), Number(b)) : m));
   t = t.replace(/\b(\d{1,2})\/(\d{1,2})\b(?!\/)/g, (m, a: string, b: string) => slashDate(Number(a), Number(b)) ?? m);
   const monthRe = MONTHS.map((mo) => `${mo.slice(0, 3)}(?:${mo.slice(3)}|\\.)?`).join("|");
   t = t.replace(new RegExp(String.raw`\b(${monthRe})\s(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s(\d{4})\b)?`, "g"), (m, mo: string, d: string, y: string | undefined) => {
