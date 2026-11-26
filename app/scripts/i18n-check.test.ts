@@ -5,7 +5,7 @@ import path from "node:path";
 import { tempDir } from "../test/tmp.ts";
 import { en } from "../src/shared/i18n/en.ts";
 import { pt } from "../src/shared/i18n/pt.ts";
-import { checkedFiles, fileTexts, fixedTexts, MAIN_DIRS, MAIN_FILES, mainFixedTexts, mascotNameHits, SWIFT_DIRS, swiftFixedTexts } from "./i18n-check.ts";
+import { checkedFiles, fileTexts, fixedTexts, MAIN_DIRS, MAIN_FILES, mainFixedTexts, htmlMascotHits, mascotNameHits, SWIFT_DIRS, swiftFixedTexts } from "./i18n-check.ts";
 
 test("acha o texto entre as tags, os atributos visíveis e as opções; ignora o t(), o código e o sem letra (T28190)", () => {
   const src = `
@@ -134,4 +134,15 @@ test("o mascote se chama Kiwi na tela: nenhum texto dos catálogos diz gato, cat
   expect(mascotNameHits(fakePt, "pt").map((h) => h.key)).toEqual(["a", "b", "b", "c"]);
   const fakeEn = { a: "The cat talks", b: "Kiwi's voice", c: "the cat's color", d: "Show the Kiwi-Cat", e: "Open the catalog to concatenate", f: "Cats" };
   expect(mascotNameHits(fakeEn, "en").map((h) => h.key)).toEqual(["a", "c", "d", "f"]);
+  const kittens = { a: "Two kittens", b: "The kitties", c: "A kitten" };
+  expect(mascotNameHits(kittens, "en").map((h) => h.key)).toEqual(["a", "b", "c"]);
+});
+
+test("o texto fixo das páginas também não chama o mascote de gato (spec #31199)", () => {
+  for (const f of readdirSync(path.join(import.meta.dir, "..", "ui"), { recursive: true }).map(String).filter((f) => f.endsWith(".html") && !f.includes("node_modules"))) {
+    expect({ f, hits: htmlMascotHits(readFileSync(path.join(import.meta.dir, "..", "ui", f), "utf8")) }).toEqual({ f, hits: [] });
+  }
+  const page = `<title>Kiwi Cat</title><style>.cat{}</style><script>const cat = 1;</script><!-- o gato -->
+<button aria-label="Fechar o gato">×</button><p>O Kiwi fala</p><div class="kn-kiwicat" title="Kiwi">Abrir o catálogo</div>`;
+  expect(htmlMascotHits(page)).toEqual(["Fechar o gato", "Kiwi Cat"]);
 });

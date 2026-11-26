@@ -183,9 +183,12 @@ function filesUnder(dir: string, ext: string): string[] {
   });
 }
 
-/** Os arquivos da tela e do main que o check lê, relativos a `root`. */
 /** O que o mascote não se chama na tela (spec #31199): em pt, "gato" e afins; em en, "cat"; nas duas, "Kiwi Cat". */
-export const NOT_MASCOT_NAME = { pt: /\bgat(?:[oa]s?|inh[oa]s?)\b|Kiwi[ -]?Cat/i, en: /\b(?:cats?|kitty|kitten)\b|Kiwi[ -]?Cat/i } as const;
+// As bordas são de letra Unicode, não o \b: com o \b, o "á" de "catálogo" deixaria o "cat" sozinho.
+export const NOT_MASCOT_NAME = {
+  pt: /(?<!\p{L})gat(?:[oa]s?|inh[oa]s?)(?!\p{L})|Kiwi[ -]?Cat/iu,
+  en: /(?<!\p{L})(?:cats?|kitt(?:y|ies|ens?))(?!\p{L})|Kiwi[ -]?Cat/iu,
+} as const;
 
 /** Os textos de um catálogo que chamam o mascote de gato (os plurais `{ one, other }` contam cada forma). */
 export function mascotNameHits(catalog: Record<string, unknown>, lang: keyof typeof NOT_MASCOT_NAME): { key: string; text: string }[] {
@@ -193,6 +196,16 @@ export function mascotNameHits(catalog: Record<string, unknown>, lang: keyof typ
   return Object.entries(catalog).flatMap(([key, v]) => texts(v).filter((text) => NOT_MASCOT_NAME[lang].test(text)).map((text) => ({ key, text })));
 }
 
+/** O texto fixo de uma página (`ui/<janela>/index.html`) que chama o mascote de gato: o texto entre as tags e os
+ *  atributos que a tela mostra ou lê em voz alta (`title`, `aria-label`, `alt`, `placeholder`), fora de script e style. */
+export function htmlMascotHits(html: string): string[] {
+  const bare = html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
+  const attrs = [...bare.matchAll(/\b(?:title|aria-label|alt|placeholder)="([^"]*)"/gi)].map((m) => m[1]!);
+  const text = [...bare.matchAll(/>([^<]+)</g)].map((m) => m[1]!.trim()).filter(Boolean);
+  return [...attrs, ...text].filter((t) => NOT_MASCOT_NAME.pt.test(t) || NOT_MASCOT_NAME.en.test(t));
+}
+
+/** Os arquivos da tela e do main que o check lê, relativos a `root`. */
 export function checkedFiles(root: string): string[] {
   const under = (d: string) => [...filesUnder(path.join(root, d), ".ts"), ...filesUnder(path.join(root, d), ".tsx")];
   return [...under("ui"), ...MAIN_DIRS.flatMap(under), ...MAIN_FILES.map((f) => path.join(root, f))].map((f) => path.relative(root, f)).sort();
@@ -212,6 +225,9 @@ if (import.meta.main) {
   const swift = SWIFT_DIRS.flatMap((d) => filesUnder(path.join(ROOT, d), ".swift")).map((f) => ({ file: path.relative(ROOT, f), texts: swiftFixedTexts(readFileSync(f, "utf8")) }));
   const failures = [...app, ...swift].filter((r) => r.texts.length > 0);
   const mascot = [...mascotNameHits(pt, "pt").map((h) => ({ ...h, lang: "pt" })), ...mascotNameHits(en, "en").map((h) => ({ ...h, lang: "en" }))];
+  for (const f of filesUnder(path.join(ROOT, "ui"), ".html")) {
+    for (const text of htmlMascotHits(readFileSync(f, "utf8"))) mascot.push({ lang: "html", key: path.relative(ROOT, f), text });
+  }
   for (const h of mascot) console.error(`✗ ${h.lang} ${h.key}: o mascote se chama Kiwi na tela, não gato nem cat (spec #31199): ${h.text}`);
   console.log(`i18n: ${app.length} arquivos da tela e do main e ${swift.length} do helper lidos; ${failures.length} com texto fixo.`);
   if (mascot.length) process.exitCode = 1;
