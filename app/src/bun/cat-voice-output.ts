@@ -82,12 +82,17 @@ export function ligarVozDoGato<P extends PreviaDaVoz>(o: VozDoGatoOpts<P>): VozD
       previa?.parar();
       pararUmaVez();
       const ac = (umaVez = new AbortController());
-      for await (const pcm of sintese.sintetizar(texto, ac.signal)) {
-        if (ac.signal.aborted) return;
-        await o.saida.tocar(pcm, () => {});
+      // Mesmo quando a síntese lança (o motivo do ElevenLabs), o teste não fica guardado: senão a próxima fala do gato
+      // limparia a saída à toa.
+      try {
+        for await (const pcm of sintese.sintetizar(texto, ac.signal)) {
+          if (ac.signal.aborted) return;
+          await o.saida.tocar(pcm, () => {});
+        }
+        if (!ac.signal.aborted) await o.saida.drenar?.();
+      } finally {
+        if (umaVez === ac) umaVez = undefined;
       }
-      if (!ac.signal.aborted) await o.saida.drenar?.();
-      if (umaVez === ac) umaVez = undefined;
     },
     stop: () => {
       pararUmaVez();
