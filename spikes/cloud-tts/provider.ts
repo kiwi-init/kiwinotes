@@ -21,7 +21,7 @@ export interface Synthesis {
 }
 
 export interface TtsProvider {
-  name: "google" | "elevenlabs" | "local";
+  name: "google" | "elevenlabs" | "elevenlabs-ws" | "local";
   /** 2 ou 3 por língua, fixas no código. */
   voices(lang: Lang): Voice[];
   /** O texto já vem preparado pelo núcleo: o provedor não filtra de novo. */

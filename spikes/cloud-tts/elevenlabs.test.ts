@@ -36,6 +36,8 @@ let gen = 0;
 let httpMode: "ok" | "error" | "drop" = "ok";
 /** O HTTP devolve o `request-id`? E o item do histórico o traz? (A doc diz que sim; o filtro pelo texto fica de reserva.) */
 let sendRequestId = true;
+/** O nome do cabeçalho do id: a doc do SDK JS mostra os dois. */
+let requestIdHeader = "request-id";
 /** A espera entre o primeiro e o segundo pedaço do áudio, para medir o primeiro som antes do total. */
 let gapMs = 0;
 /** Com que `source` o histórico guarda a fala do WebSocket (a doc não diz; a rodada do #31443 não achou com `TTS`). */
@@ -113,7 +115,7 @@ async function fakeStream(req: Request, voice: string): Promise<Response> {
   seen.synth.push({ key: req.headers.get("xi-api-key"), text: body.text, via: "http" });
   const requestId = `req-exemplo-${++gen}`;
   const headers: Record<string, string> = { "content-type": "audio/mpeg" };
-  if (sendRequestId) headers["request-id"] = requestId;
+  if (sendRequestId) headers[requestIdHeader] = requestId;
   if (httpMode === "error") return Response.json({ detail: { status: "quota_exceeded" } }, { status: 401, headers });
   history.push({ history_item_id: `item-${gen}`, text: body.text, voice_id: voice, source: "TTS", ...(sendRequestId ? { request_id: requestId } : {}) });
   const mode = httpMode;
@@ -140,6 +142,7 @@ function reset() {
   wsMode = "ok";
   httpMode = "ok";
   sendRequestId = true;
+  requestIdHeader = "request-id";
   gapMs = 0;
   wsSource = "TTS";
   historyDenyFrom = Infinity;
@@ -430,6 +433,28 @@ describe("ElevenLabs pelo HTTP /stream (o padrão, T31446)", () => {
     expect((await s.done).deleted).toBe(1);
     expect(seen.deleted).toEqual(["item-" + gen]);
     expect(history.map((h) => h.history_item_id)).toEqual(["da-pessoa"]);
+  });
+
+  test("o id também vale no cabeçalho x-request-id", async () => {
+    reset();
+    requestIdHeader = "x-request-id";
+    history.push({ history_item_id: "da-pessoa", text: "Bom dia.", voice_id: VOICE.id, source: "TTS", request_id: "req-da-pessoa" });
+    const s = httpProvider().synthesize("Bom dia.", VOICE);
+    await readAll(s.audio);
+    expect((await s.done).deleted).toBe(1);
+    expect(history.map((h) => h.history_item_id)).toEqual(["da-pessoa"]);
+  });
+
+  test("a espera entre as procuras cresce: 3 vazias somam 1+2+3 esperas", async () => {
+    reset();
+    lagGets = 3;
+    const p = elevenLabs({ env: { ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base }, historyWaitMs: 40 });
+    const s = p.synthesize("Uma frase de exemplo.", VOICE);
+    await readAll(s.audio);
+    const t0 = performance.now();
+    expect((await s.done).deleted).toBe(1);
+    // Fixa, seriam 3 × 40 = 120 ms; crescendo, 40 + 80 + 120 = 240 ms.
+    expect(performance.now() - t0).toBeGreaterThanOrEqual(220);
   });
 
   test("sem o request-id, cai no filtro pelo texto", async () => {

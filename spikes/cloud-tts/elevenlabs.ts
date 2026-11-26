@@ -180,7 +180,8 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
           body: JSON.stringify({ text, model_id: model }),
           signal: o.signal,
         });
-        gen.requestId = res.headers.get("request-id") ?? undefined;
+        // O SDK JS lê os dois nomes (o guia de request stitching e o README do `withRawResponse`).
+        gen.requestId = res.headers.get("request-id") ?? res.headers.get("x-request-id") ?? undefined;
         if (!res.ok || !res.body) {
           const body = (await res.json().catch(() => null)) as { detail?: { status?: string } } | null;
           throw new ElevenLabsError(`o servidor recusou a fala (${res.status}${body?.detail?.status ? ` ${body.detail.status}` : ""})`);
