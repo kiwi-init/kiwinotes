@@ -1,6 +1,14 @@
 // Laboratório da voz na nuvem (spec #30991, T31096): o provedor ElevenLabs, atrás da interface de `provider.ts`.
-// Streaming pelo WebSocket `stream-input`, vozes prontas (sem clone) e, no fim de cada fala, a geração
-// apagada do histórico da conta pela API. A chave só vem do ambiente (`ELEVENLABS_API_KEY`), vai só no
+// Streaming pelo HTTP `/stream` (padrão) ou pelo WebSocket `stream-input` (`ELEVENLABS_TRANSPORT=ws`), vozes
+// prontas (sem clone) e, no fim de cada fala, a geração apagada do histórico da conta pela API (T31446).
+//
+// Por que o HTTP é o padrão (a rodada do harry, #31443, achou 0 gerações do WebSocket no histórico):
+// - a doc do `stream-input` não diz se nem como as gerações do WebSocket entram no histórico;
+// - o HTTP devolve o cabeçalho `request-id`, e cada item do histórico tem o `request_id`: o apagar acha a geração
+//   pelo id, sem depender do texto (https://elevenlabs.io/docs/api-reference/history/list);
+// - o HTTP não espera o `chunk_length_schedule` do WebSocket (padrão [120, 160, 250, 290] caracteres), que com uma
+//   fala curta manda o áudio todo de uma vez. No WebSocket, o `auto_mode=true` cuida disso
+//   (https://elevenlabs.io/docs/eleven-api/guides/how-to/best-practices/latency-optimization). A chave só vem do ambiente (`ELEVENLABS_API_KEY`), vai só no
 // cabeçalho `xi-api-key` e nunca entra em URL, mensagem, erro ou log.
 
 import type { Lang, Synthesis, TtsProvider, Voice } from "./provider";
@@ -51,6 +59,17 @@ class ElevenLabsError extends Error {
   }
 }
 
+/** Uma fala enviada: o texto, e o `request-id` quando o HTTP o devolve. */
+interface Generation {
+  text: string;
+  requestId?: string;
+}
+interface HistoryItem {
+  history_item_id: string;
+  request_id?: string | null;
+  text?: string | null;
+}
+
 /** Para comparar o texto do item do histórico com a fala enviada: sem espaços nas pontas e sem espaço repetido. */
 export function sameText(a: string, b: string): boolean {
   const norm = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -63,7 +82,9 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
   if (!key) throw new ElevenLabsError("falta a variável ELEVENLABS_API_KEY no ambiente");
   const base = (env.ELEVENLABS_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const model = env.ELEVENLABS_MODEL || DEFAULT_MODEL;
-  const tries = opts.historyTries ?? 6;
+  const transport = env.ELEVENLABS_TRANSPORT === "ws" ? "ws" : "http";
+  // O histórico demora a mostrar a geração: até 10 procuras, com a espera crescendo até 2 s (uns 15 s no pior caso).
+  const tries = opts.historyTries ?? 10;
   const wait = opts.historyWaitMs ?? 500;
   const log = opts.log ?? (() => {});
   const headers = { "xi-api-key": key };
@@ -89,9 +110,9 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
   }
 
   /** O apagar não derruba a fala: o áudio já foi gerado e pago. Devolve quantas apagou, ou `null` se o apagar falhou. */
-  async function tryDelete(text: string, voiceId: string, startedAtMs: number): Promise<number | null> {
+  async function tryDelete(gen: Generation, voiceId: string, startedAtMs: number): Promise<number | null> {
     try {
-      return await deleteGeneration(text, voiceId, startedAtMs);
+      return await deleteGeneration(gen, voiceId, startedAtMs);
     } catch (e) {
       log(`elevenlabs: a fala não foi apagada do histórico (${(e as Error).message})`);
       return null;
@@ -99,29 +120,104 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
   }
 
   /**
-   * Apaga do histórico a geração desta fala: a mesma voz, TTS, a partir do início da fala e com o mesmo
-   * texto. O filtro pelo texto protege as outras gerações da conta feitas na mesma hora com a mesma voz.
+   * Apaga do histórico a geração desta fala: a mesma voz e a partir do início da fala. Com o `request-id` do HTTP,
+   * o item desse pedido; sem ele, ou se nenhum item o tem, o item com o mesmo texto. Os dois filtros protegem as
+   * outras gerações da conta feitas na mesma hora com a mesma voz. Sem o filtro `source=TTS`: a doc não diz com que
+   * `source` o WebSocket entra, e com ele a rodada do #31443 não achou nada.
    */
-  async function deleteGeneration(text: string, voiceId: string, startedAtMs: number): Promise<number> {
+  async function deleteGeneration(gen: Generation, voiceId: string, startedAtMs: number): Promise<number> {
     const after = Math.floor(startedAtMs / 1000) - 1;
-    const q = new URLSearchParams({ voice_id: voiceId, source: "TTS", date_after_unix: String(after), page_size: "100" });
+    const q = new URLSearchParams({ voice_id: voiceId, date_after_unix: String(after), page_size: "100" });
     for (let i = 0; i < tries; i++) {
-      const page = (await api("GET", `/v1/history?${q}`)) as { history?: { history_item_id: string; text?: string }[] };
-      const mine = (page.history ?? []).filter((h) => typeof h.text === "string" && sameText(h.text, text));
+      const page = (await api("GET", `/v1/history?${q}`)) as { history?: HistoryItem[] };
+      const items = page.history ?? [];
+      const byId = gen.requestId ? items.filter((h) => h.request_id === gen.requestId) : [];
+      const mine = byId.length ? byId : items.filter((h) => typeof h.text === "string" && sameText(h.text, gen.text));
       if (mine.length) {
         for (const h of mine) await api("DELETE", `/v1/history/${encodeURIComponent(h.history_item_id)}`);
         return mine.length;
       }
-      if (i < tries - 1) await Bun.sleep(wait);
+      if (i < tries - 1) await Bun.sleep(Math.min(wait * (i + 1), 4 * wait));
     }
     log("elevenlabs: a geração não apareceu no histórico; nada apagado");
     return 0;
   }
 
   function synthesize(text: string, voice: Voice, o: { signal?: AbortSignal } = {}): Synthesis {
+    return transport === "ws" ? synthesizeWs(text, voice, o) : synthesizeHttp(text, voice, o);
+  }
+
+  /** O `done` comum: o apagar roda mesmo se a fala falhar no meio, porque o servidor pode ter guardado parte dela. */
+  function finishWith(stream: Promise<void>, gen: Generation, voice: Voice, startedAt: number): Synthesis["done"] {
+    return stream.then(
+      async () => ({ chars: gen.text.length, deleted: (await tryDelete(gen, voice.id, startedAt)) ?? 0 }),
+      async (err: ElevenLabsError) => {
+        // A fala caiu e o apagar falhou: a geração pode estar na conta, e o aviso da tabela tem de contar.
+        if ((await tryDelete(gen, voice.id, startedAt)) === null) err.notDeleted = 1;
+        throw err;
+      },
+    );
+  }
+
+  /** `POST /v1/text-to-speech/{voz}/stream`: o áudio chega em pedaços no corpo, e o `request-id` no cabeçalho. */
+  function synthesizeHttp(text: string, voice: Voice, o: { signal?: AbortSignal }): Synthesis {
+    const startedAt = Date.now();
+    const gen: Generation = { text };
+    const chunks: Uint8Array[] = [];
+    let ended = false;
+    let failure: Error | null = null;
+    let wake: (() => void) | null = null;
+    const poke = () => {
+      wake?.();
+      wake = null;
+    };
+    const q = new URLSearchParams({ output_format: OUTPUT_FORMAT });
+    const stream = (async () => {
+      try {
+        const res = await fetch(`${base}/v1/text-to-speech/${encodeURIComponent(voice.id)}/stream?${q}`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ text, model_id: model }),
+          signal: o.signal,
+        });
+        gen.requestId = res.headers.get("request-id") ?? undefined;
+        if (!res.ok || !res.body) {
+          const body = (await res.json().catch(() => null)) as { detail?: { status?: string } } | null;
+          throw new ElevenLabsError(`o servidor recusou a fala (${res.status}${body?.detail?.status ? ` ${body.detail.status}` : ""})`);
+        }
+        for await (const c of res.body as unknown as AsyncIterable<Uint8Array>) {
+          chunks.push(c);
+          poke();
+        }
+      } catch (e) {
+        failure = e instanceof ElevenLabsError ? e : new ElevenLabsError(o.signal?.aborted ? "fala cancelada" : "a conexão HTTP falhou");
+        throw failure;
+      } finally {
+        ended = true;
+        poke();
+      }
+    })();
+    stream.catch(() => {});
+
+    async function* audio(): AsyncIterable<Uint8Array> {
+      for (;;) {
+        if (chunks.length) {
+          yield chunks.shift()!;
+          continue;
+        }
+        if (failure) throw failure;
+        if (ended) return;
+        await new Promise<void>((r) => (wake = r));
+      }
+    }
+    return { audio: audio(), format: "mp3", done: finishWith(stream, gen, voice, startedAt) };
+  }
+
+  function synthesizeWs(text: string, voice: Voice, o: { signal?: AbortSignal }): Synthesis {
     const startedAt = Date.now();
     const wsBase = base.replace(/^http/, "ws");
-    const q = new URLSearchParams({ model_id: model, output_format: OUTPUT_FORMAT });
+    // `auto_mode`: o servidor decide quando gerar, sem esperar o `chunk_length_schedule` encher.
+    const q = new URLSearchParams({ model_id: model, output_format: OUTPUT_FORMAT, auto_mode: "true" });
     const url = `${wsBase}/v1/text-to-speech/${encodeURIComponent(voice.id)}/stream-input?${q}`;
 
     // Fila entre o WebSocket e quem lê o áudio.
@@ -189,20 +285,12 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
       }
     }
 
-    // O apagar roda mesmo se a fala falhar no meio: o servidor pode ter gerado e guardado parte dela.
-    const done = streamDone.then(
-      async () => ({ chars: text.length, deleted: (await tryDelete(text, voice.id, startedAt)) ?? 0 }),
-      async (err: ElevenLabsError) => {
-        // A fala caiu e o apagar falhou: a geração pode estar na conta, e o aviso da tabela tem de contar.
-        if ((await tryDelete(text, voice.id, startedAt)) === null) err.notDeleted = 1;
-        throw err;
-      },
-    );
-    return { audio: audio(), format: "mp3", done };
+    return { audio: audio(), format: "mp3", done: finishWith(streamDone, { text }, voice, startedAt) };
   }
 
   return {
-    name: "elevenlabs",
+    // O nome diz o caminho na tabela, para a rodada pelo WebSocket não se misturar com a do HTTP.
+    name: transport === "ws" ? "elevenlabs-ws" : "elevenlabs",
     voices: (lang) => VOICES[lang],
     synthesize,
     check,

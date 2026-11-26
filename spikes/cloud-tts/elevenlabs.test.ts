@@ -1,4 +1,4 @@
-// T31096: o provedor ElevenLabs contra um servidor falso local. Nenhuma conta de verdade: a rodada real é do harry.
+// T31096, T31446: o provedor ElevenLabs (HTTP `/stream` e WebSocket `stream-input`) contra um servidor falso local. Nenhuma conta de verdade: a rodada real é do harry.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,7 +10,7 @@ import { main } from "./run.ts";
 const KEY = "sk_exemplo_0000000000000000000000000000000000000000";
 const VOICE = { id: "voz-exemplo", name: "Exemplo", lang: "pt-BR" as const };
 
-type HistoryItem = { history_item_id: string; text: string; voice_id: string };
+type HistoryItem = { history_item_id: string; text: string; voice_id: string; request_id?: string; source?: string };
 
 const seen = {
   wsHeaders: [] as (string | null)[],
@@ -19,6 +19,9 @@ const seen = {
   httpHeaders: [] as (string | null)[],
   httpUrls: [] as string[],
   deleted: [] as string[],
+  /** Cada fala que chegou ao servidor, pelos dois caminhos: a chave do cabeçalho e o texto. */
+  synth: [] as { key: string | null; text: string; via: "http" | "ws" }[],
+  historyQueries: [] as URLSearchParams[],
 };
 let history: HistoryItem[] = [];
 /** Quantos GETs do histórico voltam vazios antes de a geração aparecer (o atraso da conta de verdade). */
@@ -29,6 +32,14 @@ let wsMode: "ok" | "error" | "drop" = "ok";
 let historyDenyFrom = Infinity;
 let historyGets = 0;
 let gen = 0;
+/** O HTTP falso: tocar, recusar com 401 ou cair no meio do corpo. */
+let httpMode: "ok" | "error" | "drop" = "ok";
+/** O HTTP devolve o `request-id`? E o item do histórico o traz? (A doc diz que sim; o filtro pelo texto fica de reserva.) */
+let sendRequestId = true;
+/** A espera entre o primeiro e o segundo pedaço do áudio, para medir o primeiro som antes do total. */
+let gapMs = 0;
+/** Com que `source` o histórico guarda a fala do WebSocket (a doc não diz; a rodada do #31443 não achou com `TTS`). */
+let wsSource = "TTS";
 
 let server: ReturnType<typeof Bun.serve>;
 let base = "";
@@ -45,16 +56,20 @@ beforeAll(() => {
       }
       seen.httpHeaders.push(req.headers.get("xi-api-key"));
       seen.httpUrls.push(req.url);
+      const stream = url.pathname.match(/^\/v1\/text-to-speech\/([^/]+)\/stream$/);
+      if (req.method === "POST" && stream) return fakeStream(req, decodeURIComponent(stream[1]));
       // Como a API de verdade: o 401 diz o porquê no `detail.status`.
       if (req.headers.get("xi-api-key") !== KEY) return Response.json({ detail: { status: "invalid_api_key" } }, { status: 401 });
       if (url.pathname.startsWith("/v1/history") && historyGets++ >= historyDenyFrom) return Response.json({ detail: { status: "missing_permissions" } }, { status: 401 });
       if (req.method === "GET" && url.pathname === "/v1/history") {
+        seen.historyQueries.push(url.searchParams);
         if (lagGets > 0) {
           lagGets--;
           return Response.json({ history: [] });
         }
         const v = url.searchParams.get("voice_id");
-        return Response.json({ history: history.filter((h) => h.voice_id === v) });
+        const src = url.searchParams.get("source");
+        return Response.json({ history: history.filter((h) => h.voice_id === v && (!src || h.source === src)) });
       }
       const del = url.pathname.match(/^\/v1\/history\/(.+)$/);
       if (req.method === "DELETE" && del) {
@@ -76,7 +91,8 @@ beforeAll(() => {
           ws.send(JSON.stringify({ error: "quota_exceeded", message: "sem créditos" }));
           return;
         }
-        history.push({ history_item_id: `item-${++gen}`, text: data.text.trim(), voice_id: data.voice });
+        seen.synth.push({ key: seen.wsHeaders.at(-1) ?? null, text: data.text.trim(), via: "ws" });
+        history.push({ history_item_id: `item-${++gen}`, text: data.text.trim(), voice_id: data.voice, source: wsSource });
         ws.send(JSON.stringify({ audio: Buffer.from("ID3-parte-1").toString("base64"), isFinal: false }));
         if (wsMode === "drop") {
           ws.close(1011, "caiu");
@@ -91,16 +107,48 @@ beforeAll(() => {
 });
 afterAll(() => server.stop(true));
 
+/** `POST /v1/text-to-speech/{voz}/stream`: o `request-id` no cabeçalho, o item no histórico e o mp3 em pedaços no corpo. */
+async function fakeStream(req: Request, voice: string): Promise<Response> {
+  const body = (await req.json()) as { text: string; model_id?: string };
+  seen.synth.push({ key: req.headers.get("xi-api-key"), text: body.text, via: "http" });
+  const requestId = `req-exemplo-${++gen}`;
+  const headers: Record<string, string> = { "content-type": "audio/mpeg" };
+  if (sendRequestId) headers["request-id"] = requestId;
+  if (httpMode === "error") return Response.json({ detail: { status: "quota_exceeded" } }, { status: 401, headers });
+  history.push({ history_item_id: `item-${gen}`, text: body.text, voice_id: voice, source: "TTS", ...(sendRequestId ? { request_id: requestId } : {}) });
+  const mode = httpMode;
+  const gap = gapMs;
+  const enc = new TextEncoder();
+  return new Response(
+    new ReadableStream({
+      async start(c) {
+        c.enqueue(enc.encode("ID3-parte-1"));
+        if (gap) await Bun.sleep(gap);
+        if (mode === "drop") return c.error(new Error("caiu"));
+        c.enqueue(enc.encode("-parte-2"));
+        c.close();
+      },
+    }),
+    { headers },
+  );
+}
+
 function reset() {
   for (const k of Object.keys(seen) as (keyof typeof seen)[]) seen[k].length = 0;
   history = [];
   lagGets = 0;
   wsMode = "ok";
+  httpMode = "ok";
+  sendRequestId = true;
+  gapMs = 0;
+  wsSource = "TTS";
   historyDenyFrom = Infinity;
   historyGets = 0;
 }
 
-const provider = () => elevenLabs({ env: { ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base }, historyWaitMs: 5 });
+const provider = () => elevenLabs({ env: { ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base, ELEVENLABS_TRANSPORT: "ws" }, historyWaitMs: 5 });
+const httpProvider = (o: { log?: (l: string) => void } = {}) =>
+  elevenLabs({ env: { ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base }, historyWaitMs: 5, ...o });
 
 async function readAll(it: AsyncIterable<Uint8Array>) {
   const parts: Uint8Array[] = [];
@@ -108,7 +156,7 @@ async function readAll(it: AsyncIterable<Uint8Array>) {
   return Buffer.concat(parts).toString();
 }
 
-describe("ElevenLabs (servidor falso)", () => {
+describe("ElevenLabs pelo WebSocket (servidor falso)", () => {
   test("o áudio chega em pedaços, na ordem, em mp3", async () => {
     reset();
     const s = provider().synthesize("Oi, Ana! A reunião do Projeto X é às 15h.", VOICE);
@@ -252,8 +300,9 @@ test("a rodada com o ElevenLabs falso: os tokens de exemplo não saem, cada gera
   expect(all).toContain("credenciais: nenhuma");
   expect(all).not.toContain(KEY);
   // 4 falas × 3 vozes: o que chegou ao servidor não tem os tokens de exemplo, e cada geração saiu do histórico.
-  const sent = seen.wsMessages.map((m) => (JSON.parse(m) as { text: string }).text).join("\n");
-  expect(seen.wsHeaders.length).toBe(12);
+  const sent = seen.synth.map((x) => x.text).join("\n");
+  expect(seen.synth.length).toBe(12);
+  expect(seen.synth.every((x) => x.via === "http" && x.key === KEY)).toBe(true);
   expect(sent).not.toMatch(/ghp|AKIA|segredo/i);
   expect(seen.deleted.length).toBe(12);
   expect(history).toEqual([]);
@@ -287,7 +336,7 @@ test("a chave sem a permissão de histórico: a rodada para antes de qualquer fa
   expect(r.all).toContain(HISTORY_PERMISSION);
   expect(r.all).not.toContain(INVALID_KEY);
   expect(r.all).not.toContain(KEY);
-  expect(seen.wsHeaders).toEqual([]);
+  expect(seen.synth).toEqual([]);
   expect(existsSync(path.join(r.out, "tabela.md"))).toBe(false);
 });
 
@@ -298,7 +347,7 @@ test("a permissão some no meio da rodada: o áudio fica salvo e a tabela avisa 
   expect(r.code).toBe(0);
   expect(r.all).not.toContain(KEY);
   // 2 falas × 3 vozes: os 6 áudios salvos, nenhuma falha na tabela e o aviso das 6 gerações que ficaram na conta.
-  expect(seen.wsHeaders.length).toBe(6);
+  expect(seen.synth.length).toBe(6);
   const files = (readdirSync(path.join(r.out, "elevenlabs"), { recursive: true }) as string[]).filter((f) => f.endsWith(".mp3"));
   expect(files.length).toBe(6);
   const tabela = readFileSync(path.join(r.out, "tabela.md"), "utf8");
@@ -341,11 +390,119 @@ test("a fala que cai mas apaga não entra no aviso", async () => {
 
 test("na rodada, as falas que caem sem apagar aparecem no aviso da tabela", async () => {
   reset();
-  wsMode = "drop";
+  httpMode = "drop";
   historyDenyFrom = 1; // a conferência passa; o apagar dá 401
   const r = await runMain({ ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base });
   expect(r.code).toBe(0);
   const tabela = readFileSync(path.join(r.out, "tabela.md"), "utf8");
   expect(tabela).toContain("| 3 de 3 |");
   expect(tabela).toContain("Aviso: 6 falas não apagadas do histórico do elevenlabs.");
+});
+
+describe("ElevenLabs pelo HTTP /stream (o padrão, T31446)", () => {
+  test("o áudio sai pelo POST /stream, com a chave só no cabeçalho e o texto no corpo", async () => {
+    reset();
+    const s = httpProvider().synthesize("Oi, Ana! A reunião do Projeto X é às 15h.", VOICE);
+    expect(await readAll(s.audio)).toBe("ID3-parte-1-parte-2");
+    await s.done;
+    expect(seen.wsHeaders).toEqual([]);
+    expect(seen.synth).toEqual([{ key: KEY, text: "Oi, Ana! A reunião do Projeto X é às 15h.", via: "http" }]);
+    for (const u of seen.httpUrls) expect(u).not.toContain(KEY);
+  });
+
+  test("o primeiro pedaço chega antes do fim: o primeiro som não espera o áudio inteiro", async () => {
+    reset();
+    gapMs = 150;
+    const t0 = performance.now();
+    const s = httpProvider().synthesize("Uma frase curta.", VOICE);
+    let first = 0;
+    for await (const _ of s.audio) if (!first) first = performance.now() - t0;
+    const total = performance.now() - t0;
+    await s.done;
+    expect(total - first).toBeGreaterThanOrEqual(100);
+  });
+
+  test("apaga pelo request-id: o item com o mesmo texto e sem esse id fica", async () => {
+    reset();
+    history.push({ history_item_id: "da-pessoa", text: "Bom dia.", voice_id: VOICE.id, source: "TTS", request_id: "req-da-pessoa" });
+    const s = httpProvider().synthesize("Bom dia.", VOICE);
+    await readAll(s.audio);
+    expect((await s.done).deleted).toBe(1);
+    expect(seen.deleted).toEqual(["item-" + gen]);
+    expect(history.map((h) => h.history_item_id)).toEqual(["da-pessoa"]);
+  });
+
+  test("sem o request-id, cai no filtro pelo texto", async () => {
+    reset();
+    sendRequestId = false;
+    const s = httpProvider().synthesize("Lembrete: revisar o exemplo.", VOICE);
+    await readAll(s.audio);
+    expect((await s.done).deleted).toBe(1);
+    expect(history).toEqual([]);
+  });
+
+  test("o histórico atrasado: procura de novo, com a espera crescendo", async () => {
+    reset();
+    lagGets = 4;
+    const s = httpProvider().synthesize("São 3 itens na lista.", VOICE);
+    await readAll(s.audio);
+    expect((await s.done).deleted).toBe(1);
+    expect(seen.historyQueries.length).toBe(5);
+  });
+
+  test("a fala recusada sai sem a chave, e o apagar roda mesmo assim", async () => {
+    reset();
+    httpMode = "error";
+    const s = httpProvider().synthesize("Sem créditos.", VOICE);
+    const err = await readAll(s.audio).then(
+      () => null,
+      (e: Error) => e,
+    );
+    expect(err?.message).toContain("401 quota_exceeded");
+    expect(err?.message).not.toContain(KEY);
+    await expect(s.done).rejects.toThrow();
+  });
+
+  test("a fala que cai no meio do corpo ainda apaga o que a conta guardou", async () => {
+    reset();
+    httpMode = "drop";
+    const s = httpProvider().synthesize("Uma fala que cai.", VOICE);
+    await expect(readAll(s.audio)).rejects.toThrow(/conexão HTTP falhou/);
+    await expect(s.done).rejects.toThrow();
+    expect(seen.deleted.length).toBe(1);
+    expect(history).toEqual([]);
+  });
+
+  test("cancelar a fala para o download", async () => {
+    reset();
+    gapMs = 200;
+    const ac = new AbortController();
+    const s = httpProvider().synthesize("Uma fala cancelada.", VOICE, { signal: ac.signal });
+    const it = s.audio[Symbol.asyncIterator]();
+    await it.next();
+    ac.abort();
+    await expect(it.next()).rejects.toThrow(/cancelada/);
+    await s.done.catch(() => {});
+  });
+});
+
+describe("o WebSocket e o histórico (T31446)", () => {
+  test("o stream-input pede auto_mode, para o servidor não esperar o chunk_length_schedule", async () => {
+    reset();
+    const s = provider().synthesize("Tudo pronto.", VOICE);
+    await readAll(s.audio);
+    await s.done;
+    expect(new URL(seen.wsUrls[0]!).searchParams.get("auto_mode")).toBe("true");
+    expect(provider().name).toBe("elevenlabs-ws");
+    expect(httpProvider().name).toBe("elevenlabs");
+  });
+
+  test("a busca no histórico não filtra por source: a fala do WebSocket é achada com outro source", async () => {
+    reset();
+    wsSource = "stream_input";
+    const s = provider().synthesize("Tudo pronto.", VOICE);
+    await readAll(s.audio);
+    expect((await s.done).deleted).toBe(1);
+    expect(seen.historyQueries.every((q) => !q.has("source"))).toBe(true);
+  });
 });
