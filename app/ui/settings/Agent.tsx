@@ -326,8 +326,12 @@ export function AgentSection({ part }: { part: AgentPart }) {
 
   // Com o agente desligado, Voz, Memória e Avançado não teriam linha nenhuma: uma linha leva à aba Geral (lead #31811).
   const off = !status.enabled && part !== "general" && part !== "kiwi";
-  const openGeneral = (e: MouseEvent<HTMLElement>) =>
-    e.currentTarget.closest(".kn-prefs-topic")?.querySelector<HTMLElement>('.kn-prefs-tab[data-tab="general"]')?.click();
+  // O foco vai para a aba Geral: o link some com a aba escondida, e pelo teclado o foco cairia no body (#32045).
+  const openGeneral = (e: MouseEvent<HTMLElement>) => {
+    const tab = e.currentTarget.closest(".kn-prefs-topic")?.querySelector<HTMLElement>('.kn-prefs-tab[data-tab="general"]');
+    tab?.click();
+    tab?.focus();
+  };
 
   return (
     <Section title={title}>
