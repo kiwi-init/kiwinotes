@@ -15,6 +15,9 @@ import type { Lang, Synthesis, TtsProvider, Voice } from "./provider";
 
 export const HISTORY_PERMISSION = "a chave do ElevenLabs não lê o histórico: dê a ela a permissão de leitura do histórico, que o lab usa para achar e apagar as falas";
 export const INVALID_KEY = "a chave do ElevenLabs está errada: confira o valor de ELEVENLABS_API_KEY";
+/** A conta grátis não usa voz da Voice Library pela API (https://elevenlabs.io/docs/eleven-creative/quickstart). */
+export const FREE_TIER_LIBRARY = "o plano grátis do ElevenLabs não usa voz da Voice Library pela API (só as vozes prontas, premade): troque de plano ou use uma voz pronta";
+export const VOICE_NOT_FOUND = "a conta não acha esta voz: adicione-a em My Voices pela Voice Library do site e rode de novo";
 export const DEFAULT_BASE_URL = "https://api.elevenlabs.io";
 /** O de melhor qualidade em português; `eleven_flash_v2_5` troca qualidade por latência. */
 export const DEFAULT_MODEL = "eleven_multilingual_v2";
@@ -46,6 +49,11 @@ export interface ElevenLabsOptions {
   /** Quantas vezes procurar a geração no histórico, que pode demorar a aparecer, e a espera entre elas. */
   historyTries?: number;
   historyWaitMs?: number;
+  /**
+   * As vozes escolhidas na hora (`--voices` ou `ELEVENLABS_VOICES`): `<id>[:nome],<id>…`. Trocam as vozes fixas
+   * nas duas línguas, porque os modelos multilíngues falam as duas com a mesma voz. O ID não entra no repo.
+   */
+  voices?: string;
   /** Para avisos do provedor (nunca com a chave nem com o texto da fala). */
   log?: (line: string) => void;
 }
@@ -70,6 +78,22 @@ interface HistoryItem {
   text?: string | null;
 }
 
+/** `<id>[:nome],<id>…` → as vozes, nas duas línguas. Sem nome, a voz sai na tabela com o próprio ID. */
+export function parseVoices(spec: string): Record<Lang, Voice[]> {
+  const picked = spec
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      const [id, ...rest] = s.split(":");
+      const name = rest.join(":").trim();
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(id!.trim())) throw new ElevenLabsError(`ID de voz fora do formato (só letras, números, _ e -): ${JSON.stringify(id!.trim().slice(0, 64))}`);
+      return { id: id!.trim(), name: name || id!.trim() };
+    });
+  if (!picked.length) throw new ElevenLabsError("--voices sem nenhuma voz");
+  return { "pt-BR": picked.map((v) => ({ ...v, lang: "pt-BR" })), "en-US": picked.map((v) => ({ ...v, lang: "en-US" })) };
+}
+
 /** Para comparar o texto do item do histórico com a fala enviada: sem espaços nas pontas e sem espaço repetido. */
 export function sameText(a: string, b: string): boolean {
   const norm = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -87,6 +111,8 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
   const tries = opts.historyTries ?? 10;
   const wait = opts.historyWaitMs ?? 500;
   const log = opts.log ?? (() => {});
+  const voicesSpec = opts.voices ?? env.ELEVENLABS_VOICES;
+  const voices = voicesSpec ? parseVoices(voicesSpec) : VOICES;
   const headers = { "xi-api-key": key };
 
   async function api(method: "GET" | "DELETE", path: string): Promise<unknown> {
@@ -107,6 +133,34 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
       throw new ElevenLabsError(body?.detail?.status === "invalid_api_key" ? INVALID_KEY : HISTORY_PERMISSION);
     }
     if (!res.ok) throw new ElevenLabsError(`a conferência do histórico respondeu ${res.status}`);
+    if (voicesSpec) await checkVoices();
+  }
+
+  /**
+   * As vozes escolhidas: a conta acha cada uma, e o plano pode usá-la. Só GETs, que não gastam crédito. Uma voz que
+   * não é pronta (premade) num plano grátis para a rodada antes da 1ª fala, em vez de cada fala dar erro.
+   */
+  async function checkVoices(): Promise<void> {
+    const ids = [...new Set(voices["pt-BR"].map((v) => v.id))];
+    const found: { id: string; category?: string; tiers?: string[] }[] = [];
+    for (const id of ids) {
+      const res = await fetch(`${base}/v1/voices/${encodeURIComponent(id)}`, { method: "GET", headers });
+      if (res.status === 400 || res.status === 404) throw new ElevenLabsError(`${VOICE_NOT_FOUND} (${id})`);
+      if (!res.ok) throw new ElevenLabsError(`a conferência da voz ${id} respondeu ${res.status}`);
+      const v = (await res.json()) as { category?: string; available_for_tiers?: string[] };
+      found.push({ id, category: v.category, tiers: v.available_for_tiers });
+    }
+    const sub = await fetch(`${base}/v1/user/subscription`, { method: "GET", headers });
+    if (!sub.ok) {
+      // A chave sem a permissão de ler a conta: a rodada segue, e um plano sem acesso faz cada fala dar erro.
+      log(`elevenlabs: não deu para ler o plano da conta (${sub.status}); se for o grátis, a voz da Voice Library falha em cada fala`);
+      return;
+    }
+    const tier = ((await sub.json()) as { tier?: string }).tier;
+    for (const v of found) {
+      if (tier === "free" && v.category !== "premade") throw new ElevenLabsError(`${FREE_TIER_LIBRARY} (${v.id})`);
+      if (tier && v.tiers?.length && !v.tiers.includes(tier)) throw new ElevenLabsError(`a voz ${v.id} não está no plano ${tier} da conta (ela pede ${v.tiers.join(", ")})`);
+    }
   }
 
   /** O apagar não derruba a fala: o áudio já foi gerado e pago. Devolve quantas apagou, ou `null` se o apagar falhou. */
@@ -292,7 +346,7 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
   return {
     // O nome diz o caminho na tabela, para a rodada pelo WebSocket não se misturar com a do HTTP.
     name: transport === "ws" ? "elevenlabs-ws" : "elevenlabs",
-    voices: (lang) => VOICES[lang],
+    voices: (lang) => voices[lang],
     synthesize,
     check,
     costPerChar: USD_PER_CREDIT * (CREDITS_PER_CHAR[model] ?? 1),

@@ -2,6 +2,7 @@
 // N rodadas; a tabela no fim e o áudio numa pasta ao lado de docs/design/voices/ (sem commit).
 //
 //   bun run.ts [--providers google,elevenlabs,local] [--rounds 3] [--only pt01,en01] [--out <pasta>]
+//              [--voices <id>[:nome],<id>…]   (as vozes do ElevenLabs no lugar das fixas; ou ELEVENLABS_VOICES)
 //
 // As credenciais vêm só do ambiente (veja google.ts, elevenlabs.ts e local.ts). No fim, a rodada confere que nenhum valor
 // delas aparece no que ela imprimiu nem nos arquivos que gravou; se aparecer, diz onde (nunca o valor) e sai com 1.
@@ -42,7 +43,7 @@ export function leaks(values: string[], printed: string, dir: string): string[] 
 export async function main(argv = process.argv.slice(2), env = process.env): Promise<number> {
   const { values: a } = parseArgs({
     args: argv,
-    options: { providers: { type: "string", default: "google,elevenlabs,local" }, rounds: { type: "string", default: "3" }, only: { type: "string" }, out: { type: "string" } },
+    options: { providers: { type: "string", default: "google,elevenlabs,local" }, rounds: { type: "string", default: "3" }, only: { type: "string" }, out: { type: "string" }, voices: { type: "string" } },
   });
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
   const out = path.resolve(a.out ?? path.join(import.meta.dir, "../../docs/design/voices-cloud", stamp));
@@ -58,7 +59,7 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
   for (const name of a.providers!.split(",").map((s) => s.trim())) {
     try {
       if (name === "google") providers.push(googleProvider(env));
-      else if (name === "elevenlabs") providers.push(elevenLabs({ env, log: say }));
+      else if (name === "elevenlabs") providers.push(elevenLabs({ env, log: say, voices: a.voices }));
       else if (name === "local") {
         const v = realVoices(env);
         stops.push(v.stop);
@@ -78,7 +79,7 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
         await p.check?.();
       } catch (e) {
         say(`${p.name}: ${(e as Error).message.split("\n")[0]}`);
-        say("nada foi gerado; acerte a chave e rode de novo");
+        say("nada foi gerado; acerte a chave ou a voz e rode de novo");
         return 2;
       }
     }

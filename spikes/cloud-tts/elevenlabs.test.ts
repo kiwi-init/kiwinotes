@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { elevenLabs, HISTORY_PERMISSION, INVALID_KEY, sameText } from "./elevenlabs";
+import { elevenLabs, FREE_TIER_LIBRARY, HISTORY_PERMISSION, INVALID_KEY, parseVoices, sameText, VOICE_NOT_FOUND } from "./elevenlabs";
 import { main } from "./run.ts";
 
 const KEY = "sk_exemplo_0000000000000000000000000000000000000000";
@@ -42,6 +42,10 @@ let requestIdHeader = "request-id";
 let gapMs = 0;
 /** Com que `source` o histórico guarda a fala do WebSocket (a doc não diz; a rodada do #31443 não achou com `TTS`). */
 let wsSource = "TTS";
+/** As vozes que a conta acha (`GET /v1/voices/{id}`) e o plano dela (`GET /v1/user/subscription`). */
+let accountVoices: Record<string, { category: string; available_for_tiers?: string[] }> = {};
+let tier = "creator";
+let subscriptionStatus = 200;
 
 let server: ReturnType<typeof Bun.serve>;
 let base = "";
@@ -72,6 +76,14 @@ beforeAll(() => {
         const v = url.searchParams.get("voice_id");
         const src = url.searchParams.get("source");
         return Response.json({ history: history.filter((h) => h.voice_id === v && (!src || h.source === src)) });
+      }
+      const voice = url.pathname.match(/^\/v1\/voices\/([^/]+)$/);
+      if (req.method === "GET" && voice) {
+        const v = accountVoices[decodeURIComponent(voice[1]!)];
+        return v ? Response.json({ voice_id: voice[1], ...v }) : Response.json({ detail: { status: "voice_not_found" } }, { status: 404 });
+      }
+      if (req.method === "GET" && url.pathname === "/v1/user/subscription") {
+        return subscriptionStatus === 200 ? Response.json({ tier }) : Response.json({ detail: { status: "missing_permissions" } }, { status: subscriptionStatus });
       }
       const del = url.pathname.match(/^\/v1\/history\/(.+)$/);
       if (req.method === "DELETE" && del) {
@@ -145,6 +157,9 @@ function reset() {
   requestIdHeader = "request-id";
   gapMs = 0;
   wsSource = "TTS";
+  accountVoices = {};
+  tier = "creator";
+  subscriptionStatus = 200;
   historyDenyFrom = Infinity;
   historyGets = 0;
 }
@@ -529,5 +544,144 @@ describe("o WebSocket e o histórico (T31446)", () => {
     await readAll(s.audio);
     expect((await s.done).deleted).toBe(1);
     expect(seen.historyQueries.every((q) => !q.has("source"))).toBe(true);
+  });
+});
+
+describe("a voz escolhida na hora (T31480)", () => {
+  const LIB = "vozExemploBiblioteca01";
+  const withVoices = (voices: string, log?: (l: string) => void) =>
+    elevenLabs({ env: { ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base }, historyWaitMs: 5, voices, log });
+  const checkErr = (p: ReturnType<typeof elevenLabs>) =>
+    p.check!().then(
+      () => null,
+      (e: Error) => e,
+    );
+
+  test("--voices troca as vozes fixas pelas escolhidas, nas duas línguas, com o nome se vier", () => {
+    const p = withVoices(`${LIB}:Narradora, outraVozExemplo`);
+    expect(p.voices("pt-BR")).toEqual([
+      { id: LIB, name: "Narradora", lang: "pt-BR" },
+      { id: "outraVozExemplo", name: "outraVozExemplo", lang: "pt-BR" },
+    ]);
+    expect(p.voices("en-US").map((v) => v.id)).toEqual([LIB, "outraVozExemplo"]);
+  });
+
+  test("sem --voices, o ELEVENLABS_VOICES vale; sem os dois, as 3 vozes fixas", () => {
+    const viaEnv = elevenLabs({ env: { ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base, ELEVENLABS_VOICES: LIB } });
+    expect(viaEnv.voices("pt-BR").map((v) => v.id)).toEqual([LIB]);
+    expect(provider().voices("pt-BR").length).toBe(3);
+  });
+
+  test("um ID fora do formato para na hora, antes de qualquer chamada", () => {
+    expect(() => parseVoices("../v1/history")).toThrow(/fora do formato/);
+    expect(() => parseVoices(" , ")).toThrow(/sem nenhuma voz/);
+  });
+
+  test("a fala usa a voz escolhida", async () => {
+    reset();
+    accountVoices[LIB] = { category: "professional" };
+    const p = withVoices(LIB);
+    const s = p.synthesize("Oi, Ana.", p.voices("pt-BR")[0]!);
+    await readAll(s.audio);
+    await s.done;
+    expect(seen.httpUrls.some((u) => u.includes(`/v1/text-to-speech/${LIB}/stream`))).toBe(true);
+  });
+
+  test("plano pago e voz da biblioteca em My Voices: a conferência passa", async () => {
+    reset();
+    accountVoices[LIB] = { category: "professional" };
+    expect(await checkErr(withVoices(LIB))).toBeNull();
+  });
+
+  test("plano grátis e voz da biblioteca: para antes da 1ª fala, com a mensagem clara", async () => {
+    reset();
+    tier = "free";
+    accountVoices[LIB] = { category: "professional" };
+    const err = await checkErr(withVoices(LIB));
+    expect(err?.message).toContain(FREE_TIER_LIBRARY);
+    expect(err?.message).not.toContain(KEY);
+    expect(seen.synth).toEqual([]);
+  });
+
+  test("plano grátis e voz pronta (premade): passa", async () => {
+    reset();
+    tier = "free";
+    accountVoices[LIB] = { category: "premade" };
+    expect(await checkErr(withVoices(LIB))).toBeNull();
+  });
+
+  test("a voz que a conta não acha: pede para adicionar em My Voices", async () => {
+    reset();
+    const err = await checkErr(withVoices(LIB));
+    expect(err?.message).toContain(VOICE_NOT_FOUND);
+  });
+
+  test("a voz que não está no plano da conta (available_for_tiers) para antes", async () => {
+    reset();
+    tier = "starter";
+    accountVoices[LIB] = { category: "professional", available_for_tiers: ["creator", "pro"] };
+    const err = await checkErr(withVoices(LIB));
+    expect(err?.message).toContain("não está no plano starter");
+  });
+
+  test("sem permissão de ler o plano: segue com um aviso", async () => {
+    reset();
+    subscriptionStatus = 401;
+    accountVoices[LIB] = { category: "professional" };
+    const warned: string[] = [];
+    expect(await checkErr(withVoices(LIB, (l) => warned.push(l)))).toBeNull();
+    expect(warned.join("\n")).toContain("não deu para ler o plano");
+  });
+
+  test("sem --voices, a conferência não olha voz nem plano", async () => {
+    reset();
+    tier = "free";
+    expect(await checkErr(provider())).toBeNull();
+    expect(seen.httpUrls.some((u) => u.includes("/v1/voices/") || u.includes("/v1/user/subscription"))).toBe(false);
+  });
+
+  test("na rodada: --voices no plano grátis para com código 2, sem gastar crédito", async () => {
+    reset();
+    tier = "free";
+    accountVoices[LIB] = { category: "professional" };
+    const out = mkdtempSync(path.join(tmpdir(), "cloud-tts-el-"));
+    const printed: string[] = [];
+    const orig = { log: console.log, error: console.error };
+    console.log = (...a) => printed.push(a.join(" "));
+    console.error = (...a) => printed.push(a.join(" "));
+    let code: number;
+    try {
+      code = await main(["--providers", "elevenlabs", "--rounds", "1", "--only", "pt01", "--voices", `${LIB}:Narradora`, "--out", out], {
+        ELEVENLABS_API_KEY: KEY,
+        ELEVENLABS_BASE_URL: base,
+      });
+    } finally {
+      Object.assign(console, orig);
+    }
+    expect(code).toBe(2);
+    expect(printed.join("\n")).toContain(FREE_TIER_LIBRARY);
+    expect(seen.synth).toEqual([]);
+  });
+
+  test("na rodada: --voices num plano pago usa só a voz escolhida", async () => {
+    reset();
+    accountVoices[LIB] = { category: "professional" };
+    const r = await (async () => {
+      const out = mkdtempSync(path.join(tmpdir(), "cloud-tts-el-"));
+      const orig = { log: console.log, error: console.error };
+      console.log = () => {};
+      console.error = () => {};
+      try {
+        return await main(["--providers", "elevenlabs", "--rounds", "1", "--only", "pt01,en09", "--voices", `${LIB}:Narradora`, "--out", out], {
+          ELEVENLABS_API_KEY: KEY,
+          ELEVENLABS_BASE_URL: base,
+        });
+      } finally {
+        Object.assign(console, orig);
+      }
+    })();
+    expect(r).toBe(0);
+    expect(seen.synth.length).toBe(2);
+    expect(seen.httpUrls.filter((u) => u.includes("/stream")).every((u) => u.includes(`/v1/text-to-speech/${LIB}/stream`))).toBe(true);
   });
 });
