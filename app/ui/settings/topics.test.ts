@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 
 import { translate } from "../../src/shared/i18n/index.ts";
 import { HUB_SECTIONS } from "../../src/shared/ui-contract.ts";
-import { isSettingsTopic, isTopicTab, LAST_TOPIC_KEY, lastTabKey, readLastTab, readLastTopic, saveLastTab, saveLastTopic, SETTINGS_BLOCKS, SETTINGS_TOPICS, SHOWN_TOPICS, shortcutBlock, shownTopics, shortcutGroups, stepTab, stepTopic, tabOf, TOPIC_BLOCKS, TOPIC_LABEL_KEYS, TOPIC_LABELS, TOPIC_TABS, topicOf } from "./topics.ts";
+import { isSettingsTopic, isTopicTab, LAST_TOPIC_KEY, lastTabKey, pickNamed, readLastTab, readLastTopic, saveLastTab, saveLastTopic, SETTINGS_BLOCKS, SETTINGS_TOPICS, SHOWN_TOPICS, shortcutBlock, shownTopics, shortcutGroups, stepTab, stepTopic, tabOf, TOPIC_BLOCKS, TOPIC_LABEL_KEYS, TOPIC_LABELS, TOPIC_TABS, topicOf } from "./topics.ts";
 
 test("os 9 assuntos, na ordem, cada um com nome (o Geral do T28190 na frente)", () => {
   expect(SETTINGS_TOPICS.map((t) => TOPIC_LABELS[t])).toEqual(["Geral", "Aparência", "Ditado", "Notas", "Reuniões", "Agente", "Atividade do agente", "Privacidade", "Sobre"]);
@@ -153,4 +153,13 @@ test("o Agente em 5 abas, cada uma com os seus blocos (T31765)", () => {
   expect(tabOf("doubtAnswers")).toBe("memory");
   expect(tabOf("usage")).toBe("advanced");
   expect(tabOf("agentAdvanced")).toBe("advanced");
+});
+
+test("a busca por linha: a linha de mesmo nome que a seção ganha dela (#31832), e a seção vale quando não há linha", () => {
+  const text = (e: { t: string }) => e.t;
+  const section = { t: "Memória" };
+  const row = { t: " Memória " };
+  expect(pickNamed([{ t: "Instruções" }, row], [section], text, "Memória")).toBe(row);
+  expect(pickNamed([{ t: "Instruções" }], [section], text, "Memória")).toBe(section);
+  expect(pickNamed([], [], text, "Memória")).toBeUndefined();
 });

@@ -30,7 +30,7 @@ import { ShortcutsSection, SidebarKeysSection } from "./Shortcuts.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
 import { TopicIcon } from "./topicIcons.tsx";
 import { TrailsSection } from "./Trails.tsx";
-import { isSettingsTopic, isTopicTab, NARROW_PX, readLastTab, readLastTopic, saveLastTab, saveLastTopic, SHOWN_TOPICS, type SettingsBlock, type SettingsTopic, stepTab, stepTopic, TOPIC_LABEL_KEYS, TOPIC_TABS } from "./topics.ts";
+import { isSettingsTopic, isTopicTab, NARROW_PX, pickNamed, readLastTab, readLastTopic, saveLastTab, saveLastTopic, SHOWN_TOPICS, type SettingsBlock, type SettingsTopic, stepTab, stepTopic, TOPIC_LABEL_KEYS, TOPIC_TABS } from "./topics.ts";
 import { UsageMeter } from "./UsageMeter.tsx";
 
 /** A Transcrição de antes: o idioma e o "Guardar o áudio" ainda só guardam estado local. */
@@ -133,9 +133,8 @@ function reveal(panel: HTMLElement, row: string, showTab: (id: string) => void):
   let tries = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const find = () => {
-    // A linha antes da seção: com as abas, uma seção pode ter o nome de uma linha dela (Agente › Memória, #31832).
-    const named = (sel: string) => [...panel.querySelectorAll<HTMLElement>(sel)].find((e) => e.textContent?.trim() === row);
-    const label = named(".kn-row-label") ?? named(".kn-section-title");
+    // A linha antes da seção de mesmo nome (#31832): o `pickNamed` explica.
+    const label = pickNamed(panel.querySelectorAll<HTMLElement>(".kn-row-label"), panel.querySelectorAll<HTMLElement>(".kn-section-title"), (e) => e.textContent, row);
     const target = label?.closest<HTMLElement>(".kn-row, .kn-section") ?? label;
     if (!target) {
       if (++tries < 30) timer = setTimeout(find, 100);
