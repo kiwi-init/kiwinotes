@@ -17,6 +17,7 @@
     { "waitFor": "html[data-theme-id='neon-arcade'] body", "name": "esta troca pelo settings.changed, sem recarregar" },
     { "click": ".kn-theme:has-text('Glacier Mint')", "name": "um tema claro com o modo Escuro" },
     { "waitFor": "html[data-theme='light'][data-theme-id='glacier-mint'] body", "name": "o modo vai junto para Claro" },
+    { "click": ".kn-prefs-topic[data-topic=appearance] .kn-prefs-tab[data-tab=text]", "name": "a aba Texto (spec #31754)" },
     { "click": ".kn-segmented button:has-text('Grande')", "name": "Tamanho do texto: Grande" },
     { "waitFor": "html[style*='--text-scale: 1.14'] body", "name": "o zoom de 1.14" },
     { "click": ".kn-segmented button:has-text('Inter')", "name": "Fonte: Inter" },
