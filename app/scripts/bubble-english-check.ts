@@ -20,12 +20,9 @@ const registry = fakeRegistry([
 const packages = join(mkdtempSync(join(tmpdir(), "kiwi-bubble-en-")), "packages.json");
 writeFileSync(packages, JSON.stringify(registry.pinned));
 
-// O português que já tem dono: some daqui no PR que o traduz. Os erros do agente (`AGENT_ERROR_MESSAGES`, em
-// src/agent/errors.ts) ainda não têm inglês; a task sai do lead (#28171).
-const KNOWN: [string, string][] = [
-  ["Sem conexão com a internet", "#28171"],
-  ["não está logado", "#28171"],
-];
+// O português que já tem dono: some daqui no PR que o traduz. Os erros do agente saem do catálogo desde o T30986, e
+// um erro em português no balão volta a barrar.
+const KNOWN: [string, string][] = [];
 const s = await startEnglish({
   name: "T30636-bubble-english",
   known: KNOWN,

@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { tempDir } from "../test/tmp.ts";
 import { AGY_LOGIN_HELP, GEMINI, GEMINI_NOT_A_COMMAND } from "../src/agent/gemini-host.ts";
+import { translate } from "../src/shared/i18n/index.ts";
 
 const CLI = path.join(import.meta.dir, "cli.ts");
 const dirs: string[] = [];
@@ -147,7 +148,7 @@ describe("o Gemini (spec #24666), com o gemini falso", () => {
     expect(r.result).toMatchObject({ ok: false, code: "E_AGENT_NOT_LOGGED_IN" });
     expect(r.result!.message).toContain(`O ${GEMINI} não está logado`);
     // O `agy` falso é o padrão da CLI (spec #25046): a mensagem diz como entrar no Antigravity.
-    expect(r.result!.message).toContain(AGY_LOGIN_HELP);
+    expect(r.result!.message).toContain(translate("pt", AGY_LOGIN_HELP));
     expect(r.result!.message).not.toMatch(/auth|required/i);
   });
 

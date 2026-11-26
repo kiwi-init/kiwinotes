@@ -354,4 +354,24 @@ export const ptAgent = {
   "agent.nm.body.curtos": "Parágrafos curtos",
   "agent.nm.body.longos": "Parágrafos longos",
   "agent.nm.body.misto": "Misto",
+  // Os erros do agente (src/agent/errors.ts, T30986): {agente} é o nome do agente; {instalada} e {esperada}, as versões.
+  "agent.error.E_AGENT_NOT_INSTALLED": "O {agente} não está instalado neste Mac. Instale e tente de novo.",
+  "agent.error.E_AGENT_NOT_LOGGED_IN": "O {agente} não está logado. {entrar}",
+  "agent.error.E_AGENT_LIMIT": "O {agente} atingiu o limite de uso da sua conta. Espere o limite voltar e tente de novo.",
+  "agent.error.E_AGENT_OFFLINE": "Sem conexão com a internet. O {agente} precisa de rede para responder.",
+  "agent.error.E_AGENT_BUSY": "O {agente} ainda está respondendo o pedido anterior. Espere terminar ou cancele.",
+  "agent.error.E_AGENT_FAILED": "O {agente} falhou ao responder. Tente de novo.",
+  "agent.error.E_ADAPTER_MISSING": "Falta baixar o adaptador do {agente}. Ele é baixado uma vez, quando você liga o agente.",
+  "agent.error.E_ADAPTER_OFFLINE": "Sem conexão com a internet. O Kiwi precisa de rede para baixar o adaptador do {agente}.",
+  "agent.error.E_ADAPTER_TAMPERED": "Um pacote do adaptador do {agente} chegou diferente do esperado e foi apagado. Nada foi instalado. Tente de novo mais tarde.",
+  "agent.error.E_ADAPTER_DOWNLOAD": "O download do adaptador do {agente} falhou. Nada foi instalado. Tente de novo mais tarde.",
+  "agent.error.E_ADAPTER_CANCELLED": "O download do adaptador do {agente} foi cancelado. Nada foi instalado.",
+  "agent.error.E_AGENT_TOO_OLD": "O {agente} instalado (versão {instalada}) é mais antigo que o que este Kiwi usa ({esperada}). Atualize o {agente} e tente de novo.",
+  "agent.error.E_AGENT_TOO_NEW": "O {agente} instalado (versão {instalada}) mudou de série, e este Kiwi só conhece a da {esperada}. O agente fica indisponível até sair uma atualização do Kiwi Notes.",
+  // Como entrar, depois de "não está logado": o padrão serve ao Claude Code; o Antigravity tem a dele (spec #25046).
+  "agent.error.login": "Entre na sua conta pelo próprio {agente} e tente de novo.",
+  "agent.error.login.agy": "Abra o Antigravity no Terminal e entre com a sua conta.",
+  // O nome quando quem cria o erro não diz qual agente; a versão que o Antigravity precisa.
+  "agent.error.someAgent": "agente",
+  "agent.error.agyAcp": "uma com o agy acp",
 } as const;

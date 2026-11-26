@@ -15,11 +15,14 @@ import { geminiArgs, geminiEnv, geminiStatus, GEMINI_MIN_VERSION, writeGeminiPol
 import { AgentHost, type AgentHostOptions } from "./host.ts";
 import { AGENT_NAMES } from "./kinds.ts";
 import type { ProgramArgv } from "./claude.ts";
+import { mainLocale } from "../bun/locale.ts";
+import { type TextKey, translate } from "../shared/i18n/index.ts";
 
 export const GEMINI = AGENT_NAMES.gemini;
 
 /** Como entrar no `agy` sem login (spec #25046): o login é o dele, no Terminal; o Kiwi nunca pede nem usa chave. */
-export const AGY_LOGIN_HELP = "Abra o Antigravity no Terminal e entre com a sua conta.";
+// A chave do catálogo (T30986): a frase sai na língua do app.
+export const AGY_LOGIN_HELP: TextKey = "agent.error.login.agy";
 
 export interface GeminiHostOptions {
   /** A pasta de dados do app (ou a de teste). */
@@ -37,7 +40,7 @@ export async function geminiHost(o: GeminiHostOptions): Promise<{ host: AgentHos
   if (!status.installed || !o.program) throw new AgentError("E_AGENT_NOT_INSTALLED", GEMINI);
   const agy = programKind(o.program) === "agy";
   if (status.tooOld) {
-    throw new AgentError("E_AGENT_TOO_OLD", GEMINI, undefined, { instalada: status.version ?? "?", esperada: agy ? "uma com o agy acp" : GEMINI_MIN_VERSION });
+    throw new AgentError("E_AGENT_TOO_OLD", GEMINI, undefined, { instalada: status.version ?? "?", esperada: agy ? translate(mainLocale.get(), "agent.error.agyAcp") : GEMINI_MIN_VERSION });
   }
   const dir = agentDir(o.data);
   const env = o.env ?? process.env;

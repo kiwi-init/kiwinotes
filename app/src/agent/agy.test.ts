@@ -10,8 +10,11 @@ import { AgentError } from "./errors.ts";
 import { FAKE_AGY, FAKE_GEMINI, writeFakeAgyExecutable } from "./fake/index.ts";
 import { geminiStatus } from "./gemini.ts";
 import { AGY_LOGIN_HELP, GEMINI, geminiHost } from "./gemini-host.ts";
+import { translate } from "../shared/i18n/index.ts";
 import type { AgentHost } from "./host.ts";
 import { tempDir } from "../../test/tmp.ts";
+
+const AGY_LOGIN_TEXT = translate("pt", AGY_LOGIN_HELP);
 
 const dirs: string[] = [];
 const hosts: AgentHost[] = [];
@@ -279,7 +282,7 @@ describe("o agy: permissões, sessão e login no host (T25060)", () => {
     const { host, log } = await agy(tmp(), { KIWI_FAKE_GEMINI_LOGGED_IN: "0" });
     const e = await rejection(host.start());
     expect(e.code).toBe("E_AGENT_NOT_LOGGED_IN");
-    expect(e.message).toBe(`O ${GEMINI} não está logado. ${AGY_LOGIN_HELP}`);
+    expect(e.message).toBe(`O ${GEMINI} não está logado. ${AGY_LOGIN_TEXT}`);
     expect(e.detail).toContain("Authentication required");
     expect(readLog(log).map((l) => l.method)).not.toContain("authenticate");
   });
@@ -289,7 +292,7 @@ describe("o agy: permissões, sessão e login no host (T25060)", () => {
     const { host } = await agy(data, { KIWI_FAKE_GEMINI_LOGGED_IN: "0" }, FAKE_GEMINI);
     const e = await rejection(host.start());
     expect(e.code).toBe("E_AGENT_NOT_LOGGED_IN");
-    expect(e.message).not.toContain(AGY_LOGIN_HELP);
+    expect(e.message).not.toContain(AGY_LOGIN_TEXT);
     expect(e.message).toContain(`Entre na sua conta pelo próprio ${GEMINI}`);
   });
 
@@ -312,7 +315,7 @@ describe("o agy: permissões, sessão e login no host (T25060)", () => {
     const out = await agy(data, { KIWI_FAKE_GEMINI_LOGGED_IN: "0" });
     const e = await rejection(out.host.start());
     expect(e.code).toBe("E_AGENT_NOT_LOGGED_IN");
-    expect(e.message).toContain(AGY_LOGIN_HELP);
+    expect(e.message).toContain(AGY_LOGIN_TEXT);
     expect(readLog(out.log).map((l) => l.method)).toContain("session/resume");
   });
 });
