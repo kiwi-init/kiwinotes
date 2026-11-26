@@ -148,7 +148,7 @@ try {
   assert.equal(first.on, false, "entra desligada");
   assert.ok(Date.now() - booted < 50_000, `a preparação levou ${Math.round((Date.now() - booted) / 1000)} s: o relógio de teste já passou das 18h`);
   await invoke("agent.routineUpdate", { id: first.id, on: true });
-  const h = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 980, height: 900, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
+  const h = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 980, height: 900, motion: false, browser: "webkit", query: { section: "settings", topic: "agent", tab: "memory" } });
   const p = h.page;
   await p.waitForSelector('.kn-kiwicat[data-ready="true"]', { timeout: 15000 });
   await ctx.send({ cmd: "hubView", view: true });
@@ -227,13 +227,13 @@ try {
 
   // 4. A parte Rotinas inteira, no claro e no escuro, e o apagar.
   for (const theme of ["light", "dark"] as const) {
-    const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 2000, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
+    const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 2000, motion: false, browser: "webkit", query: { section: "settings", topic: "agent", tab: "memory" } });
     await w.page.waitForSelector(`${box} .kn-routine-card[data-routine=weekly]`, { timeout: 15000 });
     await shot(w.page, box, `5-rotinas-${theme}.png`, `5. Ajustes › Agente › Rotinas, com as novas (${theme === "light" ? "claro" : "escuro"})`);
     report.problems.push(...w.report.problems);
     await w.close();
   }
-  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1600, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
+  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1600, motion: false, browser: "webkit", query: { section: "settings", topic: "agent", tab: "memory" } });
   await w.page.locator(`${card} button:has-text('Apagar')`).click();
   await w.page.locator(`${card} [role=group] button:has-text('Apagar')`).click();
   await w.page.waitForSelector(card, { state: "detached", timeout: 5000 });

@@ -328,7 +328,7 @@ try {
     const tag = `com ${LOAD} entradas chegando no cofre`;
     {
       await invoke("agent.configure", { onboarding: { state: "done" } });
-      const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 1100, height: 800, motion: true, browser: "webkit", query: { section: "settings", topic: "agent" } }, 60000);
+      const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 1100, height: 800, motion: true, browser: "webkit", query: { section: "settings", topic: "agent", tab: "memory" } }, 60000);
       const p = w.page;
       const sel = `.kn-routine-card[data-routine=daily] select[aria-label$="a pasta"]`;
       await p.waitForSelector(sel, { timeout: 60000 });

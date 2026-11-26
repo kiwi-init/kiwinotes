@@ -81,6 +81,7 @@
       "waitFor": ".kn-agent-test",
       "name": "o Testar aparece sem baixar nada"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "click": ".kn-agent-test button:has-text('Testar')",
       "name": "manda o pedido de teste ao Gemini falso"
@@ -104,6 +105,7 @@
     {
       "wait": 400
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "scroll": ".kn-section:has(h2:text-is('Agente'))",
       "y": -20000,

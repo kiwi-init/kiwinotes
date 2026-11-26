@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, settingsTab, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const app = resolve(import.meta.dir, "..");
@@ -293,6 +293,7 @@ try {
     if (theme === "light") {
       report.checks.push("the final card shows the colour, the tone, the projects and the shortcut, with no colour stripe on top (spec #17709); Pronto ends it");
       // Spec #17709 (T18615): em Ajustes, a mesma linha da cor tem a mesma altura com as 5, e a frase numa linha.
+      await settingsTab(p, "agent", "kiwi"); // a cor fica na aba Kiwi (spec #31754)
       const row = p.locator(".kn-row", { has: p.getByRole("radiogroup", { name: "Cor do Kiwi" }) }).first();
       await row.scrollIntoViewIfNeeded();
       const settingsHeights: Record<string, number> = {};
@@ -309,6 +310,7 @@ try {
       assert.equal(new Set(Object.values(settingsHeights)).size, 1, `em Ajustes, a linha da cor com a mesma altura: ${JSON.stringify(settingsHeights)}`);
       report.checks.push("in Settings, the colour row keeps one height and a one-line sentence with each of the 5 (spec #17709)");
       // 2. "Refazer o onboarding" em Ajustes abre de novo, do passo 1; fechar no meio termina com o que foi escolhido.
+      await settingsTab(p, "agent", "advanced"); // o Refazer fica na aba Avançado
       await p.locator("button:has-text('Refazer o onboarding')").click();
       await p.waitForSelector(".kn-onb", { timeout: 15000 });
       await stepIs(p, 1);

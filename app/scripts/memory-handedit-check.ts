@@ -106,7 +106,7 @@ try {
   for (const theme of ["light", "dark"] as const) {
     const t = theme === "light" ? "claro" : "escuro";
     // 1. Ajustes › Agente › Memória: o aviso com o fato de fora e a linha que não é fato.
-    const a = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 900, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
+    const a = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 900, motion: false, browser: "webkit", query: { section: "settings", topic: "agent", tab: "memory" } });
     const box = a.page.locator(".kn-agent-memory").first();
     await a.page.waitForSelector(".kn-memory-skipped", { timeout: 15000 });
     await box.scrollIntoViewIfNeeded();

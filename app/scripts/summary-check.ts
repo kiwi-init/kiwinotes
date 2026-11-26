@@ -164,7 +164,7 @@ try {
   await h.close();
 
   // 6. Ajustes › Agente: os 6 blocos e o período do primeiro resumo. O próximo resumo segue.
-  const s = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 2200, motion: false, browser: "webkit", query: { section: "settings", topic: "meetings" } });
+  const s = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 2200, motion: false, browser: "webkit", query: { section: "settings", topic: "meetings", tab: "yours" } });
   const p = s.page;
   const rows = ".kn-agent-meetings";
   await p.waitForSelector(rows, { timeout: 15000 });

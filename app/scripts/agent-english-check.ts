@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type Page, webkit } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, settingsTab, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 import { enActivity } from "../src/shared/i18n/activity.en.ts";
 import { enAgent } from "../src/shared/i18n/agent.en.ts";
@@ -134,13 +134,16 @@ try {
   }
 
   // Ajustes › Agente: a memória, as rotinas, o placar, as trilhas e as respostas.
-  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "dark", width: 900, height: 2600, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
+  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "dark", width: 900, height: 2600, motion: false, browser: "webkit", query: { section: "settings", topic: "agent", tab: "memory" } });
   const p = w.page;
   page = p;
   await check(p, ".kn-agent-memory", "1-memoria", [en("mem.clearAll"), "1 of"]);
   await check(p, ".kn-agent-routines", "2-rotinas", [en("routines.title"), en("routines.runNow"), "Mon, Wed and Fri at 6:30 PM"]);
   // A hora do placar é a de agora: AM antes do meio-dia, PM depois (T30888; o " PM" fixo caía em todo run da manhã).
+  // O placar fica no medidor de uso, na aba Avançado; as trilhas e as respostas, na Memória (spec #31754).
+  await settingsTab(p, "agent", "advanced");
   await check(p, section(en("agent.placar.section")), "3-placar", [en("agent.placar.section"), en("agent.placar.found"), en("agent.placar.col.last"), /\d:\d\d [AP]M/]);
+  await settingsTab(p, "agent", "memory");
   await check(p, section(en("trails.learning")), "4-trilhas", [en("trails.waiting"), "· once"]);
   await check(p, section(en("answers.title")), "5-respostas", [en("answers.none")]);
   await w.close();

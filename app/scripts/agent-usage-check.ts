@@ -88,7 +88,7 @@ try {
     await idle();
   }
 
-  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
+  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings", topic: "agent", tab: "advanced" } });
   const p = w.page;
   // 1. O medidor: o gasto do Kiwi e, ao abrir, o uso da assinatura pelo /usage.
   await p.waitForSelector(meter, { timeout: 15000 });

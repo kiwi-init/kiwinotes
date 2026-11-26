@@ -66,6 +66,7 @@
       "fill": ".kn-agent-test-input",
       "text": "Qual é o prazo do Kiwi?"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "click": ".kn-agent-test button:has-text('Testar')",
       "name": "pergunta sobre a nota"
@@ -76,6 +77,7 @@
       "timeout": 20000,
       "name": "o status diz o que está lendo"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "screenshot": "1-lendo.png",
       "selector": ".kn-section:has(h2:text-is('Agente'))"
