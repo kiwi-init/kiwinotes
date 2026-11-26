@@ -1,7 +1,7 @@
 // A chave no Keychain (spec #31616, T31627). Nada aqui toca o Keychain da pessoa: o falso na memória, ou um
 // `.keychain-db` temporário criado e apagado pelo próprio teste, fora da lista de busca do Mac. Sem diálogo nenhum.
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -72,7 +72,13 @@ describe.skipIf(process.platform !== "darwin")("com o security, num Keychain tem
   beforeAll(() => {
     dir = mkdtempSync(path.join(tmpdir(), "kiwi-keychain-"));
     file = path.join(dir, "teste.keychain-db");
+    // Sempre com a senha no comando, e sem o bloqueio automático: um Keychain bloqueado pediria a senha numa janela.
+    // Nunca o `list-keychains -s` nem o `default-keychain`: ele fica fora da lista de busca do Mac.
     expect(sec("create-keychain", "-p", "exemplo", file)).toBe(0);
+    expect(sec("set-keychain-settings", file)).toBe(0);
+  });
+  beforeEach(() => {
+    expect(sec("unlock-keychain", "-p", "exemplo", file)).toBe(0);
   });
   afterAll(() => {
     sec("delete-keychain", file);
@@ -99,8 +105,9 @@ describe.skipIf(process.platform !== "darwin")("com o security, num Keychain tem
     expect(seen.filter((l) => l.includes(KEY)).every((l) => l.startsWith("add-generic-password "))).toBe(true);
   });
 
-  test("o Keychain temporário não entra na lista de busca do Mac", () => {
-    const list = Bun.spawnSync(["/usr/bin/security", "list-keychains"], { stdout: "pipe", stderr: "ignore" }).stdout.toString();
-    expect(list).not.toContain(file);
+  test("o Keychain temporário não entra na lista de busca nem vira o padrão", () => {
+    const out = (...a: string[]) => Bun.spawnSync(["/usr/bin/security", ...a], { stdout: "pipe", stderr: "ignore" }).stdout.toString();
+    expect(out("list-keychains")).not.toContain(file);
+    expect(out("default-keychain")).not.toContain(file);
   });
 });
