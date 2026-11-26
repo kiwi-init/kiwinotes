@@ -125,6 +125,17 @@ try {
     await expectTab(p, "notes", "sidebar");
     problems.push(...w.report.problems);
     await w.close();
+    // 5. Com o agente desligado, a Voz leva à aba Geral, e o foco vai junto para ela (#32045), não para o body.
+    const v = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 1100, height: 720, motion: false, browser: "webkit", query: { section: "settings", topic: "agent", tab: "voice" } });
+    await expectTab(v.page, "agent", "voice");
+    const link = v.page.locator(`${panel("agent")} .kn-prefs-tabpanel[data-tab=voice] .kn-agent-link`);
+    await link.focus();
+    await v.page.keyboard.press("Enter");
+    await expectTab(v.page, "agent", "general");
+    assert.equal((await state(v.page, "agent")).focused, "general", "o foco vai para a aba Geral");
+    problems.push(...v.report.problems);
+    await v.close();
+    checks.push("with the agent off, Agente › Voz links to the Geral tab, and the keyboard focus goes to that tab");
     checks.push("?topic=meetings&tab=yours opens that tab; a tab id from another topic falls back to the last one opened there");
   }
 } finally {
