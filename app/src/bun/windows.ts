@@ -159,10 +159,11 @@ let catVoiceOutput: { preview: CatVoicePreview; falarUmaVez: ReturnType<typeof l
  * queda para a local. O `speakOnce` é o "Testar" e o `lastFallback`, o motivo da última queda. No headless, nunca o
  * Keychain da pessoa: sem chave.
  */
+const elevenLabsSecret = process.env.KIWI_HEADLESS === "1" ? undefined : elevenLabsKey();
 export const kiwiVoice = vozDoKiwi({
   vozLocal: catVoice.voice,
   settings: stores.settings,
-  key: process.env.KIWI_HEADLESS === "1" ? { getKey: async () => null } : elevenLabsKey(),
+  key: elevenLabsSecret ?? { getKey: async () => null },
   falarUmaVez: () => catVoiceOutput?.falarUmaVez,
   log: (m) => console.log(`[cat-voice] ${m}`),
 });
@@ -201,6 +202,18 @@ export function startCatVoiceOutput(sidecar: Sidecar): void {
 const UPDATER_OFF = "o atualizador ainda não subiu"; // i18n-ok: diagnóstico
 
 const capabilities = uiCapabilities({
+  // A chave no Keychain e o Testar do ElevenLabs nos Ajustes (spec #31616). No headless, nunca o Keychain da pessoa.
+  ...(elevenLabsSecret
+    ? {
+        elevenLabs: {
+          hasKey: () => elevenLabsSecret.hasKey(),
+          setKey: (k: string) => elevenLabsSecret.setKey(k),
+          deleteKey: () => elevenLabsSecret.deleteKey(),
+          speakOnce: (t: string) => kiwiVoice.speakOnce(t),
+          lastFallback: () => kiwiVoice.lastFallback(),
+        },
+      }
+    : {}),
   introDone: () => {
     for (const fn of introDoneListeners) fn();
   },

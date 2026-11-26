@@ -14,7 +14,7 @@
 //   também. O motivo vai à UI uma vez, e só de novo quando ele muda ou depois de uma fala que deu certo.
 
 import { MARKER, SecretGuard } from "../guardrail/filter.ts";
-import type { CatVoiceProvider, ElevenLabsModel } from "../shared/elevenlabs.ts";
+import { type CatVoiceProvider, ELEVENLABS_REASONS, type ElevenLabsModel, type ElevenLabsReason } from "../shared/elevenlabs.ts";
 import type { SinteseFala } from "./voice-process.ts";
 
 export const ELEVENLABS_BASE_URL = "https://api.elevenlabs.io";
@@ -23,8 +23,7 @@ export const ELEVENLABS_OUTPUT_FORMAT = "pcm_24000";
 /** 80 ms a 24 kHz: o tamanho das fatias da voz local, para o player e a boca do gato verem o mesmo ritmo. */
 const SLICE = 1920;
 
-export const ELEVENLABS_REASONS = ["no_key", "invalid_api_key", "missing_permissions", "quota_exceeded", "voice_not_found", "network", "unknown"] as const;
-export type ElevenLabsReason = (typeof ELEVENLABS_REASONS)[number];
+export { ELEVENLABS_REASONS, type ElevenLabsReason } from "../shared/elevenlabs.ts";
 
 /** Uma falha do ElevenLabs, só com o motivo e o código HTTP: nunca a chave nem o texto. */
 export class ElevenLabsError extends Error {
