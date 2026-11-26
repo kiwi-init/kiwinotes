@@ -9,6 +9,8 @@
 // - A voz (T27778): cada `speak` leva a referência, o texto e o idioma da voz. Ela é lida uma vez por fala (o `signal`
 //   do turno, o mesmo para todas as frases dele): trocar a voz no meio de uma fala só vale a partir da próxima, e o
 //   processo quente não recarrega o modelo. O Ouvir (`com`) fala numa voz fixa, sem mexer na escolhida.
+// - A língua de cada frase (T31030, harry #31028): com o `lingua`, cada frase pede a voz da língua dela (`assets(lingua)`),
+//   e uma frase sem sinal (`null`: "Hmm.", um número) segue na língua da anterior. Uma voz por língua e por fala.
 
 import path from "node:path";
 
@@ -23,6 +25,9 @@ export const VOICE_SLICE_SAMPLES = 1920;
 /** O teto de cache do MLX do ADR 0014. */
 export const VOICE_CACHE_MB = 512;
 export const VOICE_IDLE_MS = 120_000;
+
+/** A língua de uma frase, para a voz (T31030): `null` quando a frase não diz. */
+export type FalaLingua = "pt" | "en" | null;
 
 /** O modelo e a voz baixados no clique da pessoa (T26729). */
 export interface VoiceAssets {
@@ -44,8 +49,13 @@ export interface VoiceChild {
 export interface VoiceProcessOptions {
   /** O executável: o `voicePath`. */
   bin: string;
-  /** O modelo e a voz escolhida: o `load` do processo, e a voz de cada fala nova. */
-  assets: () => VoiceAssets | Promise<VoiceAssets>;
+  /**
+   * O modelo e a voz escolhida: o `load` do processo, e a voz de cada fala nova. Com o `lingua`, a voz para a língua de
+   * uma frase (T31030); sem a língua (o `load`, uma frase sem sinal no começo da fala), a escolhida.
+   */
+  assets: (lingua?: FalaLingua) => VoiceAssets | Promise<VoiceAssets>;
+  /** A língua de cada frase (T31030). Sem ele, todas as frases na voz escolhida, como antes. */
+  lingua?: (frase: string) => FalaLingua;
   idleMs?: number;
   cacheMB?: number;
   /** Quanto o `load` pode levar (a 1ª vez compila os kernels Metal). */
@@ -115,8 +125,11 @@ export class VoiceProcess implements SinteseFala {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly idleMs: number;
   private readonly log: (m: string) => void;
-  /** A voz de cada fala, pelo `signal` dela: lida na 1ª frase, a mesma até o fim. */
-  private readonly voices = new WeakMap<AbortSignal, Promise<VoiceAssets>>();
+  /**
+   * A voz de cada fala, pelo `signal` dela: lida na 1ª frase de cada língua, a mesma até o fim. `last` é a língua da
+   * frase anterior, a de uma frase sem sinal.
+   */
+  private readonly voices = new WeakMap<AbortSignal, { last: FalaLingua; byLingua: Map<string, Promise<VoiceAssets>> }>();
 
   constructor(private readonly opts: VoiceProcessOptions) {
     this.idleMs = opts.idleMs ?? VOICE_IDLE_MS;
@@ -129,25 +142,35 @@ export class VoiceProcess implements SinteseFala {
   }
 
   sintetizar(frase: string, signal: AbortSignal): AsyncGenerator<Int16Array> {
-    return this.gerar(frase, signal, this.opts.assets);
+    return this.gerar(frase, signal, this.opts.assets, this.opts.lingua?.(frase) ?? null);
   }
 
-  /** A síntese numa voz fixa (o Ouvir dos Ajustes, T27778): a escolhida não muda. */
+  /** A síntese numa voz fixa (o Ouvir dos Ajustes, T27778): a escolhida não muda, e a língua da frase não conta. */
   com(voz: () => VoiceAssets | Promise<VoiceAssets>): SinteseFala {
-    return { sintetizar: (frase, signal) => this.gerar(frase, signal, voz) };
+    return { sintetizar: (frase, signal) => this.gerar(frase, signal, voz, null) };
   }
 
-  private voiceOf(signal: AbortSignal, voz: () => VoiceAssets | Promise<VoiceAssets>): Promise<VoiceAssets> {
-    let v = this.voices.get(signal);
+  private voiceOf(signal: AbortSignal, voz: (lingua?: FalaLingua) => VoiceAssets | Promise<VoiceAssets>, lingua: FalaLingua): Promise<VoiceAssets> {
+    let fala = this.voices.get(signal);
+    if (!fala) this.voices.set(signal, (fala = { last: null, byLingua: new Map() }));
+    const l = lingua ?? fala.last;
+    fala.last = l;
+    const key = l ?? "";
+    let v = fala.byLingua.get(key);
     if (!v) {
-      v = Promise.resolve().then(voz);
+      v = Promise.resolve().then(() => (l ? voz(l) : voz()));
       v.catch(() => {});
-      this.voices.set(signal, v);
+      fala.byLingua.set(key, v);
     }
     return v;
   }
 
-  private async *gerar(frase: string, signal: AbortSignal, voz: () => VoiceAssets | Promise<VoiceAssets>): AsyncGenerator<Int16Array> {
+  private async *gerar(
+    frase: string,
+    signal: AbortSignal,
+    voz: (lingua?: FalaLingua) => VoiceAssets | Promise<VoiceAssets>,
+    lingua: FalaLingua,
+  ): AsyncGenerator<Int16Array> {
     if (signal.aborted) return;
     this.clearIdle();
     const id = `f${this.nextId++}`;
@@ -157,7 +180,7 @@ export class VoiceProcess implements SinteseFala {
     signal.addEventListener("abort", onAbort);
     let leftover = new Int16Array(0);
     try {
-      const voice = this.voiceOf(signal, voz);
+      const voice = this.voiceOf(signal, voz, lingua);
       const live = (turn.live = this.start());
       await Promise.race([live.ready, new Promise<void>((r) => signal.addEventListener("abort", () => r(), { once: true }))]);
       if (signal.aborted) return;

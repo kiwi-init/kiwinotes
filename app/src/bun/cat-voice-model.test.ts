@@ -4,7 +4,7 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type { Fetcher, ModelManifest } from "../notes/semantic/model.ts";
@@ -12,7 +12,7 @@ import { modelDir } from "../notes/semantic/model.ts";
 import { tempDir } from "../../test/tmp.ts";
 import type { CatVoiceStatus } from "../shared/ui-contract.ts";
 import { CAT_VOICE_IDS, CAT_VOICES, type CatVoiceId, DEFAULT_CAT_VOICE } from "../shared/cat-voices.ts";
-import { CAT_VOICE_REFS, CatVoiceModel, type CatVoiceRef, headlessCatVoiceSource, QWEN3_TTS } from "./cat-voice-model.ts";
+import { CAT_VOICE_REFS, CatVoiceModel, type CatVoiceRef, createCatVoice, headlessCatVoiceSource, LINGUA_VOICE, QWEN3_TTS, voiceForLingua } from "./cat-voice-model.ts";
 import { spawnVoice, VoiceProcess } from "./voice-process.ts";
 
 const bytes = (n: number, seed: number) => Buffer.from(Array.from({ length: n }, (_, i) => (i * 31 + seed) % 251));
@@ -257,6 +257,44 @@ describe("CatVoiceModel", () => {
     await expect(m.voiceAssets("pt-a")).rejects.toThrow(/ainda não tem referência/);
   });
 
+  test("T31030: a voz da língua da frase, sem trocar a escolha; fora do disco, a escolhida", async () => {
+    // Uma voz em português inventada (o mesmo arquivo da Bia, outra referência).
+    const PT = (): CatVoiceRef => {
+      const r = wav("bia-exemplo", "Oi, eu sou a Bia falando português.");
+      return { ...r, manifest: { ...r.manifest, id: "voz-pt-exemplo" }, language: "portuguese" };
+    };
+    let escolha: CatVoiceId = "en-b";
+    const { m, modelsDir } = make({ voices: { "en-a": VOICE(), "en-b": VOICE_B(), "pt-a": PT() }, selected: () => escolha });
+    await m.download();
+    // A inglesa escolhida: inglês e sem sinal nela, português na pt-a.
+    expect((await m.assets("en")).refText).toBe(VOICE_B().text);
+    expect((await m.assets(null)).refText).toBe(VOICE_B().text);
+    expect((await m.assets()).refText).toBe(VOICE_B().text);
+    expect(await m.assets("pt")).toMatchObject({ refText: PT().text, language: "portuguese" });
+    expect(m.status().selected).toBe("en-b");
+    // A portuguesa escolhida: português nela, inglês na en-a.
+    escolha = "pt-a";
+    expect((await m.assets("pt")).refText).toBe(PT().text);
+    expect(await m.assets("en")).toMatchObject({ refText: VOICE().text, language: "english" });
+    // A voz da outra língua fora do disco: a frase sai na escolhida, e o gato não cala.
+    escolha = "en-b";
+    rmSync(path.dirname(modelDir(modelsDir, PT().manifest)), { recursive: true, force: true });
+    expect((await m.assets("pt")).refText).toBe(VOICE_B().text);
+  });
+
+  test("T31030: a voz de cada língua, pela escolhida", () => {
+    expect(LINGUA_VOICE).toEqual({ pt: "pt-a", en: "en-a" });
+    for (const id of CAT_VOICE_IDS) {
+      expect(voiceForLingua(id, null)).toBe(id);
+      const own = CAT_VOICES[id].language === "english" ? "en" : "pt";
+      expect(voiceForLingua(id, own)).toBe(id);
+      expect(voiceForLingua(id, own === "en" ? "pt" : "en")).toBe(own === "en" ? "pt-a" : "en-a");
+    }
+    // A voz de cada língua fala aquela língua.
+    expect(CAT_VOICES[LINGUA_VOICE.pt].language).toBe("portuguese");
+    expect(CAT_VOICES[LINGUA_VOICE.en].language).toBe("english");
+  });
+
   test("o setPreview sai no status, para a linha mostrar o que está tocando", async () => {
     const { m, seen } = make();
     m.setPreview("en-b");
@@ -377,6 +415,46 @@ describe("CatVoiceModel", () => {
       expect(voice.running).toBe(false);
     } finally {
       await voice.stop();
+    }
+  });
+});
+
+describe("a voz segue a língua da frase no app (T31030)", () => {
+  test("o createCatVoice liga o detector: numa fala mista, o português na pt-a e o inglês na inglesa escolhida", async () => {
+    // O kiwi-voice falso, chamado pelo caminho como o app chama o de verdade.
+    const dir = tempDir("cat-voice-lingua");
+    const log = path.join(dir, "cmds.jsonl");
+    const bin = path.join(dir, "kiwi-voice");
+    const fake = path.join(import.meta.dir, "..", "..", "test", "helpers", "fake-kiwi-voice.ts");
+    writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${fake}" "${log}"\n`);
+    chmodSync(bin, 0o755);
+    const pt = wav("bia-exemplo", "Oi, eu sou a Bia falando português.");
+    const pair = createCatVoice({
+      modelsDir: tempDir("cat-voice-lingua-models"),
+      bin,
+      download: true,
+      manifest: MODEL,
+      voices: { "en-a": VOICE(), "en-b": null, "pt-a": { ...pt, manifest: { ...pt.manifest, id: "voz-pt-exemplo" }, language: "portuguese" } },
+      fetch: fakeFetch,
+      selected: () => "en-a",
+    });
+    try {
+      await pair.model.download();
+      const fala = new AbortController();
+      const frases = ["I found the note.", "Achei a nota que você queria.", "Hmm.", "It is saved now."];
+      for (const f of frases) for await (const _ of pair.voice.sintetizar(f, fala.signal));
+      const speaks = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((c) => c.type === "speak");
+      expect(speaks.map((c) => `${c.text}>${c.voice.language}`)).toEqual([
+        "I found the note.>english",
+        "Achei a nota que você queria.>portuguese",
+        // Sem pista: segue a anterior.
+        "Hmm.>portuguese",
+        "It is saved now.>english",
+      ]);
+      // A escolha nos Ajustes não mudou.
+      expect(pair.model.status().selected).toBe("en-a");
+    } finally {
+      await pair.voice.stop();
     }
   });
 });

@@ -16,10 +16,11 @@ import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
+import { linguaOuNada } from "../agent/lingua.ts";
 import { ensureModel, type Fetcher, modelBytes, modelDir, type ModelManifest, modelPresent } from "../notes/semantic/model.ts";
-import { CAT_VOICE_IDS, type CatVoiceId, DEFAULT_CAT_VOICE, isCatVoiceId } from "../shared/cat-voices.ts";
+import { CAT_VOICE_IDS, CAT_VOICES, type CatVoiceId, type CatVoiceLanguage, DEFAULT_CAT_VOICE, isCatVoiceId } from "../shared/cat-voices.ts";
 import type { CatVoiceItem, CatVoiceStatus } from "../shared/ui-contract.ts";
-import { type VoiceAssets, VoiceProcess } from "./voice-process.ts";
+import { type FalaLingua, type VoiceAssets, VoiceProcess } from "./voice-process.ts";
 
 /** O modelo do ADR 0014: o Qwen3-TTS 0.6B Base em 8 bits, 1,9 GB. O `tokenizer.json` o `kiwi-voice` gera na 1ª carga. */
 export const QWEN3_TTS: ModelManifest = {
@@ -68,6 +69,20 @@ const releaseWav = (id: string, name: string, size: number, sha256: string): Mod
   revision: "cat-voices-1",
   files: [{ name, size, sha256, url: `https://github.com/kiwi-init/kiwinotes/releases/download/cat-voices-1/${name}` }],
 });
+
+/**
+ * A voz de uma frase (T31030, harry #31028): a voz inglesa lendo português sai com sotaque, e o contrário também. Uma
+ * frase na língua da voz escolhida fica nela; na outra língua, vai para a voz do catálogo daquela língua: a `pt-a` para
+ * o português, a `en-a` para o inglês. A escolha da pessoa nos Ajustes não muda. Sem a língua (`null`), a escolhida.
+ */
+export function voiceForLingua(chosen: CatVoiceId, lingua: FalaLingua): CatVoiceId {
+  if (!lingua) return chosen;
+  const wanted: CatVoiceLanguage = lingua === "pt" ? "portuguese" : "english";
+  if (CAT_VOICES[chosen].language === wanted) return chosen;
+  return LINGUA_VOICE[lingua];
+}
+/** A voz de cada língua quando a escolhida é da outra. */
+export const LINGUA_VOICE: Record<"pt" | "en", CatVoiceId> = { pt: "pt-a", en: "en-a" };
 
 /**
  * As referências do catálogo (spec #27531, #27781, #28142). `null`: a voz ainda não tem referência e aparece como
@@ -265,19 +280,23 @@ export class CatVoiceModel {
   }
 
   /**
-   * A voz escolhida, que o `VoiceProcess` lê no começo de cada fala. Se ela não está no disco (falhou, ou ainda é
+   * A voz escolhida, que o `VoiceProcess` lê no começo de cada fala. Com a língua da frase (T31030), a voz daquela
+   * língua: a escolhida, se ela fala essa língua, ou a do catálogo para ela (`voiceForLingua`). Se ela não está no disco (falhou, ou ainda é
    * "em breve"), a primeira do catálogo que está: uma voz quebrada não cala o gato (spec #27531). Sem nenhuma, um throw:
    * a fala falha, e nada baixa por isso.
    */
-  async assets(): Promise<VoiceAssets> {
+  async assets(lingua?: FalaLingua): Promise<VoiceAssets> {
     const chosen = await this.readChoice();
-    if (this.ref(chosen)) {
+    // A voz da língua da frase (T31030), e a escolhida se ela não está no disco.
+    const first = [...new Set([voiceForLingua(chosen, lingua ?? null), chosen])];
+    for (const id of first) {
+      if (!this.ref(id)) continue;
       try {
-        return await this.voiceAssets(chosen);
+        return await this.voiceAssets(id);
       } catch {}
     }
     for (const [id] of this.refs) {
-      if (id === chosen) continue;
+      if (first.includes(id)) continue;
       try {
         return await this.voiceAssets(id);
       } catch {}
@@ -426,11 +445,14 @@ export class CatVoiceModel {
  * processo, e remover derruba o processo antes de apagar. O app e o headless criam um par só.
  */
 export function createCatVoice(
-  o: { modelsDir: string; bin: string; download: boolean } & Pick<CatVoiceModelOptions, "manifest" | "voices" | "fetch" | "selected">,
+  o: { modelsDir: string; bin: string; download: boolean; /** A língua de cada frase (T31030); o padrão é o `linguaOuNada`. */ lingua?: (frase: string) => FalaLingua } & Pick<
+    CatVoiceModelOptions,
+    "manifest" | "voices" | "fetch" | "selected"
+  >,
 ): { model: CatVoiceModel; voice: VoiceProcess } {
   const log = (m: string) => console.log(`[cat-voice] ${m}`);
   let model: CatVoiceModel | undefined;
-  const voice = new VoiceProcess({ bin: o.bin, assets: () => model!.assets(), log });
+  const voice = new VoiceProcess({ bin: o.bin, assets: (l) => model!.assets(l), lingua: o.lingua ?? linguaOuNada, log });
   model = new CatVoiceModel({
     modelsDir: o.modelsDir,
     download: o.download,
