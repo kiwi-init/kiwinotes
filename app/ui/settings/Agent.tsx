@@ -332,7 +332,7 @@ export function AgentSection({ part }: { part: AgentPart }) {
   return (
     <Section title={title}>
       {off ? (
-        <Row label={part === "voice" ? t("agent.offTab.voice") : t("agent.offTab")}>
+        <Row label={part === "voice" ? t("agent.offTab.voice") : part === "memory" ? t("agent.offTab.memory") : t("agent.offTab")}>
           <button type="button" className="kn-agent-link" onClick={openGeneral}>
             {t("agent.offTab.open")}
           </button>
