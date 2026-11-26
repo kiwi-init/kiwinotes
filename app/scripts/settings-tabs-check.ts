@@ -117,13 +117,14 @@ try {
     const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "dark", width: 1100, height: 720, motion: false, browser: "webkit", query: { section: "settings", topic: "meetings", tab: "yours" } });
     const p = w.page;
     await expectTab(p, "meetings", "yours");
+    // Na mesma página (cada janela nova é um contexto novo, sem o localStorage): o `tab` de outro assunto cai na última.
     await p.evaluate((k) => localStorage.setItem(k, "sidebar"), lastTabKey("notes"));
+    const url = new URL(p.url());
+    url.searchParams.set("topic", "notes");
+    await p.goto(url.toString());
+    await expectTab(p, "notes", "sidebar");
     problems.push(...w.report.problems);
     await w.close();
-    const w2 = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "dark", width: 1100, height: 720, motion: false, browser: "webkit", query: { section: "settings", topic: "notes", tab: "yours" } });
-    await expectTab(w2.page, "notes", "sidebar");
-    problems.push(...w2.report.problems);
-    await w2.close();
     checks.push("?topic=meetings&tab=yours opens that tab; a tab id from another topic falls back to the last one opened there");
   }
 } finally {
