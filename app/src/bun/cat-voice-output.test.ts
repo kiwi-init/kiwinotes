@@ -3,6 +3,7 @@
 import { expect, test } from "bun:test";
 import type { FalaNaTela, Pcm, SaidaFala, SinteseFala } from "../agent/fala-player.ts";
 import { ligarVozDoGato, ligarVozDoGatoNoApp } from "./cat-voice-output.ts";
+import { ElevenLabsError } from "./elevenlabs-voice.ts";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const esperar = async (ok: () => boolean) => {
@@ -209,4 +210,60 @@ test("no app, a prévia recebe a mesma saída, e desligar solta o helper e o age
   expect(m.ouvintes()).toBeGreaterThan(0);
   m.voz.stop();
   expect(m.ouvintes()).toBe(0); // o `saida.dispose()` também tira o speech.played e o fechar do helper
+});
+
+test("falarUmaVez (o Testar do ElevenLabs, spec #31616): cala o gato, toca na mesma saída e rejeita com o motivo", async () => {
+  const m = montar({ pedacos: 50 });
+  m.falar("t1");
+  await esperar(() => m.naTela.length >= 2);
+  const tocados: number[] = [];
+  const teste: SinteseFala = {
+    async *sintetizar(frase) {
+      expect(frase).toBe("Oi, este é um teste.");
+      yield Int16Array.from([7]);
+      yield Int16Array.from([8]);
+    },
+  };
+  // A saída do montar não guarda o que tocou: troca por uma que guarda, a mesma para o player e o teste.
+  const saida: SaidaFala = { async tocar(pcm, aoTocar) { tocados.push(pcm[0]!); aoTocar(1); await tick(); }, limpar() {} };
+  const fala = new Set<(e: { turnId: string; frases: string[] }) => void>();
+  const voz = ligarVozDoGato({ sintese: { async *sintetizar() {} }, saida, agent: { onSpeech: (fn) => (fala.add(fn), () => fala.delete(fn)) }, naTela: () => {} });
+  await voz.falarUmaVez(teste, "Oi, este é um teste.");
+  expect(tocados).toEqual([7, 8]);
+  // O gato que falava foi calado.
+  await m.voz.falarUmaVez(teste, "Oi, este é um teste.");
+  await esperar(() => m.naTela.at(-1)?.nivel === null);
+  expect(m.naTela.at(-1)).toEqual({ turnId: "t1", nivel: null });
+  const falha: SinteseFala = {
+    // biome-ignore lint/correctness/useYield: falha antes do 1º pedaço
+    async *sintetizar() {
+      throw new ElevenLabsError("voice_not_found", 404);
+    },
+  };
+  await expect(voz.falarUmaVez(falha, "Oi, este é um teste.")).rejects.toMatchObject({ reason: "voice_not_found" });
+  voz.stop();
+  m.voz.stop();
+});
+
+test("falarUmaVez: o gato voltando a falar corta o teste", async () => {
+  const fala = new Set<(e: { turnId: string; frases: string[] }) => void>();
+  let limpou = 0;
+  const saida: SaidaFala = { async tocar(_p, aoTocar) { aoTocar(1); await tick(); }, limpar() { limpou++; } };
+  const voz = ligarVozDoGato({ sintese: { async *sintetizar() { yield tom(10, 100); } }, saida, agent: { onSpeech: (fn) => (fala.add(fn), () => fala.delete(fn)) }, naTela: () => {} });
+  let vistos = 0;
+  const longo: SinteseFala = {
+    async *sintetizar(_f, signal) {
+      for (let i = 0; i < 1000 && !signal.aborted; i++) {
+        vistos++;
+        yield tom(10, 100);
+      }
+    },
+  };
+  const p = voz.falarUmaVez(longo, "Teste.");
+  await esperar(() => vistos >= 3);
+  for (const fn of fala) fn({ turnId: "t2", frases: ["Oi."] });
+  await p;
+  expect(vistos).toBeLessThan(1000);
+  expect(limpou).toBeGreaterThan(0);
+  voz.stop();
 });

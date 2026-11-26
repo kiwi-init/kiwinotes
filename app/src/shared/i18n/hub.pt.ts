@@ -92,6 +92,7 @@ export const ptHub = {
   "about.reverting": "Voltando…",
   "about.revertFailed": "Não deu para voltar à aparência anterior.",
   "about.revertHint": "Volta cada janela à aparência que ela tinha antes da última que chegou, sem fechar o app.",
+  "about.windowsBuiltIn": "Todas as janelas estão na aparência de fábrica.",
   "about.checkUpdates": "Buscar atualizações",
   "about.checkUpdatesHint": "Procura no GitHub uma versão nova do app e da aparência das janelas. Desligado, o Kiwi Notes não faz nenhum pedido para isso.",
   "about.update.check": "Verificar atualizações",
