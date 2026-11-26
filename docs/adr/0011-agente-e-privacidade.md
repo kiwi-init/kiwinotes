@@ -71,7 +71,7 @@ Só com o agente ligado, e só nestes dois momentos:
 ## A voz do Kiwi por um provedor que a pessoa liga (emenda, spec #31616)
 O Kiwi fala com a voz local (ADR 0014). Ligada pela pessoa, a fala pode sair por um **provedor de voz na nuvem**; hoje, só o ElevenLabs. É um extra: o Kiwi Notes não vende nem embute o serviço (#31613), e cada pessoa usa a própria conta.
 
-- **Vem desligado.** Sem ligar em Ajustes › Voz do Kiwi, nada vai ao provedor, e o Kiwi fala com a voz local.
+- **Vem desligado.** Sem ligar em Ajustes › Agente › Voz, nada vai ao provedor, e o Kiwi fala com a voz local.
 - **O que vai:** só o texto que o Kiwi vai falar, frase por frase, e a voz e o modelo que a pessoa escolheu. Antes de sair, o texto passa pelo mesmo filtro de segredos do agente, e o que ele segura não vai, nem como marcador.
 - **O que nunca vai:** o áudio do microfone, as notas, as reuniões e o resto do que o agente leu: o provedor de voz recebe só a fala.
 - **A chave é da pessoa, e fica no Keychain do macOS.** Aqui o Kiwi guarda uma credencial, diferente do agente: a pessoa cola a chave da API dela, e ela vai direto para o Keychain (`com.kiwinotes.elevenlabs`). Nunca vai para arquivo, log, settings.json nem para a tela: a tela só sabe se há uma chave. O Kiwi a lê na hora de falar e a manda só ao provedor, no cabeçalho da chamada. A pessoa apaga quando quiser.
@@ -86,5 +86,5 @@ O Kiwi fala com a voz local (ADR 0014). Ligada pela pessoa, a fala pode sair por
 - **Antes de divulgar a função para outras pessoas,** a Kiwi Init confirma com a Anthropic por escrito (#8373). Até lá, ela é para o uso do harry.
 - **Um agente novo** (Codex, Gemini, OpenCode) segue a mesma regra: o login é dele, e a tela mostra o nome e a empresa dele.
 - **Um risco anotado:** a documentação do Claude Code avisa que o uso por programas pode passar a pedir uma chave paga por uso, em vez da assinatura. Se isso acontecer, a regra continua: a chave fica no programa do agente, e o Kiwi não a guarda.
-- **Com a emenda do spec #31616,** "tudo é local" ganha uma segunda exceção, que a pessoa também liga: o provedor de voz. O AGENTS.md diz isso na seção de Privacidade. Os textos de "100% local" dos Ajustes e do Sobre continuam verdadeiros com o provedor desligado; ligado, a tela de Ajustes › Voz do Kiwi mostra o aviso.
+- **Com a emenda do spec #31616,** "tudo é local" ganha uma segunda exceção, que a pessoa também liga: o provedor de voz. O AGENTS.md diz isso na seção de Privacidade. Os textos de "100% local" dos Ajustes e do Sobre continuam verdadeiros com o provedor desligado; ligado, a tela de Ajustes › Agente › Voz mostra o aviso.
 - **Os testes do provedor usam um servidor falso e um Keychain falso.** Nenhum agente usa a chave do harry; o teste real é dele, pedido pelo lead.
