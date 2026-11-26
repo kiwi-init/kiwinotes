@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 
 import { translate } from "../../src/shared/i18n/index.ts";
 import { HUB_SECTIONS } from "../../src/shared/ui-contract.ts";
-import { isSettingsTopic, LAST_TOPIC_KEY, readLastTopic, saveLastTopic, SETTINGS_BLOCKS, SETTINGS_TOPICS, SHOWN_TOPICS, shortcutBlock, shownTopics, shortcutGroups, stepTopic, TOPIC_BLOCKS, TOPIC_LABEL_KEYS, TOPIC_LABELS, topicOf } from "./topics.ts";
+import { isSettingsTopic, isTopicTab, LAST_TOPIC_KEY, lastTabKey, pickNamed, readLastTab, readLastTopic, saveLastTab, saveLastTopic, SETTINGS_BLOCKS, SETTINGS_TOPICS, SHOWN_TOPICS, shortcutBlock, shownTopics, shortcutGroups, stepTab, stepTopic, tabOf, TOPIC_BLOCKS, TOPIC_LABEL_KEYS, TOPIC_LABELS, TOPIC_TABS, topicOf } from "./topics.ts";
 
 test("os 9 assuntos, na ordem, cada um com nome (o Geral do T28190 na frente)", () => {
   expect(SETTINGS_TOPICS.map((t) => TOPIC_LABELS[t])).toEqual(["Geral", "Aparência", "Ditado", "Notas", "Reuniões", "Agente", "Atividade do agente", "Privacidade", "Sobre"]);
@@ -79,4 +79,87 @@ test("o último assunto: lido e guardado no storage, com Aparência quando não 
   expect(readLastTopic(broken)).toBe("appearance");
   expect(() => saveLastTopic(broken, "notes")).not.toThrow();
   expect(readLastTopic(null)).toBe("appearance");
+});
+
+// As abas internas (spec #31754, T31770).
+test("toda seção de Ajustes está em exatamente uma aba, e as abas de um assunto têm ids diferentes", () => {
+  for (const t of SETTINGS_TOPICS) {
+    const ids = TOPIC_TABS[t].map((x) => x.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const x of TOPIC_TABS[t]) expect(x.blocks.length).toBeGreaterThan(0);
+  }
+  const all = SETTINGS_TOPICS.flatMap((t) => TOPIC_TABS[t].flatMap((x) => x.blocks));
+  expect(all.length).toBe(new Set(all).size);
+  expect([...all].sort()).toEqual([...SETTINGS_BLOCKS].sort());
+  // O TOPIC_BLOCKS sai das abas, na ordem delas.
+  for (const t of SETTINGS_TOPICS) expect(TOPIC_BLOCKS[t]).toEqual(TOPIC_TABS[t].flatMap((x) => x.blocks));
+});
+
+test("cada aba tem nome em português e em inglês", () => {
+  for (const t of SETTINGS_TOPICS)
+    for (const x of TOPIC_TABS[t]) {
+      expect(translate("pt", x.label)).not.toBe(x.label);
+      expect(translate("en", x.label)).not.toBe(x.label);
+    }
+  expect(TOPIC_TABS.dictation.map((x) => translate("pt", x.label))).toEqual(["Atalhos", "Transcrição", "Dicionário", "Snippets"]);
+  expect(TOPIC_TABS.notes.map((x) => translate("pt", x.label))).toEqual(["Pasta e opções", "Atalhos", "Barra lateral"]);
+  expect(TOPIC_TABS.meetings.map((x) => translate("en", x.label))).toEqual(["Recording", "Shortcuts", "Your meetings"]);
+});
+
+test("a aba de um bloco, ← e → param na primeira e na última, e o id vale só no seu assunto", () => {
+  expect(tabOf("dictionary")).toBe("dictionary");
+  expect(tabOf("sidebarKeys")).toBe("sidebar");
+  expect(tabOf("agentMeetings")).toBe("yours");
+  expect(stepTab("dictation", "shortcuts", -1)).toBe("shortcuts");
+  expect(stepTab("dictation", "shortcuts", 1)).toBe("transcription");
+  expect(stepTab("dictation", "snippets", 1)).toBe("snippets");
+  expect(stepTab("dictation", "lixo", 1)).toBe("transcription");
+  expect(isTopicTab("notes", "sidebar")).toBe(true);
+  expect(isTopicTab("meetings", "sidebar")).toBe(false);
+});
+
+test("a última aba: uma por assunto no storage, com a primeira quando não há, é de outro assunto ou o storage falha", () => {
+  const map = new Map<string, string>();
+  const storage = { getItem: (k: string) => map.get(k) ?? null, setItem: (k: string, v: string) => void map.set(k, v) };
+  expect(readLastTab(storage, "dictation")).toBe("shortcuts");
+  saveLastTab(storage, "dictation", "snippets");
+  saveLastTab(storage, "notes", "sidebar");
+  expect(map.get(lastTabKey("dictation"))).toBe("snippets");
+  expect(readLastTab(storage, "dictation")).toBe("snippets");
+  expect(readLastTab(storage, "notes")).toBe("sidebar");
+  map.set(lastTabKey("meetings"), "sidebar");
+  expect(readLastTab(storage, "meetings")).toBe("recording");
+  const broken = {
+    getItem: () => {
+      throw new Error("sem storage");
+    },
+    setItem: () => {
+      throw new Error("sem storage");
+    },
+  };
+  expect(readLastTab(broken, "notes")).toBe("folder");
+  expect(() => saveLastTab(broken, "notes", "sidebar")).not.toThrow();
+  expect(readLastTab(null, "meetings")).toBe("recording");
+});
+
+test("o Agente em 5 abas, cada uma com os seus blocos (T31765)", () => {
+  expect(TOPIC_TABS.agent.map((x) => x.id)).toEqual(["general", "kiwi", "voice", "memory", "advanced"]);
+  expect(tabOf("agent")).toBe("general");
+  expect(tabOf("agentKiwi")).toBe("kiwi");
+  expect(tabOf("agentVoice")).toBe("voice");
+  expect(tabOf("agentMemory")).toBe("memory");
+  expect(tabOf("trails")).toBe("memory");
+  expect(tabOf("doubtAnswers")).toBe("memory");
+  expect(tabOf("usage")).toBe("advanced");
+  expect(tabOf("agentAdvanced")).toBe("advanced");
+});
+
+test("a busca por linha: a linha de mesmo nome que a seção ganha dela (#31832), e a seção vale quando não há linha", () => {
+  const text = (e: { t: string }) => e.t;
+  const section = { t: "Memória" };
+  const row = { t: " Memória " };
+  expect(pickNamed([{ t: "Instruções" }, row], [section], text, "Memória")).toBe(row);
+  expect(pickNamed([{ t: "Instruções" }], [section], text, "Memória")).toBe(section);
+  expect(pickNamed([], [], text, "Memória")).toBeUndefined();
 });

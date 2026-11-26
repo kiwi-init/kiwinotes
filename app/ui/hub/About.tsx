@@ -120,8 +120,6 @@ export function About() {
         </div>
       </div>
 
-      {about.ui && about.ui.windows.length ? <Appearance initial={about.ui} /> : null}
-
       <footer className="kn-about-foot">
         <span className="kn-about-privacy">{t("privacy.rule")}.</span>
         <span className="kn-about-actions">
@@ -138,6 +136,29 @@ export function About() {
       <p className="kn-about-hint kn-about-diag" aria-live="polite">
         {diag.state === "saved" ? t("about.diagSaved", { folder: diag.folder, name: diag.name }) : diag.state === "failed" ? t("about.diagFailed") : ""}
       </p>
+    </div>
+  );
+}
+
+/**
+ * A aba Janelas de Ajustes › Sobre (T31766, spec #31754): a aparência de cada janela, que antes ficava embaixo da versão.
+ * Sem a UI do canal (a CLI headless), toda janela está na de fábrica, e a aba diz isso em vez de ficar vazia.
+ */
+export function AboutWindows() {
+  const { t } = useT();
+  const [ui, setUi] = useState<UiAppearance | null | undefined>(undefined);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    api.app.about().then(
+      (a) => setUi(a.ui && a.ui.windows.length ? a.ui : null),
+      () => setFailed(true),
+    );
+  }, []);
+  if (failed) return <div className="kn-about"><p className="kn-about-line">{t("about.readFailed")}</p></div>;
+  if (ui === undefined) return <div className="kn-about" />;
+  return (
+    <div className="kn-about">
+      {ui ? <Appearance initial={ui} /> : <p className="kn-about-hint">{t("about.windowsBuiltIn")}</p>}
     </div>
   );
 }

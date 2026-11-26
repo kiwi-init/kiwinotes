@@ -6,6 +6,7 @@
     { "expectCount": "[data-testid=ui-update-ready] button", "count": 2, "name": "com Recarregar e Depois" },
     { "click": ".kn-tab:has-text('Configurações')" },
     { "click": ".kn-prefs-item[data-topic=about]", "name": "o Sobre" },
+    { "click": ".kn-prefs-topic[data-topic=about] .kn-prefs-tab[data-tab=windows]", "name": "a aba Janelas (spec #31754)" },
     { "expectText": ".kn-about-appearance", "text": "Aparência" },
     { "expectCount": ".kn-about-windows li", "count": 5, "name": "a versão da UI de cada janela" },
     { "expectText": ".kn-about-windows li[data-window=notes]", "text": "2026.11.12 · nova pronta: 2026.11.13" },

@@ -13,10 +13,12 @@
       "click": ".kn-prefs-item[data-topic=agent]",
       "name": "o assunto agent"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "waitFor": ".kn-section:has(h2:text-is('O gasto do agente'))",
       "name": "antes da troca: o Claude Code ligado e pronto, e o medidor dele aparece"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "waitFor": ".kn-row:has(.kn-row-label:text-is('Adaptador'))",
       "name": "e a linha do adaptador dele"
@@ -66,16 +68,19 @@
       "waitFor": ".kn-row:has(.kn-row-label:text-is('Claude Code · não escolhido'))",
       "name": "o Claude Code fica embaixo, para comparar"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "waitFor": ".kn-section:has(h2:text-is('O gasto do agente'))",
       "state": "detached",
       "name": "o medidor do Claude some com o Gemini, mesmo com o adaptador do Claude baixado"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "expectCount": ".kn-row:has(.kn-row-label:text-is('Adaptador'))",
       "count": 0,
       "name": "com o agente ligado, sem a linha do adaptador"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "waitFor": ".kn-agent-test",
       "name": "o Testar aparece sem baixar nada"
@@ -104,6 +109,7 @@
       "text": "Hydrogen",
       "name": "com os nomes do Gemini, nenhum do Claude"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "select": "select[aria-label='Modelo do agente']",
       "value": "gemini-neon",
@@ -116,6 +122,7 @@
     {
       "wait": 400
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "scroll": ".kn-section:has(h2:text-is('Agente'))",
       "y": -20000,

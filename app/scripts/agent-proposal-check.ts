@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, settingsTab, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const app = resolve(import.meta.dir, "..");
@@ -167,6 +167,7 @@ try {
   // 6. "Suas reuniões" em Ajustes › Reuniões (spec #11966): tema · data, com a prévia, e sem o bloco Ações. A próxima
   // proposta segue.
   await p.locator(".kn-prefs-item[data-topic=meetings]").click();
+  await settingsTab(p, "meetings", "yours"); // as do agente ficam na aba Suas (spec #31754)
   const rows = ".kn-agent-meetings";
   await p.waitForSelector(rows, { timeout: 15000 });
   await p.locator(`${rows} [role=radiogroup][aria-label='O nome do arquivo'] button:has-text('tema · data')`).click();

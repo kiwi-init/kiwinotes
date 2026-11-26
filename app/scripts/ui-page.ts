@@ -366,3 +366,13 @@ export async function settle(page: Page): Promise<void> {
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   });
 }
+
+/**
+ * Abre uma aba de um assunto dos Ajustes (spec #31754) e espera ela à vista. As outras abas ficam montadas, só
+ * escondidas: um roteiro que clica numa linha de outra aba precisa abrir a aba antes. Para abrir já na aba, use
+ * `query: { section: "settings", topic, tab }`.
+ */
+export async function settingsTab(page: Page, topic: string, tab: string): Promise<void> {
+  await page.locator(`.kn-prefs-topic[data-topic=${topic}] .kn-prefs-tab[data-tab=${tab}]`).click();
+  await page.waitForSelector(`.kn-prefs-topic[data-topic=${topic}] .kn-prefs-tabpanel[data-tab=${tab}]:not([hidden])`, { state: "attached" });
+}

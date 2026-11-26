@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, settingsTab, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const app = resolve(import.meta.dir, "..");
@@ -88,7 +88,7 @@ try {
     await idle();
   }
 
-  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
+  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings", topic: "agent", tab: "advanced" } });
   const p = w.page;
   // 1. O medidor: o gasto do Kiwi e, ao abrir, o uso da assinatura pelo /usage.
   await p.waitForSelector(meter, { timeout: 15000 });
@@ -121,6 +121,8 @@ try {
   // sobe pela trilha. A seção mostra a trilha, e o Apagar a tira.
   const trilhas = ".kn-section:has(h2:text-is('As trilhas'))";
   const aprendendo = ".kn-section:has(h2:text-is('Aprendendo'))";
+  // As trilhas ficam na aba Memória; o medidor e o placar, na Avançado; o modo econômico, na Geral (spec #31754).
+  await settingsTab(p, "agent", "memory");
   await p.waitForSelector(`${aprendendo} button:text-is('Apagar')`, { timeout: 15000 });
   const atext = (await p.locator(aprendendo).textContent()) ?? "";
   for (const want of ["cronograma · março", "leva a Kiwi (Projetos/Kiwi.md)", "1 vez"]) assert.ok(atext.includes(want), `aprendendo mostra "${want}": ${atext}`);
@@ -137,7 +139,9 @@ try {
   await idle();
   await p.waitForFunction(() => document.querySelector("[data-testid=placar]")?.textContent?.includes("achou · pela trilha"), undefined, { timeout: 15000 });
   await p.waitForFunction(() => [...document.querySelectorAll(".kn-section")].find((s) => s.querySelector("h2")?.textContent === "As trilhas")?.textContent?.includes("3 vezes"), undefined, { timeout: 15000 });
+  await settingsTab(p, "agent", "advanced");
   await shot(p, placar, "1c-placar-trilha.png");
+  await settingsTab(p, "agent", "memory");
   await shot(p, trilhas, "1d-trilhas.png");
   await p.locator(`${trilhas} button:text-is('Apagar')`).click();
   await p.waitForSelector(`${trilhas} .kn-row-label:text-is('Nenhuma trilha ainda')`, { timeout: 15000 });
@@ -146,6 +150,7 @@ try {
 
   // 2. O modo econômico, em Ajustes › Agente.
   const eco = ".kn-row:has(.kn-row-label:text-is('Modo econômico'))";
+  await settingsTab(p, "agent", "general");
   await p.waitForSelector(eco);
   await p.locator(`${eco} [role=switch]`).click();
   await p.waitForSelector(`${eco} [role=switch][aria-checked=true]`);
@@ -156,6 +161,7 @@ try {
   // 3. O limite acabado: a linha no medidor, com a hora de volta que o agente informou.
   await invoke("agent.ask", { text: "/limite-com-hora" });
   await idle();
+  await settingsTab(p, "agent", "advanced");
   await meterHas(p, "O limite acabou. Ele volta");
   await shot(p, meter, "3-medidor-limite.png");
   report.checks.push("the meter says the limit is over, with the return time");

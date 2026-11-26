@@ -94,6 +94,7 @@ export const enHub: { readonly [K in keyof typeof ptHub]: Entry } = {
   "about.reverting": "Going back…",
   "about.revertFailed": "Couldn't go back to the previous appearance.",
   "about.revertHint": "Returns each window to the appearance it had before the latest one arrived, without closing the app.",
+  "about.windowsBuiltIn": "Every window uses the built-in look.",
   "about.checkUpdates": "Check for updates",
   "about.checkUpdatesHint": "Looks on GitHub for a new version of the app and of the windows' appearance. Off, Kiwi Notes makes no request for this.",
   "about.update.check": "Check for updates",

@@ -94,7 +94,7 @@ try {
   // 1. Os dois cartões, desligados, no claro e no escuro.
   const cards = ".kn-agent-routines";
   for (const theme of ["dark", "light"] as const) {
-    const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
+    const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings", topic: "agent", tab: "memory" } });
     await w.page.waitForSelector(`${cards} .kn-routine-card[data-routine=weekly]`, { timeout: 15000 });
     for (const kind of ["daily", "weekly"]) assert.equal(await w.page.locator(`.kn-routine-card[data-routine=${kind}] [role=switch]`).getAttribute("aria-checked"), "false", `${kind} desligada`);
     const text = (await w.page.locator(cards).textContent()) ?? "";
@@ -107,7 +107,7 @@ try {
 
   // 2. Ligar o resumo do dia pela tela; o relógio passa das 18h e a rotina roda sozinha.
   const videoDir = join(out, "video");
-  const h = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 980, height: 820, motion: true, browser: "webkit", query: { section: "settings", topic: "agent" }, video: videoDir });
+  const h = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 980, height: 820, motion: true, browser: "webkit", query: { section: "settings", topic: "agent", tab: "memory" }, video: videoDir });
   const p = h.page;
   await p.waitForSelector('.kn-kiwicat[data-ready="true"]', { timeout: 15000 });
   await ctx.send({ cmd: "hubView", view: true });

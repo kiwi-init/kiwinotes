@@ -69,7 +69,7 @@ try {
   assert.equal((await invoke("agent.noteModel")).saved, false, "o cofre começa sem o arquivo do modelo");
 
   const videos = join(out, "video-tmp");
-  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 980, height: 1500, motion: true, browser: "webkit", query: { section: "settings", topic: "agent" }, video: videos });
+  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 980, height: 1500, motion: true, browser: "webkit", query: { section: "settings", topic: "agent", tab: "advanced" }, video: videos });
   const p = w.page;
 
   // 1. A primeira vez: a tela aberta, depois do Testar, com "Pular"; o desenho é só forma, sem texto.
@@ -166,7 +166,7 @@ try {
   const v = readdirSync(videos).find((f) => f.endsWith(".webm"));
   if (v) renameSync(join(videos, v), join(out, "modelo-de-nota.webm"));
   rmSync(videos, { recursive: true, force: true });
-  const d = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "dark", width: 980, height: 1500, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
+  const d = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "dark", width: 980, height: 1500, motion: false, browser: "webkit", query: { section: "settings", topic: "agent", tab: "advanced" } });
   await d.page.locator("button:has-text('Mudar')").click();
   await d.page.waitForSelector(editor);
   assert.ok(!(await d.page.locator(`${editor}[data-first]`).count()), "depois do Pronto, a tela não é mais a da primeira vez");

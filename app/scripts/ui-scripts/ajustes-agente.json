@@ -115,6 +115,7 @@
       "timeout": 30000,
       "name": "pronto"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "waitFor": ".kn-agent-test",
       "name": "o Testar aparece"
@@ -124,6 +125,7 @@
       "timeout": 20000,
       "name": "o medidor já conferiu o uso (o /usage, spec #11084): o agente está livre"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=kiwi]", "name": "a aba Kiwi (spec #31754)" },
     {
       "expectCount": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi')) [role=radio]",
       "count": 5,
@@ -152,6 +154,7 @@
       "screenshot": "4b-paletas.png",
       "selector": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi'))"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "click": ".kn-agent-test button:has-text('Testar')",
       "name": "testa: diga oi"
@@ -164,7 +167,7 @@
     },
     {
       "screenshot": "5-resposta.png",
-      "selector": ".kn-section:has(h2:text-is('Agente'))"
+      "selector": ".kn-prefs-tabpanel[data-tab=advanced]"
     },
     {
       "fill": ".kn-agent-test-input",
@@ -181,7 +184,7 @@
     },
     {
       "screenshot": "6-respondendo.png",
-      "selector": ".kn-section:has(h2:text-is('Agente'))"
+      "selector": ".kn-prefs-tabpanel[data-tab=advanced]"
     },
     {
       "click": ".kn-agent-test button:has-text('Cancelar')",
@@ -253,6 +256,7 @@
       "text": "agora sim",
       "timeout": 20000
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "select": ".kn-row:has(.kn-row-label:text-is('Modelo')) select",
       "value": "opus",
@@ -277,6 +281,7 @@
       "timeout": 20000,
       "name": "o Esforço do modelo novo aparece na hora, sem pedido: a tela abre o programa (T25729)"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "fill": ".kn-agent-test-input",
       "text": "oi no opus"
@@ -290,6 +295,7 @@
       "text": "oi no opus",
       "timeout": 20000
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "waitFor": ".kn-row:has(.kn-row-label:text-is('Esforço')) select",
       "name": "o seletor Esforço, abaixo do Modelo, com as escolhas que o agente dá ao opus"
@@ -321,6 +327,7 @@
       "value": "sonnet",
       "name": "troca para o sonnet"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "fill": ".kn-agent-test-input",
       "text": "oi no sonnet"
@@ -333,6 +340,7 @@
       "text": "oi no sonnet",
       "timeout": 20000
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "expectCount": ".kn-row:has(.kn-row-label:text-is('Esforço')) select option",
       "count": 4,
@@ -367,6 +375,7 @@
       "value": "opus-legacy",
       "name": "um modelo sem esforço"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "fill": ".kn-agent-test-input",
       "text": "oi no legado"
@@ -379,6 +388,7 @@
       "text": "oi no legado",
       "timeout": 20000
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "expectText": ".kn-row:has(.kn-row-label:text-is('Esforço')) .kn-row-hint",
       "text": "não tem nível de esforço",
@@ -404,6 +414,7 @@
       "text": "Desligado. Nada vai",
       "name": "desligado, na hora"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=kiwi]", "name": "a aba Kiwi (spec #31754)" },
     {
       "expectCount": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi')) [role=radio]:disabled",
       "count": 5,
@@ -414,6 +425,7 @@
       "args": {},
       "name": "o programa fechou"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "click": ".kn-row:has(.kn-row-label:text-is('Adaptador')) button:has-text('Remover o adaptador')",
       "name": "remove o adaptador"

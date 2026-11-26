@@ -22,7 +22,7 @@ import { join, resolve } from "node:path";
 import { webkit, type Browser, type Page } from "playwright-core";
 
 import { request } from "./cli.ts";
-import { openWindow, settle, type UiContext } from "./ui-page.ts";
+import { openWindow, settingsTab, settle, type UiContext } from "./ui-page.ts";
 
 const args = process.argv.slice(2);
 const video = args.includes("--video");
@@ -252,7 +252,8 @@ const TREE = ["data-new='note'", "data-new='folder'", "data-all='collapse'", "da
 const TOP = ["aria-label='Nova nota'", "aria-label='Buscar'"];
 const sel = (attr: string) => `.kn-expand[${attr}]`;
 /** O × de remover dos Ajustes (Dicionário e Snippets), no fim da linha de um cartão com `overflow: hidden`. */
-const SETTINGS = ["aria-label='Remover Ana'", "aria-label='Remover meu endereço'"];
+// Cada × com a aba dos Ajustes onde fica (spec #31754): a palavra no Dicionário, o atalho de texto nos Atalhos de texto.
+const SETTINGS: [string, string][] = [["aria-label='Remover Ana'", "dictionary"], ["aria-label='Remover meu endereço'", "snippets"]];
 
 async function openTree(p: Page) {
   await p.click(".kn-crumb-bt");
@@ -332,10 +333,11 @@ if (import.meta.main) {
       await w.close();
     }
     // 2b. Os × dos Ajustes: o cartão não rola nem corta a camada, e o "Remover" leva o vermelho do botão.
-    const st = await openWindow(browser, ctx, { ...base, query: { section: "settings", topic: "dictation" }, motion: true });
+    const st = await openWindow(browser, ctx, { ...base, query: { section: "settings", topic: "dictation", tab: "dictionary" }, motion: true });
     try {
       await settle(st.page);
-      for (const label of SETTINGS) {
+      for (const [label, tab] of SETTINGS) {
+        await settingsTab(st.page, "dictation", tab);
         await st.page.waitForSelector(sel(label));
         const run = await hoverRun(st.page, sel(label));
         const bad = motionProblems(label, run);

@@ -110,19 +110,27 @@ async function open(mode: "ok" | "old" | "failing", colorScheme: "light" | "dark
 
 type Page = import("playwright-core").Page;
 type Topic = "dictation" | "notes" | "meetings";
-/** O assunto de Ajustes de cada linha que o roteiro usa (spec #11966). */
-const TOPIC: Record<string, Topic> = {
-  Ditar: "dictation", "Cancelar a gravação": "dictation", "Colar o último ditado": "dictation", "Som ao começar e terminar": "dictation",
-  "Abrir as Notas": "notes", "Paleta de comandos": "notes", "Nova nota": "notes", "Nota do dia": "notes",
-  "Gravar e parar a reunião": "meetings", "Pausar meu mic": "meetings",
+/** O assunto e a aba de Ajustes de cada linha que o roteiro usa (spec #11966; as abas, spec #31754). */
+const TOPIC: Record<string, [Topic, string]> = {
+  Ditar: ["dictation", "shortcuts"], "Cancelar a gravação": ["dictation", "shortcuts"], "Colar o último ditado": ["dictation", "shortcuts"],
+  "Som ao começar e terminar": ["dictation", "transcription"],
+  "Abrir as Notas": ["notes", "shortcuts"], "Paleta de comandos": ["notes", "shortcuts"], "Nova nota": ["notes", "shortcuts"], "Nota do dia": ["notes", "shortcuts"],
+  "Gravar e parar a reunião": ["meetings", "shortcuts"], "Pausar meu mic": ["meetings", "shortcuts"],
 };
-/** Abre o assunto da linha (se ainda não está à vista). */
+/** Abre o assunto e a aba da linha (se ainda não estão à vista). */
 async function show(page: Page, label: string) {
-  const topic = TOPIC[label];
-  if (!topic) throw new Error(`sem assunto para "${label}"`);
-  if (await page.locator(`.kn-prefs-topic[data-topic=${topic}]:not([hidden])`).count()) return;
-  await page.locator(`.kn-prefs-item[data-topic=${topic}]`).click();
-  await page.locator(`.kn-prefs-topic[data-topic=${topic}]:not([hidden])`).waitFor();
+  const where = TOPIC[label];
+  if (!where) throw new Error(`sem assunto para "${label}"`);
+  const [topic, tab] = where;
+  const panel = `.kn-prefs-topic[data-topic=${topic}]:not([hidden]) .kn-prefs-tabpanel[data-tab=${tab}]:not([hidden])`;
+  if (await page.locator(panel).count()) return;
+  if (!(await page.locator(`.kn-prefs-topic[data-topic=${topic}]:not([hidden])`).count())) {
+    await page.locator(`.kn-prefs-item[data-topic=${topic}]`).click();
+    await page.locator(`.kn-prefs-topic[data-topic=${topic}]:not([hidden])`).waitFor();
+  }
+  await page.locator(`.kn-prefs-topic[data-topic=${topic}] .kn-prefs-tab[data-tab=${tab}]`).click();
+  // "attached": sem os atalhos (engine velho), a aba aberta fica vazia, e o Playwright não chama de visível uma caixa sem altura.
+  await page.locator(panel).waitFor({ state: "attached" });
 }
 /** Um print só com as seções de atalhos do assunto à vista (a página inteira, recortada). */
 async function shotShortcuts(page: Page, file: string) {
@@ -131,7 +139,7 @@ async function shotShortcuts(page: Page, file: string) {
   const size = page.viewportSize()!;
   await page.setViewportSize({ width: size.width, height: 4000 });
   const box = await page.evaluate(() => {
-    const all = [...document.querySelectorAll(".kn-prefs-topic:not([hidden]) .kn-section")].filter((s) => s.querySelector(".kn-section-title")?.textContent?.startsWith("Atalhos"));
+    const all = [...document.querySelectorAll(".kn-prefs-topic:not([hidden]) .kn-prefs-tabpanel:not([hidden]) .kn-section")].filter((s) => s.querySelector(".kn-section-title")?.textContent?.startsWith("Atalhos"));
     const top = all[0]!.getBoundingClientRect(), bottom = all.at(-1)!.getBoundingClientRect();
     return { x: Math.max(0, top.left - 8), y: Math.max(0, top.top - 8), width: top.width + 16, height: bottom.bottom - top.top + 16 };
   });
@@ -143,9 +151,11 @@ async function shotShortcuts(page: Page, file: string) {
  * A linha pelo rótulo, no assunto à vista. Os atalhos, só na seção "Atalhos": o assunto Reuniões repete os da reunião nos
  * Ajustes de reunião.
  */
+/** A aba à vista, no assunto à vista (spec #31754: as outras abas ficam montadas, só escondidas). */
+const VISIBLE_TAB = ".kn-prefs-topic:not([hidden]) .kn-prefs-tabpanel:not([hidden])";
 const row = (page: Page, label: string) =>
   page
-    .locator(TOPIC[label] === "dictation" && label === "Som ao começar e terminar" ? ".kn-prefs-topic:not([hidden])" : ".kn-prefs-topic:not([hidden]) .kn-section:has(.kn-section-title:text-matches('^Atalhos'))")
+    .locator(TOPIC[label]?.[1] === "transcription" ? VISIBLE_TAB : `${VISIBLE_TAB} .kn-section:has(.kn-section-title:text-matches('^Atalhos'))`)
     .locator(".kn-row", { has: page.locator(".kn-row-label", { hasText: new RegExp(`^${label}$`) }) });
 const key = (page: Page, label: string) => row(page, label).locator(".kn-shortcut-key");
 const calls = (page: Page) => page.evaluate(() => JSON.stringify((window as any).__calls));

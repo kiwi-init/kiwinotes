@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, settingsTab, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const arg = (name: string, def: number) => {
@@ -260,7 +260,8 @@ try {
     }
     record("1c. Reuniões → Configurações", GOALS.tab, meet);
 
-    // 3. O dropdown da pasta das Rotinas: do clique ao quadro seguinte.
+    // 3. O dropdown da pasta das Rotinas: do clique ao quadro seguinte. As Rotinas ficam na aba Memória (spec #31754).
+    await settingsTab(p, "agent", "memory");
     const sel = `.kn-routine-card[data-routine=daily] select[aria-label$="a pasta"]`;
     await p.waitForSelector(sel, { timeout: 30000 });
     await p.locator(sel).scrollIntoViewIfNeeded();
@@ -328,7 +329,7 @@ try {
     const tag = `com ${LOAD} entradas chegando no cofre`;
     {
       await invoke("agent.configure", { onboarding: { state: "done" } });
-      const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 1100, height: 800, motion: true, browser: "webkit", query: { section: "settings", topic: "agent" } }, 60000);
+      const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 1100, height: 800, motion: true, browser: "webkit", query: { section: "settings", topic: "agent", tab: "memory" } }, 60000);
       const p = w.page;
       const sel = `.kn-routine-card[data-routine=daily] select[aria-label$="a pasta"]`;
       await p.waitForSelector(sel, { timeout: 60000 });

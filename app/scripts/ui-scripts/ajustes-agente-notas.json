@@ -47,6 +47,7 @@
       "waitFor": ".kn-section:has(h2:text-is('Agente'))",
       "name": "a seção Agente"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "waitFor": ".kn-agent-test",
       "timeout": 30000,
@@ -76,10 +77,12 @@
       "timeout": 20000,
       "name": "o status diz o que está lendo"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "screenshot": "1-lendo.png",
       "selector": ".kn-section:has(h2:text-is('Agente'))"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=advanced]", "name": "a aba Avançado (spec #31754)" },
     {
       "expectText": ".kn-agent-test-text",
       "text": "Pela nota Projetos/Kiwi.md",
@@ -91,6 +94,7 @@
       "text": "março",
       "name": "com o prazo"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "screenshot": "2-resposta.png",
       "selector": ".kn-section:has(h2:text-is('Agente'))"

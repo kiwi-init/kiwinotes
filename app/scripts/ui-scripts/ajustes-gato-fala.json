@@ -5,6 +5,7 @@
     { "waitFor": ".kn-tab", "name": "o hub abre" },
     { "click": ".kn-tab:has-text('Configurações')" },
     { "click": ".kn-prefs-item[data-topic=agent]", "name": "o assunto Agente" },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=voice]", "name": "a aba Voz (spec #31754)" },
     { "waitFor": ".kn-row:has(.kn-row-label:text-is('O Kiwi fala'))", "name": "a linha \"O Kiwi fala\", com o agente ligado" },
     { "expectCount": ".kn-row:has(.kn-row-label:text-is('O Kiwi fala')) [role=switch][aria-checked=true]", "count": 0, "name": "desligado por padrão" },
     { "expectCount": ".kn-row:has(.kn-row-label:text-is('A voz do Kiwi'))", "count": 0, "name": "desligado, sem a voz no disco, a linha da voz não aparece" },

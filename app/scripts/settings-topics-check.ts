@@ -116,7 +116,8 @@ try {
       // As seções que leem o app chegam depois do clique: espera todas antes de contar.
       for (const title of EXPECTED[t]) await p.waitForSelector(`.kn-prefs-topic[data-topic=${t}] .kn-section-title:text-is("${title}")`, { state: "attached", timeout: 15000 });
       if (t === "agent") await p.waitForSelector(".kn-prefs-topic[data-topic=agent] [role=switch][aria-label='Ligar o agente']", { timeout: 15000 });
-      if (t === "meetings") await p.waitForSelector(".kn-prefs-topic[data-topic=meetings] .kn-agent-meetings", { timeout: 15000 });
+      // "Suas reuniões" fica na 3ª aba (spec #31754), montada e escondida: basta estar no assunto.
+      if (t === "meetings") await p.waitForSelector(".kn-prefs-topic[data-topic=meetings] .kn-agent-meetings", { state: "attached", timeout: 15000 });
       if (t === "about") await p.waitForSelector(".kn-prefs-topic[data-topic=about] .kn-about-name", { timeout: 15000 });
       for (const title of await p.locator(`.kn-prefs-topic[data-topic=${t}] .kn-section-title`).allTextContents()) seen.set(title, [...(seen.get(title) ?? []), t]);
       await shot(p, `${i + 1}-${t}-${theme}.png`, `${i + 1}. ${TOPIC_LABELS[t]} (${theme === "light" ? "claro" : "escuro"})`);
