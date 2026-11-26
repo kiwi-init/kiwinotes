@@ -109,6 +109,7 @@
       "text": "Hydrogen",
       "name": "com os nomes do Gemini, nenhum do Claude"
     },
+    { "click": ".kn-prefs-topic[data-topic=agent] .kn-prefs-tab[data-tab=general]", "name": "a aba Geral (spec #31754)" },
     {
       "select": "select[aria-label='Modelo do agente']",
       "value": "gemini-neon",
