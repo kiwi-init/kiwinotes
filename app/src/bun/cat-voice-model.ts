@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
+import { linguaOuNada } from "../agent/lingua.ts";
 import { ensureModel, type Fetcher, modelBytes, modelDir, type ModelManifest, modelPresent } from "../notes/semantic/model.ts";
 import { CAT_VOICE_IDS, CAT_VOICES, type CatVoiceId, type CatVoiceLanguage, DEFAULT_CAT_VOICE, isCatVoiceId } from "../shared/cat-voices.ts";
 import type { CatVoiceItem, CatVoiceStatus } from "../shared/ui-contract.ts";
@@ -444,14 +445,14 @@ export class CatVoiceModel {
  * processo, e remover derruba o processo antes de apagar. O app e o headless criam um par só.
  */
 export function createCatVoice(
-  o: { modelsDir: string; bin: string; download: boolean; /** A língua de cada frase (T31030). */ lingua?: (frase: string) => FalaLingua } & Pick<
+  o: { modelsDir: string; bin: string; download: boolean; /** A língua de cada frase (T31030); o padrão é o `linguaOuNada`. */ lingua?: (frase: string) => FalaLingua } & Pick<
     CatVoiceModelOptions,
     "manifest" | "voices" | "fetch" | "selected"
   >,
 ): { model: CatVoiceModel; voice: VoiceProcess } {
   const log = (m: string) => console.log(`[cat-voice] ${m}`);
   let model: CatVoiceModel | undefined;
-  const voice = new VoiceProcess({ bin: o.bin, assets: (l) => model!.assets(l), ...(o.lingua ? { lingua: o.lingua } : {}), log });
+  const voice = new VoiceProcess({ bin: o.bin, assets: (l) => model!.assets(l), lingua: o.lingua ?? linguaOuNada, log });
   model = new CatVoiceModel({
     modelsDir: o.modelsDir,
     download: o.download,
