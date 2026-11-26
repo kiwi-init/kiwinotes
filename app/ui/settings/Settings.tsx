@@ -86,7 +86,7 @@ const BLOCKS: Record<SettingsBlock, () => ReactNode> = {
   "shortcuts:Notas": () => <ShortcutsSection group="Notas" />,
   sidebarKeys: () => <SidebarKeysSection />,
   meetingSettings: () => <MeetingSettingsSection />,
-  "shortcuts:Reuniões": () => <ShortcutsSection group="Reuniões" />,
+  "shortcuts:Reuniões": () => <ShortcutsSection group="Reuniões" />, // i18n-ok: o id do grupo de atalhos, não aparece
   agentMeetings: () => <AgentMeetingsSection />,
   // O agente (spec #8373), o medidor (spec #11084) e o que a pessoa já respondeu na dúvida do guardrail (spec #9873).
   agent: () => <AgentSection />,

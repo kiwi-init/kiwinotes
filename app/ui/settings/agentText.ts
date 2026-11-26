@@ -112,14 +112,14 @@ export function modelOptions(s: Pick<AgentStatus, "name" | "model" | "models">, 
  * as duas línguas. As frases são as do Claude Code de hoje; uma nova cai fora até entrar aqui.
  */
 const MODEL_ABOUT: Record<string, string> = {
-  "most efficient for simpler tasks": "o mais econômico, para tarefas simples",
-  "fastest for quick answers": "o mais rápido, para respostas curtas",
+  "most efficient for simpler tasks": "o mais econômico, para tarefas simples", // i18n-ok: a tradução para o português, usada só com o app em pt
+  "fastest for quick answers": "o mais rápido, para respostas curtas", // i18n-ok: a tradução para o português, usada só com o app em pt
   "for complex work and everyday tasks": "para trabalho complexo e o dia a dia",
   "best for everyday, complex tasks": "o melhor para o dia a dia e tarefas complexas",
   "most capable for complex work": "o mais capaz, para trabalho complexo",
   "can think for more complex tasks": "pensa mais, para tarefas complexas",
-  "previous opus version": "a versão anterior do Opus",
-  legacy: "versão antiga",
+  "previous opus version": "a versão anterior do Opus", // i18n-ok: a tradução para o português, usada só com o app em pt
+  legacy: "versão antiga", // i18n-ok: a tradução para o português, usada só com o app em pt
   recommended: "recomendado",
   "1m context": "contexto de 1M",
   "1m context window": "contexto de 1M",

@@ -1,21 +1,19 @@
-// Os textos fixos nas telas (spec #28171, T28190): todo texto visível escrito direto no JSX, fora do catálogo
-// (`src/shared/i18n/`). Por enquanto é um aviso: a migração anda por partes (T28191, T28297), e o CI só conta.
-// As telas já migradas (`MIGRATED`) não podem ter nenhum: ali o check barra.
+// Os textos fixos (spec #28171): todo texto visível escrito direto no código, fora do catálogo (`src/shared/i18n/`).
+// Barra em todo arquivo da tela e do main (T30630): um texto novo fora do catálogo quebra o CI.
 //
-//   bun scripts/i18n-check.ts            o total e os arquivos com mais textos fixos (sai 0)
-//   bun scripts/i18n-check.ts --list F   cada texto fixo de um arquivo, com a linha
+//   bun scripts/i18n-check.ts            os textos fixos que sobraram, com o arquivo e a linha (sai 1 se houver)
+//   bun scripts/i18n-check.ts --list F   cada texto fixo de um arquivo, com a linha (sai 0)
 //
-// O que conta: o texto entre as tags (`<p>Salvar</p>`) e as aspas dos atributos que aparecem (`label`, `hint`, `title`,
-// `aria-label`, `placeholder`, `alt`), também num `{"…"}`, e as mesmas chaves num objeto (`{ label: "…" }`, as opções).
-// Um texto sem letra (`·`, `›`, `%`) não conta, nem a linha com `// i18n-ok: <motivo>` (um nome próprio). Dos `.ts` ao
-// lado, só os do editor (`MIGRATED_EDITOR`, T29842), pela régua do main; os outros (`agentText.ts`) ainda não contam.
-// Uma chave do catálogo (`"editor.menu.cut"`) não é texto.
+// O que conta, em todo `.tsx` da UI: o texto entre as tags (`<p>Salvar</p>`) e as aspas dos atributos que aparecem
+// (`label`, `hint`, `title`, `aria-label`, `placeholder`, `alt`), também num `{"…"}`, e as mesmas chaves num objeto
+// (`{ label: "…" }`, as opções). Em todo `.ts` e `.tsx` da UI e do main (`src/bun`, a notificação do agente, as frases
+// do Info.plist): o texto de um item de menu, de um diálogo (`label`, `title`, `message`, `detail`, `buttons`) e toda
+// frase com acento, também a que está num ternário ou numa variável, fora dos logs e dos erros. No helper Swift
+// (`native/Sources`): o texto de um `Text(…)`, de um `label:`, de um `accessibilityLabel(…)` e toda frase com acento,
+// fora dos logs. Um texto sem letra (`·`, `›`, `%`) não conta, nem uma chave do catálogo (`"editor.menu.cut"`).
 //
-// O main e o helper (T28192) também: no main (`src/bun`, a notificação do agente), o texto de um item de menu, de um
-// diálogo (`label`, `title`, `message`, `detail`, `buttons`) e toda frase com acento, fora dos logs e dos erros; no
-// helper Swift (`native/Sources`), o texto de um `Text(…)`, de um `label:`, de um `accessibilityLabel(…)` e toda
-// frase com acento, fora dos logs. Os arquivos que já seguem o catálogo (`MIGRATED_MAIN`, todo o Swift na tela)
-// barram. Um texto que não é da tela (uma lista de palavras, um rótulo da transcrição) leva `// i18n-ok: <motivo>`.
+// O falso positivo (um nome próprio, um log, uma lista de palavras da busca) leva `// i18n-ok: <motivo>` na linha. Um
+// arquivo que já traz as duas línguas lado a lado (o `showcaseText.ts`) leva `// i18n-ok-file: <motivo>` no começo.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -25,157 +23,26 @@ import { pt } from "../src/shared/i18n/pt.ts";
 
 // `KIWI_I18N_ROOT`: só o teste, que roda o check numa árvore falsa para provar o `exit 1`.
 const ROOT = process.env.KIWI_I18N_ROOT ?? path.resolve(import.meta.dir, "..");
-const UI = path.join(ROOT, "ui");
 
-/** As telas já no catálogo: um texto fixo aqui quebra o CI. Cada parte migrada entra na lista. */
-export const MIGRATED = [
-  "ui/settings/LanguageSection.tsx",
-  // A casca das Notas (T29244).
-  "ui/notes/NotesApp.tsx",
-  "ui/notes/Sidebar.tsx",
-  "ui/notes/FindBar.tsx",
-  "ui/notes/FolderPicker.tsx",
-  "ui/notes/MeetingSpeakerDialog.tsx",
-  "ui/notes/NoteEditor.tsx",
-  "ui/notes/NoteWidth.tsx",
-  "ui/notes/Palette.tsx",
-  "ui/notes/Properties.tsx",
-  "ui/notes/RefactorDialog.tsx",
-  "ui/notes/TrashView.tsx",
-  "ui/notes/TreePopover.tsx",
-  "ui/notes/UndoToast.tsx",
-  "ui/notes/UnlinkedMentions.tsx",
-  "ui/notes/VersionsDialog.tsx",
-  // Os Ajustes (T28297).
-  "ui/settings/Settings.tsx",
-  "ui/settings/Appearance.tsx",
-  "ui/settings/Shortcuts.tsx",
-  "ui/settings/Microphone.tsx",
-  "ui/settings/CuesRow.tsx",
-  "ui/settings/PreciseRow.tsx",
-  "ui/settings/SemanticRow.tsx",
-  "ui/settings/OcrRow.tsx",
-  "ui/settings/ExtensionsRow.tsx",
-  "ui/settings/Dictionary.tsx",
-  "ui/settings/Snippets.tsx",
-  "ui/settings/topicIcons.tsx",
-  "ui/notes/NotesFolder.tsx",
-  "ui/src/kit/editable.tsx",
-  // Ajustes de Reuniões (T29273).
-  "ui/settings/AgentMeetings.tsx",
-  "ui/settings/MeetingsRows.tsx",
-  // Ajustes › Agente (T29271).
-  "ui/settings/Agent.tsx",
-  "ui/settings/CatRow.tsx",
-  "ui/settings/CatSpeaksRow.tsx",
-  "ui/settings/ControlRow.tsx",
-  "ui/settings/ModelRows.tsx",
-  "ui/settings/NoteModel.tsx",
-  "ui/settings/NoticeRow.tsx",
-  "ui/settings/Placar.tsx",
-  "ui/settings/UsageMeter.tsx",
-  // Reuniões e Histórico (T29247).
-  "ui/meetings/Meetings.tsx",
-  "ui/meetings/MeetingSettings.tsx",
-  "ui/history/History.tsx",
-  // O Hub, os balões, o Sobre, a abertura, o Início e a faixa da aparência nova (T28191).
-  "ui/hub/About.tsx",
-  "ui/hub/bubbleMd.tsx",
-  "ui/hub/BubblePresence.tsx",
-  "ui/hub/BubbleTail.tsx",
-  "ui/hub/CatAsk.tsx",
-  "ui/hub/CatBubble.tsx",
-  "ui/hub/DoubtCard.tsx",
-  "ui/hub/Goo.tsx",
-  "ui/hub/KiwiCat.tsx",
-  "ui/hub/main.tsx",
-  "ui/hub/MemoryBubble.tsx",
-  "ui/hub/ProposalBubble.tsx",
-  "ui/hub/RoutineBubble.tsx",
-  "ui/hub/onboarding/FirstRunSetup.tsx",
-  "ui/hub/onboarding/KiwiShowcase.tsx",
-  "ui/hub/onboarding/Onboarding.tsx",
-  "ui/hub/onboarding/Welcome.tsx",
-  "ui/home/Home.tsx",
-  "ui/home/icons.tsx",
-  "ui/home/InicioMenu.tsx",
-  "ui/home/Pendencias.tsx",
-  "ui/home/Semana.tsx",
-  "ui/src/kit/index.tsx",
-  // A memória, as rotinas, as propostas, o placar, as trilhas, as respostas e a Atividade do agente (T29272).
-  "ui/settings/memoryText.ts",
-  "ui/settings/MemoryRows.tsx",
-  "ui/settings/trailsText.ts",
-  "ui/settings/Trails.tsx",
-  "ui/settings/placarText.ts",
-  "ui/settings/Placar.tsx",
-  "ui/settings/routinesText.ts",
-  "ui/settings/RoutinesRows.tsx",
-  "ui/settings/RoutineEditor.tsx",
-  "ui/settings/proposalText.ts",
-  "ui/settings/Proposals.tsx",
-  "ui/settings/activityText.ts",
-  "ui/settings/AgentActivity.tsx",
-  "ui/settings/DoubtAnswers.tsx",
-  // Os visualizadores das Notas (T29245).
-  "ui/notes/NoteFacts.tsx",
-  "ui/notes/canvas/CanvasView.tsx",
-  "ui/notes/editor/embeds.tsx",
-  "ui/notes/editor/mermaid.tsx",
-  "ui/notes/editor/renderedWidget.tsx",
-  "ui/notes/files/DocxFormatBar.tsx",
-  "ui/notes/files/DocxViewer.tsx",
-  "ui/notes/files/DrawioViewer.tsx",
-  "ui/notes/files/FileView.tsx",
-  "ui/notes/files/ImageViewer.tsx",
-  "ui/notes/files/MediaViewer.tsx",
-  "ui/notes/files/PdfViewer.tsx",
-  "ui/notes/files/SheetPane.tsx",
-  "ui/notes/files/TableGrid.tsx",
-  "ui/notes/files/TableViewer.tsx",
-  "ui/notes/files/TextViewer.tsx",
-  "ui/notes/files/XlsxViewer.tsx",
-];
-
-/** O main e a notificação já no catálogo (T28192): menu, bandeja, status, diálogo do link, pílula e notificação. */
-export const MIGRATED_MAIN = [
-  "src/bun/menus.ts",
-  "src/bun/session-status.ts",
-  "src/bun/permissions.ts",
-  "src/bun/dictation.ts",
-  "src/bun/locale.ts",
-  "src/bun/windows.ts",
-  "src/bun/index.ts",
-  "src/agent/notice.ts",
-  // T29006: os erros e o motivo das atualizações no Sobre, e as frases do pedido de permissão do macOS.
-  "src/bun/updates.ts",
-  "scripts/info-plist.ts",
-  "scripts/app-plist.ts",
-  "scripts/usage-strings.ts",
-];
-/**
- * O editor das Notas (T29842): os menus e os textos que o CodeMirror desenha saem de `.ts`, pela mesma régua do main (a
- * chave visível e a frase com acento). Barra em todos.
- */
-export const MIGRATED_EDITOR = [
-  "ui/notes/editor/attachments.ts",
-  "ui/notes/editor/callouts.ts",
-  "ui/notes/editor/code-copy.ts",
-  "ui/notes/editor/context-menu.ts",
-  "ui/notes/editor/footnotes.ts",
-  "ui/notes/editor/index.ts",
-  "ui/notes/editor/livePreview.ts",
-  "ui/notes/editor/search-fold.ts",
-  "ui/notes/editor/slash.ts",
-  "ui/notes/editor/spelling.ts",
-  "ui/notes/editor/table.ts",
-  "ui/notes/editor/tools.ts",
-];
-/** Todo o Swift do helper barra: as telas dele são poucas e já estão no `Localizable.xcstrings`. */
+/** O main que o check lê: todo o `src/bun` e os arquivos de fora dele que escrevem na tela ou no pedido do macOS. */
+export const MAIN_DIRS = ["src/bun"];
+export const MAIN_FILES = ["src/agent/notice.ts", "scripts/info-plist.ts", "scripts/app-plist.ts", "scripts/usage-strings.ts"];
+/** O Swift do helper: as telas dele são poucas e já estão no `Localizable.xcstrings`. */
 export const SWIFT_DIRS = ["../native/Sources/kiwi-helper", "../native/Sources/KiwiHelperCore"];
 
 const VISIBLE_ATTRS = new Set(["label", "hint", "title", "aria-label", "placeholder", "alt", "caption", "description"]);
 const hasLetter = (s: string) => /\p{L}/u.test(s);
+
+/** As linhas liberadas: a que tem `// i18n-ok: <motivo>`, e a de baixo quando o comentário está sozinho na linha. */
+function okLines(source: string): Set<number> {
+  const ok = new Set<number>();
+  source.split("\n").forEach((l, i) => {
+    if (!/\/\/\s*i18n-ok:/.test(l)) return;
+    ok.add(i + 1);
+    if (/^\s*\/\/\s*i18n-ok:/.test(l)) ok.add(i + 2);
+  });
+  return ok;
+}
 
 export interface FixedText {
   line: number;
@@ -191,8 +58,8 @@ export function fixedTexts(file: string, source: string): FixedText[] {
     if (t && hasLetter(t)) out.push({ line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1, text: t });
   };
   visit(sf);
-  // Um nome próprio (a fonte "Inter", um tema) leva `// i18n-ok: <motivo>` na mesma linha, como no main.
-  const ok = new Set(source.split("\n").flatMap((l, i) => (/\/\/\s*i18n-ok:/.test(l) ? [i + 1] : [])));
+  // Um nome próprio (a fonte "Inter", um tema) leva `// i18n-ok: <motivo>` na linha, como no main.
+  const ok = okLines(source);
   return out.filter((t) => !ok.has(t.line));
 
   function visit(node: ts.Node) {
@@ -221,12 +88,12 @@ export function fixedTexts(file: string, source: string): FixedText[] {
 const ACCENT = /[áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ]/;
 const MAIN_PROPS = new Set(["label", "title", "message", "detail", "buttons"]);
 /** As chamadas cujo texto é para o log, para o código ou para o agent control (depuração), nunca para a tela. */
-const LOG_CALL = /(^|\.)(log|warn|error|info|debug|trace)$|^(Error|TypeError|RangeError|SidecarError)$|(^|\.)registerAction$/;
+const LOG_CALL = /(^|\.)(log|warn|error|info|debug|trace)$|^\w*Error$|(^|\.)registerAction$/;
 
 /** Os textos fixos de um .ts do main: os de menu e diálogo pela chave, e as frases com acento. */
 export function mainFixedTexts(file: string, source: string): FixedText[] {
-  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const lines = source.split("\n");
+  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const ok = okLines(source);
   const out: FixedText[] = [];
   const inLog = (node: ts.Node): boolean => {
     for (let p: ts.Node | undefined = node.parent; p; p = p.parent) {
@@ -247,7 +114,7 @@ export function mainFixedTexts(file: string, source: string): FixedText[] {
     else if (ts.isTemplateExpression(node)) text = [node.head.text, ...node.templateSpans.map((s) => s.literal.text)].join(" ");
     if (text !== null && hasLetter(text) && !(ts.isPropertyAssignment(node.parent) && node.parent.name === node) && !Object.hasOwn(pt, text)) {
       const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
-      const fixed = (ACCENT.test(text) || visibleProp(node)) && !inLog(node) && !/i18n-ok:/.test(lines[line - 1] ?? "");
+      const fixed = (ACCENT.test(text) || visibleProp(node)) && !inLog(node) && !ok.has(line);
       if (fixed) out.push({ line, text: text.replace(/\s+/g, " ").trim() });
     }
     if (!ts.isTemplateExpression(node)) ts.forEachChild(node, visit);
@@ -291,20 +158,31 @@ export function swiftFixedTexts(source: string): FixedText[] {
   return out;
 }
 
+/** Um arquivo com as duas línguas lado a lado: `// i18n-ok-file: <motivo>` nas primeiras linhas. */
+const okFile = (source: string) => /^(?:\s*\/\/.*\n|\s*\n)*\s*\/\/\s*i18n-ok-file:\s*\S/.test(source);
+
+/** Os textos fixos de um arquivo da tela ou do main: no `.tsx`, as duas réguas juntas, sem repetir a mesma linha. */
+export function fileTexts(file: string, source: string): FixedText[] {
+  if (okFile(source)) return [];
+  const texts = file.endsWith(".tsx") ? [...fixedTexts(file, source), ...mainFixedTexts(file, source)] : mainFixedTexts(file, source);
+  const seen = new Set<string>();
+  return texts
+    .filter((t) => !seen.has(`${t.line}\u0000${t.text}`) && !!seen.add(`${t.line}\u0000${t.text}`))
+    .sort((x, y) => x.line - y.line);
+}
+
 function filesUnder(dir: string, ext: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const p = path.join(dir, name);
-    if (statSync(p).isDirectory()) return filesUnder(p, ext);
-    return name.endsWith(ext) && !name.includes(".test.") ? [p] : [];
+    if (statSync(p).isDirectory()) return name === "node_modules" ? [] : filesUnder(p, ext);
+    return name.endsWith(ext) && !name.includes(".test.") && !name.endsWith(".d.ts") ? [p] : [];
   });
 }
 
-function tsxFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const p = path.join(dir, name);
-    if (statSync(p).isDirectory()) return name === "node_modules" ? [] : tsxFiles(p);
-    return name.endsWith(".tsx") && !name.endsWith(".test.tsx") ? [p] : [];
-  });
+/** Os arquivos da tela e do main que o check lê, relativos a `root`. */
+export function checkedFiles(root: string): string[] {
+  const under = (d: string) => [...filesUnder(path.join(root, d), ".ts"), ...filesUnder(path.join(root, d), ".tsx")];
+  return [...under("ui"), ...MAIN_DIRS.flatMap(under), ...MAIN_FILES.map((f) => path.join(root, f))].map((f) => path.relative(root, f)).sort();
 }
 
 if (import.meta.main) {
@@ -312,34 +190,18 @@ if (import.meta.main) {
   const listAt = args.indexOf("--list");
   if (listAt >= 0) {
     const f = path.resolve(ROOT, args[listAt + 1] ?? "");
-    for (const t of fixedTexts(f, readFileSync(f, "utf8"))) console.log(`${path.relative(ROOT, f)}:${t.line}  ${t.text}`);
+    const source = readFileSync(f, "utf8");
+    const texts = f.endsWith(".swift") ? swiftFixedTexts(source) : fileTexts(f, source);
+    for (const t of texts) console.log(`${path.relative(ROOT, f)}:${t.line}  ${t.text}`);
     process.exit(0);
   }
-  const counts = tsxFiles(UI)
-    .map((f) => ({ file: path.relative(ROOT, f), texts: fixedTexts(f, readFileSync(f, "utf8")) }))
-    .filter((r) => r.texts.length > 0)
-    .sort((a, b) => b.texts.length - a.texts.length);
-  const total = counts.reduce((n, r) => n + r.texts.length, 0);
-  const broken = counts.filter((r) => MIGRATED.includes(r.file));
-  console.log(`i18n: ${total} textos fixos em ${counts.length} telas (aviso; a migração é do spec #28171).`);
-  for (const r of counts.slice(0, 15)) console.log(`  ${String(r.texts.length).padStart(4)}  ${r.file}`);
-  if (counts.length > 15) console.log(`  … e mais ${counts.length - 15} telas. Um arquivo: bun scripts/i18n-check.ts --list <arquivo>`);
-  if (process.env.GITHUB_ACTIONS) console.log(`::warning title=i18n::${total} textos fixos em ${counts.length} telas, fora do catálogo (spec #28171)`);
-  // O main (T28192): avisa no resto de `src/bun`, barra nos migrados.
-  const main = [...filesUnder(path.join(ROOT, "src/bun"), ".ts"), ...["src/agent/notice.ts", "scripts/info-plist.ts", "scripts/app-plist.ts", "scripts/usage-strings.ts"].map((f) => path.join(ROOT, f))]
-    .map((f) => ({ file: path.relative(ROOT, f), texts: mainFixedTexts(f, readFileSync(f, "utf8")) }))
-    .filter((r) => r.texts.length > 0);
-  const mainTotal = main.reduce((n, r) => n + r.texts.length, 0);
-  console.log(`i18n: ${mainTotal} textos fixos em ${main.length} arquivos do main (barra em ${MIGRATED_MAIN.length} já migrados).`);
-  // O helper Swift (T28192): barra em tudo.
-  const swift = SWIFT_DIRS.flatMap((d) => filesUnder(path.join(ROOT, d), ".swift"))
-    .map((f) => ({ file: path.relative(ROOT, f), texts: swiftFixedTexts(readFileSync(f, "utf8")) }))
-    .filter((r) => r.texts.length > 0);
-  // O editor (T29842): barra em todos.
-  const editor = MIGRATED_EDITOR.map((f) => ({ file: f, texts: mainFixedTexts(f, readFileSync(path.join(ROOT, f), "utf8")) })).filter((r) => r.texts.length > 0);
-  const failures = [...broken, ...main.filter((r) => MIGRATED_MAIN.includes(r.file)), ...swift, ...editor];
+  const app = checkedFiles(ROOT).map((file) => ({ file, texts: fileTexts(file, readFileSync(path.join(ROOT, file), "utf8")) }));
+  const swift = SWIFT_DIRS.flatMap((d) => filesUnder(path.join(ROOT, d), ".swift")).map((f) => ({ file: path.relative(ROOT, f), texts: swiftFixedTexts(readFileSync(f, "utf8")) }));
+  const failures = [...app, ...swift].filter((r) => r.texts.length > 0);
+  console.log(`i18n: ${app.length} arquivos da tela e do main e ${swift.length} do helper lidos; ${failures.length} com texto fixo.`);
   if (failures.length) {
-    for (const r of failures) for (const t of r.texts) console.error(`✗ ${r.file}:${t.line} já está no catálogo e tem um texto fixo: ${t.text}`);
+    for (const r of failures) for (const t of r.texts) console.error(`✗ ${r.file}:${t.line} texto fixo fora do catálogo: ${t.text}`);
+    console.error("Ponha o texto no catálogo (src/shared/i18n/) e use o t(); um falso positivo leva // i18n-ok: <motivo> na linha.");
     process.exit(1);
   }
 }

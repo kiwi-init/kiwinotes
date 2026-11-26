@@ -22,8 +22,8 @@ const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
 /** Por que a URL inicial não pode sair, ou null se pode. */
 export function channelUrlRefusal(url: URL): string | null {
-  if (url.username || url.password) return "a URL do canal não leva usuário nem senha";
-  if (url.search || url.hash) return "a URL do canal não leva query nem #";
+  if (url.username || url.password) return "a URL do canal não leva usuário nem senha"; // i18n-ok: o motivo do erro, vai ao log
+  if (url.search || url.hash) return "a URL do canal não leva query nem #"; // i18n-ok: o motivo do erro, vai ao log
   if (!url.href.startsWith(UI_CHANNEL_BASE)) return `fora do release ui-channel: ${url.origin}${url.pathname}`;
   if (url.pathname.length <= new URL(UI_CHANNEL_BASE).pathname.length) return "sem o nome do arquivo";
   return null;
@@ -32,7 +32,7 @@ export function channelUrlRefusal(url: URL): string | null {
 /** Por que o destino de um redirect não pode ser seguido, ou null se pode. */
 export function redirectRefusal(url: URL): string | null {
   if (url.protocol !== "https:") return `redirect sem https: ${url.protocol}`;
-  if (url.username || url.password) return "redirect com usuário ou senha";
+  if (url.username || url.password) return "redirect com usuário ou senha"; // i18n-ok: o motivo do erro, vai ao log
   if (url.port) return `redirect com porta: ${url.port}`;
   if (!UI_CHANNEL_STORAGE_HOSTS.includes(url.hostname)) return `redirect para outro host: ${url.hostname}`;
   return null;

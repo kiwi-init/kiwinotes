@@ -2,7 +2,7 @@
 // Trocar salva no engine, que avisa todas as janelas (`app.localeChanged`), e esta também troca na hora.
 import { useState } from "react";
 
-import { AUTO_FOLLOWS_SYSTEM, type LanguageSetting } from "../../src/shared/i18n/index.ts";
+import type { LanguageSetting } from "../../src/shared/i18n/index.ts";
 import { api, has } from "../src/api.ts";
 import { setAppLocale, useAppLocale, useT } from "../src/i18n.ts";
 import { Row, Section, Segmented } from "../src/kit/index.tsx";
@@ -26,7 +26,7 @@ export function LanguageSection() {
   const hint = failed
     ? t("common.saveFailed")
     : now.setting === "auto"
-      ? `${t("settings.language.hint")} ${AUTO_FOLLOWS_SYSTEM ? t("settings.language.autoNow", { language: t(`language.${now.locale}`) }) : t("settings.language.autoPending")}`
+      ? `${t("settings.language.hint")} ${t("settings.language.autoNow", { language: t(`language.${now.locale}`) })}`
       : t("settings.language.hint");
 
   return (

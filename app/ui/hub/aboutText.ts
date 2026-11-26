@@ -88,7 +88,7 @@ export const CREDITS: readonly { name: string; by: string; license: string; use:
   { name: "PDF.js", by: "Mozilla", license: "Apache-2.0", use: "abrir pdf nas Notas e ler pdf para o agente", pkg: "pdfjs-dist" },
   { name: "Mammoth", by: "Michael Williamson", license: "BSD-2-Clause", use: "ler docx para o agente", pkg: "mammoth" },
   // O docx nas Notas, em páginas como no Word (T21151, spec #21080). O npm não diz o autor: é o repo eigenpal/docx-editor.
-  { name: "docx-editor", by: "eigenpal", license: "Apache-2.0", use: "abrir docx nas Notas, em páginas como no Word", pkg: "@docx-editor.dev/core" },
+  { name: "docx-editor", by: "eigenpal", license: "Apache-2.0", use: "abrir docx nas Notas, em páginas como no Word", pkg: "@docx-editor.dev/core" }, // i18n-ok: o uso no arquivo de licenças; a tela usa o about.credit.docxEditor
   { name: "SheetJS Community Edition", by: "SheetJS LLC", license: "Apache-2.0", use: "abrir xlsx nas Notas, e ler e gerar xlsx com o agente", pkg: "xlsx" },
   // Não vem do npm: o viewer oficial vai no repo, com a licença (`scripts/drawio-viewer.ts`, T7112).
   { name: "draw.io", by: "JGraph Ltd", license: "Apache-2.0", use: "abrir diagramas .drawio nas Notas", pkg: "jgraph/drawio" },
@@ -120,8 +120,8 @@ export const NOTICES_FILE = "THIRD_PARTY_NOTICES.txt";
 
 /** O texto do arquivo de avisos: cada biblioteca, com a versão e a licença inteira, como o pacote dela traz. */
 export function noticesText(items: readonly { name: string; by: string; license: string; use: string; pkg: string; version: string; text: string }[]): string {
-  const head = "Kiwi Notes: software de terceiros que vai dentro do app, com as licenças.\nGerado por `bun scripts/third-party-notices.ts`; não edite à mão.\n";
-  return [head, ...items.map((i) => `${"=".repeat(78)}\n${i.name} ${i.version} (${i.pkg}), de ${i.by}: ${i.use}\nLicença: ${i.license}\n\n${i.text.trim()}\n`)].join("\n");
+  const head = "Kiwi Notes: software de terceiros que vai dentro do app, com as licenças.\nGerado por `bun scripts/third-party-notices.ts`; não edite à mão.\n"; // i18n-ok: o arquivo de licenças gerado, não aparece na tela
+  return [head, ...items.map((i) => `${"=".repeat(78)}\n${i.name} ${i.version} (${i.pkg}), de ${i.by}: ${i.use}\nLicença: ${i.license}\n\n${i.text.trim()}\n`)].join("\n"); // i18n-ok: o arquivo de licenças gerado, não aparece na tela
 }
 
 /** O nome de cada janela na lista "Aparência" do Sobre (spec #25011). */

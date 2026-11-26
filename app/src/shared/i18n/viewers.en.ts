@@ -5,6 +5,7 @@ import type { ptViewers } from "./viewers.pt.ts";
 
 export const enViewers: { readonly [K in keyof typeof ptViewers]: Entry } = {
   "files.preview": "Preview",
+  "files.previewOf": "Preview of {name}",
   "files.card.type": "Kind",
   "files.card.size": "Size",
   "files.card.modified": "Modified",
@@ -162,6 +163,8 @@ export const enViewers: { readonly [K in keyof typeof ptViewers]: Entry } = {
   "files.drawio.prevPage": "Previous page",
   "files.drawio.nextPage": "Next page",
   "files.drawio.layers": "Layers",
+  "files.drawio.tooLarge": "This diagram is too large to open here. Open it in the default app.",
+  "files.drawio.failed": "Couldn't open this diagram. Open it in the default app.",
 
   "canvas.name": "Board name",
   "canvas.find": "Search the board",
@@ -212,6 +215,12 @@ export const enViewers: { readonly [K in keyof typeof ptViewers]: Entry } = {
   "editor.mermaid.diagram": "Diagram",
   "editor.mermaid.label": "Mermaid diagram",
   "editor.mermaid.code": "Code",
+  "editor.mermaid.invalid": "isn't valid Mermaid",
+  "editor.mermaid.tooLarge": "too large to draw (over {n} characters)",
+  "editor.image.alt": "image",
+  "editor.image.loading": "loading…",
+  "editor.image.retry": "couldn't load · try again",
+  "editor.image.load": "load",
   "editor.embed.open": "Open the note",
   "editor.embed.block": " · block",
   "editor.embed.noNote": "That note doesn't exist.",

@@ -58,8 +58,8 @@ const EN_LINES = "Hi. I'm Kiwi. Your notes have a cat now. Hmm. Found it. That n
 const EN_PREVIEW = ["Hi. I'm Kiwi. Your notes have a cat now.", "Hmm. Found it. That note was hiding.", "Done. Your note is right where it belongs."];
 
 /** A voz em português (#28142): o texto exato da referência (a R0, harry #28133) e as falas da prévia. */
-const PT_LINES = "Achei! Era exatamente essa nota que você queria! Pronto. A nota está salva e organizada.";
-const PT_PREVIEW = ["Oi. Eu sou o Kiwi. Suas notas agora têm um gato.", "Hum. Achei. Essa nota estava escondida.", "Pronto. Sua nota está no lugar certo."];
+const PT_LINES = "Achei! Era exatamente essa nota que você queria! Pronto. A nota está salva e organizada."; // i18n-ok: a fala da voz em português do gato
+const PT_PREVIEW = ["Oi. Eu sou o Kiwi. Suas notas agora têm um gato.", "Hum. Achei. Essa nota estava escondida.", "Pronto. Sua nota está no lugar certo."]; // i18n-ok: a fala da voz em português do gato
 
 /** Um WAV do release `cat-voices-1` (spec #27531): a URL fixa, os bytes e o SHA-256 de lá. */
 const releaseWav = (id: string, name: string, size: number, sha256: string): ModelManifest => ({

@@ -3,7 +3,7 @@
 // mermaid é carregado só quando aparece o primeiro diagrama. Mudanças: os tokens das Notas, os textos em português,
 // sem o botão Copiar (o app não escreve no clipboard por conta própria), links pelo `externalUrl` das Notas.
 
-import { useT } from "../../src/i18n.ts";
+import { t as tNow, useT } from "../../src/i18n.ts";
 import { type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { externalUrl } from "../links.ts";
@@ -101,7 +101,7 @@ export function errorLine(e: unknown): string {
       .split("\n")
       .find((l) => l.trim())
       ?.trim()
-      .replace(/:\s*$/, "") || "não é um Mermaid válido"
+      .replace(/:\s*$/, "") || tNow("editor.mermaid.invalid")
   );
 }
 
@@ -204,7 +204,7 @@ export function drawCached(source: string, scheme: string, render: (source: stri
     return held;
   }
   const fresh =
-    source.length > MAX_SOURCE ? Promise.resolve<Drawn>({ kind: "error", message: `grande demais para desenhar (mais de ${MAX_SOURCE.toLocaleString("pt-BR")} caracteres)` }) : render(source);
+    source.length > MAX_SOURCE ? Promise.resolve<Drawn>({ kind: "error", message: tNow("editor.mermaid.tooLarge", { n: MAX_SOURCE }) }) : render(source);
   drawings.set(key, fresh);
   const oldest = drawings.keys().next();
   if (drawings.size > MAX_DRAWN && !oldest.done) drawings.delete(oldest.value);

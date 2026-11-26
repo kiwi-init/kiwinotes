@@ -1606,8 +1606,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         ] : []),
     // Os comandos da nota aberta só nas Notas: fora delas, a nota não está na tela (spec #16821).
     ...(active && note && view === "note" ? [
-      { id: "focus", title: tr(focusMode ? "notes.cmd.focusOff" : "notes.cmd.focus"), words: "foco concentrar distração zen esconder focus distraction hide" },
-      { id: "typewriter", title: tr(typewriter ? "notes.cmd.typewriterOff" : "notes.cmd.typewriter"), words: "máquina escrever centralizar linha typewriter center line" },
+      { id: "focus", title: tr(focusMode ? "notes.cmd.focusOff" : "notes.cmd.focus"), words: "foco concentrar distração zen esconder focus distraction hide" }, // i18n-ok: as palavras que a busca da paleta acha, nas duas línguas
+      { id: "typewriter", title: tr(typewriter ? "notes.cmd.typewriterOff" : "notes.cmd.typewriter"), words: "máquina escrever centralizar linha typewriter center line" }, // i18n-ok: as palavras que a busca da paleta acha, nas duas línguas
       { id: "add-property", title: tr("notes.cmd.addProperty"), words: "propriedade frontmatter metadado campo yaml property metadata field" },
     ] : []),
   ];

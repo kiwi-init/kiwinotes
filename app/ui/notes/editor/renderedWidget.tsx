@@ -4,7 +4,7 @@
 // O parser (md4c em WASM) vem embutido na lib como base64: nada é baixado.
 
 // Antes da lib: o `__DEV__` que ela lê.
-import { useT } from "../../src/i18n.ts";
+import { t as tNow, useT } from "../../src/i18n.ts";
 import { CalloutIcon } from "./calloutIcons.tsx";
 import "./enrichedEnv.ts";
 import katex from "katex";
@@ -231,10 +231,10 @@ function withImages(node: ASTNode, source: AttachmentSource | undefined): ASTNod
       } catch {
         // Fica o endereço inteiro.
       }
-      const label = `🖼 ${alt || "imagem"} · ${host}`;
+      const label = `🖼 ${alt || tNow("editor.image.alt")} · ${host}`;
       // https: o clique carrega aqui. http: só abre no navegador (a CSP não deixa carregar sem TLS).
-      if (got === "loading") return text(`${label} · carregando…`);
-      const load = got === null ? "não deu para carregar · tentar de novo" : "carregar";
+      if (got === "loading") return text(`${label} · ${tNow("editor.image.loading")}`);
+      const load = tNow(got === null ? "editor.image.retry" : "editor.image.load");
       if (/^https:/i.test(from.url)) return { type: "Link", attributes: { url: `${LOAD_IMAGE_LINK}${encodeURIComponent(from.url)}` }, children: [text(`${label} · ${load}`)] };
       return { type: "Link", attributes: { url: from.url }, children: [text(label)] };
     }
@@ -242,8 +242,8 @@ function withImages(node: ASTNode, source: AttachmentSource | undefined): ASTNod
       const name = from.target.split("/").at(-1)!;
       const file = readImage(source, from.target);
       if (file === undefined) return text(alt || name);
-      if (file === null) return text(`${name} não está no vault`);
-      if (!file.mime.startsWith("image/")) return text(`${name} (${file.mime === "application/pdf" ? "PDF" : "arquivo"})`);
+      if (file === null) return text(tNow("editor.attach.notInVault", { name }));
+      if (!file.mime.startsWith("image/")) return text(`${name} (${file.mime === "application/pdf" ? "PDF" : tNow("editor.attach.file")})`);
       return { ...node, attributes: { ...node.attributes, url: file.dataUrl } };
     }
     return text(alt);

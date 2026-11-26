@@ -4,8 +4,9 @@ import { appLocale, t } from "../src/i18n.ts";
 
 const en = () => appLocale().locale === "en";
 
+// i18n-ok: os nomes em português, só no ramo pt; o inglês sai pelo Intl
 const WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
-const MONTH = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const MONTH = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]; // i18n-ok: só no ramo pt
 
 /** `YYYY-MM-DD` (o dia local) → a data ao meio-dia, para o fuso e o horário de verão não trocarem o dia. */
 const fromDate = (date: string) => {

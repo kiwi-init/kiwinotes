@@ -289,7 +289,7 @@ export function DrawioViewer({ path, file }: FileViewerProps) {
       ) : null}
       {failed ? (
         <div className="kn-file-notice" role="status">
-          <p>{state.kind === "tooLarge" ? "Este diagrama é grande demais para abrir aqui. Abra no app padrão." : "Não deu para abrir este diagrama. Abra no app padrão."}</p>
+          <p>{t(state.kind === "tooLarge" ? "files.drawio.tooLarge" : "files.drawio.failed")}</p>
         </div>
       ) : null}
       {/* A área fica montada mesmo com o aviso (escondida), para o próximo arquivo abrir nela. */}
