@@ -51,6 +51,7 @@ type ShortcutGroup = ShortcutDef["group"];
 export const SETTINGS_BLOCKS = [
   "language",
   "appearance",
+  "appearanceText",
   "shortcuts:Ditado",
   "transcription",
   "dictionary",
@@ -68,6 +69,7 @@ export const SETTINGS_BLOCKS = [
   "activity",
   "privacy",
   "about",
+  "aboutWindows",
 ] as const;
 export type SettingsBlock = (typeof SETTINGS_BLOCKS)[number];
 
@@ -85,8 +87,10 @@ export interface TopicTab {
 const tab = (id: string, label: TextKey, blocks: readonly SettingsBlock[]): TopicTab => ({ id, label, blocks });
 
 export const TOPIC_TABS: Record<SettingsTopic, readonly TopicTab[]> = {
-  general: [tab("general", "settings.tab.general", ["language"])],
-  appearance: [tab("general", "settings.tab.general", ["appearance"])],
+  // Os assuntos de um grupo só mostram a barra com uma aba, para a tela ser igual em todo lugar (T31766).
+  general: [tab("language", "settings.tab.language", ["language"])],
+  // O modo e os temas; o tamanho do texto, a fonte e o movimento.
+  appearance: [tab("theme", "settings.tab.theme", ["appearance"]), tab("text", "settings.tab.text", ["appearanceText"])],
   // O microfone e o atalho Fn ficam nos Atalhos; o som, na Transcrição.
   dictation: [
     tab("shortcuts", "settings.tab.shortcuts", ["shortcuts:Ditado"]),
@@ -106,9 +110,10 @@ export const TOPIC_TABS: Record<SettingsTopic, readonly TopicTab[]> = {
   ],
   // Ligar e testar, a cor, o Control, o aviso, o modo econômico e o gasto, a memória, as instruções, o Modelo, as trilhas e as respostas.
   agent: [tab("general", "settings.tab.general", ["agent", "usage", "trails", "doubtAnswers"])],
-  activity: [tab("general", "settings.tab.general", ["activity"])],
-  privacy: [tab("general", "settings.tab.general", ["privacy"])],
-  about: [tab("general", "settings.tab.general", ["about"])],
+  activity: [tab("requests", "settings.tab.requests", ["activity"])],
+  privacy: [tab("data", "settings.tab.data", ["privacy"])],
+  // A versão, a atualização, o diagnóstico e as licenças; a aparência de cada janela e o voltar (spec #25011).
+  about: [tab("version", "settings.tab.version", ["about"]), tab("windows", "settings.tab.windows", ["aboutWindows"])],
 };
 
 /** O que cada assunto mostra, na ordem da tela: os blocos das abas, uma depois da outra. */

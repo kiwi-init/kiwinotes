@@ -1,5 +1,6 @@
 // Configurações › Aparência (T2503, spec #2457 ponto 4): a mesma tela do Channels. Modo, Tamanho do texto, Fonte,
-// Movimento e os 44 temas, um para o lado escuro e um para o claro. Troca na hora em todas as janelas.
+// Movimento e os 44 temas, um para o lado escuro e um para o claro. Troca na hora em todas as janelas. Desde o spec
+// #31754 (T31766), em duas abas: Tema (o modo e os temas) e Texto (o tamanho, a fonte e o movimento).
 import "./appearance.css";
 
 import { useMemo, useState } from "react";
@@ -33,16 +34,23 @@ function ThemeTile({ theme, chosen, onPick }: { theme: ColorTheme; chosen: boole
   );
 }
 
-export function AppearanceSection() {
+/** Grava uma mudança da Aparência; se falhar, a seção mostra o erro. */
+function useChange() {
   const { t: tr } = useT();
   const [a, set] = useAppearance();
-  const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
-
   const change = (patch: Partial<Appearance>) => {
     setError(null);
     set(patch).catch(() => setError(tr("appearance.saveFailed")));
   };
+  return { a, change, error };
+}
+
+/** A aba Tema (T31766): o modo e os temas. */
+export function AppearanceSection() {
+  const { t: tr } = useT();
+  const { a, change, error } = useChange();
+  const [query, setQuery] = useState("");
 
   const shown = useMemo(() => {
     const q = fold(query.trim());
@@ -67,44 +75,6 @@ export function AppearanceSection() {
             { value: "system", label: tr("appearance.mode.system") },
             { value: "dark", label: tr("appearance.mode.dark") },
             { value: "light", label: tr("appearance.mode.light") },
-          ]}
-        />
-      </Row>
-      <Row label={tr("appearance.textSize")}>
-        <Segmented<TextSize>
-          label={tr("appearance.textSize")}
-          value={a.textSize}
-          onChange={(textSize) => change({ textSize })}
-          options={[
-            { value: "small", label: tr("appearance.textSize.small") },
-            { value: "default", label: tr("appearance.textSize.default") },
-            { value: "large", label: tr("appearance.textSize.large") },
-            { value: "larger", label: tr("appearance.textSize.larger") },
-            { value: "largest", label: tr("appearance.textSize.largest") },
-          ]}
-        />
-      </Row>
-      <Row label={tr("appearance.font")}>
-        <Segmented<AppearanceFont>
-          label={tr("appearance.font")}
-          value={a.font}
-          onChange={(font) => change({ font })}
-          options={[
-            { value: "system", label: tr("appearance.font.system") },
-            { value: "inter", label: "Inter" }, // i18n-ok: o nome da fonte
-            { value: "lato", label: "Lato" }, // i18n-ok: o nome da fonte
-            { value: "atkinson", label: "Atkinson" }, // i18n-ok: o nome da fonte
-          ]}
-        />
-      </Row>
-      <Row label={tr("appearance.motion")} hint={tr("appearance.motion.hint")}>
-        <Segmented<Motion>
-          label={tr("appearance.motion")}
-          value={a.motion}
-          onChange={(motion) => change({ motion })}
-          options={[
-            { value: "full", label: tr("appearance.motion.full") },
-            { value: "reduced", label: tr("appearance.motion.reduced") },
           ]}
         />
       </Row>
@@ -146,6 +116,59 @@ export function AppearanceSection() {
         })}
         {shown.length === 0 ? <p className="kn-themes-empty">{tr("appearance.themes.none")}</p> : null}
       </div>
+    </Section>
+  );
+}
+
+/** A aba Texto (T31766): o tamanho do texto, a fonte e o movimento, as mesmas linhas de antes. */
+export function AppearanceTextSection() {
+  const { t: tr } = useT();
+  const { a, change, error } = useChange();
+  return (
+    <Section title={tr("settings.tab.text")}>
+      <Row label={tr("appearance.textSize")}>
+        <Segmented<TextSize>
+          label={tr("appearance.textSize")}
+          value={a.textSize}
+          onChange={(textSize) => change({ textSize })}
+          options={[
+            { value: "small", label: tr("appearance.textSize.small") },
+            { value: "default", label: tr("appearance.textSize.default") },
+            { value: "large", label: tr("appearance.textSize.large") },
+            { value: "larger", label: tr("appearance.textSize.larger") },
+            { value: "largest", label: tr("appearance.textSize.largest") },
+          ]}
+        />
+      </Row>
+      <Row label={tr("appearance.font")}>
+        <Segmented<AppearanceFont>
+          label={tr("appearance.font")}
+          value={a.font}
+          onChange={(font) => change({ font })}
+          options={[
+            { value: "system", label: tr("appearance.font.system") },
+            { value: "inter", label: "Inter" }, // i18n-ok: o nome da fonte
+            { value: "lato", label: "Lato" }, // i18n-ok: o nome da fonte
+            { value: "atkinson", label: "Atkinson" }, // i18n-ok: o nome da fonte
+          ]}
+        />
+      </Row>
+      <Row label={tr("appearance.motion")} hint={tr("appearance.motion.hint")}>
+        <Segmented<Motion>
+          label={tr("appearance.motion")}
+          value={a.motion}
+          onChange={(motion) => change({ motion })}
+          options={[
+            { value: "full", label: tr("appearance.motion.full") },
+            { value: "reduced", label: tr("appearance.motion.reduced") },
+          ]}
+        />
+      </Row>
+      {error ? (
+        <p className="kn-themes-error" role="alert">
+          {error}
+        </p>
+      ) : null}
     </Section>
   );
 }

@@ -6,7 +6,7 @@ import "./topics.css";
 
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { About } from "../hub/About.tsx";
+import { About, AboutWindows } from "../hub/About.tsx";
 import { MeetingSettingsSection } from "../meetings/MeetingSettings.tsx";
 import { NotesFolderRow } from "../notes/NotesFolder.tsx";
 import "../notes/notes.css";
@@ -15,7 +15,7 @@ import { Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
 import { AgentSection } from "./Agent.tsx";
 import { AgentActivitySection } from "./AgentActivity.tsx";
 import { AgentMeetingsSection } from "./AgentMeetings.tsx";
-import { AppearanceSection } from "./Appearance.tsx";
+import { AppearanceSection, AppearanceTextSection } from "./Appearance.tsx";
 import { CuesRow } from "./CuesRow.tsx";
 import { LanguageSection } from "./LanguageSection.tsx";
 import { t as translateNow, useT } from "../src/i18n.ts";
@@ -70,6 +70,7 @@ const BLOCKS: Record<SettingsBlock, () => ReactNode> = {
   // O idioma do app (T28190, spec #28171).
   language: () => <LanguageSection />,
   appearance: () => <AppearanceSection />,
+  appearanceText: () => <AppearanceTextSection />,
   // Todos os atalhos, configuráveis (T5349), cada grupo no assunto dele.
   "shortcuts:Ditado": () => <ShortcutsSection group="Ditado" />,
   transcription: () => <TranscriptionSection />,
@@ -103,6 +104,8 @@ const BLOCKS: Record<SettingsBlock, () => ReactNode> = {
   ),
   // A antiga aba Sobre do topo (#11969).
   about: () => <About />,
+  // A aparência de cada janela, numa aba à parte (T31766).
+  aboutWindows: () => <AboutWindows />,
 };
 
 /** O assunto ao abrir: `?topic=` (a CLI e o print), senão o último aberto. */
