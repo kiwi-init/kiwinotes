@@ -10,8 +10,8 @@ export const SETTINGS_TOPICS = ["general", "appearance", "dictation", "notes", "
 export type SettingsTopic = (typeof SETTINGS_TOPICS)[number];
 
 /**
- * Os assuntos que a lista mostra. O Geral só tem o Idioma do app, que fica escondido enquanto a `LANGUAGE_CHOICE` está
- * desligada (T29319, harry #29314): sem ele, o assunto some da lista, do `?topic=` e do último aberto.
+ * Os assuntos que a lista mostra. O Geral só tem o Idioma do app, que some com a `LANGUAGE_CHOICE` desligada (T29319,
+ * harry #29314): sem ele, o assunto sai da lista, do `?topic=` e do último aberto. A T30629 ligou a chave.
  */
 export function shownTopics(choice = LANGUAGE_CHOICE): readonly SettingsTopic[] {
   return choice ? SETTINGS_TOPICS : SETTINGS_TOPICS.filter((t) => t !== "general");

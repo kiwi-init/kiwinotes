@@ -39,22 +39,19 @@ export function localeFromSystem(languages: readonly string[]): Locale {
 }
 
 /**
- * A chave do spec #28171 (lead, #28346): enquanto as telas não estão todas no catálogo (T28191, T28192, T28297), o
- * Automático fica em português, para um Mac em inglês não ver o app misturado. O English se escolhe à mão. A última
- * parte do spec vira esta chave para `true` e troca o teste que a marca (`i18n.test.ts`).
+ * A chave do spec #28171 (lead, #28346): o Automático segue a língua do macOS. Ficou desligada enquanto as telas não
+ * estavam todas no catálogo, para um Mac em inglês não ver o app misturado; a T30629 a ligou.
  */
-export const AUTO_FOLLOWS_SYSTEM = false;
+export const AUTO_FOLLOWS_SYSTEM = true;
 
 /**
- * O harry (#29311, #29314): o app em inglês não entra na v2026.11.14 (T29319). Com esta chave desligada, os Ajustes não
- * mostram o Idioma do app, e o app fica em português qualquer que seja a escolha salva: quem escolheu English num
- * build de antes volta ao português, e não fica num app misturado sem o menu para voltar. A última parte do spec
- * #28171 liga esta chave junto com a `AUTO_FOLLOWS_SYSTEM`.
+ * A escolha da língua nos Ajustes (Geral › Idioma do app). O harry (#29311, #29314) a escondeu na v2026.11.14 (T29319):
+ * desligada, os Ajustes não mostram o Idioma do app, e o app fica em português qualquer que seja a escolha salva. A
+ * T30629, a última parte do spec #28171, a ligou junto com a `AUTO_FOLLOWS_SYSTEM`.
  *
- * `KIWI_LANGUAGE_CHOICE=1` no ambiente liga a escolha só no main e no headless, nunca no app de release: o `bun test`
- * (o preload põe) e os prints em inglês das partes do spec, pelo `settings.set`.
+ * Com a chave desligada, `KIWI_LANGUAGE_CHOICE=1` no ambiente ligava a escolha só no main e no headless.
  */
-export const LANGUAGE_CHOICE = false;
+export const LANGUAGE_CHOICE = true;
 
 /** A escolha da língua vale agora: a chave, ou o `KIWI_LANGUAGE_CHOICE=1` do main e do headless. */
 export function languageChoice(): boolean {
