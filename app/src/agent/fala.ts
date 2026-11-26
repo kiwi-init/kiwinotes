@@ -2,8 +2,11 @@
  * O texto para a fala do gato (spec #26687, T26709): o que o agente mandou pelo `kiwi falar` vira palavras que a voz lê
  * bem em pt-BR. Números, datas, horas, dinheiro, porcentagens, siglas e símbolos viram palavras; Markdown, links,
  * código, emoji e o raciocínio do agente saem. Depois, o texto é cortado por frase, para a voz começar antes do fim.
- * Funções puras, sem nada do Mac.
+ * Uma frase em inglês sai por extenso em inglês (T31029, `fala-en.ts`). Funções puras, sem nada do Mac.
  */
+
+import { convertEnglish } from "./fala-en.ts";
+import { type Lingua, linguaDe, linguaOuNada } from "./lingua.ts";
 
 const UNIDADES = ["zero", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez", "onze", "doze", "treze", "catorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
 const DEZENAS = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"];
@@ -199,19 +202,28 @@ export function semMarkdown(texto: string): string {
   );
 }
 
-/**
- * O texto que a voz lê: sem Markdown, e com números, datas, horas, dinheiro, porcentagens, siglas e símbolos por
- * extenso em pt-BR. Linhas viram frases.
- */
-export function textoParaFala(texto: string): string {
-  let t = semMarkdown(texto);
-  // Cada linha que não fecha uma frase fecha aqui: um item de lista é uma frase.
-  t = t
+/** O texto sem Markdown e numa linha só: cada linha que não fecha uma frase fecha aqui (um item de lista é uma frase). */
+function preparar(texto: string): string {
+  return semMarkdown(texto)
     .split(/\n+/)
     .map((l) => l.trim())
     .filter(Boolean)
     .map((l) => (/[.!?…:;,]$/.test(l) ? l : `${l}.`))
     .join(" ");
+}
+
+/**
+ * O texto que a voz lê: sem Markdown, e com números, datas, horas, dinheiro, porcentagens, siglas e símbolos por
+ * extenso na língua dele (T31029): a `lingua` dada ou, sem ela, a que o texto mostra (pt sem pista). Linhas viram frases.
+ */
+export function textoParaFala(texto: string, lingua?: Lingua): string {
+  const t = preparar(texto);
+  return arrumar((lingua ?? linguaDe(t)) === "en" ? convertEnglish(t) : emPortugues(t));
+}
+
+/** Números, datas, horas, dinheiro, porcentagens, siglas e símbolos por extenso em pt-BR. */
+function emPortugues(texto: string): string {
+  let t = texto;
   for (const [re, por] of ABREVIACOES) t = t.replace(re, por);
   // O ponto entre números que não é o do milhar ("3.5", "2026.11.13", "192.168.0.1") se fala "ponto", antes do corte.
   t = t.replace(/(?<![\d.,])\d+(?:\.\d+)+(?![\d,])/g, (m) => (/^\d{1,3}(?:\.\d{3})+$/.test(m) ? m : m.split(".").join(" ponto ")));
@@ -280,7 +292,11 @@ export function textoParaFala(texto: string): string {
     if (/^[A-Z]+$/.test(base) && (base.length <= 3 || !/[AEIOU]/.test(base))) return [...base].map((l) => LETRAS[l] ?? l).join(" ") + fim;
     return base.toLowerCase() + fim;
   });
-  // O que sobrou de símbolo solto sai; os espaços se ajeitam.
+  return t;
+}
+
+/** O que sobrou de símbolo solto sai; os espaços se ajeitam. Vale para as duas línguas. */
+function arrumar(t: string): string {
   return t
     .replace(/[*_~^`|<>{}[\]\\#]/g, " ")
     .replace(/\s+([,.!?;:…])/g, "$1")
@@ -320,5 +336,33 @@ export function cortarFrases(falavel: string): string[] {
   return out;
 }
 
+/** Uma frase pronta para a voz e a língua em que ela foi escrita por extenso. */
+export interface FraseFalada {
+  frase: string;
+  lingua: Lingua;
+}
+
+/**
+ * As frases do texto, já por extenso, cada uma na língua dela (T31029): um texto em pt com uma frase em inglês lê os
+ * números de cada uma na sua língua. A frase sem pista ("OK.", "42.", "Dr.") fica com a língua da vizinha; um texto
+ * todo sem pista, com a `padrao`. A `lingua` de cada frase é a que a voz deve usar (T31030).
+ */
+export function frasesComLingua(texto: string, padrao: Lingua = "pt"): FraseFalada[] {
+  const pedacos = preparar(texto)
+    .split(/(?<=[.!?…])\s+(?=\S)/u)
+    .map((p) => ({ p, l: linguaOuNada(p) }));
+  const primeira = pedacos.find((x) => x.l)?.l ?? padrao;
+  let anterior = primeira;
+  const blocos: { texto: string; lingua: Lingua }[] = [];
+  for (const { p, l } of pedacos) {
+    const lingua = l ?? anterior;
+    anterior = lingua;
+    const ultimo = blocos.at(-1);
+    if (ultimo?.lingua === lingua) ultimo.texto += ` ${p}`;
+    else blocos.push({ texto: p, lingua });
+  }
+  return blocos.flatMap((b) => cortarFrases(arrumar(b.lingua === "en" ? convertEnglish(b.texto) : emPortugues(b.texto))).map((frase) => ({ frase, lingua: b.lingua })));
+}
+
 /** O que a voz recebe: as frases do texto, já por extenso, na ordem. Vazio quando não sobra nada para falar. */
-export const frasesParaFala = (texto: string): string[] => cortarFrases(textoParaFala(texto));
+export const frasesParaFala = (texto: string): string[] => frasesComLingua(texto).map((f) => f.frase);
