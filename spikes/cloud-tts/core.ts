@@ -167,7 +167,7 @@ export function table(rows: Measure[]): string {
   for (const [k, rs] of groups) {
     const [provider, lang] = k.split("\u0000");
     const ok = rs.filter((r) => !r.error);
-    const chars = ok.length ? median(ok.map((r) => r.chars)) : 0;
+    const chars = ok.length ? Math.round(median(ok.map((r) => r.chars))) : 0;
     const cost = ok.length ? median(ok.map((r) => r.costUsd)) : 0;
     out.push(
       `| ${provider} | ${lang} | ${ok.length ? ms(median(ok.map((r) => r.firstMs))) : "-"} | ${ok.length ? ms(median(ok.map((r) => r.totalMs))) : "-"} | ${chars} | US$ ${cost.toFixed(5)} | ${rs.length - ok.length} de ${rs.length} |`,
