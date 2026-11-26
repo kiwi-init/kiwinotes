@@ -39,7 +39,6 @@ const enBase: { readonly [K in keyof typeof PT_PARTS.base]: Entry } = {
   "settings.language.hint": "Automatic follows the macOS language. Dictation, the cat's voice and the agent's replies don't change here.",
   "settings.language.auto": "Automatic",
   "settings.language.autoNow": "From macOS, now in {language}.",
-  "settings.language.autoPending": "For now, Automatic stays in Portuguese: the rest of the app is still being translated.",
 
   // The app menu, the tray and the dictation status (T28192).
   "menu.quit": "Quit Kiwi Notes",
