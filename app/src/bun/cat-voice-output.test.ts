@@ -267,3 +267,40 @@ test("falarUmaVez: o gato voltando a falar corta o teste", async () => {
   expect(limpou).toBeGreaterThan(0);
   voz.stop();
 });
+
+test("falarUmaVez que falha não deixa o teste guardado: a próxima fala do gato não limpa a saída à toa", async () => {
+  const fala = new Set<(e: { turnId: string; frases: string[] }) => void>();
+  let limpou = 0;
+  const naTela: FalaNaTela[] = [];
+  const saida: SaidaFala = {
+    async tocar(_p, aoTocar) {
+      aoTocar(1);
+      await tick();
+    },
+    limpar() {
+      limpou++;
+    },
+  };
+  const voz = ligarVozDoGato({
+    sintese: {
+      async *sintetizar() {
+        yield tom(10, 100);
+      },
+    },
+    saida,
+    agent: { onSpeech: (fn) => (fala.add(fn), () => fala.delete(fn)) },
+    naTela: (e) => naTela.push(e),
+  });
+  const falha: SinteseFala = {
+    // biome-ignore lint/correctness/useYield: falha antes do 1º pedaço
+    async *sintetizar() {
+      throw new ElevenLabsError("network");
+    },
+  };
+  await expect(voz.falarUmaVez(falha, "Teste.")).rejects.toMatchObject({ reason: "network" });
+  const antes = limpou;
+  for (const fn of fala) fn({ turnId: "t1", frases: ["Oi."] });
+  await esperar(() => naTela.at(-1)?.nivel === null);
+  expect(limpou).toBe(antes);
+  voz.stop();
+});
