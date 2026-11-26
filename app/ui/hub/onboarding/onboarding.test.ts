@@ -11,7 +11,7 @@ test("os 10 passos na ordem do spec, cada um com título e frase (o do Control, 
   expect(ONBOARDING_STEPS.map((s) => stepText(s).title.length > 0 && (s === "control" || stepText(s).hint.length > 0))).toEqual(Array(10).fill(true));
   expect(stepText("control").hint).toBe("");
   // Spec #17709: o passo 1 acorda o Kiwi Cat; a frase de baixo diz o que se instala: o agente escolhido (spec #24666).
-  expect(stepText("claude").title).toBe("Oi! Vamos acordar o Kiwi Cat");
+  expect(stepText("claude").title).toBe("Oi! Vamos acordar o Kiwi");
   expect(stepText("claude").hint).toContain("(o Claude Code ou o Gemini) está instalado");
   expect([stepAt(1), stepAt(4), stepAt(10), stepAt(0), stepAt(12)]).toEqual(["claude", "guardrail", "done", "claude", "done"]);
   expect(progressLine(3)).toBe("Passo 3 de 10");
@@ -46,7 +46,7 @@ test("o cartão final: o jeito de falar, os projetos e o atalho", () => {
   expect(projectsSummary(["Kiwi", "SILO"])).toBe("Kiwi, SILO");
   expect(projectsSummary(["A", "B", "C", "D", "E"])).toBe("A, B, C e mais 2");
   expect(shortcutSummary(true)).toBe("Segure o Control para falar");
-  expect(shortcutSummary(false)).toBe("Ligue o Kiwi Cat em Ajustes › Agente");
+  expect(shortcutSummary(false)).toBe("Ligue o Kiwi em Ajustes › Agente");
   // O atalho escolhido (spec #12946) nas frases.
   expect(holdName("control")).toBe("o Control");
   expect(holdName("rightOption")).toBe("o ⌥ direito");
@@ -77,7 +77,7 @@ test("o passo 2: a fala pelo Control vai de esperando a ouvindo, pedido e respos
 test("o passo 2 sem a fala (\"Mostrar o que eu falei\" desligado, spec #26055): nenhuma frase repete o que a pessoa disse", () => {
   let s: ControlPhase = controlStep({ phase: "processing" }, { voice: { phase: "asked", id: "p1" } });
   expect(s).toEqual({ phase: "asked", id: "p1" });
-  expect(controlLine(s)).toBe("O gato está pensando…");
+  expect(controlLine(s)).toBe("O Kiwi está pensando…");
   s = controlStep(s, { turn: { id: "p1", type: "done", text: "Oi!", stopReason: "end_turn" } as never });
   expect(s).toEqual({ phase: "answered" });
   expect(controlLine(s)).toBe("Deu certo! Agora é só segurar o Control quando quiser.");

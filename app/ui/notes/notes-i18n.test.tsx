@@ -166,8 +166,8 @@ describe("os visualizadores das Notas em inglês (T29245)", () => {
     expect(fileSize(1_258_291, "en")).toBe("1.2 MB");
     expect(fileSize(1_258_291)).toBe("1,2 MB");
     expect(fileSize(1024, "en")).toBe("1 KB");
-    expect(translate("en", CHANGED_OUTSIDE)).toBe("The file changed outside Kiwi: the new version is open, and your last edit wasn't saved.");
-    expect(translate("pt", SAVE_FAILED)).toBe("Não deu para gravar este documento agora. O Kiwi tenta de novo na próxima edição.");
+    expect(translate("en", CHANGED_OUTSIDE)).toBe("The file changed outside Kiwi Notes: the new version is open, and your last edit wasn't saved.");
+    expect(translate("pt", SAVE_FAILED)).toBe("Não deu para gravar este documento agora. O Kiwi Notes tenta de novo na próxima edição.");
   });
 
   test("o motivo da planilha (revisão #30550): a tela traduz, e o agente segue com a frase em português", () => {

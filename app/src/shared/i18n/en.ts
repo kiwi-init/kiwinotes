@@ -36,7 +36,7 @@ const enBase: { readonly [K in keyof typeof PT_PARTS.base]: Entry } = {
 
   "settings.language.section": "Language",
   "settings.language.label": "App language",
-  "settings.language.hint": "Automatic follows the macOS language. Dictation, the cat's voice and the agent's replies don't change here.",
+  "settings.language.hint": "Automatic follows the macOS language. Dictation, Kiwi's voice and the agent's replies don't change here.",
   "settings.language.auto": "Automatic",
   "settings.language.autoNow": "From macOS, now in {language}.",
 

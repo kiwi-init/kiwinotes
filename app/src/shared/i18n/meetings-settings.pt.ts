@@ -12,7 +12,7 @@ export const ptMeetingsSettings = {
   "settings.meetings.propose.auto": "Propor sozinho",
   "settings.meetings.propose.onRequest": "Só quando eu pedir",
   "settings.meetings.propose.hint.onRequest": 'Só quando você pedir, como "atualiza o projeto com a reunião que eu acabei de ter".',
-  "settings.meetings.propose.hint.economy": "Com o modo econômico, o Kiwi pergunta antes, porque cada proposta gasta um pedido do seu plano.",
+  "settings.meetings.propose.hint.economy": "Com o modo econômico, o Kiwi Notes pergunta antes, porque cada proposta gasta um pedido do seu plano.",
   "settings.meetings.propose.hint.auto": "Cada proposta gasta um pedido do seu plano.",
   "settings.meetings.where": "Onde vai a nota",
   "settings.meetings.folder.project": "Na pasta do projeto",

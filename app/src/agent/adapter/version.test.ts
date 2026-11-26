@@ -35,7 +35,7 @@ describe("a régua de versão", () => {
       "O Claude Code instalado (versão 2.0.5) é mais antigo que o que este Kiwi usa (2.1.322). Atualize o Claude Code e tente de novo.",
     );
     expect(versionError("3.0.0", "Claude Code", "2.1.322")?.message).toBe(
-      "O Claude Code instalado (versão 3.0.0) mudou de série, e este Kiwi só conhece a da 2.1.322. O agente fica indisponível até sair uma atualização do Kiwi Notes.",
+      "O Claude Code instalado (versão 3.0.0) mudou de série, e este Kiwi Notes só conhece a da 2.1.322. O agente fica indisponível até sair uma atualização do Kiwi Notes.",
     );
   });
 });

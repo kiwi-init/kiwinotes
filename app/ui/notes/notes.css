@@ -1537,7 +1537,7 @@ button.kn-side-head:focus-visible {
 }
 
 /* O Kiwi escrevendo ao vivo (T20869, spec #20843): o cursor dele, como o de outra pessoa num doc compartilhado, na cor
-   do Kiwi Cat (`--kiwi-accent`, da paleta escolhida). O texto trocado esmaece antes de sair, e o novo fica realçado
+   do Kiwi (`--kiwi-accent`, da paleta escolhida). O texto trocado esmaece antes de sair, e o novo fica realçado
    e some sozinho. */
 :root {
   --kiwi-accent: #F472B6;

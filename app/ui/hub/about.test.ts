@@ -161,7 +161,7 @@ describe("Buscar atualizações (T25110)", () => {
     expect(updateBand({ state: "off", reason: UPDATES_OFF_BY_SETTING, lastCheck: null })).toEqual({
       tone: "quiet",
       title: "Atualizações desligadas",
-      detail: "O Kiwi não procura versão nova nem aparência nova.",
+      detail: "O Kiwi Notes não procura versão nova nem aparência nova.",
       bar: null,
       notesOf: null,
       action: null,

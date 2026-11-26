@@ -3,7 +3,9 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync }
 import path from "node:path";
 
 import { tempDir } from "../test/tmp.ts";
-import { checkedFiles, fileTexts, fixedTexts, MAIN_DIRS, MAIN_FILES, mainFixedTexts, SWIFT_DIRS, swiftFixedTexts } from "./i18n-check.ts";
+import { en } from "../src/shared/i18n/en.ts";
+import { pt } from "../src/shared/i18n/pt.ts";
+import { checkedFiles, fileTexts, fixedTexts, MAIN_DIRS, MAIN_FILES, mainFixedTexts, mascotNameHits, SWIFT_DIRS, swiftFixedTexts } from "./i18n-check.ts";
 
 test("acha o texto entre as tags, os atributos visíveis e as opções; ignora o t(), o código e o sem letra (T28190)", () => {
   const src = `
@@ -122,4 +124,14 @@ test("um texto fixo em qualquer arquivo da tela, novo ou antigo, faz o check sai
 test("a chave do catálogo não conta como texto (T29842)", () => {
   const src = 'const a = { label: "editor.menu.cut" };\nconst b = { label: "Recortar" };\nconst c = { label: "editor.naoExiste" };';
   expect(mainFixedTexts("x.ts", src).map((t) => t.text)).toEqual(["Recortar", "editor.naoExiste"]);
+});
+
+test("o mascote se chama Kiwi na tela: nenhum texto dos catálogos diz gato, cat ou Kiwi Cat (spec #31199)", () => {
+  expect(mascotNameHits(pt, "pt")).toEqual([]);
+  expect(mascotNameHits(en, "en")).toEqual([]);
+  // O que barra, também dentro de um plural; e o que só parece ("categoria", "catalog", "concatenate").
+  const fakePt = { a: "O gato fala", b: { one: "1 gatinho", other: "{n} gatos" }, c: "Mostrar o Kiwi Cat", d: "Uma categoria nova", e: "O Kiwi fala" };
+  expect(mascotNameHits(fakePt, "pt").map((h) => h.key)).toEqual(["a", "b", "b", "c"]);
+  const fakeEn = { a: "The cat talks", b: "Kiwi's voice", c: "the cat's color", d: "Show the Kiwi-Cat", e: "Open the catalog to concatenate", f: "Cats" };
+  expect(mascotNameHits(fakeEn, "en").map((h) => h.key)).toEqual(["a", "c", "d", "f"]);
 });

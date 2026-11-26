@@ -415,7 +415,7 @@ try {
       "the earlier talks about the name, so you get to the meeting with the options and what each person thought.";
     const { ctx, p, width, height } = await openPage("escala=1.00&lado=right&balao=acima&lang=en", "dark", 360);
     assert.equal(await p.evaluate(() => document.documentElement.lang), "en");
-    assert.equal(await p.getAttribute("#cat-close", "aria-label"), "Close Kiwi Cat");
+    assert.equal(await p.getAttribute("#cat-close", "aria-label"), "Close Kiwi");
     assert.equal(await p.getAttribute("#bubble-close", "aria-label"), "Close");
     await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false, ask: true }, catHover: true }), EN);
     await settle(p);
@@ -439,7 +439,7 @@ try {
     assert.equal(s.bubble.text, EN);
     assert.equal(await p.textContent("#bubble-more"), "Ver menos");
     assert.equal(await p.textContent("#bubble-ask"), "Precisa de mais alguma coisa?");
-    assert.equal(await p.getAttribute("#cat-close", "aria-label"), "Fechar o Kiwi Cat");
+    assert.equal(await p.getAttribute("#cat-close", "aria-label"), "Fechar o Kiwi");
     assert.equal(await p.evaluate(() => document.documentElement.lang), "pt-BR");
     // Uma língua que não é do app fica em português, e nada quebra.
     await p.evaluate(() => (window as any).kiwiOverlay.set({ lang: "fr" }));
@@ -453,7 +453,7 @@ try {
   const img = (f: string) => `data:image/png;base64,${readFileSync(join(out, f)).toString("base64")}`;
   await sheet.setContent(
     `<body style="margin:0;padding:24px;background:#eceae4;font:600 18px -apple-system,sans-serif;color:#222">` +
-      `<h1 style="margin:0 0 16px;font-size:26px">O balão do Kiwi Cat: a conversa contínua (spec #13378, #13380)</h1>` +
+      `<h1 style="margin:0 0 16px;font-size:26px">O balão do Kiwi: a conversa contínua (spec #13378, #13380)</h1>` +
       `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start">` +
       shots.map((x) =>
         `<figure style="margin:0"><figcaption style="margin-bottom:8px;min-height:44px">${x.caption}</figcaption>` +

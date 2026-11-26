@@ -22,28 +22,28 @@ test("desligado, a linha da voz aparece com a voz no disco, para apagar, e enqua
   expect(catVoiceLine(false, v({}))).toBeNull();
   // Desligar no meio do download não esconde o download (revisão do T26736): o andamento e o Cancelar ficam.
   expect(catVoiceLine(false, v({ phase: "downloading", done: SIZE / 4, total: SIZE }))).toEqual({
-    hint: "Baixando a voz: 25% de 2 GB. O gato está desligado: ele não fala até você ligar.",
+    hint: "Baixando a voz: 25% de 2 GB. O Kiwi está desligado: ele não fala até você ligar.",
     action: "cancel",
   });
   expect(catVoiceLine(false, v({ phase: "warming" }))).toEqual({
-    hint: "Preparando a voz neste Mac… Na primeira vez, leva uns 20 segundos. O gato está desligado: ele não fala até você ligar.",
+    hint: "Preparando a voz neste Mac… Na primeira vez, leva uns 20 segundos. O Kiwi está desligado: ele não fala até você ligar.",
     action: null,
   });
   expect(catVoiceLine(false, v({ phase: "error", error: "download" }))).toBeNull();
   for (const s of [v({ phase: "ready" }), v({ phase: "noVoice", voice: false }), v({ phase: "error", error: "warmup" })])
-    expect(catVoiceLine(false, s)).toEqual({ hint: "Baixada (2 GB). Desligado, o gato não fala.", action: "remove" });
+    expect(catVoiceLine(false, s)).toEqual({ hint: "Baixada (2 GB). Desligado, o Kiwi não fala.", action: "remove" });
 });
 
 test("ligado sem a voz: o tamanho e o botão; nada baixa sem o clique", () => {
   expect(catVoiceLine(true, v({}))).toEqual({
-    hint: "Para falar, o gato precisa do modelo e das vozes (2 GB), baixados uma vez, só com o seu clique.",
+    hint: "Para falar, o Kiwi precisa do modelo e das vozes (2 GB), baixados uma vez, só com o seu clique.",
     action: "download",
   });
 });
 
 test("ligado: o andamento, a preparação, pronta e os erros", () => {
   expect(catVoiceLine(true, v({ phase: "downloading", done: SIZE / 4, total: SIZE }))).toEqual({
-    hint: "Baixando a voz: 25% de 2 GB. Até terminar, o gato responde por escrito.",
+    hint: "Baixando a voz: 25% de 2 GB. Até terminar, o Kiwi responde por escrito.",
     action: "cancel",
   });
   expect(catVoiceLine(true, v({ phase: "downloading" }))!.hint).toStartWith("Baixando a voz: 0% de 2 GB");

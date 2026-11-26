@@ -73,7 +73,7 @@ describe("o Claude Code instalado", () => {
   test("pronto: a versão e o login, e o Kiwi nunca vê a senha", () => {
     const l = claudeLine("Claude Code", base.claude);
     expect(l.ok).toBe(true);
-    expect(l.text).toBe("Claude Code 2.1.322 instalado e logado com a sua conta do Claude. O login é dele: o Kiwi nunca vê a sua senha.");
+    expect(l.text).toBe("Claude Code 2.1.322 instalado e logado com a sua conta do Claude. O login é dele: o Kiwi Notes nunca vê a sua senha.");
   });
 
   test("não instalado: o que fazer", () => {
@@ -88,12 +88,12 @@ describe("o Claude Code instalado", () => {
     expect(l.ok).toBe(false);
     expect(l.text).toContain("não está logado");
     expect(l.text).toContain("digite “claude”");
-    expect(l.text).toContain("O Kiwi nunca pede a sua senha.");
+    expect(l.text).toContain("O Kiwi Notes nunca pede a sua senha.");
   });
 
   test("o aviso de versão: antigo (atualize) e de série nova (espere o Kiwi)", () => {
     const old = claudeLine("Claude Code", { installed: true, version: "2.0.9", loggedIn: true, versionOk: false, versionError: "E_AGENT_TOO_OLD" });
-    expect(old.text).toBe("O Claude Code 2.0.9 é mais antigo que o que o Kiwi precisa. No Terminal, digite “claude update” e toque em Tentar de novo.");
+    expect(old.text).toBe("O Claude Code 2.0.9 é mais antigo que o que o Kiwi Notes precisa. No Terminal, digite “claude update” e toque em Tentar de novo.");
     const newer = claudeLine("Claude Code", { installed: true, version: "3.0.0", loggedIn: true, versionOk: false, versionError: "E_AGENT_TOO_NEW" });
     expect(newer.text).toContain("série nova");
     expect(newer.text).toContain("atualização do Kiwi Notes");
@@ -130,7 +130,7 @@ describe("os dois agentes (spec #24666)", () => {
     expect(out.text).not.toContain("Gemini CLI");
     expect(out.text).toContain("nunca pede a sua senha nem a sua chave");
     expect(out.text).not.toContain("claude");
-    expect(agentLine("gemini", "Gemini", gemini.gemini).text).toBe("Gemini 0.70.0 instalado e logado. O login é dele: o Kiwi nunca vê a sua senha.");
+    expect(agentLine("gemini", "Gemini", gemini.gemini).text).toBe("Gemini 0.70.0 instalado e logado. O login é dele: o Kiwi Notes nunca vê a sua senha.");
   });
 
   test("o login que o Gemini ainda não disse não vira \"não logado\", e o Testar fica liberado", () => {
@@ -190,7 +190,7 @@ describe("o interruptor e o adaptador", () => {
     expect(adapterLine({ ...base, adapter: { version: "0.106.0", phase: "error", error: { code: "E_ADAPTER_CANCELLED", message: "x" } } })).toBe(
       "Download cancelado. Nada foi instalado.",
     );
-    const offline = "Sem conexão com a internet. O Kiwi precisa de rede para baixar o adaptador do Claude Code.";
+    const offline = "Sem conexão com a internet. O Kiwi Notes precisa de rede para baixar o adaptador do Claude Code.";
     expect(adapterLine({ ...base, adapter: { version: "0.106.0", phase: "error", error: { code: "E_ADAPTER_OFFLINE", message: offline } } })).toBe(offline);
   });
 });
@@ -360,7 +360,7 @@ describe("o Testar", () => {
 
   test("a permissão recusada aparece no status: o agente só lê as notas e as reuniões", () => {
     expect(run([ev({ type: "started" }), ev({ type: "permission", tool: "Bash", decision: "denied" })]).status).toBe(
-      "Recusei o Bash: o agente só usa as suas notas e reuniões, pelo Kiwi.",
+      "Recusei o Bash: o agente só usa as suas notas e reuniões, pelo Kiwi Notes.",
     );
   });
 
@@ -464,8 +464,8 @@ test("a linha do aviso (spec #9839): o botão antes de pedir, o liga/desliga com
 test("Pesquisar na web (spec #11908): o texto diz o que muda e que o Kiwi não chama serviço", async () => {
   const { WEB_LABEL, webHint, toolStatus } = await import("./agentText.ts");
   expect(WEB_LABEL).toBe("Pesquisar na web");
-  expect(webHint({ webSearch: false })).toStartWith("Desligado: o Kiwi recusa a busca");
-  expect(webHint({ webSearch: true })).toContain("O Kiwi não chama nenhum serviço");
+  expect(webHint({ webSearch: false })).toStartWith("Desligado: o Kiwi Notes recusa a busca");
+  expect(webHint({ webSearch: true })).toContain("O Kiwi Notes não chama nenhum serviço");
   expect(toolStatus("web")).toBe("Pesquisando na web…");
   expect(toolStatus("notes_edit", "Ideias")).toBe("Trocando um trecho em Ideias…");
   expect(toolStatus("notes_section_merge")).toBe("Arrumando as seções de uma nota…");

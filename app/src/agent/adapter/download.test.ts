@@ -145,7 +145,7 @@ describe("o download", () => {
     const root = tmp();
     const err = await rejection(downloadAdapter({ root, registry: url, packages: r.pinned }));
     expect(err.code).toBe("E_ADAPTER_OFFLINE");
-    expect(err.message).toBe("Sem conexão com a internet. O Kiwi precisa de rede para baixar o adaptador do Claude Code.");
+    expect(err.message).toBe("Sem conexão com a internet. O Kiwi Notes precisa de rede para baixar o adaptador do Claude Code.");
     expect(leftovers(root)).toEqual([]);
   });
 

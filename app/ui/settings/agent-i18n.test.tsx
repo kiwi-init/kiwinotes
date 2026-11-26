@@ -73,7 +73,7 @@ describe("Ajustes › Agente em inglês", () => {
     expect(voiceSize(1_540_000_000)).toBe("1,5 GB");
     expect(catSpeaksHint(true, false, "en")).toContain("The voice runs on this Mac");
     const v = { phase: "downloading", size: 2e9, total: 100, done: 40, voices: [], selected: "en-a", model: false } as unknown as CatVoiceStatus;
-    expect(catVoiceLine(true, v, "en")?.hint).toBe("Downloading the voice: 40% of 2 GB. Until it finishes, the cat answers in writing.");
+    expect(catVoiceLine(true, v, "en")?.hint).toBe("Downloading the voice: 40% of 2 GB. Until it finishes, Kiwi answers in writing.");
     const missing = { phase: "noVoice", size: 2e9, voices: [{ id: "en-a", state: "missing", size: 3e8 }, { id: "en-b", state: "ready" }], selected: "en-b", model: true } as unknown as CatVoiceStatus;
     expect(catVoiceLine(true, missing, "en")?.hint).toBe("1 voice missing (300 MB). The model is already here and won't download again.");
     expect(catVoiceLine(true, missing)?.hint).toBe("Falta 1 voz (300 MB). O modelo já está aqui e não baixa de novo.");

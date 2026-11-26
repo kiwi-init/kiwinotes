@@ -8,7 +8,7 @@ export const ptCatOverlay = {
   "catOverlay.less": "Ver menos",
   "catOverlay.ask": "Precisa de mais alguma coisa?",
   "catOverlay.closeBubble": "Fechar",
-  "catOverlay.closeCat": "Fechar o Kiwi Cat",
+  "catOverlay.closeCat": "Fechar o Kiwi",
   "catOverlay.voiceError": "Não consegui falar com o agente: {message}",
   "catOverlay.unknownError": "erro desconhecido",
   // A resposta sem texto (só o que ele fez): depois de uma ferramenta, ou sem nenhuma.

@@ -12,6 +12,9 @@
 // (`native/Sources`): o texto de um `Text(…)`, de um `label:`, de um `accessibilityLabel(…)` e toda frase com acento,
 // fora dos logs. Um texto sem letra (`·`, `›`, `%`) não conta, nem uma chave do catálogo (`"editor.menu.cut"`).
 //
+// O nome do mascote (spec #31199): na tela ele é o Kiwi, e o app é o Kiwi Notes. Um texto do catálogo com "gato",
+// "cat" ou "Kiwi Cat" também barra.
+//
 // O falso positivo (um nome próprio, um log, uma lista de palavras da busca) leva `// i18n-ok: <motivo>` na linha. Um
 // arquivo que já traz as duas línguas lado a lado (o `showcaseText.ts`) leva `// i18n-ok-file: <motivo>` no começo.
 
@@ -19,6 +22,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 
+import { en } from "../src/shared/i18n/en.ts";
 import { pt } from "../src/shared/i18n/pt.ts";
 
 // `KIWI_I18N_ROOT`: só o teste, que roda o check numa árvore falsa para provar o `exit 1`.
@@ -180,6 +184,15 @@ function filesUnder(dir: string, ext: string): string[] {
 }
 
 /** Os arquivos da tela e do main que o check lê, relativos a `root`. */
+/** O que o mascote não se chama na tela (spec #31199): em pt, "gato" e afins; em en, "cat"; nas duas, "Kiwi Cat". */
+export const NOT_MASCOT_NAME = { pt: /\bgat(?:[oa]s?|inh[oa]s?)\b|Kiwi[ -]?Cat/i, en: /\b(?:cats?|kitty|kitten)\b|Kiwi[ -]?Cat/i } as const;
+
+/** Os textos de um catálogo que chamam o mascote de gato (os plurais `{ one, other }` contam cada forma). */
+export function mascotNameHits(catalog: Record<string, unknown>, lang: keyof typeof NOT_MASCOT_NAME): { key: string; text: string }[] {
+  const texts = (v: unknown): string[] => (typeof v === "string" ? [v] : v && typeof v === "object" ? Object.values(v).flatMap(texts) : []);
+  return Object.entries(catalog).flatMap(([key, v]) => texts(v).filter((text) => NOT_MASCOT_NAME[lang].test(text)).map((text) => ({ key, text })));
+}
+
 export function checkedFiles(root: string): string[] {
   const under = (d: string) => [...filesUnder(path.join(root, d), ".ts"), ...filesUnder(path.join(root, d), ".tsx")];
   return [...under("ui"), ...MAIN_DIRS.flatMap(under), ...MAIN_FILES.map((f) => path.join(root, f))].map((f) => path.relative(root, f)).sort();
@@ -198,7 +211,10 @@ if (import.meta.main) {
   const app = checkedFiles(ROOT).map((file) => ({ file, texts: fileTexts(file, readFileSync(path.join(ROOT, file), "utf8")) }));
   const swift = SWIFT_DIRS.flatMap((d) => filesUnder(path.join(ROOT, d), ".swift")).map((f) => ({ file: path.relative(ROOT, f), texts: swiftFixedTexts(readFileSync(f, "utf8")) }));
   const failures = [...app, ...swift].filter((r) => r.texts.length > 0);
+  const mascot = [...mascotNameHits(pt, "pt").map((h) => ({ ...h, lang: "pt" })), ...mascotNameHits(en, "en").map((h) => ({ ...h, lang: "en" }))];
+  for (const h of mascot) console.error(`✗ ${h.lang} ${h.key}: o mascote se chama Kiwi na tela, não gato nem cat (spec #31199): ${h.text}`);
   console.log(`i18n: ${app.length} arquivos da tela e do main e ${swift.length} do helper lidos; ${failures.length} com texto fixo.`);
+  if (mascot.length) process.exitCode = 1;
   if (failures.length) {
     for (const r of failures) for (const t of r.texts) console.error(`✗ ${r.file}:${t.line} texto fixo fora do catálogo: ${t.text}`);
     console.error("Ponha o texto no catálogo (src/shared/i18n/) e use o t(); um falso positivo leva // i18n-ok: <motivo> na linha.");

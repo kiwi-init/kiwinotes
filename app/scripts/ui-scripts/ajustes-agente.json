@@ -125,32 +125,32 @@
       "name": "o medidor já conferiu o uso (o /usage, spec #11084): o agente está livre"
     },
     {
-      "expectCount": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi Cat')) [role=radio]",
+      "expectCount": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi')) [role=radio]",
       "count": 5,
       "name": "a cor do gato: as 5 paletas do pacote (spec #14963)"
     },
     {
-      "expectCount": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi Cat')) [role=radio][aria-label='Prisma Original'][aria-checked=true]",
+      "expectCount": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi')) [role=radio][aria-label='Prisma Original'][aria-checked=true]",
       "count": 1,
       "name": "a prisma-original marcada por padrão"
     },
     {
-      "click": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi Cat')) [role=radio][aria-label='Âmbar Noturno']",
+      "click": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi')) [role=radio][aria-label='Âmbar Noturno']",
       "name": "escolhe a Âmbar Noturno"
     },
     {
-      "expectCount": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi Cat')) [role=radio][aria-label='Âmbar Noturno'][aria-checked=true]",
+      "expectCount": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi')) [role=radio][aria-label='Âmbar Noturno'][aria-checked=true]",
       "count": 1,
       "name": "ela fica marcada"
     },
     {
-      "expectText": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi Cat')) .kn-row-hint",
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi')) .kn-row-hint",
       "text": "Âmbar Noturno",
       "name": "a frase diz a paleta"
     },
     {
       "screenshot": "4b-paletas.png",
-      "selector": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi Cat'))"
+      "selector": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi'))"
     },
     {
       "click": ".kn-agent-test button:has-text('Testar')",
@@ -405,7 +405,7 @@
       "name": "desligado, na hora"
     },
     {
-      "expectCount": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi Cat')) [role=radio]:disabled",
+      "expectCount": ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi')) [role=radio]:disabled",
       "count": 5,
       "name": "com o agente desligado, as amostras ficam desabilitadas"
     },

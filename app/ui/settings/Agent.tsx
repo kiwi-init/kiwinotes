@@ -254,7 +254,7 @@ export function AgentSection() {
       {/* "Mostrar o que eu falei" (spec #26055): só com o agente ligado. */}
       {status.enabled ? <SpokenTextRow status={status} onStatus={setStatus} /> : null}
 
-      {/* "O gato fala" (spec #26687): só com o agente ligado; a voz baixa no clique, nunca ao abrir os Ajustes. */}
+      {/* "O Kiwi fala" (spec #26687): só com o agente ligado; a voz baixa no clique, nunca ao abrir os Ajustes. */}
       {status.enabled ? <CatSpeaksRow status={status} onStatus={setStatus} /> : null}
 
       {/* O onboarding (spec #11955): abre de novo, do passo 1, por cima do hub. */}
