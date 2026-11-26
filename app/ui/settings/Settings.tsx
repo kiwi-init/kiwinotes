@@ -89,7 +89,11 @@ const BLOCKS: Record<SettingsBlock, () => ReactNode> = {
   "shortcuts:Reuniões": () => <ShortcutsSection group="Reuniões" />, // i18n-ok: o id do grupo de atalhos, não aparece
   agentMeetings: () => <AgentMeetingsSection />,
   // O agente (spec #8373), o medidor (spec #11084) e o que a pessoa já respondeu na dúvida do guardrail (spec #9873).
-  agent: () => <AgentSection />,
+  agent: () => <AgentSection part="general" />,
+  agentKiwi: () => <AgentSection part="kiwi" />,
+  agentVoice: () => <AgentSection part="voice" />,
+  agentMemory: () => <AgentSection part="memory" />,
+  agentAdvanced: () => <AgentSection part="advanced" />,
   usage: () => <UsageMeter />,
   // As trilhas da Bússola (T14682): visíveis e apagáveis, uma a uma.
   trails: () => <TrailsSection />,

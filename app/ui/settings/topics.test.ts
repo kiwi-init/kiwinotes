@@ -142,3 +142,15 @@ test("a última aba: uma por assunto no storage, com a primeira quando não há,
   expect(() => saveLastTab(broken, "notes", "sidebar")).not.toThrow();
   expect(readLastTab(null, "meetings")).toBe("recording");
 });
+
+test("o Agente em 5 abas, cada uma com os seus blocos (T31765)", () => {
+  expect(TOPIC_TABS.agent.map((x) => x.id)).toEqual(["general", "kiwi", "voice", "memory", "advanced"]);
+  expect(tabOf("agent")).toBe("general");
+  expect(tabOf("agentKiwi")).toBe("kiwi");
+  expect(tabOf("agentVoice")).toBe("voice");
+  expect(tabOf("agentMemory")).toBe("memory");
+  expect(tabOf("trails")).toBe("memory");
+  expect(tabOf("doubtAnswers")).toBe("memory");
+  expect(tabOf("usage")).toBe("advanced");
+  expect(tabOf("agentAdvanced")).toBe("advanced");
+});
