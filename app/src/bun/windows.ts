@@ -42,6 +42,8 @@ import { writerFromCapabilities } from "../agent/tools/writer.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { HomeChanges } from "./home.ts";
 import { ligarVozDoGatoNoApp } from "./cat-voice-output.ts";
+import { vozDoKiwi } from "./cat-voice-provider.ts";
+import { elevenLabsKey } from "./keychain.ts";
 import { CatVoicePreview, createCatVoicePreview } from "./cat-voice-preview.ts";
 import { hubFrame, type IntroLayout, introWindow, parseHubFrame, type Rect } from "../shared/intro-layout.ts";
 import { systemLanguages } from "./system-language.ts";
@@ -151,7 +153,19 @@ export const catVoice = createCatVoice({
  * A voz do gato no alto-falante (T27825): o player da fala e o Ouvir dos Ajustes tocam pelo helper (`speech.play`),
  * ligados quando o helper sobe (`startCatVoiceOutput`). Antes disso, o Ouvir não toca.
  */
-let catVoiceOutput: { preview: CatVoicePreview; stop(): void } | undefined;
+let catVoiceOutput: { preview: CatVoicePreview; falarUmaVez: ReturnType<typeof ligarVozDoGatoNoApp>["falarUmaVez"]; stop(): void } | undefined;
+/**
+ * A voz do Kiwi com o provedor dos Ajustes (spec #31616, T31626): a local, ou o ElevenLabs com a chave do Keychain e a
+ * queda para a local. O `speakOnce` é o "Testar" e o `lastFallback`, o motivo da última queda. No headless, nunca o
+ * Keychain da pessoa: sem chave.
+ */
+export const kiwiVoice = vozDoKiwi({
+  vozLocal: catVoice.voice,
+  settings: stores.settings,
+  key: process.env.KIWI_HEADLESS === "1" ? { getKey: async () => null } : elevenLabsKey(),
+  falarUmaVez: () => catVoiceOutput?.falarUmaVez,
+  log: (m) => console.log(`[cat-voice] ${m}`),
+});
 const catVoicePreview = {
   ouvir: async (id: Parameters<CatVoicePreview["ouvir"]>[0]) => {
     if (!catVoiceOutput) throw new Error("helper_unavailable");
@@ -164,7 +178,7 @@ export function startCatVoiceOutput(sidecar: Sidecar): void {
   const log = (m: string) => console.log(`[cat-voice] ${m}`);
   // A ligação inteira fica no `ligarVozDoGatoNoApp` (T29234), que os testes provam; aqui só o que é do app.
   const voz = ligarVozDoGatoNoApp({
-    sintese: catVoice.voice,
+    sintese: kiwiVoice.sintese,
     agent: stores.agent,
     helper: {
       saida: {
@@ -181,7 +195,7 @@ export function startCatVoiceOutput(sidecar: Sidecar): void {
     previa: (saida, falaDoGato) => createCatVoicePreview(catVoice, { saida, falaDoGato, log }),
     log,
   });
-  catVoiceOutput = { preview: voz.previa!, stop: voz.stop };
+  catVoiceOutput = { preview: voz.previa!, falarUmaVez: voz.falarUmaVez, stop: voz.stop };
 }
 // O motivo do Sobre sem atualizador (um build de dev). Vai ao log e ao agente; a tela não mostra.
 const UPDATER_OFF = "o atualizador ainda não subiu"; // i18n-ok: diagnóstico
