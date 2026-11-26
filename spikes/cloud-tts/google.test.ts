@@ -8,7 +8,8 @@ import path from "node:path";
 import * as grpc from "@grpc/grpc-js";
 
 import { measure, prepare, table, wav } from "./core.ts";
-import { googleProvider, ttsService } from "./google.ts";
+import { chirpNames, googleProvider, ttsService } from "./google.ts";
+import { main } from "./run.ts";
 
 // Um token falso de exemplo, montado por partes para nenhum scanner o tomar por real.
 const FAKE_TOKEN = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
@@ -24,10 +25,24 @@ let server: grpc.Server;
 let port = 0;
 const seen: Seen[] = [];
 let failNext = false;
+/** O `ListVoices` falso: vozes Chirp 3 HD de exemplo e uma de outra família, que o filtro tira. */
+const CATALOG = [
+  { name: "pt-BR-Chirp3-HD-Zephyr", language_codes: ["pt-BR"] },
+  { name: "pt-BR-Chirp3-HD-Achird", language_codes: ["pt-BR"] },
+  { name: "pt-BR-Neural2-A", language_codes: ["pt-BR"] },
+  { name: "en-US-Chirp3-HD-Puck", language_codes: ["en-US"] },
+];
+const listed: string[] = [];
+let catalogEmpty = false;
 
 beforeAll(async () => {
   server = new grpc.Server();
   server.addService(ttsService().service, {
+    ListVoices(call: grpc.ServerUnaryCall<{ language_code?: string }, unknown>, cb: grpc.sendUnaryData<unknown>) {
+      const lang = call.request.language_code ?? "";
+      listed.push(lang);
+      cb(null, { voices: catalogEmpty ? [] : CATALOG.filter((v) => !lang || v.language_codes.includes(lang)) });
+    },
     StreamingSynthesize(call: grpc.ServerDuplexStream<Record<string, unknown>, unknown>) {
       const s: Seen = { texts: [], metadata: call.metadata.getMap() };
       seen.push(s);
@@ -151,4 +166,73 @@ test("as ADC viram o cabeçalho authorization (o google-auth-library devolve um 
   const gen = authMetadata({ getRequestHeaders: async () => new Headers({ authorization: "Bearer exemplo" }) });
   const md = await new Promise<grpc.Metadata>((res, rej) => gen({ service_url: "https://exemplo.local", method_name: "x" }, (e: Error | null, m?: grpc.Metadata) => (e ? rej(e) : res(m!))));
   expect(md.get("authorization")).toEqual(["Bearer exemplo"]);
+});
+
+describe("as vozes escolhidas na hora (T31480)", () => {
+  const withVoices = (voices: string) => googleProvider({ GOOGLE_TTS_ENDPOINT: `127.0.0.1:${port}` }, { voices });
+
+  test("--voices all: as Chirp 3 HD da língua, pelo ListVoices, antes da 1ª fala", async () => {
+    listed.length = 0;
+    const p = withVoices("all");
+    await p.check!();
+    expect(p.voices("pt-BR").map((v) => v.id)).toEqual(["pt-BR-Chirp3-HD-Achird", "pt-BR-Chirp3-HD-Zephyr"]);
+    expect(p.voices("en-US").map((v) => v.name)).toEqual(["Puck"]);
+    expect(listed).toEqual(["pt-BR", "en-US"]);
+  });
+
+  test("--voices com uma lista: os nomes curtos ou inteiros, sem o ListVoices", async () => {
+    listed.length = 0;
+    const p = withVoices("Kore, pt-BR-Chirp3-HD-Fenrir");
+    await p.check!();
+    expect(p.voices("pt-BR").map((v) => v.id)).toEqual(["pt-BR-Chirp3-HD-Kore", "pt-BR-Chirp3-HD-Fenrir"]);
+    expect(listed).toEqual([]);
+  });
+
+  test("sem --voices, as 3 fixas", () => {
+    expect(provider().voices("pt-BR").map((v) => v.name)).toEqual(["Aoede", "Kore", "Charon"]);
+  });
+
+  test("um nome fora do formato para na hora", () => {
+    expect(() => chirpNames("Kore/../x")).toThrow(/fora do formato/);
+  });
+
+  test("o ListVoices sem nenhuma Chirp 3 HD para a rodada antes da 1ª fala", async () => {
+    catalogEmpty = true;
+    try {
+      await expect(withVoices("all").check!()).rejects.toThrow(/nenhuma voz Chirp 3 HD/);
+    } finally {
+      catalogEmpty = false;
+    }
+  });
+
+  test("na rodada: --voices all, uma pasta por voz com a fala", async () => {
+    seen.length = 0;
+    const out = mkdtempSync(path.join(tmpdir(), "cloud-tts-g-"));
+    const orig = { log: console.log, error: console.error };
+    console.log = () => {};
+    console.error = () => {};
+    let code: number;
+    try {
+      code = await main(["--providers", "google", "--rounds", "1", "--only", "pt02", "--voices", "all", "--out", out], { GOOGLE_TTS_ENDPOINT: `127.0.0.1:${port}` });
+    } finally {
+      Object.assign(console, orig);
+    }
+    expect(code).toBe(0);
+    expect(seen.map((s) => s.config?.voice?.name)).toEqual(["pt-BR-Chirp3-HD-Achird", "pt-BR-Chirp3-HD-Zephyr"]);
+    expect(readdirSync(path.join(out, "google")).sort()).toEqual(["Achird", "Zephyr"]);
+    expect(readdirSync(path.join(out, "google", "Zephyr"))).toEqual(["pt02.wav"]);
+  });
+
+  test("--voices com mais de um provedor para antes de tudo", async () => {
+    const orig = console.log;
+    const printed: string[] = [];
+    console.log = (...a) => printed.push(a.join(" "));
+    try {
+      const code = await main(["--providers", "google,local", "--voices", "all", "--out", mkdtempSync(path.join(tmpdir(), "cloud-tts-g-"))], {});
+      expect(code).toBe(2);
+    } finally {
+      console.log = orig;
+    }
+    expect(printed.join("\n")).toContain("um provedor por vez");
+  });
 });

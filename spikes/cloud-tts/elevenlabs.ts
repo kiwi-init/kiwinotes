@@ -42,7 +42,13 @@ const VOICES: Record<Lang, Voice[]> = {
  * o `multilingual_v2` gasta 1 crédito por caractere e o `flash_v2_5`, meio. Conferir em elevenlabs.io/pricing.
  */
 const USD_PER_CREDIT = 22 / 100_000;
-const CREDITS_PER_CHAR: Record<string, number> = { eleven_multilingual_v2: 1, eleven_flash_v2_5: 0.5, eleven_turbo_v2_5: 0.5 };
+const CREDITS_PER_CHAR: Record<string, number> = { eleven_multilingual_v2: 1, eleven_v3: 1, eleven_flash_v2_5: 0.5, eleven_turbo_v2_5: 0.5 };
+
+/**
+ * O `stream-input` (WebSocket) não aceita o `eleven_v3` nem o `eleven_v4`; o HTTP `/stream` aceita
+ * (https://elevenlabs.io/docs/eleven-api/guides/how-to/websockets/tts-vs-ttd-websockets).
+ */
+export const V3_NOT_ON_WS = "o WebSocket stream-input do ElevenLabs não aceita o eleven_v3 nem o eleven_v4: rode sem ELEVENLABS_TRANSPORT=ws, pelo HTTP /stream";
 
 export interface ElevenLabsOptions {
   env?: Record<string, string | undefined>;
@@ -107,6 +113,7 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
   const base = (env.ELEVENLABS_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const model = env.ELEVENLABS_MODEL || DEFAULT_MODEL;
   const transport = env.ELEVENLABS_TRANSPORT === "ws" ? "ws" : "http";
+  if (transport === "ws" && /^eleven_v[34]/.test(model)) throw new ElevenLabsError(V3_NOT_ON_WS);
   // O histórico demora a mostrar a geração: até 10 procuras, com a espera crescendo até 2 s (uns 15 s no pior caso).
   const tries = opts.historyTries ?? 10;
   const wait = opts.historyWaitMs ?? 500;

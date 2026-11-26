@@ -81,15 +81,65 @@ function cleanError(e: unknown): Error {
   return new Error(`google: ${status}: ${detail}`);
 }
 
-export function googleProvider(env: Record<string, string | undefined> = process.env): TtsProvider {
+/**
+ * As vozes Chirp 3 HD escolhidas na hora (T31480): `all` (todas as da língua, pelo `ListVoices`) ou uma lista de nomes
+ * (`Aoede,Kore`, ou o nome inteiro `pt-BR-Chirp3-HD-Aoede`). Sem a opção, as 3 fixas.
+ */
+export interface GoogleOptions {
+  voices?: string;
+}
+
+const CHIRP = "Chirp3-HD-";
+const LANGS: Lang[] = ["pt-BR", "en-US"];
+
+/** `Aoede, pt-BR-Chirp3-HD-Kore` → `["Aoede", "Kore"]`. */
+export function chirpNames(spec: string): string[] {
+  const names = spec
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => (s.includes(CHIRP) ? s.slice(s.indexOf(CHIRP) + CHIRP.length) : s));
+  for (const n of names) if (!/^[A-Za-z0-9_-]{1,40}$/.test(n)) throw new Error(`google: nome de voz fora do formato: ${JSON.stringify(n.slice(0, 40))}`);
+  if (!names.length) throw new Error("google: --voices sem nenhuma voz");
+  return names;
+}
+
+export function googleProvider(env: Record<string, string | undefined> = process.env, opts: GoogleOptions = {}): TtsProvider {
   const { endpoint, creds } = credentials(env);
   const Service = ttsService();
   const client = new Service(endpoint, creds);
+  const all = opts.voices?.trim() === "all";
+  const chosen: Record<Lang, string[]> = all || !opts.voices ? { ...VOICES } : { "pt-BR": chirpNames(opts.voices), "en-US": chirpNames(opts.voices) };
+
+  /** `ListVoices` de uma língua: os nomes das vozes Chirp 3 HD dela, em ordem. Não gasta caractere. */
+  function listChirp(lang: Lang): Promise<string[]> {
+    return new Promise((res, rej) =>
+      (client as unknown as { ListVoices(req: unknown, cb: (e: unknown, r?: { voices?: { name?: string }[] }) => void): void }).ListVoices({ language_code: lang }, (e, r) => {
+        if (e) return rej(cleanError(e));
+        const names = (r?.voices ?? [])
+          .map((v) => v.name ?? "")
+          .filter((n) => n.startsWith(`${lang}-${CHIRP}`))
+          .map((n) => n.slice(`${lang}-${CHIRP}`.length))
+          .sort();
+        res(names);
+      }),
+    );
+  }
+
   return {
     name: "google",
+    /** Com `--voices all`, a lista vem do Google antes da 1ª fala. */
+    async check() {
+      if (!all) return;
+      for (const lang of LANGS) {
+        const names = await listChirp(lang);
+        if (!names.length) throw new Error(`google: nenhuma voz Chirp 3 HD em ${lang} no ListVoices`);
+        chosen[lang] = names;
+      }
+    },
     // US$ 30 por milhão de caracteres depois do 1 milhão grátis do mês (spec #30991).
     costPerChar: 30 / 1_000_000,
-    voices: (lang) => VOICES[lang].map((v) => ({ id: `${lang}-Chirp3-HD-${v}`, name: v, lang })),
+    voices: (lang) => chosen[lang].map((v) => ({ id: `${lang}-Chirp3-HD-${v}`, name: v, lang })),
     synthesize(text: string, voice: Voice, opts?: { signal?: AbortSignal }): Synthesis {
       const call = (client as unknown as { StreamingSynthesize(): grpc.ClientDuplexStream<unknown, { audio_content?: Buffer }> }).StreamingSynthesize();
       opts?.signal?.addEventListener("abort", () => call.cancel(), { once: true });

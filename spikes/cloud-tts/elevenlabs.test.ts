@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { elevenLabs, FREE_TIER_LIBRARY, HISTORY_PERMISSION, INVALID_KEY, parseVoices, sameText, VOICE_NOT_FOUND } from "./elevenlabs";
+import { elevenLabs, FREE_TIER_LIBRARY, V3_NOT_ON_WS, HISTORY_PERMISSION, INVALID_KEY, parseVoices, sameText, VOICE_NOT_FOUND } from "./elevenlabs";
 import { main } from "./run.ts";
 
 const KEY = "sk_exemplo_0000000000000000000000000000000000000000";
@@ -22,6 +22,7 @@ const seen = {
   /** Cada fala que chegou ao servidor, pelos dois caminhos: a chave do cabeçalho e o texto. */
   synth: [] as { key: string | null; text: string; via: "http" | "ws" }[],
   historyQueries: [] as URLSearchParams[],
+  models: [] as (string | undefined)[],
 };
 let history: HistoryItem[] = [];
 /** Quantos GETs do histórico voltam vazios antes de a geração aparecer (o atraso da conta de verdade). */
@@ -125,6 +126,7 @@ afterAll(() => server.stop(true));
 async function fakeStream(req: Request, voice: string): Promise<Response> {
   const body = (await req.json()) as { text: string; model_id?: string };
   seen.synth.push({ key: req.headers.get("xi-api-key"), text: body.text, via: "http" });
+  seen.models.push(body.model_id);
   const requestId = `req-exemplo-${++gen}`;
   const headers: Record<string, string> = { "content-type": "audio/mpeg" };
   if (sendRequestId) headers[requestIdHeader] = requestId;
@@ -683,5 +685,31 @@ describe("a voz escolhida na hora (T31480)", () => {
     expect(r).toBe(0);
     expect(seen.synth.length).toBe(2);
     expect(seen.httpUrls.filter((u) => u.includes("/stream")).every((u) => u.includes(`/v1/text-to-speech/${LIB}/stream`))).toBe(true);
+  });
+});
+
+describe("o eleven_v3 (T31480)", () => {
+  test("pelo HTTP /stream: o model_id vai no corpo, e a fala sai", async () => {
+    reset();
+    const p = elevenLabs({ env: { ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base, ELEVENLABS_MODEL: "eleven_v3" }, historyWaitMs: 5 });
+    const s = p.synthesize("Pronto. A nota está salva.", VOICE);
+    expect(await readAll(s.audio)).toBe("ID3-parte-1-parte-2");
+    await s.done;
+    expect(seen.models).toEqual(["eleven_v3"]);
+    expect(p.costPerChar).toBeGreaterThan(0);
+  });
+
+  test("pelo WebSocket: para antes de conectar, porque o stream-input não aceita o v3", () => {
+    reset();
+    expect(() => elevenLabs({ env: { ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base, ELEVENLABS_MODEL: "eleven_v3", ELEVENLABS_TRANSPORT: "ws" } })).toThrow(V3_NOT_ON_WS);
+    expect(seen.wsHeaders).toEqual([]);
+  });
+
+  test("na rodada: o v3 pelo WebSocket sai com código 2, sem gastar crédito", async () => {
+    reset();
+    const r = await runMain({ ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base, ELEVENLABS_MODEL: "eleven_v3", ELEVENLABS_TRANSPORT: "ws" });
+    expect(r.code).toBe(2);
+    expect(r.all).toContain(V3_NOT_ON_WS);
+    expect(seen.synth).toEqual([]);
   });
 });

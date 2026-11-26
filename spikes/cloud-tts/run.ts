@@ -2,7 +2,8 @@
 // N rodadas; a tabela no fim e o áudio numa pasta ao lado de docs/design/voices/ (sem commit).
 //
 //   bun run.ts [--providers google,elevenlabs,local] [--rounds 3] [--only pt01,en01] [--out <pasta>]
-//              [--voices <id>[:nome],<id>…]   (as vozes do ElevenLabs no lugar das fixas; ou ELEVENLABS_VOICES)
+//              [--voices …]   (um provedor por vez, no lugar das vozes fixas:
+//                              elevenlabs: <id>[:nome],<id>… (ou ELEVENLABS_VOICES); google: all, ou Aoede,Kore,…)
 //
 // As credenciais vêm só do ambiente (veja google.ts, elevenlabs.ts e local.ts). No fim, a rodada confere que nenhum valor
 // delas aparece no que ela imprimiu nem nos arquivos que gravou; se aparecer, diz onde (nunca o valor) e sai com 1.
@@ -54,11 +55,20 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
     console.log(s);
   };
 
+  const names = a.providers!.split(",").map((s) => s.trim());
+  if (a.voices && names.length > 1) {
+    say("--voices vale para um provedor por vez: rode com --providers elevenlabs ou --providers google");
+    return 2;
+  }
+  if (a.voices && !["google", "elevenlabs"].includes(names[0]!)) {
+    say(`--voices não vale para o provedor ${names[0]}`);
+    return 2;
+  }
   const stops: (() => Promise<void>)[] = [];
   const providers: TtsProvider[] = [];
-  for (const name of a.providers!.split(",").map((s) => s.trim())) {
+  for (const name of names) {
     try {
-      if (name === "google") providers.push(googleProvider(env));
+      if (name === "google") providers.push(googleProvider(env, { voices: a.voices }));
       else if (name === "elevenlabs") providers.push(elevenLabs({ env, log: say, voices: a.voices }));
       else if (name === "local") {
         const v = realVoices(env);
@@ -70,6 +80,10 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
     }
   }
 
+  if (!providers.length) {
+    say("nenhum provedor nesta rodada; nada foi gerado");
+    return 2;
+  }
   const only = a.only ? new Set(a.only.split(",")) : null;
   const rows: Measure[] = [];
   try {
