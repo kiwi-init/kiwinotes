@@ -13,8 +13,9 @@ import { MEETINGS_FOLDER_LABEL as MEETINGS_FOLDER } from "../src/shared/meetings
 // O português que já tem dono: some daqui no PR que o traduz.
 const KNOWN: [string, string][] = [];
 const s = await startEnglish({ name: "T30636-meetings-english", known: KNOWN });
-// A pasta das reuniões no disco não muda com a língua (src/shared/meetings.ts): o nome dela fica em português.
-const check = (p: Page, name: string) => s.check(p, name, { skip: [MEETINGS_FOLDER] });
+// A pasta das reuniões no disco não muda com a língua (src/shared/meetings.ts): o nome dela fica em português. Sai só
+// onde ela aparece como pasta ("Reuniões/" no vazio; sozinha, só na nota aberta), para a aba "Meetings" seguir conferida.
+const check = (p: Page, name: string, skip: string[] = []) => s.check(p, name, { skip: [`${MEETINGS_FOLDER}/`, ...skip] });
 
 /** Uma reunião inventada, no formato que o app grava (o R4): o frontmatter e a transcrição. */
 const meeting = (session: string, day: string, start: string, end: string | null, app: string, people: string[], body = "") =>
@@ -69,7 +70,9 @@ try {
   // 5. Uma reunião aberta: vai às Notas.
   await p.locator(".kn-meet-open", { hasText: "Weekly sync" }).click();
   await p.waitForSelector(".cm-content", { timeout: 15000 });
-  await check(p, "5-reuniao-aberta");
+  // Aqui a pasta aparece sozinha (o caminho da nota) e sai da conferência inteira; a aba do hub se confere à parte.
+  assert.equal((await p.locator(".kn-tab[data-section=meetings]").innerText()).trim(), "Meetings", "a aba das Reuniões em inglês");
+  await check(p, "5-reuniao-aberta", [MEETINGS_FOLDER]);
 } catch (e) {
   await s.fail(e, page);
 }
