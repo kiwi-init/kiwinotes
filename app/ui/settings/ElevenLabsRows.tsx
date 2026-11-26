@@ -35,12 +35,13 @@ export function modelLabel(m: ElevenLabsModel, locale: Locale = "pt"): string {
 
 export const reasonText = (r: ElevenLabsReason, locale: Locale = "pt") => translate(locale, `agent.voice.el.reason.${r}` as TextKey);
 
-export type KeyProblem = "invalid" | "failed" | null;
+export type KeyProblem = "invalid" | "failed" | "deleteFailed" | null;
 
 /** O que a linha da chave diz. */
 export function keyHint(hasKey: boolean, problem: KeyProblem, locale: Locale = "pt"): string {
   if (problem === "invalid") return translate(locale, "agent.voice.el.key.invalid");
   if (problem === "failed") return translate(locale, "agent.voice.el.key.failed");
+  if (problem === "deleteFailed") return translate(locale, "agent.voice.el.key.deleteFailed");
   return translate(locale, hasKey ? "agent.voice.el.key.saved" : "agent.voice.el.key.none");
 }
 
@@ -79,7 +80,7 @@ export function ElevenLabsRows({ voiceId, model }: { voiceId: string; model: Ele
       alive = false;
     };
   }, []);
-  // A voz mudou em outra janela: o campo segue, se a pessoa não está editando outra.
+  // A voz mudou nas settings (aqui ou em outra janela): o campo passa a mostrar a gravada, mesmo no meio de uma edição.
   useEffect(() => setDraftVoice(voiceId), [voiceId]);
 
   const hasKey = status?.hasKey === true;
@@ -111,7 +112,7 @@ export function ElevenLabsRows({ voiceId, model }: { voiceId: string; model: Ele
       .then((s) => {
         setStatus(s);
         setTest({ phase: "idle" });
-      }, () => setKeyProblem("failed"))
+      }, () => setKeyProblem("deleteFailed"))
       .finally(() => setBusy(false));
   };
   const voiceValid = isElevenLabsVoiceId(draftVoice.trim());

@@ -198,6 +198,7 @@ export const enAgent: { readonly [K in keyof typeof ptAgent]: Entry } = {
   "agent.voice.el.key.remove": "Remove key",
   "agent.voice.el.key.invalid": "That doesn't look like an ElevenLabs key.",
   "agent.voice.el.key.failed": "Couldn't save the key to the Keychain.",
+  "agent.voice.el.key.deleteFailed": "Couldn't remove the key from the Keychain.",
   "agent.voice.el.model": "Model",
   "agent.voice.el.model.hint": "v4 Turbo is the default: fast, in Portuguese and English.",
   "agent.voice.el.model.default": "{name} (default)",
