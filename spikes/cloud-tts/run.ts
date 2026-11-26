@@ -72,6 +72,16 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
   const only = a.only ? new Set(a.only.split(",")) : null;
   const rows: Measure[] = [];
   try {
+    // A conferência de cada conta antes da primeira fala: um problema para a rodada sem gastar crédito.
+    for (const p of providers) {
+      try {
+        await p.check?.();
+      } catch (e) {
+        say(`${p.name}: ${(e as Error).message.split("\n")[0]}`);
+        say("nada foi gerado; acerte a chave e rode de novo");
+        return 2;
+      }
+    }
     for (const fala of FALAS.filter((f) => !only || only.has(f.id))) {
       const { text, held } = prepare(fala.text, fala.lang);
       if (held) say(`${fala.id}: o filtro tirou ${held} segredo(s) antes de enviar`);

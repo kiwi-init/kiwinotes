@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { elevenLabs, sameText } from "./elevenlabs";
+import { elevenLabs, HISTORY_PERMISSION, sameText } from "./elevenlabs";
 import { main } from "./run.ts";
 
 const KEY = "sk_exemplo_0000000000000000000000000000000000000000";
@@ -25,6 +25,9 @@ let history: HistoryItem[] = [];
 let lagGets = 0;
 /** O que o WebSocket falso faz: tocar o áudio, recusar ou cair no meio. */
 let wsMode: "ok" | "error" | "drop" = "ok";
+/** A chave sem a permissão de histórico: os GETs do histórico a partir deste (0 = desde a conferência) dão 401. */
+let historyDenyFrom = Infinity;
+let historyGets = 0;
 let gen = 0;
 
 let server: ReturnType<typeof Bun.serve>;
@@ -43,6 +46,7 @@ beforeAll(() => {
       seen.httpHeaders.push(req.headers.get("xi-api-key"));
       seen.httpUrls.push(req.url);
       if (req.headers.get("xi-api-key") !== KEY) return new Response("{}", { status: 401 });
+      if (url.pathname.startsWith("/v1/history") && historyGets++ >= historyDenyFrom) return Response.json({ detail: { status: "missing_permissions" } }, { status: 401 });
       if (req.method === "GET" && url.pathname === "/v1/history") {
         if (lagGets > 0) {
           lagGets--;
@@ -91,6 +95,8 @@ function reset() {
   history = [];
   lagGets = 0;
   wsMode = "ok";
+  historyDenyFrom = Infinity;
+  historyGets = 0;
 }
 
 const provider = () => elevenLabs({ env: { ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base }, historyWaitMs: 5 });
@@ -186,17 +192,28 @@ describe("ElevenLabs (servidor falso)", () => {
     expect(() => elevenLabs({ env: { ELEVENLABS_BASE_URL: base } })).toThrow(/ELEVENLABS_API_KEY/);
   });
 
-  test("a chave errada: o erro diz o código, não a chave", async () => {
+  test("a chave errada: a conferência para antes de gerar, sem a chave no erro", async () => {
     reset();
     const p = elevenLabs({ env: { ELEVENLABS_API_KEY: "sk_exemplo_errada", ELEVENLABS_BASE_URL: base }, historyWaitMs: 5 });
-    const s = p.synthesize("Oi.", VOICE);
-    await readAll(s.audio);
-    const err = await s.done.then(
+    const err = await p.check!().then(
       () => null,
       (e: Error) => e,
     );
-    expect(err?.message).toContain("401");
+    expect(err?.message).toContain(HISTORY_PERMISSION);
     expect(err?.message).not.toContain("sk_exemplo_errada");
+    expect(seen.wsHeaders).toEqual([]);
+  });
+
+  test("o apagar que falha não derruba a fala: o áudio chega e a fala conta como não apagada", async () => {
+    reset();
+    historyDenyFrom = 0;
+    const warned: string[] = [];
+    const p = elevenLabs({ env: { ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base }, historyWaitMs: 5, log: (l) => warned.push(l) });
+    const s = p.synthesize("Oi, Ana.", VOICE);
+    expect(await readAll(s.audio)).toBe("ID3-parte-1-parte-2");
+    expect(await s.done).toEqual({ chars: "Oi, Ana.".length, deleted: 0 });
+    expect(warned.join("\n")).toContain("não foi apagada");
+    expect(warned.join("\n")).not.toContain(KEY);
   });
 
   test("vozes prontas: 3 por língua, nenhuma clonada", () => {
@@ -243,4 +260,46 @@ test("a rodada com o ElevenLabs falso: os tokens de exemplo não saem, cada gera
     if (!f.includes(".")) continue;
     expect(readFileSync(path.join(out, f)).toString("latin1")).not.toContain(KEY);
   }
+});
+
+/** A rodada inteira pelo main, com a saída capturada. */
+async function runMain(env: Record<string, string>) {
+  const out = mkdtempSync(path.join(tmpdir(), "cloud-tts-el-"));
+  const printed: string[] = [];
+  const orig = { log: console.log, error: console.error };
+  console.log = (...a) => printed.push(a.join(" "));
+  console.error = (...a) => printed.push(a.join(" "));
+  try {
+    const code = await main(["--providers", "elevenlabs", "--rounds", "1", "--only", "pt01,en09", "--out", out], env);
+    return { code, out, all: printed.join("\n") };
+  } finally {
+    Object.assign(console, orig);
+  }
+}
+
+test("a chave sem a permissão de histórico: a rodada para antes de qualquer fala, sem gastar crédito (#31397)", async () => {
+  reset();
+  historyDenyFrom = 0;
+  const r = await runMain({ ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base });
+  expect(r.code).toBe(2);
+  expect(r.all).toContain(HISTORY_PERMISSION);
+  expect(r.all).not.toContain(KEY);
+  expect(seen.wsHeaders).toEqual([]);
+  expect(existsSync(path.join(r.out, "tabela.md"))).toBe(false);
+});
+
+test("a permissão some no meio da rodada: o áudio fica salvo e a tabela avisa as falas não apagadas", async () => {
+  reset();
+  historyDenyFrom = 1; // a conferência passa; os GETs do apagar dão 401
+  const r = await runMain({ ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base });
+  expect(r.code).toBe(0);
+  expect(r.all).not.toContain(KEY);
+  // 2 falas × 3 vozes: os 6 áudios salvos, nenhuma falha na tabela e o aviso das 6 gerações que ficaram na conta.
+  expect(seen.wsHeaders.length).toBe(6);
+  const files = (readdirSync(path.join(r.out, "elevenlabs"), { recursive: true }) as string[]).filter((f) => f.endsWith(".mp3"));
+  expect(files.length).toBe(6);
+  const tabela = readFileSync(path.join(r.out, "tabela.md"), "utf8");
+  expect(tabela).toContain("| 0 de 3 |");
+  expect(tabela).toContain("Aviso: 6 falas não apagadas do histórico do elevenlabs.");
+  expect(seen.deleted).toEqual([]);
 });
