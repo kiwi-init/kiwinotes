@@ -57,6 +57,8 @@ export interface Measure {
   chars: number;
   costUsd: number;
   deleted?: number;
+  /** Rodadas cuja geração ficou no histórico do provedor (o apagar falhou ou não achou). */
+  notDeleted?: number;
   file?: string;
   error?: string;
 }
@@ -126,19 +128,24 @@ export async function measure(p: TtsProvider, voice: Voice, fala: { id: string; 
   try {
     let last: Awaited<ReturnType<typeof oneRound>> | null = null;
     let deleted = 0;
+    let notDeleted = 0;
     let chars = 0;
     for (let i = 0; i < o.rounds; i++) {
       last = await oneRound(() => p.synthesize(fala.text, voice));
       base.rounds.push(last.round);
       chars += last.done.chars;
       deleted += last.done.deleted ?? 0;
+      if (last.done.deleted === 0) notDeleted++;
     }
     base.firstMs = median(base.rounds.map((r) => r.firstMs));
     base.totalMs = median(base.rounds.map((r) => r.totalMs));
     // Os caracteres e o custo de uma fala (uma rodada); as N rodadas gastam N vezes isso.
     base.chars = Math.round(chars / o.rounds);
     base.costUsd = base.chars * p.costPerChar;
-    if (last && last.done.deleted !== undefined) base.deleted = deleted;
+    if (last && last.done.deleted !== undefined) {
+      base.deleted = deleted;
+      base.notDeleted = notDeleted;
+    }
     if (o.out && last) {
       const dir = path.join(o.out, p.name, slug(voice.name));
       mkdirSync(dir, { recursive: true });
@@ -173,5 +180,9 @@ export function table(rows: Measure[]): string {
       `| ${provider} | ${lang} | ${ok.length ? ms(median(ok.map((r) => r.firstMs))) : "-"} | ${ok.length ? ms(median(ok.map((r) => r.totalMs))) : "-"} | ${chars} | US$ ${cost.toFixed(5)} | ${rs.length - ok.length} de ${rs.length} |`,
     );
   }
+  // O aviso das gerações que ficaram na conta: o áudio está salvo, mas falta apagar à mão.
+  const left = new Map<string, number>();
+  for (const r of rows) if (r.notDeleted) left.set(r.provider, (left.get(r.provider) ?? 0) + r.notDeleted);
+  for (const [provider, n] of left) out.push("", `Aviso: ${n} ${n === 1 ? "fala não apagada" : "falas não apagadas"} do histórico do ${provider}.`);
   return out.join("\n");
 }

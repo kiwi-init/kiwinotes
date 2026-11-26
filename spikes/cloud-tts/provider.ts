@@ -26,6 +26,11 @@ export interface TtsProvider {
   voices(lang: Lang): Voice[];
   /** O texto já vem preparado pelo núcleo: o provedor não filtra de novo. */
   synthesize(text: string, voice: Voice, opts?: { signal?: AbortSignal }): Synthesis;
+  /**
+   * Opcional: confere a conta antes da primeira fala, sem gastar crédito. Rejeita com uma mensagem clara (sem a
+   * credencial), e a rodada para antes de sintetizar qualquer coisa.
+   */
+  check?(): Promise<void>;
   /** US$ por caractere, depois da cota grátis, para a tabela. */
   costPerChar: number;
 }

@@ -5,6 +5,7 @@
 
 import type { Lang, Synthesis, TtsProvider, Voice } from "./provider";
 
+export const HISTORY_PERMISSION = "a chave do ElevenLabs precisa da permissão de histórico (escrita) para o lab apagar as falas";
 export const DEFAULT_BASE_URL = "https://api.elevenlabs.io";
 /** O de melhor qualidade em português; `eleven_flash_v2_5` troca qualidade por latência. */
 export const DEFAULT_MODEL = "eleven_multilingual_v2";
@@ -68,6 +69,26 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
     const res = await fetch(`${base}${path}`, { method, headers });
     if (!res.ok) throw new ElevenLabsError(`${method} ${path.split("?")[0]} respondeu ${res.status}`);
     return res.json();
+  }
+
+  /**
+   * Antes da primeira fala: a chave lê o histórico? Sem a permissão, cada geração ficaria na conta e o apagar
+   * falharia depois do crédito gasto (a rodada do harry, #31397). Um GET de um item não gasta crédito.
+   */
+  async function check(): Promise<void> {
+    const res = await fetch(`${base}/v1/history?page_size=1`, { method: "GET", headers });
+    if (res.status === 401 || res.status === 403) throw new ElevenLabsError(HISTORY_PERMISSION);
+    if (!res.ok) throw new ElevenLabsError(`a conferência do histórico respondeu ${res.status}`);
+  }
+
+  /** O apagar não derruba a fala: o áudio já foi gerado e pago. Falhou, a fala conta como não apagada (0). */
+  async function tryDelete(text: string, voiceId: string, startedAtMs: number): Promise<number> {
+    try {
+      return await deleteGeneration(text, voiceId, startedAtMs);
+    } catch (e) {
+      log(`elevenlabs: a fala não foi apagada do histórico (${(e as Error).message})`);
+      return 0;
+    }
   }
 
   /**
@@ -163,9 +184,9 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
 
     // O apagar roda mesmo se a fala falhar no meio: o servidor pode ter gerado e guardado parte dela.
     const done = streamDone.then(
-      async () => ({ chars: text.length, deleted: await deleteGeneration(text, voice.id, startedAt) }),
+      async () => ({ chars: text.length, deleted: await tryDelete(text, voice.id, startedAt) }),
       async (err) => {
-        await deleteGeneration(text, voice.id, startedAt).catch(() => 0);
+        await tryDelete(text, voice.id, startedAt);
         throw err;
       },
     );
@@ -176,6 +197,7 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
     name: "elevenlabs",
     voices: (lang) => VOICES[lang],
     synthesize,
+    check,
     costPerChar: USD_PER_CREDIT * (CREDITS_PER_CHAR[model] ?? 1),
   };
 }
