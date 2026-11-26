@@ -61,4 +61,6 @@ export const enMeetings: { readonly [K in keyof typeof ptMeetings]: Entry } = {
   "meetings.settings.needName": "Give the app a name.",
   "meetings.settings.badId": "The bundle ID looks like com.company.App (in Finder: Show Package Contents › Info.plist).",
   "meetings.settings.already": "That app is already on the list.",
+  "meetings.note.title": "Meeting",
+  "meetings.note.titleApp": "{app} meeting",
 };

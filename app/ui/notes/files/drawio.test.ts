@@ -56,6 +56,8 @@ describe("o texto do diagrama (T22217)", () => {
     ]);
     // O formato antigo, o mxGraphModel solto: uma página sem nome.
     expect(drawioPages(html)![0]!.labels.length).toBe(3);
+    // Uma aba sem nome no arquivo fica sem nome (T30631): nada de "Página 2" inventado em português; quem mostra põe o rótulo.
+    expect(drawioPages(`<mxfile><diagram>${packed(html)}</diagram></mxfile>`)!.map((p) => p.name)).toEqual([""]);
   });
 
   test("o que não é diagrama, ou a bomba, dá null sem abrir", () => {

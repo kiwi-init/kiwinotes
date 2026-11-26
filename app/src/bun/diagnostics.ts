@@ -8,6 +8,7 @@ import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import os, { homedir } from "node:os";
 import path from "node:path";
 
+import { type Locale, type Params, type TextKey, translate } from "../shared/i18n/index.ts";
 import type { FileLog } from "./file-log.ts";
 import type { SessionDiagnostics } from "./session.ts";
 
@@ -33,57 +34,63 @@ export interface DiagnosticsInput {
   settings: { microphone: string; notesShortcut: string | null };
   crashes: CrashReport[];
   log: string[];
+  /** A língua do texto (T30631). Sem, português. */
+  locale?: Locale;
 }
 
-const yesNo = (v: boolean) => (v ? "sim" : "não");
-
-/** O texto do diagnóstico. Puro, para o teste conferir o que entra e o que não entra. */
+/** O texto do diagnóstico, na língua do app (T30631; sem, português). Puro, para o teste conferir o que entra e o que não entra. */
 export function diagnosticsReport(i: DiagnosticsInput): string {
   const s = i.session;
+  const tr = (key: TextKey, params?: Params) => translate(i.locale ?? "pt", key, params);
+  const yesNo = (v: boolean) => tr(v ? "diag.yes" : "diag.no");
   const lines = [
-    "Kiwi Notes · diagnóstico",
-    `Gerado em ${i.now.toISOString()}`,
-    "Sem texto de ditado, de notas nem áudio.",
+    tr("diag.title"),
+    tr("diag.generated", { at: i.now.toISOString() }),
+    tr("diag.private"),
     "",
     "== App",
-    `versão: ${i.app.version} (${i.app.channel})`,
-    `contrato da UI: ${i.contract}`,
+    tr("diag.version", { version: i.app.version, channel: i.app.channel }),
+    tr("diag.contract", { contract: i.contract }),
     "",
-    "== Sistema",
+    tr("diag.system"),
     `macOS: ${i.system.macos}`,
-    `arquitetura: ${i.system.arch}`,
-    `processador: ${i.system.cpu}`,
-    `memória: ${i.system.memoryGb} GB`,
+    tr("diag.arch", { arch: i.system.arch }),
+    tr("diag.cpu", { cpu: i.system.cpu }),
+    tr("diag.memory", { gb: String(i.system.memoryGb) }),
     "",
     "== Helper",
   ];
-  if (!s) lines.push("desligado neste app (sem o helper)");
+  if (!s) lines.push(tr("diag.helperOff"));
   else {
-    lines.push(`de pé: ${yesNo(s.connected)}`);
-    if(s.supervision)lines.push(`supervisor: ${s.supervision.state} · quedas na janela: ${s.supervision.crashes}${s.supervision.reason ? ` · motivo: ${s.supervision.reason}` : ""}`);
+    lines.push(tr("diag.running", { yes: yesNo(s.connected) }));
+    if (s.supervision)
+      lines.push(
+        tr("diag.supervisor", { state: s.supervision.state, crashes: String(s.supervision.crashes) }) +
+          (s.supervision.reason ? tr("diag.reason", { reason: s.supervision.reason }) : ""),
+      );
     if (s.helper) {
-      lines.push(`versão: ${s.helper.version} · pid ${s.helper.pid}`);
-      lines.push(`atalho recebendo teclas: ${yesNo(s.hotkeyActive)}`);
+      lines.push(tr("diag.helperVersion", { version: s.helper.version, pid: String(s.helper.pid) }));
+      lines.push(tr("diag.hotkey", { yes: yesNo(s.hotkeyActive) }));
     }
-    lines.push(`quedas desde que o app abriu: ${s.exits.length}`);
-    for (const e of s.exits) lines.push(`  ${e.at} · ${e.signal ? `sinal ${e.signal}` : `código ${e.code ?? "?"}`}`);
+    lines.push(tr("diag.exits", { count: String(s.exits.length) }));
+    for (const e of s.exits) lines.push(`  ${e.at} · ${e.signal ? tr("diag.signal", { signal: String(e.signal) }) : tr("diag.code", { code: String(e.code ?? "?") })}`);
   }
-  lines.push("", "== Permissões (só o estado; nada é pedido)");
+  lines.push("", tr("diag.permissions"));
   if (s?.helper) {
     for (const [name, state] of Object.entries(s.helper.permissions)) lines.push(`${name}: ${state}`);
-    if (s.missing.length) lines.push(`faltam: ${s.missing.join(", ")}`);
-    if (s.helper.llm) lines.push(`LLM local: ${s.helper.llm.available ? "pronto" : `indisponível (${s.helper.llm.reason ?? "?"})`}`);
-  } else lines.push("sem o helper de pé, o estado não é conhecido");
-  lines.push("", "== Ditado");
-  lines.push(`STT: ${s ? s.stt : "sem o helper"}`);
-  if (s?.boosting) lines.push(`vocabulário (boosting): ${s.boosting}`);
-  lines.push(`microfone escolhido: ${i.settings.microphone}`);
-  lines.push(`atalho das Notas: ${i.settings.notesShortcut ?? "desligado"}`);
-  lines.push("", "== Crashes do macOS (só o nome e a data)");
-  if (!i.crashes.length) lines.push("nenhum");
+    if (s.missing.length) lines.push(tr("diag.missing", { list: s.missing.join(", ") }));
+    if (s.helper.llm) lines.push(s.helper.llm.available ? tr("diag.llmReady") : tr("diag.llmOff", { reason: s.helper.llm.reason ?? "?" }));
+  } else lines.push(tr("diag.unknown"));
+  lines.push("", tr("diag.dictation"));
+  lines.push(`STT: ${s ? s.stt : tr("diag.noHelper")}`);
+  if (s?.boosting) lines.push(tr("diag.boosting", { words: s.boosting }));
+  lines.push(tr("diag.microphone", { mic: i.settings.microphone }));
+  lines.push(tr("diag.notesShortcut", { shortcut: i.settings.notesShortcut ?? tr("diag.off") }));
+  lines.push("", tr("diag.crashes"));
+  if (!i.crashes.length) lines.push(tr("diag.none"));
   for (const c of i.crashes) lines.push(`${c.at} · ${c.name}`);
-  lines.push("", `== Log (as últimas ${i.log.length} linhas)`);
-  lines.push(...(i.log.length ? i.log : ["(vazio)"]));
+  lines.push("", tr("diag.log", { count: String(i.log.length) }));
+  lines.push(...(i.log.length ? i.log : [tr("diag.empty")]));
   return `${lines.join("\n")}\n`;
 }
 
@@ -120,10 +127,10 @@ export function crashReports(dir = path.join(homedir(), "Library", "Logs", "Diag
     .slice(0, 20);
 }
 
-/** O nome do arquivo: `Kiwi Notes diagnóstico 2026-11-06 03h40.txt`, na hora local. */
-export function diagnosticsFileName(now: Date): string {
+/** O nome do arquivo: `Kiwi Notes diagnóstico 2026-11-06 03h40.txt`, na hora local e na língua do app. */
+export function diagnosticsFileName(now: Date, locale: Locale = "pt"): string {
   const p = (n: number) => String(n).padStart(2, "0");
-  return `Kiwi Notes diagnóstico ${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}h${p(now.getMinutes())}.txt`;
+  return translate(locale, "diag.fileName", { date: `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`, time: `${p(now.getHours())}h${p(now.getMinutes())}` });
 }
 
 export interface DiagnosticsDeps {
@@ -141,11 +148,14 @@ export interface DiagnosticsDeps {
   system?(): SystemInfo;
   /** Quantas linhas do log entram. Padrão: 400. */
   logLines?: number;
+  /** A língua do app (T30631): o texto e o nome do arquivo saem nela. */
+  locale?(): Locale;
 }
 
 /** Escreve o .txt e mostra no Finder. Devolve onde ficou. */
 export async function saveDiagnostics(d: DiagnosticsDeps): Promise<{ path: string; bytes: number }> {
   const now = d.now?.() ?? new Date();
+  const locale = d.locale?.() ?? "pt";
   const text = diagnosticsReport({
     now,
     app: d.app(),
@@ -155,9 +165,10 @@ export async function saveDiagnostics(d: DiagnosticsDeps): Promise<{ path: strin
     settings: await d.settings(),
     crashes: crashReports(d.crashDir),
     log: d.log()?.tail(d.logLines ?? 400) ?? [],
+    locale,
   });
   mkdirSync(d.saveDir, { recursive: true });
-  const file = path.join(d.saveDir, diagnosticsFileName(now));
+  const file = path.join(d.saveDir, diagnosticsFileName(now, locale));
   writeFileSync(file, text, { mode: 0o600 });
   console.log(`[diagnostics] saved ${Buffer.byteLength(text)} bytes`);
   d.reveal?.(file);

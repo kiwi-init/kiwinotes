@@ -118,3 +118,21 @@ test("salvar: o .txt com o nome da hora, 0600, com o fim do log, e o Finder most
   expect(text).toContain("linha 4");
   expect(text).not.toContain("linha 1");
 });
+
+test("em inglês (T30631): o texto e o nome do arquivo na língua do app; os valores como estão", () => {
+  const text = diagnosticsReport({
+    now: new Date(0), app: { version: "dev", channel: "dev" }, contract: "1.25.0", system, session,
+    settings: { microphone: "auto", notesShortcut: null }, crashes: [], log: [], locale: "en",
+  });
+  expect(text).toStartWith("Kiwi Notes · diagnostics\nGenerated at 1970-01-01T00:00:00.000Z\nNo dictation text, notes or audio.");
+  expect(text).toContain("running: yes");
+  expect(text).toContain("version: 0.1.0 · pid 4242");
+  expect(text).toContain("== Permissions (state only; nothing is requested)\nmicrophone: granted");
+  expect(text).toContain("Notes shortcut: off");
+  expect(text).toContain("== macOS crashes (name and date only)\nnone");
+  expect(text).toContain("== Log (last 0 lines)\n(empty)");
+  expect(text).not.toMatch(/[ãçéêíóõú]|\b(sim|não|versão|desligado|nenhum)\b/);
+  const at = new Date(2026, 10, 6, 3, 40);
+  expect(diagnosticsFileName(at, "en")).toBe("Kiwi Notes diagnostics 2026-11-06 03h40.txt");
+  expect(diagnosticsFileName(at)).toBe("Kiwi Notes diagnóstico 2026-11-06 03h40.txt");
+});

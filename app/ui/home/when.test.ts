@@ -9,6 +9,7 @@ test("o rótulo do dia e o intervalo da semana", () => {
   expect(dayLabel("2026-11-17", 0)).toBe("Hoje");
   expect(dayLabel("2026-11-16", 1)).toBe("Ontem");
   expect(dayLabel("2026-11-13", 4)).toBe("sex 13");
+  expect(hours(192)).toBe("3 h 12");
   expect(weekRange("2026-11-11", "2026-11-17")).toBe("De 11 a 17 de novembro");
   expect(weekRange("2026-10-28", "2026-11-03")).toBe("De 28 de outubro a 3 de novembro");
   expect(weekRange("2026-12-28", "2027-01-03")).toBe("De 28 de dezembro de 2026 a 3 de janeiro de 2027");
@@ -35,6 +36,9 @@ test("em inglês (spec #28171): o dia, a semana e o milhar no costume de lá", (
     expect(weekRange("2026-10-28", "2026-11-03")).toBe("October 28 – November 3");
     expect(weekRange("2026-12-29", "2027-01-04")).toBe("December 29, 2026 – January 4, 2027");
     expect(thousands(2140)).toBe("2,140");
+    expect(hours(42)).toBe("42 min");
+    expect(hours(192)).toBe("3h 12m");
+    expect(hours(120)).toBe("2h");
   } finally {
     setAppLocale(before);
   }

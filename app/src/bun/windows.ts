@@ -325,6 +325,7 @@ const capabilities = uiCapabilities({
       const debug = process.env.KIWI_DEBUG === "1";
       return saveDiagnostics({
         app: () => about?.info() ?? { version: "dev", channel: "dev" },
+        locale: () => mainLocale.get(),
         contract: UI_CONTRACT_VERSION,
         session: () => session.get()?.diagnostics() ?? null,
         settings: async () => {

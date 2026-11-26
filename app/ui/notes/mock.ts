@@ -3,6 +3,7 @@
 // (api.ts só usa fora do AppEngine, em dev). As notas são inventadas.
 
 import { approxWord, wordsOf } from "../../src/shared/fuzzy.ts";
+import { t } from "../src/i18n.ts";
 import { splitFrontmatter, tagsOf } from "./frontmatter.ts";
 import { linkSafeName, makeResolver, parseLinks as sharedLinks, resolveLink, rewriteLinks } from "../../src/shared/wikilinks.ts";
 import { folderOf, noteName } from "./links.ts";
@@ -173,7 +174,7 @@ export class MockVault implements NotesApi {
   }
 
   async create(title: string, folder = "", content = "", template?: string): Promise<Note> {
-    const clean = title.replace(/[\\/:]/g, "-").trim() || "Sem título";
+    const clean = title.replace(/[\\/:]/g, "-").trim() || t("notes.untitled");
     const base = folder ? `${folder}/${clean}` : clean;
     let path = `${base}.md`;
     for (let n = 2; this.notes.has(path); n++) path = `${base} ${n}.md`;

@@ -281,6 +281,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       save: () =>
         saveDiagnostics({
           app: () => ({ version: "headless", channel: "dev" }),
+          locale: () => mainLocale.get(),
           contract: UI_CONTRACT_VERSION,
           session: () => session?.diagnostics() ?? null,
           settings: async () => {

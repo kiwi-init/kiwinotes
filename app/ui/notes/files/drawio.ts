@@ -63,6 +63,7 @@ export interface DrawioLabel {
 
 /** Uma página do diagrama, com o nome e os rótulos, na ordem do arquivo. */
 export interface DrawioPage {
+  /** O nome da aba no arquivo; vazio quando ela não tem (T30631: nada inventado em português, quem mostra põe o rótulo). */
   name: string;
   labels: DrawioLabel[];
 }
@@ -137,9 +138,9 @@ export function drawioPages(text: string, limits: { bytes: number; pages: number
   const body = text.replace(/^\uFEFF/, "");
   const diagrams = [...body.matchAll(/<diagram\b([^>]*)>([\s\S]*?)<\/diagram>/g)];
   if (!diagrams.length) return [{ name: "", labels: modelLabels(body) }];
-  return diagrams.map(([, attrs, content], i) => {
+  return diagrams.map(([, attrs, content]) => {
     const inner = content!.trim();
     const xml = inner.startsWith("<") ? inner : inner ? (unpack(inner) ?? "") : "";
-    return { name: attributes(attrs!).get("name") ?? `Página ${i + 1}`, labels: modelLabels(xml) };
+    return { name: attributes(attrs!).get("name") ?? "", labels: modelLabels(xml) };
   });
 }

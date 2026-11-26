@@ -64,4 +64,7 @@ export const ptMeetings = {
   "meetings.settings.needName": "Dê um nome ao app.",
   "meetings.settings.badId": "O identificador é como com.empresa.App (no Finder: Mostrar Conteúdo do Pacote › Info.plist).",
   "meetings.settings.already": "Esse app já está na lista.",
+  // O título da nota da reunião, na língua do app quando ela começa (T30631).
+  "meetings.note.title": "Reunião",
+  "meetings.note.titleApp": "Reunião do {app}",
 } as const;

@@ -488,3 +488,15 @@ test("meeting: a nota recriada (T7723) avisa uma vez, segue recebendo a fala, e 
 test("a pasta que a aba Reuniões mostra é a do disco (T29247)", () => {
   expect(MEETINGS_FOLDER_LABEL).toBe(MEETINGS_FOLDER);
 });
+
+test("o título da ata na língua do app quando a reunião começa (T30631)", async () => {
+  const root = tempDir("kiwi-meeting-note-");
+  const vault = new Vault({ root, watch: false });
+  let locale: "pt" | "en" = "en";
+  const notes = new MeetingNotes(vault, { locale: () => locale });
+  rigs.push({ root, vault, notes });
+  expect((await notes.start("s1", "Teams", at)).path).toBe("Reuniões/2026-11-05 14h30 Teams meeting.md");
+  expect((await notes.start("s2", "Reunião", new Date(at.getTime() + 60_000))).path).toBe("Reuniões/2026-11-05 14h31 Meeting.md");
+  locale = "pt";
+  expect((await notes.start("s3", "Zoom", new Date(at.getTime() + 120_000))).path).toBe("Reuniões/2026-11-05 14h32 Reunião do Zoom.md");
+});
