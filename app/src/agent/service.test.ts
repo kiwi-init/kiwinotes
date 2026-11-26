@@ -13,6 +13,7 @@ import { adapterRoot, agentDir } from "./adapter/open.ts";
 import { fakeNotices } from "./fake/notices.ts";
 import { FAKE_AGENT_COMMAND, FAKE_AGY, FAKE_CLAUDE, FAKE_GEMINI } from "./fake/index.ts";
 import { AGY_LOGIN_HELP, GEMINI_NOT_A_COMMAND, geminiHost } from "./gemini-host.ts";
+import { translate } from "../shared/i18n/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost, sessionFileOf, WEB_TOOLS } from "./host.ts";
 import { AGENT_NAMES } from "./kinds.ts";
@@ -37,6 +38,8 @@ import { createHash } from "node:crypto";
 import { tempDir } from "../../test/tmp.ts";
 import { CAPSULE_MAX_TOKENS, modelTokens } from "./window.ts";
 import { effortHint, effortOptions, effortValue } from "../../ui/settings/agentText.ts";
+
+const AGY_LOGIN_TEXT = translate("pt", AGY_LOGIN_HELP);
 
 const services: AgentService[] = [];
 const registries: FakeRegistry[] = [];
@@ -3340,7 +3343,7 @@ describe("o Antigravity (spec #25046): os testes do #24666 com o agy falso", () 
     const failed = await askAndWait(m, "oi");
     expect(failed.at(-1)).toMatchObject({ type: "error", code: "E_AGENT_NOT_LOGGED_IN" });
     const message = (failed.at(-1) as { message: string }).message;
-    expect(message).toContain(AGY_LOGIN_HELP);
+    expect(message).toContain(AGY_LOGIN_TEXT);
     // Em português, sem o texto em inglês do agy.
     expect(message).not.toMatch(/authentication|required/i);
     let s = await m.svc.status();

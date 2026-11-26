@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import { RequestError } from "@agentclientprotocol/sdk";
 
-import { ACP_AUTH_REQUIRED, AgentError, classifyAgentError } from "./errors.ts";
+import { ACP_AUTH_REQUIRED, AgentError, agentErrorKey, type AgentErrorCode, classifyAgentError } from "./errors.ts";
+import { mainLocale } from "../bun/locale.ts";
+import { translate } from "../shared/i18n/index.ts";
 
 const code = (e: unknown) => classifyAgentError(e, "Claude Code").code;
 
@@ -16,15 +18,16 @@ describe("os erros do agente", () => {
     expect(classifyAgentError(RequestError.authRequired(), "Claude Code").message).toBe(
       "O Claude Code não está logado. Entre na sua conta pelo próprio Claude Code e tente de novo.",
     );
-    const help = "Abra o Antigravity no Terminal e entre com a sua conta.";
+    const help = "agent.error.login.agy" as const;
+    const helpText = "Abra o Antigravity no Terminal e entre com a sua conta.";
     // O -32000 "Authentication required" do `agy acp` (docs do Antigravity), o data.reason e as palavras.
     for (const e of [new RequestError(-32000, "Authentication required"), new RequestError(-32603, "x", { reason: "auth_required" }), new Error("401 UNAUTHENTICATED")]) {
       const err = classifyAgentError(e, "Gemini", help);
       expect(err.code).toBe("E_AGENT_NOT_LOGGED_IN");
-      expect(err.message).toBe(`O Gemini não está logado. ${help}`);
+      expect(err.message).toBe(`O Gemini não está logado. ${helpText}`);
     }
     // O loginHelp só muda o login: os outros erros ficam iguais.
-    expect(classifyAgentError(new Error("429 Too Many Requests"), "Gemini", help).message).not.toContain(help);
+    expect(classifyAgentError(new Error("429 Too Many Requests"), "Gemini", help).message).not.toContain(helpText);
   });
 
   test("um data.reason explícito vale antes das palavras", () => {
@@ -78,5 +81,38 @@ describe("os erros do agente", () => {
   test("um AgentError passa como está", () => {
     const e = new AgentError("E_AGENT_BUSY", "Claude Code");
     expect(classifyAgentError(e)).toBe(e);
+  });
+
+  // T30986: as mensagens saem do catálogo, na língua do main.
+  test("em inglês, cada erro sai em inglês, com o nome, o login e as versões", () => {
+    const all: Record<AgentErrorCode, true> = {
+      E_AGENT_NOT_INSTALLED: true, E_AGENT_NOT_LOGGED_IN: true, E_AGENT_LIMIT: true, E_AGENT_OFFLINE: true,
+      E_AGENT_BUSY: true, E_AGENT_FAILED: true, E_ADAPTER_MISSING: true, E_ADAPTER_OFFLINE: true,
+      E_ADAPTER_TAMPERED: true, E_ADAPTER_DOWNLOAD: true, E_ADAPTER_CANCELLED: true, E_AGENT_TOO_OLD: true,
+      E_AGENT_TOO_NEW: true,
+    };
+    mainLocale.set("en");
+    try {
+      for (const c of Object.keys(all) as AgentErrorCode[]) {
+        const m = new AgentError(c, "Claude Code", undefined, { instalada: "1.0.0", esperada: "2.0.0" }).message;
+        expect(m).toBe(translate("en", agentErrorKey(c), { agente: "Claude Code", entrar: translate("en", "agent.error.login", { agente: "Claude Code" }), instalada: "1.0.0", esperada: "2.0.0" }));
+        expect(m).toContain("Claude Code");
+        expect(m).not.toMatch(/[{}]|não|Tente|ç|ã/);
+      }
+      expect(classifyAgentError(RequestError.authRequired(), "Claude Code").message).toBe(
+        "Claude Code isn't logged in. Sign in to your account in Claude Code itself and try again.",
+      );
+      expect(classifyAgentError(new Error("401 UNAUTHENTICATED"), "Gemini", "agent.error.login.agy").message).toBe(
+        "Gemini isn't logged in. Open Antigravity in Terminal and sign in to your account.",
+      );
+      expect(classifyAgentError(new Error("fetch failed: ENOTFOUND exemplo.com"), "Gemini").message).toBe(
+        "No internet connection. Gemini needs the network to answer.",
+      );
+      // Sem o nome, "the agent" no começo da frase vira "The agent".
+      expect(new AgentError("E_AGENT_FAILED").message).toBe("The agent failed to answer. Try again.");
+    } finally {
+      mainLocale.set("pt");
+    }
+    expect(new AgentError("E_AGENT_FAILED", "Gemini").message).toBe("O Gemini falhou ao responder. Tente de novo.");
   });
 });

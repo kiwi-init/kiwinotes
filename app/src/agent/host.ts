@@ -32,6 +32,7 @@ import type {
 
 import { AgentError, classifyAgentError } from "./errors.ts";
 import type { AgentKind } from "./kinds.ts";
+import type { TextKey } from "../shared/i18n/index.ts";
 
 /** O arquivo da sessão de antes do spec #24666, só do Claude. */
 const LEGACY_SESSION = "session.json";
@@ -124,10 +125,10 @@ export interface AgentHostOptions {
    */
   kind?: AgentKind;
   /**
-   * Como a pessoa entra na conta, quando o agente diz que não está logado: a frase depois de "O {agente} não está
-   * logado." Sem ela, "Entre na sua conta pelo próprio {agente}". O Antigravity diz a dele (spec #25046).
+   * Como a pessoa entra na conta, quando o agente diz que não está logado: a chave do catálogo da frase depois de
+   * "O {agente} não está logado." Sem ela, `agent.error.login`. O Antigravity diz a dele (spec #25046, T30986).
    */
-  loginHelp?: string;
+  loginHelp?: TextKey;
   /** O ambiente do processo do agente (o padrão é o do Kiwi). */
   env?: Record<string, string | undefined>;
   /** A versão do Kiwi, que vai na apresentação do protocolo (`clientInfo`). */

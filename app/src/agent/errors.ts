@@ -6,6 +6,9 @@
 // ADR 0012). Por isso a classificação olha primeiro o que o ACP define (o código -32000 de `authRequired`) e um
 // `data.reason` explícito, e só depois procura palavras na mensagem.
 
+import { mainLocale } from "../bun/locale.ts";
+import { type Locale, type TextKey, translate } from "../shared/i18n/index.ts";
+
 export type AgentErrorCode =
   | "E_AGENT_NOT_INSTALLED"
   | "E_AGENT_NOT_LOGGED_IN"
@@ -22,44 +25,40 @@ export type AgentErrorCode =
   | "E_AGENT_TOO_OLD"
   | "E_AGENT_TOO_NEW";
 
-/**
- * A mensagem de cada caso, para a pessoa ler. `{agente}` vira o nome do agente; `{instalada}` e `{esperada}` são as
- * versões, nos dois erros de versão.
- */
-export const AGENT_ERROR_MESSAGES: Record<AgentErrorCode, string> = {
-  E_AGENT_NOT_INSTALLED: "O {agente} não está instalado neste Mac. Instale e tente de novo.",
-  E_AGENT_NOT_LOGGED_IN: "O {agente} não está logado. {entrar}",
-  E_AGENT_LIMIT: "O {agente} atingiu o limite de uso da sua conta. Espere o limite voltar e tente de novo.",
-  E_AGENT_OFFLINE: "Sem conexão com a internet. O {agente} precisa de rede para responder.",
-  E_AGENT_BUSY: "O {agente} ainda está respondendo o pedido anterior. Espere terminar ou cancele.",
-  E_AGENT_FAILED: "O {agente} falhou ao responder. Tente de novo.",
-  E_ADAPTER_MISSING: "Falta baixar o adaptador do {agente}. Ele é baixado uma vez, quando você liga o agente.",
-  E_ADAPTER_OFFLINE: "Sem conexão com a internet. O Kiwi precisa de rede para baixar o adaptador do {agente}.",
-  E_ADAPTER_TAMPERED:
-    "Um pacote do adaptador do {agente} chegou diferente do esperado e foi apagado. Nada foi instalado. Tente de novo mais tarde.",
-  E_ADAPTER_DOWNLOAD: "O download do adaptador do {agente} falhou. Nada foi instalado. Tente de novo mais tarde.",
-  E_ADAPTER_CANCELLED: "O download do adaptador do {agente} foi cancelado. Nada foi instalado.",
-  E_AGENT_TOO_OLD:
-    "O {agente} instalado (versão {instalada}) é mais antigo que o que este Kiwi usa ({esperada}). Atualize o {agente} e tente de novo.",
-  E_AGENT_TOO_NEW:
-    "O {agente} instalado (versão {instalada}) mudou de série, e este Kiwi só conhece a da {esperada}. O agente fica indisponível até sair uma atualização do Kiwi Notes.",
-};
+/** A chave do catálogo de cada caso (T30986): a mensagem sai na língua do app, como o resto do main. */
+export const agentErrorKey = (code: AgentErrorCode): TextKey => `agent.error.${code}`;
 
-/** O padrão de cada variável, quando quem cria o erro não diz outro. */
-const DEFAULT_VARS: Record<string, string> = {
-  // Como entrar: o padrão serve ao Claude Code; o Antigravity diz o dele pelo `loginHelp` do host (spec #25046).
-  entrar: "Entre na sua conta pelo próprio {agente} e tente de novo.",
-};
+/**
+ * A mensagem de um caso, para a pessoa ler, na língua dada. `{agente}` vira o nome do agente; `{entrar}`, como entrar
+ * na conta (o padrão, ou o `loginHelp` do host); `{instalada}` e `{esperada}`, as versões nos dois erros de versão.
+ */
+export function agentErrorMessage(
+  code: AgentErrorCode,
+  locale: Locale,
+  agentName?: string,
+  vars: Record<string, string> = {},
+  loginHelp: TextKey = "agent.error.login",
+): string {
+  const agente = agentName ?? translate(locale, "agent.error.someAgent");
+  const entrar = translate(locale, loginHelp, { agente });
+  const text = translate(locale, agentErrorKey(code), { entrar, ...vars, agente });
+  // Em inglês a frase pode começar pelo nome: "the agent" vira "The agent".
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 export class AgentError extends Error {
   readonly code: AgentErrorCode;
   /** O que o agente disse, cru, para o log. Nunca vai para a mensagem da pessoa. */
   readonly detail?: string;
-  constructor(code: AgentErrorCode, agentName = "agente", detail?: string, vars: Record<string, string> = {}) {
-    let message = AGENT_ERROR_MESSAGES[code];
-    for (const [k, v] of Object.entries({ ...DEFAULT_VARS, ...vars })) message = message.replaceAll(`{${k}}`, v);
-    message = message.replaceAll("{agente}", agentName);
-    super(message);
+  constructor(
+    code: AgentErrorCode,
+    agentName?: string,
+    detail?: string,
+    vars: Record<string, string> = {},
+    loginHelp?: TextKey,
+    locale: Locale = mainLocale.get(),
+  ) {
+    super(agentErrorMessage(code, locale, agentName, vars, loginHelp));
     this.name = "AgentError";
     this.code = code;
     this.detail = detail;
@@ -90,9 +89,9 @@ function textOf(err: unknown): string {
  * Um erro qualquer (do ACP, do processo ou de rede) vira um `AgentError`. A ordem importa: o `authRequired` do ACP
  * e o `data.reason` vêm antes das palavras, e o limite vem antes do login (uma mensagem de limite costuma dizer "account").
  */
-export function classifyAgentError(err: unknown, agentName = "agente", loginHelp?: string): AgentError {
+export function classifyAgentError(err: unknown, agentName?: string, loginHelp?: TextKey): AgentError {
   if (err instanceof AgentError) return err;
-  const notLoggedIn = (detail: string) => new AgentError("E_AGENT_NOT_LOGGED_IN", agentName, detail, loginHelp ? { entrar: loginHelp } : {});
+  const notLoggedIn = (detail: string) => new AgentError("E_AGENT_NOT_LOGGED_IN", agentName, detail, {}, loginHelp);
   const detail = textOf(err).slice(0, 2000);
   const e = (err ?? {}) as { code?: unknown; data?: { reason?: unknown } };
   if (e.code === "ENOENT") return new AgentError("E_AGENT_NOT_INSTALLED", agentName, detail);
