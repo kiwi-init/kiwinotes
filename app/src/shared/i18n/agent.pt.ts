@@ -223,6 +223,7 @@ export const ptAgent = {
   "agent.voice.el.key.remove": "Apagar a chave",
   "agent.voice.el.key.invalid": "Isso não parece uma chave do ElevenLabs.",
   "agent.voice.el.key.failed": "Não deu para guardar a chave no Keychain.",
+  "agent.voice.el.key.deleteFailed": "Não deu para apagar a chave do Keychain.",
   "agent.voice.el.model": "Modelo",
   "agent.voice.el.model.hint": "O v4 Turbo é o padrão: rápido, em português e em inglês.",
   "agent.voice.el.model.default": "{name} (padrão)",

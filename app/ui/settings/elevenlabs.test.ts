@@ -25,6 +25,8 @@ test("a linha da chave: guardada no Keychain, sem chave, chave com cara errada e
   expect(keyHint(true, null)).toBe("Chave guardada no Keychain do Mac.");
   expect(keyHint(false, "invalid")).toBe("Isso não parece uma chave do ElevenLabs.");
   expect(keyHint(true, "failed", "en")).toBe("Couldn't save the key to the Keychain.");
+  expect(keyHint(true, "deleteFailed")).toBe("Não deu para apagar a chave do Keychain.");
+  expect(keyHint(true, "deleteFailed", "en")).toBe("Couldn't remove the key from the Keychain.");
 });
 
 test("o Testar: parado, falando, funcionou e o motivo de não falar", () => {
