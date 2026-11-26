@@ -90,7 +90,7 @@ const idle = async () => {
 const problems: string[] = [];
 const shots: string[] = [];
 /** Uma parte da tela em inglês: nenhum pedaço do catálogo em português, as frases pedidas em inglês, e o print dela. */
-async function check(p: Page, sel: string, name: string, want: string[]) {
+async function check(p: Page, sel: string, name: string, want: (string | RegExp)[]) {
   const el = p.locator(sel).first();
   await el.waitFor({ timeout: 15000 });
   await el.scrollIntoViewIfNeeded();
@@ -98,7 +98,7 @@ async function check(p: Page, sel: string, name: string, want: string[]) {
   // O `textContent`, não o `innerText`: o título da seção é maiúsculo só pelo CSS.
   const text = (await el.textContent()) ?? "";
   for (const piece of PT_PIECES) if (text.includes(piece)) problems.push(`${name}: "${piece}"`);
-  for (const w of want) if (!text.includes(w)) problems.push(`${name}: falta "${w}"`);
+  for (const w of want) if (typeof w === "string" ? !text.includes(w) : !w.test(text)) problems.push(`${name}: falta "${w}"`);
   const file = join(out, `${name}.png`);
   await el.screenshot({ path: file });
   shots.push(file);
@@ -139,7 +139,8 @@ try {
   page = p;
   await check(p, ".kn-agent-memory", "1-memoria", [en("mem.clearAll"), "1 of"]);
   await check(p, ".kn-agent-routines", "2-rotinas", [en("routines.title"), en("routines.runNow"), "Mon, Wed and Fri at 6:30 PM"]);
-  await check(p, section(en("agent.placar.section")), "3-placar", [en("agent.placar.section"), en("agent.placar.found"), en("agent.placar.col.last"), " PM"]);
+  // A hora do placar é a de agora: AM antes do meio-dia, PM depois (T30888; o " PM" fixo caía em todo run da manhã).
+  await check(p, section(en("agent.placar.section")), "3-placar", [en("agent.placar.section"), en("agent.placar.found"), en("agent.placar.col.last"), /\d:\d\d [AP]M/]);
   await check(p, section(en("trails.learning")), "4-trilhas", [en("trails.waiting"), "· once"]);
   await check(p, section(en("answers.title")), "5-respostas", [en("answers.none")]);
   await w.close();
