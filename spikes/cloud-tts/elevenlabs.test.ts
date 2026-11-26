@@ -47,6 +47,7 @@ let wsSource = "TTS";
 let accountVoices: Record<string, { category: string; available_for_tiers?: string[] }> = {};
 let tier = "creator";
 let subscriptionStatus = 200;
+let voiceStatus = 200;
 
 let server: ReturnType<typeof Bun.serve>;
 let base = "";
@@ -81,6 +82,7 @@ beforeAll(() => {
       const voice = url.pathname.match(/^\/v1\/voices\/([^/]+)$/);
       if (req.method === "GET" && voice) {
         const v = accountVoices[decodeURIComponent(voice[1]!)];
+        if (voiceStatus !== 200) return Response.json({ detail: [{ msg: "invalid" }] }, { status: voiceStatus });
         return v ? Response.json({ voice_id: voice[1], ...v }) : Response.json({ detail: { status: "voice_not_found" } }, { status: 404 });
       }
       if (req.method === "GET" && url.pathname === "/v1/user/subscription") {
@@ -162,6 +164,7 @@ function reset() {
   accountVoices = {};
   tier = "creator";
   subscriptionStatus = 200;
+  voiceStatus = 200;
   historyDenyFrom = Infinity;
   historyGets = 0;
 }
@@ -615,6 +618,14 @@ describe("a voz escolhida na hora (T31480)", () => {
   test("a voz que a conta não acha: pede para adicionar em My Voices", async () => {
     reset();
     const err = await checkErr(withVoices(LIB));
+    expect(err?.message).toContain(VOICE_NOT_FOUND);
+  });
+
+  test("o 422 da doc também conta como voz não achada", async () => {
+    reset();
+    accountVoices["voz422"] = { category: "x" };
+    voiceStatus = 422;
+    const err = await checkErr(withVoices("voz422"));
     expect(err?.message).toContain(VOICE_NOT_FOUND);
   });
 

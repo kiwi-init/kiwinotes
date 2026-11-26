@@ -152,7 +152,8 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
     const found: { id: string; category?: string; tiers?: string[] }[] = [];
     for (const id of ids) {
       const res = await fetch(`${base}/v1/voices/${encodeURIComponent(id)}`, { method: "GET", headers });
-      if (res.status === 400 || res.status === 404) throw new ElevenLabsError(`${VOICE_NOT_FOUND} (${id})`);
+      // A doc só lista o 422; o 400 e o 404 são o "não achei" comum. Qualquer um deles: a conta não tem a voz.
+      if (res.status === 400 || res.status === 404 || res.status === 422) throw new ElevenLabsError(`${VOICE_NOT_FOUND} (${id})`);
       if (!res.ok) throw new ElevenLabsError(`a conferência da voz ${id} respondeu ${res.status}`);
       const v = (await res.json()) as { category?: string; available_for_tiers?: string[] };
       found.push({ id, category: v.category, tiers: v.available_for_tiers });
