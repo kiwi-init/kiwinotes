@@ -2,96 +2,38 @@
 // Início e o Sobre, com o app em English. No hub de verdade, com o AppEngine headless, o agente de mentira
 // (`KIWI_FAKE_AGENT`) e as permissões de mentira (`KIWI_FAKE_SETUP`), num WebKit headless: nada aparece na tela de
 // ninguém. A escolha da língua vai ligada só aqui (`KIWI_LANGUAGE_CHOICE=1`), enquanto o app a esconde (T29319). Em
-// cada tela, nenhuma frase em português do catálogo do Hub (`hub.pt.ts`) pode aparecer, e o print fica na pasta.
+// cada tela, nenhuma frase em português dos catálogos nem palavra só do português pode aparecer
+// (`english-check-lib.ts`), e o print fica na pasta.
 //
 //   bun scripts/hub-english-check.ts [pasta]
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { type Page, webkit } from "playwright-core";
-import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import type { Page } from "playwright-core";
+import { startEnglish } from "./english-check-lib";
 import { enCommon } from "../src/shared/i18n/common.en.ts";
-import { ptCommon } from "../src/shared/i18n/common.pt.ts";
 import { enHub } from "../src/shared/i18n/hub.en.ts";
-import { ptHub } from "../src/shared/i18n/hub.pt.ts";
 import type { Entry } from "../src/shared/i18n/index.ts";
 
-const app = resolve(import.meta.dir, "..");
-const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T28191-english"));
-mkdirSync(out, { recursive: true });
 const FAKE = { permissions: { inputMonitoring: "undetermined", accessibility: "denied" }, model: { state: "loading", phase: "downloading", fraction: 0.42 } };
 const EN = { ...enCommon, ...enHub } as Record<string, Entry>;
 const en = (key: keyof typeof enHub | keyof typeof enCommon) => EN[key] as string;
 
-/**
- * Os pedaços em português que não podem aparecer: de cada frase do catálogo que muda em inglês, o maior trecho entre
- * os `{params}`, com pelo menos 12 letras (os curtos, como "Ok" ou "Kiwi", são iguais nas duas línguas ou comuns demais).
- */
-const PT_PIECES = (() => {
-  const forms = (e: Entry) => (typeof e === "string" ? [e] : Object.values(e));
-  const pieces = new Set<string>();
-  for (const [key, pt] of Object.entries({ ...ptCommon, ...ptHub }) as [string, Entry][]) {
-    const enForms = forms(EN[key]!);
-    for (const f of forms(pt)) {
-      if (enForms.includes(f)) continue;
-      const longest = f.split(/\{\w+\}/).map((s) => s.trim()).sort((a, b) => b.length - a.length)[0] ?? "";
-      if (longest.length >= 12) pieces.add(longest);
-    }
-  }
-  return [...pieces];
-})();
-
-const data = mkdtempSync(join(tmpdir(), "kiwi-english-"));
-writeFileSync(join(data, "settings.json"), JSON.stringify({ version: 1, firstRun: "pending", language: "en" }));
-const env = { ...process.env, KIWI_FAKE_SETUP: JSON.stringify(FAKE), KIWI_FAKE_AGENT: "1", KIWI_SYSTEM_LANG: "en-US", KIWI_LANGUAGE_CHOICE: "1" };
-const cli = async (args: string[]) => {
-  const p = Bun.spawn([process.execPath, join(app, "scripts/cli.ts"), ...args, "--data", data], { cwd: app, stdout: "pipe", stderr: "pipe", env });
-  const text = await new Response(p.stdout).text();
-  assert.equal(await p.exited, 0, text + (await new Response(p.stderr).text()));
-};
-const ctx: UiContext = {
-  data,
-  send: async (msg) => {
-    const r = await request(data, msg);
-    assert.ok(r);
-    return r;
-  },
-  subscribe: async (topics, onMsg) => {
-    const c = await connect(data, (line) => {
-      if (!("id" in line)) onMsg(line);
-    });
-    assert.ok(c);
-    c.write({ id: 0, cmd: "subscribe", topics, follow: true, backlog: false });
-    return () => c.close();
-  },
-};
-const invoke = async (cap: string, args: unknown = {}) => {
-  const r = await ctx.send({ cmd: "invoke", cap, args });
-  assert.equal(r.ok, true, JSON.stringify(r));
-  return r.value as any;
-};
-
-const problems: string[] = [];
-const shots: string[] = [];
-/** A tela inteira em inglês: nenhum pedaço do catálogo em português; e o print. */
-async function check(p: Page, name: string) {
-  await Bun.sleep(500);
-  const text = await p.evaluate(() => document.body.innerText);
-  for (const piece of PT_PIECES) if (text.includes(piece)) problems.push(`${name}: "${piece}"`);
-  const file = join(out, `${name}.png`);
-  await p.screenshot({ path: file });
-  shots.push(file);
-}
+// O português que a T30631 traduz: a linha do agente no passo 1 do onboarding e o nome da cor no cartão final.
+const KNOWN: [string, string][] = [
+  ["O login é dele", "T30631"],
+  ["com a sua conta do Claude", "T30631"],
+  ["Nada seu vai junto", "T30631"],
+  ["Prisma Original", "T30631"],
+];
+const s = await startEnglish({ name: "T28191-english", settings: { firstRun: "pending" }, env: { KIWI_FAKE_SETUP: JSON.stringify(FAKE) }, known: KNOWN });
+const { invoke } = s;
+// O motivo do atualizador desligado só aparece no headless e nos testes (`UPDATES_OFF`), nunca no app.
+const check = (p: Page, name: string) => s.check(p, name, { skip: [/\(sem o atualizador no headless e nos testes\)\.?/] });
 const button = (p: Page, name: string | RegExp) => p.getByRole("button", { name, exact: typeof name === "string" });
 
-const browser = await webkit.launch({ headless: true });
-await cli(["start", "--no-helper"]);
 let page: Page | null = null;
 try {
   assert.equal((await invoke("app.locale")).locale, "en", "o app devia estar em English");
-  const h = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "dark", width: 900, height: 760, motion: false, browser: "webkit", query: {} });
+  const h = await s.open("hub", {}, { width: 900, height: 760 });
   const p = h.page;
   page = p;
 
@@ -147,13 +89,6 @@ try {
   await check(p, "11-sobre");
   await h.close();
 } catch (e) {
-  // O print de onde parou, para ver o porquê.
-  await page?.screenshot({ path: join(out, "falhou.png") }).catch(() => {});
-  throw e;
-} finally {
-  await browser.close();
-  await cli(["stop"]).catch(() => {});
+  await s.fail(e, page);
 }
-
-console.log(JSON.stringify({ out, shots: shots.length, pieces: PT_PIECES.length, problems }, null, 2));
-if (problems.length) process.exit(1);
+await s.finish();
