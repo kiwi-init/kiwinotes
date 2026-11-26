@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { tempDir } from "../../test/tmp.ts";
-import { spawnVoice, VOICE_SLICE_SAMPLES, VoiceError, VoiceProcess, voicePath, type VoiceAssets } from "./voice-process.ts";
+import { type FalaLingua, spawnVoice, VOICE_SLICE_SAMPLES, VoiceError, VoiceProcess, voicePath, type VoiceAssets } from "./voice-process.ts";
 
 const FAKE = path.join(import.meta.dir, "..", "..", "test", "helpers", "fake-kiwi-voice.ts");
 const ASSETS: VoiceAssets = { modelDir: "/tmp/exemplo/modelo", refAudio: "/tmp/exemplo/voz.wav", refText: "Oi, eu sou a Ana." };
@@ -16,12 +16,15 @@ afterEach(async () => {
   await Promise.all(open.splice(0).map((v) => v.stop()));
 });
 
-function make(over: { idleMs?: number; assets?: () => VoiceAssets | Promise<VoiceAssets> } = {}) {
+function make(
+  over: { idleMs?: number; assets?: (lingua?: FalaLingua) => VoiceAssets | Promise<VoiceAssets>; lingua?: (frase: string) => FalaLingua } = {},
+) {
   const log = path.join(tempDir("kiwi-voice"), "cmds.jsonl");
   let spawns = 0;
   const v = new VoiceProcess({
     bin: "kiwi-voice",
     assets: over.assets ?? (() => ASSETS),
+    ...(over.lingua ? { lingua: over.lingua } : {}),
     idleMs: over.idleMs ?? 60_000,
     spawn: () => {
       spawns++;
@@ -247,3 +250,48 @@ describe("a voz de cada fala (T27778)", () => {
   });
 });
 
+
+describe("a voz segue a língua da frase (T31030, harry #31028)", () => {
+  const EN: VoiceAssets = { ...ASSETS, refAudio: "/tmp/exemplo/en.wav", refText: "Hi, I'm Ana.", language: "english" };
+  const PT: VoiceAssets = { ...ASSETS, refAudio: "/tmp/exemplo/pt.wav", refText: "Oi, eu sou a Ana.", language: "portuguese" };
+  // O detector de mentira: a frase diz a língua dela no começo ("pt:", "en:"); sem prefixo, sem sinal.
+  const lingua = (frase: string): FalaLingua => (frase.startsWith("pt:") ? "pt" : frase.startsWith("en:") ? "en" : null);
+  const speaks = (cmds: () => { type: string; text?: string; voice?: { refAudio: string; language: string } }[]) =>
+    cmds().filter((c) => c.type === "speak").map((c) => `${c.text}>${c.voice!.language}`);
+
+  test("numa fala mista, cada frase na voz da língua dela; a escolhida é a do load e a de quem não diz", async () => {
+    const asked: (FalaLingua | undefined)[] = [];
+    // A pessoa escolheu a voz inglesa: sem a língua, o EN.
+    const { v, cmds, spawns } = make({ assets: (l) => (asked.push(l), l === "pt" ? PT : EN), lingua });
+    const fala = new AbortController();
+    for (const f of ["en:Found it.", "pt:Achei a nota.", "pt:Está salva.", "en:Done."]) await collect(v.sintetizar(f, fala.signal));
+    expect(speaks(cmds)).toEqual(["en:Found it.>english", "pt:Achei a nota.>portuguese", "pt:Está salva.>portuguese", "en:Done.>english"]);
+    // Uma leitura por língua na fala, e um processo só, carregado uma vez.
+    expect(asked.filter((l) => l !== undefined)).toEqual(["en", "pt"]);
+    expect(spawns()).toBe(1);
+    expect(cmds().filter((c) => c.type === "load").length).toBe(1);
+  });
+
+  test("a frase sem sinal segue a língua da anterior; no começo da fala, a voz escolhida", async () => {
+    const { v, cmds } = make({ assets: (l) => (l === "pt" ? PT : EN), lingua });
+    const fala = new AbortController();
+    for (const f of ["Hmm.", "pt:Achei.", "42.", "en:Done.", "OK."]) await collect(v.sintetizar(f, fala.signal));
+    expect(speaks(cmds)).toEqual(["Hmm.>english", "pt:Achei.>portuguese", "42.>portuguese", "en:Done.>english", "OK.>english"]);
+    // Uma fala nova começa de novo pela escolhida.
+    await collect(v.sintetizar("Hmm.", new AbortController().signal));
+    expect(speaks(cmds).at(-1)).toBe("Hmm.>english");
+  });
+
+  test("o com() (o Ouvir) não olha a língua da frase", async () => {
+    const { v, cmds } = make({ assets: (l) => (l === "pt" ? PT : EN), lingua });
+    await collect(v.com(() => EN).sintetizar("pt:Oi, eu sou o Kiwi.", new AbortController().signal));
+    expect(speaks(cmds)).toEqual(["pt:Oi, eu sou o Kiwi.>english"]);
+  });
+
+  test("sem o lingua, todas as frases na voz escolhida, como antes", async () => {
+    const { v, cmds } = make({ assets: (l) => (l === "pt" ? PT : EN) });
+    const fala = new AbortController();
+    for (const f of ["en:Found it.", "pt:Achei."]) await collect(v.sintetizar(f, fala.signal));
+    expect(speaks(cmds)).toEqual(["en:Found it.>english", "pt:Achei.>english"]);
+  });
+});
