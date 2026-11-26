@@ -133,7 +133,9 @@ function reveal(panel: HTMLElement, row: string, showTab: (id: string) => void):
   let tries = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const find = () => {
-    const label = [...panel.querySelectorAll<HTMLElement>(".kn-row-label, .kn-section-title")].find((e) => e.textContent?.trim() === row);
+    // A linha antes da seção: com as abas, uma seção pode ter o nome de uma linha dela (Agente › Memória, #31832).
+    const named = (sel: string) => [...panel.querySelectorAll<HTMLElement>(sel)].find((e) => e.textContent?.trim() === row);
+    const label = named(".kn-row-label") ?? named(".kn-section-title");
     const target = label?.closest<HTMLElement>(".kn-row, .kn-section") ?? label;
     if (!target) {
       if (++tries < 30) timer = setTimeout(find, 100);
