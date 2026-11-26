@@ -16,6 +16,16 @@ import { DEFAULT_MEETING_SETTINGS, type MeetingSettings, sanitizeMeetingSettings
 import { type CatColorChoice, DEFAULT_CAT_COLOR, isCatColorChoice } from "../shared/kiwicat-colors.ts";
 import { CAT_SIZE, type CatPosition, catSize, DEFAULT_CAT_POSITION, isCatPosition } from "../shared/kiwicat-place.ts";
 import { type CatVoiceId, DEFAULT_CAT_VOICE, isCatVoiceId } from "../shared/cat-voices.ts";
+import {
+  type CatVoiceProvider,
+  DEFAULT_CAT_VOICE_PROVIDER,
+  DEFAULT_ELEVENLABS_MODEL,
+  DEFAULT_ELEVENLABS_VOICE,
+  type ElevenLabsModel,
+  isCatVoiceProvider,
+  isElevenLabsModel,
+  isElevenLabsVoiceId,
+} from "../shared/elevenlabs.ts";
 import { folderPath } from "../notes/paths.ts";
 import { type AgentOnboarding, DEFAULT_AGENT_ONBOARDING, sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
 import type { AgentKind } from "../shared/ui-contract.ts";
@@ -71,6 +81,15 @@ export interface AppSettings {
    * menos os termos técnicos, a ~0,3 s por ditado. Desligado por padrão; ligar baixa o modelo (270 MB), e desligar apaga.
    */
   preciseDictation: boolean;
+  /**
+   * Quem fala com a voz do Kiwi (spec #31616): a voz local (o padrão) ou o ElevenLabs, com a conta e a chave da pessoa
+   * (no Keychain, nunca aqui). Sem chave, ou com o ElevenLabs falhando, o Kiwi fala com a local daquela vez.
+   */
+  catVoiceProvider: CatVoiceProvider;
+  /** O ID da voz no ElevenLabs, colado pela pessoa (harry #31625). Padrão: a Matilda. */
+  elevenLabsVoiceId: string;
+  /** O modelo do ElevenLabs (harry #31625), um de `ELEVENLABS_MODELS`. Padrão: `eleven_v4_turbo`. */
+  elevenLabsModel: ElevenLabsModel;
   /** Os ajustes de reunião (R6, T4947): os atalhos, o pop-up e os apps que contam. O helper recebe no `config.set`. */
   meetings: MeetingSettings;
   /** A largura máxima da coluna da nota, em px (T5299, issue #212): a alça na borda da nota muda, dentro dos limites. */
@@ -280,7 +299,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, checkUpdates: true, language: DEFAULT_LANGUAGE, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR, posicao: DEFAULT_CAT_POSITION, tamanho: CAT_SIZE.default, voz: DEFAULT_CAT_VOICE }, firstRun: "done" };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, checkUpdates: true, language: DEFAULT_LANGUAGE, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, catVoiceProvider: DEFAULT_CAT_VOICE_PROVIDER, elevenLabsVoiceId: DEFAULT_ELEVENLABS_VOICE, elevenLabsModel: DEFAULT_ELEVENLABS_MODEL, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR, posicao: DEFAULT_CAT_POSITION, tamanho: CAT_SIZE.default, voz: DEFAULT_CAT_VOICE }, firstRun: "done" };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -344,6 +363,9 @@ export function sanitizeSettings(input: unknown): AppSettings {
     showExtensions: o.showExtensions === true,
     cues: o.cues !== false,
     preciseDictation: o.preciseDictation === true,
+    catVoiceProvider: isCatVoiceProvider(o.catVoiceProvider) ? o.catVoiceProvider : DEFAULT_CAT_VOICE_PROVIDER,
+    elevenLabsVoiceId: isElevenLabsVoiceId(o.elevenLabsVoiceId) ? o.elevenLabsVoiceId : DEFAULT_ELEVENLABS_VOICE,
+    elevenLabsModel: isElevenLabsModel(o.elevenLabsModel) ? o.elevenLabsModel : DEFAULT_ELEVENLABS_MODEL,
     meetings: sanitizeMeetingSettings(o.meetings),
     noteWidth: sanitizeNoteWidth(o.noteWidth),
     agent: sanitizeAgentSettings(o.agent),

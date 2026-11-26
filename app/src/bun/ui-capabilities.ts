@@ -16,6 +16,16 @@ import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
 import { NOTE_WIDTH } from "../shared/note-width.ts";
 import { ONBOARDING_STEPS } from "../shared/agent-onboarding.ts";
+import {
+  CAT_VOICE_PROVIDERS,
+  ELEVENLABS_MODELS,
+  type ElevenLabsReason,
+  isCatVoiceProvider,
+  isElevenLabsKeyShape,
+  isElevenLabsModel,
+  isElevenLabsReason,
+  isElevenLabsVoiceId,
+} from "../shared/elevenlabs.ts";
 import { isCatColorChoice } from "../shared/kiwicat-colors.ts";
 import { catSize, isCatPosition, isCatSize } from "../shared/kiwicat-place.ts";
 import { type CatVoiceId, isCatVoiceId } from "../shared/cat-voices.ts";
@@ -35,7 +45,7 @@ import type { TextIndex } from "../notes/text-index.ts";
 import type { SemanticIndex } from "../notes/semantic/index.ts";
 import type { SemanticEngine } from "../notes/semantic/engine.ts";
 import { semanticQueryText } from "../shared/query.ts";
-import type { CatVoiceStatus, PreciseStatus, ProjectCandidate, ProjectSearchView, SemanticStatus } from "../shared/ui-contract.ts";
+import type { CatVoiceStatus, ElevenLabsStatus, PreciseStatus, ProjectCandidate, ProjectSearchView, SemanticStatus } from "../shared/ui-contract.ts";
 import { isSetupPermission, type SetupModel, type SetupPermission, type SetupStatus } from "../shared/first-run.ts";
 import { modelBytes } from "../notes/semantic/model.ts";
 import { WHISPER_SMALL } from "./precise-dictation.ts";
@@ -62,7 +72,7 @@ import { type AgentService, AgentServiceError } from "../agent/service.ts";
 import { ACTIVITY_LIST_MAX } from "../agent/activity.ts";
 import { AGENT_KINDS, isAgentKind, type AgentKind } from "../agent/kinds.ts";
 import { isAgentChoice } from "../store/settings.ts";
-import { type AppLocale, appLocale, isLanguageSetting, type LanguageSetting } from "../shared/i18n/index.ts";
+import { type AppLocale, appLocale, isLanguageSetting, type LanguageSetting, translate } from "../shared/i18n/index.ts";
 import type { IntroLayout } from "../shared/intro-layout.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
@@ -218,6 +228,19 @@ export interface CapabilityDeps {
     download(): Promise<void>;
     cancel(): Promise<void>;
     remove(): Promise<void>;
+  };
+  /**
+   * A voz do Kiwi pelo ElevenLabs nos Ajustes (T31628, spec #31616): a chave no Keychain (parte 1, a UI só sabe se há
+   * uma) e o `speakOnce` do provedor (parte 2), que confere a voz, fala com a voz e o modelo das settings e rejeita
+   * com um erro de `.reason` (`ElevenLabsReason`). Sem ele, as `elevenLabs.*` dão E_UNAVAILABLE.
+   */
+  elevenLabs?: {
+    hasKey(): Promise<boolean>;
+    setKey(key: string): Promise<void>;
+    deleteKey(): Promise<void>;
+    speakOnce(text: string): Promise<void>;
+    /** A última queda para a voz local; sem ela, a linha do motivo não aparece. */
+    lastFallback?(): { reason: ElevenLabsReason; at: string } | null;
   };
   /** O Ouvir (T27778, `cat-voice-preview.ts`). Sem ele (sem a saída de som), o `catVoice.preview` dá E_UNAVAILABLE. */
   catVoicePreview?: { ouvir(id: CatVoiceId): Promise<void>; parar(): void };
@@ -673,6 +696,14 @@ export function uiCapabilities(deps: CapabilityDeps,
     under(gone, p) ? null : p;
 
   // A voz do gato (T26729): sem ela, nada a mostrar nem a baixar.
+  const elevenLabs = () => {
+    if (!deps.elevenLabs) throw new CapabilityError("E_UNAVAILABLE", "elevenlabs unavailable");
+    return deps.elevenLabs;
+  };
+  const elevenLabsStatus = async (el: NonNullable<CapabilityDeps["elevenLabs"]>): Promise<ElevenLabsStatus> => ({
+    hasKey: await el.hasKey(),
+    lastFallback: el.lastFallback?.() ?? null,
+  });
   const catVoice = async () => {
     if (!deps.catVoice) throw new CapabilityError("E_UNAVAILABLE", "cat voice unavailable");
     return deps.catVoice;
@@ -809,6 +840,16 @@ export function uiCapabilities(deps: CapabilityDeps,
           // O modo preciso do ditado (1.38.0, T6602): ligar baixa o Whisper small, desligar apaga.
           if (typeof value !== "boolean") throw bad("preciseDictation must be true or false");
           patch.preciseDictation = value;
+        } else if (key === "catVoiceProvider") {
+          // A voz do Kiwi pelo ElevenLabs (1.106.0, spec #31616): ligar não pede nem guarda a chave, que vai ao Keychain.
+          if (!isCatVoiceProvider(value)) throw bad(`catVoiceProvider must be one of ${CAT_VOICE_PROVIDERS.join(", ")}`);
+          patch.catVoiceProvider = value;
+        } else if (key === "elevenLabsVoiceId") {
+          if (!isElevenLabsVoiceId(value)) throw bad("elevenLabsVoiceId must be an ElevenLabs voice ID (letters, digits, _ and -, up to 64)");
+          patch.elevenLabsVoiceId = value;
+        } else if (key === "elevenLabsModel") {
+          if (!isElevenLabsModel(value)) throw bad(`elevenLabsModel must be one of ${ELEVENLABS_MODELS.join(", ")}`);
+          patch.elevenLabsModel = value;
         } else if (key === "showExtensions") {
           // A extensão na árvore das Notas (1.19.0, T3370).
           if (typeof value !== "boolean") throw bad("showExtensions must be true or false");
@@ -1550,6 +1591,38 @@ export function uiCapabilities(deps: CapabilityDeps,
       deps.catVoicePreview?.parar();
       await v.remove();
       return v.status();
+    },
+    "elevenLabs.status": async (args) => {
+      noArgs(args, "elevenLabs.status");
+      return elevenLabsStatus(elevenLabs());
+    },
+    "elevenLabs.setKey": async (args) => {
+      const { key } = fields(args, "elevenLabs.setKey", ["key"]);
+      const el = elevenLabs();
+      const k = typeof key === "string" ? key.trim() : key;
+      // A mensagem nunca leva a chave: ela some do erro, do log e da resposta.
+      if (!isElevenLabsKeyShape(k)) throw bad("elevenLabs.setKey: key must be an ElevenLabs API key (no spaces)");
+      await el.setKey(k);
+      return elevenLabsStatus(el);
+    },
+    "elevenLabs.deleteKey": async (args) => {
+      noArgs(args, "elevenLabs.deleteKey");
+      const el = elevenLabs();
+      await el.deleteKey();
+      return elevenLabsStatus(el);
+    },
+    "elevenLabs.test": async (args) => {
+      noArgs(args, "elevenLabs.test");
+      const el = elevenLabs();
+      if (!(await el.hasKey())) return { ok: false, reason: "no_key" } as const;
+      const { locale } = appLocale((await deps.settings.load()).language, deps.systemLanguages?.() ?? []);
+      try {
+        await el.speakOnce(translate(locale, "agent.voice.el.testPhrase"));
+        return { ok: true } as const;
+      } catch (e) {
+        const reason = (e as { reason?: unknown } | null)?.reason;
+        return { ok: false, reason: isElevenLabsReason(reason) ? reason : "unknown" } as const;
+      }
     },
     "catVoice.preview": async (args) => {
       const { id } = fields(args, "catVoice.preview", ["id"]);

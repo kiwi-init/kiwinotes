@@ -5,14 +5,20 @@
 // As vozes (spec #27531, T27778): o idioma primeiro, e só as vozes dele, cada uma com o código, a descrição, o "Usar"
 // (guarda em `kiwicat.voz`) e o Ouvir (o texto fixo daquela voz, sem mudar a escolhida e sem o agente). Trocar de voz
 // não baixa nada: o clique da voz já baixou todas.
+//
+// A voz pelo ElevenLabs (spec #31616, T31628): o "Voz: Local | ElevenLabs" logo embaixo do interruptor. Com o ElevenLabs,
+// as linhas dele (`ElevenLabsRows`) tomam o lugar da lista de vozes locais; a linha da voz local fica, porque é ela que
+// fala quando o ElevenLabs falha.
 import { useEffect, useState } from "react";
 
 import { formatNumber, type Locale, type TextKey, translate } from "../../src/shared/i18n/index.ts";
+import { type CatVoiceProvider, DEFAULT_CAT_VOICE_PROVIDER, DEFAULT_ELEVENLABS_MODEL, DEFAULT_ELEVENLABS_VOICE, type ElevenLabsModel } from "../../src/shared/elevenlabs.ts";
 import { CAT_VOICE_IDS, CAT_VOICE_LANGUAGES, CAT_VOICES, type CatVoiceId, type CatVoiceLanguage } from "../../src/shared/cat-voices.ts";
 import type { AgentStatus, CatVoiceItem, CatVoiceStatus } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { useT } from "../src/i18n.ts";
 import { Button, Row, Segmented, Switch } from "../src/kit/index.tsx";
+import { ElevenLabsRows } from "./ElevenLabsRows.tsx";
 
 /** "2 GB", "1,5 GB", "250 MB" (em inglês, "1.5 GB"). */
 export function voiceSize(bytes: number, locale: Locale = "pt"): string {
@@ -20,8 +26,10 @@ export function voiceSize(bytes: number, locale: Locale = "pt"): string {
   return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
 }
 
-export function catSpeaksHint(on: boolean, failed: boolean, locale: Locale = "pt"): string {
+/** Com o ElevenLabs escolhido (T31628), a linha não diz mais que nada sai do Mac: o texto falado vai a ele. */
+export function catSpeaksHint(on: boolean, failed: boolean, locale: Locale = "pt", provider: CatVoiceProvider = "local"): string {
   if (failed) return translate(locale, "agent.saveFailed");
+  if (provider === "elevenlabs") return translate(locale, "agent.voice.hint.cloud");
   return translate(locale, on ? "agent.voice.hint.on" : "agent.voice.hint.off");
 }
 
@@ -146,6 +154,22 @@ export function CatSpeaksRow({ status, onStatus }: { status: AgentStatus; onStat
   }, [round]);
 
   const on = status.catSpeaks === true;
+  const [cloud, setCloud] = useState<{ provider: CatVoiceProvider; voiceId: string; model: ElevenLabsModel }>({
+    provider: DEFAULT_CAT_VOICE_PROVIDER,
+    voiceId: DEFAULT_ELEVENLABS_VOICE,
+    model: DEFAULT_ELEVENLABS_MODEL,
+  });
+  useEffect(() => {
+    const take = (s: { catVoiceProvider?: CatVoiceProvider; elevenLabsVoiceId?: string; elevenLabsModel?: ElevenLabsModel }) =>
+      setCloud((c) => ({ provider: s.catVoiceProvider ?? c.provider, voiceId: s.elevenLabsVoiceId ?? c.voiceId, model: s.elevenLabsModel ?? c.model }));
+    void api.settings.get().then(take, () => {});
+    return api.settings.onChanged(take);
+  }, []);
+  const chooseProvider = (provider: CatVoiceProvider) => {
+    setCloud((c) => ({ ...c, provider }));
+    void api.settings.set({ catVoiceProvider: provider });
+  };
+  const elevenLabs = on && cloud.provider === "elevenlabs";
   const change = (next: boolean) => {
     setFailed(false);
     onStatus({ ...status, catSpeaks: next });
@@ -168,7 +192,7 @@ export function CatSpeaksRow({ status, onStatus }: { status: AgentStatus; onStat
   const line = voice ? catVoiceLine(on, voice, locale) : null;
   const [language, setLanguage] = useState<CatVoiceLanguage | null>(null);
   const shownLanguage = language ?? (voice ? languageOf(voice.selected) : "english");
-  const rows = on && voice && voice.voices.length > 0 ? voiceRows(voice, shownLanguage, locale) : null;
+  const rows = on && !elevenLabs && voice && voice.voices.length > 0 ? voiceRows(voice, shownLanguage, locale) : null;
   const choose = (id: CatVoiceId) => {
     if (!voice) return;
     setVoice({ ...voice, selected: id });
@@ -187,11 +211,25 @@ export function CatSpeaksRow({ status, onStatus }: { status: AgentStatus; onStat
 
   return (
     <>
-      <Row label={t("agent.voice.speaks")} hint={catSpeaksHint(on, failed, locale)}>
+      <Row label={t("agent.voice.speaks")} hint={catSpeaksHint(on, failed, locale, cloud.provider)}>
         <Switch label={t("agent.voice.speaks")} checked={on} onChange={change} />
       </Row>
+      {on ? (
+        <Row label={t("agent.voice.provider")} hint={t("agent.voice.provider.hint")}>
+          <Segmented
+            label={t("agent.voice.provider")}
+            value={cloud.provider}
+            options={[
+              { value: "local", label: t("agent.voice.provider.option.onMac") },
+              { value: "elevenlabs", label: t("agent.voice.provider.option.elevenLabs") },
+            ]}
+            onChange={chooseProvider}
+          />
+        </Row>
+      ) : null}
+      {elevenLabs ? <ElevenLabsRows voiceId={cloud.voiceId} model={cloud.model} /> : null}
       {line ? (
-        <Row label={t("agent.voice.label")} hint={line.hint}>
+        <Row label={t("agent.voice.label")} hint={elevenLabs ? `${line.hint} ${t("agent.voice.el.localBackup")}` : line.hint}>
           {line.action ? (
             <Button variant={line.action === "download" || line.action === "retry" ? "primary" : undefined} disabled={busy} onClick={() => act(line.action!)}>
               {t(ACTION_LABEL[line.action])}
