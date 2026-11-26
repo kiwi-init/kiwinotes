@@ -1,5 +1,6 @@
 import type { SetupPermission, SetupStatus } from "./first-run.ts";
 import type { CatVoiceId } from "./cat-voices.ts";
+import type { ElevenLabsReason } from "./elevenlabs.ts";
 import type { AppLocale } from "./i18n/index.ts";
 import type { NoteModel } from "./note-model.ts";
 import type { SheetOp } from "./sheet/ops.ts";
@@ -332,7 +333,19 @@ export type { NoteModel };
 // 1.106.0 (T31626, spec #31616): a voz do Kiwi pelo ElevenLabs. O `catVoiceProvider` ("local" ou "elevenlabs"), o
 //   `elevenLabsVoiceId` e o `elevenLabsModel` nas settings (`src/shared/elevenlabs.ts`). A chave nunca passa pela UI.
 //   Só acréscimo.
+//   Na mesma versão (T31628), os Ajustes da voz: `elevenLabs.status` (`hasKey` e a última queda para a voz local),
+//   `elevenLabs.setKey` e `elevenLabs.deleteKey` (a chave vai ao Keychain e nunca volta) e `elevenLabs.test` (fala a
+//   frase curta com a voz e o modelo das settings).
 export const UI_CONTRACT_VERSION = "1.106.0";
+
+/** A voz do Kiwi pelo ElevenLabs nos Ajustes (T31628): só se há chave, nunca ela. */
+export interface ElevenLabsStatus {
+  hasKey: boolean;
+  /** A última vez que o Kiwi caiu na voz local, e por quê. `null`: não caiu desde que o app abriu. */
+  lastFallback: { reason: ElevenLabsReason; at: string } | null;
+}
+/** O "Testar": falou, ou o motivo de não ter falado. */
+export type ElevenLabsTestResult = { ok: true } | { ok: false; reason: ElevenLabsReason };
 /** O `reason` do `updates` desligado quando foi a pessoa, em Ajustes (1.97.0, T25110), e não o build. */
 export const UPDATES_OFF_BY_SETTING = "desligado em Buscar atualizações";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
@@ -685,6 +698,14 @@ export interface UiCapabilities {
    * acabar. `id: null` para a prévia. E_UNAVAILABLE sem a voz ou sem a saída de som.
    */
   "catVoice.preview": { args: { id: CatVoiceId | null }; result: CatVoiceStatus };
+  /** A voz do Kiwi pelo ElevenLabs (1.106.0, T31628): se há chave no Keychain e a última queda para a voz local. */
+  "elevenLabs.status": { args: Record<string, never>; result: ElevenLabsStatus };
+  /** Grava a chave colada no Keychain. A chave nunca volta à UI, nem no erro. */
+  "elevenLabs.setKey": { args: { key: string }; result: ElevenLabsStatus };
+  /** Apaga a chave do Keychain. */
+  "elevenLabs.deleteKey": { args: Record<string, never>; result: ElevenLabsStatus };
+  /** O "Testar": confere a voz e fala a frase curta, na língua do app, com a voz e o modelo das settings. */
+  "elevenLabs.test": { args: Record<string, never>; result: ElevenLabsTestResult };
   /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */
   "notes.resolve": { args: { link: string }; result: string | null };
   /** O que um embed de nota mostra (1.36.0, T6594): o pedaço já cortado, `missing` sem o título ou o bloco, null sem a nota. */
@@ -1349,6 +1370,10 @@ export const UI_CAPABILITIES = [
   "catVoice.cancel",
   "catVoice.remove",
   "catVoice.preview",
+  "elevenLabs.status",
+  "elevenLabs.setKey",
+  "elevenLabs.deleteKey",
+  "elevenLabs.test",
   "notes.backlinks",
   "notes.resolve",
   "notes.embed",

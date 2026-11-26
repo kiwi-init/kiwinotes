@@ -24,7 +24,7 @@ import { UI_CAPABILITIES, UI_CONTRACT_VERSION, type AppSettings } from "../share
 import { DEFAULT_AGENT_SETTINGS, type SettingsPatch } from "../store/settings.ts";
 import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
 import { uiChannelFetch } from "./ui-channel-fetch.ts";
-import { uiCapabilities } from "./ui-capabilities.ts";
+import { type CapabilityDeps, uiCapabilities } from "./ui-capabilities.ts";
 import { revertWindow } from "./ui-appearance.ts";
 import {
   builtInFrom,
@@ -963,5 +963,89 @@ describe("KIWI_UI_CHANNEL errado (T1378)", () => {
     expect(channelUrlOrOff(undefined, "settings", (m) => warnings.push(m))).toBeNull();
     expect(channelUrlOrOff("http://127.0.0.1:5179", "settings", (m) => warnings.push(m))).toBe("http://127.0.0.1:5179/settings/manifest.json");
     expect(warnings).toHaveLength(2);
+  });
+});
+
+describe("elevenLabs.* (T31628, spec #31616)", () => {
+  const fake = (over: { speak?: () => Promise<void>; fallback?: { reason: "network"; at: string } | null } = {}) => {
+    const log: string[] = [];
+    let key: string | null = null;
+    const el: NonNullable<CapabilityDeps["elevenLabs"]> = {
+      hasKey: async () => key !== null,
+      setKey: async (k) => {
+        log.push("set");
+        key = k;
+      },
+      deleteKey: async () => {
+        log.push("delete");
+        key = null;
+      },
+      speakOnce: async (text) => {
+        log.push(`speak:${text}`);
+        await over.speak?.();
+      },
+      lastFallback: () => over.fallback ?? null,
+    };
+    return { el, log, key: () => key };
+  };
+
+  test("sem o ElevenLabs no engine, E_UNAVAILABLE", async () => {
+    const caps = uiCapabilities(fakeDeps().deps);
+    for (const cap of ["elevenLabs.status", "elevenLabs.deleteKey", "elevenLabs.test"]) expect(await directInvoke(caps, cap, {})).toMatchObject({ ok: false, code: "E_UNAVAILABLE" });
+  });
+
+  test("a chave vai ao Keychain e nunca volta, nem no erro", async () => {
+    const x = fake();
+    const caps = uiCapabilities({ ...fakeDeps().deps, elevenLabs: x.el });
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+    expect(await call("elevenLabs.status", {})).toEqual({ ok: true, value: { hasKey: false, lastFallback: null } });
+    const ruim = "chave de exemplo com espaco";
+    const r = await call("elevenLabs.setKey", { key: ruim });
+    expect(r).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(JSON.stringify(r)).not.toContain(ruim);
+    for (const key of ["", "curta", 42, null, "x".repeat(257)]) expect(await call("elevenLabs.setKey", { key })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("elevenLabs.setKey", { key: "x", extra: 1 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(x.log).toEqual([]);
+    const boa = "  sk_exemplo0123456789abcdef  ";
+    const ok = await call("elevenLabs.setKey", { key: boa });
+    expect(ok).toEqual({ ok: true, value: { hasKey: true, lastFallback: null } });
+    expect(JSON.stringify(ok)).not.toContain("sk_exemplo");
+    expect(x.key()).toBe("sk_exemplo0123456789abcdef");
+    expect(await call("elevenLabs.deleteKey", {})).toEqual({ ok: true, value: { hasKey: false, lastFallback: null } });
+    expect(x.log).toEqual(["set", "delete"]);
+  });
+
+  test("o Testar fala a frase curta na língua do app, e o motivo volta quando não fala", async () => {
+    let fail: unknown = null;
+    const x = fake({
+      speak: async () => {
+        if (fail) throw fail;
+      },
+    });
+    const f = fakeDeps();
+    const caps = uiCapabilities({ ...f.deps, elevenLabs: x.el });
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+    expect(await call("elevenLabs.test", {})).toEqual({ ok: true, value: { ok: false, reason: "no_key" } });
+    expect(x.log).toEqual([]);
+    await call("elevenLabs.setKey", { key: "sk_exemplo0123456789abcdef" });
+    await call("settings.set", { language: "pt" });
+    expect(await call("elevenLabs.test", {})).toEqual({ ok: true, value: { ok: true } });
+    await call("settings.set", { language: "en" });
+    expect(await call("elevenLabs.test", {})).toEqual({ ok: true, value: { ok: true } });
+    expect(x.log.filter((l) => l.startsWith("speak:"))).toEqual(["speak:Oi! Eu sou o Kiwi.", "speak:Hi! I'm Kiwi."]);
+    for (const reason of ["invalid_api_key", "missing_permissions", "quota_exceeded", "voice_not_found", "network"]) {
+      fail = Object.assign(new Error(reason), { reason });
+      expect(await call("elevenLabs.test", {})).toEqual({ ok: true, value: { ok: false, reason } });
+    }
+    for (const odd of [new Error("boom"), Object.assign(new Error("x"), { reason: "outro" }), "texto"]) {
+      fail = odd;
+      expect(await call("elevenLabs.test", {})).toEqual({ ok: true, value: { ok: false, reason: "unknown" } });
+    }
+  });
+
+  test("o status traz a última queda para a voz local", async () => {
+    const x = fake({ fallback: { reason: "network", at: "2026-11-26T10:00:00.000Z" } });
+    const caps = uiCapabilities({ ...fakeDeps().deps, elevenLabs: x.el });
+    expect(await directInvoke(caps, "elevenLabs.status", {})).toEqual({ ok: true, value: { hasKey: false, lastFallback: { reason: "network", at: "2026-11-26T10:00:00.000Z" } } });
   });
 });

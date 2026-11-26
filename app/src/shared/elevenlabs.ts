@@ -17,3 +17,17 @@ export const isElevenLabsModel = (v: unknown): v is ElevenLabsModel => (ELEVENLA
 export const DEFAULT_ELEVENLABS_VOICE = "XrExE9yKIg1WjnnlVkGX";
 /** O ID de uma voz, como o ElevenLabs o mostra para copiar: letras, números, `_` e `-`. Ele vai no caminho da URL. */
 export const isElevenLabsVoiceId = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(v);
+
+/**
+ * Por que o ElevenLabs não falou (spec #31616): o `.reason` do `ElevenLabsError` do provedor, o motivo do "Testar" e o
+ * da linha discreta dos Ajustes quando o Kiwi cai na voz local. `no_key`: ligado sem chave no Keychain.
+ */
+export const ELEVENLABS_REASONS = ["no_key", "invalid_api_key", "missing_permissions", "quota_exceeded", "voice_not_found", "network", "unknown"] as const;
+export type ElevenLabsReason = (typeof ELEVENLABS_REASONS)[number];
+export const isElevenLabsReason = (v: unknown): v is ElevenLabsReason => (ELEVENLABS_REASONS as readonly unknown[]).includes(v);
+
+/**
+ * A chave colada nos Ajustes: a mesma regra do Keychain (`KEY` em `src/bun/keychain.ts`), letras, números, `_`, `-` e
+ * `.`, de 8 a 256. Não confere com o ElevenLabs: isso é o "Testar".
+ */
+export const isElevenLabsKeyShape = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9_.-]{8,256}$/.test(v);
