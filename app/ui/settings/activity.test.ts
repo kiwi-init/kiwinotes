@@ -122,13 +122,13 @@ describe("a seção Atividade do agente: os textos", () => {
           { at: t, tool: "notes_read", target: "Ideias.md" },
         ],
       }),
-    ).toEqual(["O Kiwi segurou 1 segredo no pedido.", "O Kiwi segurou 2 segredos em Projetos/Kiwi.", "O Kiwi segurou 3 segredos nos resultados da busca."]);
+    ).toEqual(["O Kiwi Notes segurou 1 segredo no pedido.", "O Kiwi Notes segurou 2 segredos em Projetos/Kiwi.", "O Kiwi Notes segurou 3 segredos nos resultados da busca."]);
     expect(removedLine(1)).toBe("Esta mudança tirou 1 segredo da nota. O Desfazer o traz de volta, e o texto de antes está nas Versões.");
   });
 
   test("a dúvida sem resposta (spec #9873): onde e a máscara, nunca o trecho", () => {
     expect(doubtLine({ path: "Projetos/Kiwi.md", line: 4, mask: "•••• (32 caracteres)" })).toBe(
-      "O Kiwi ficou em dúvida em Projetos/Kiwi, linha 4 (•••• (32 caracteres)) e segurou desta vez.",
+      "O Kiwi Notes ficou em dúvida em Projetos/Kiwi, linha 4 (•••• (32 caracteres)) e segurou desta vez.",
     );
     expect(doubtLine({ path: "", line: 1, mask: "•••• (32 caracteres)" })).toContain("no seu pedido");
   });

@@ -167,7 +167,7 @@ try {
   // 2. A tela: os dois caminhos e "Nova rotina"; o cartão cria a rotina desligada; editar, ligar e apagar.
   const box = ".kn-agent-routines";
   const paths = (await p.locator(".kn-routine-paths").textContent()) ?? "";
-  assert.ok(paths.includes("Nova rotina") && paths.includes("Kiwi Cat"), paths);
+  assert.ok(paths.includes("Nova rotina") && paths.includes("Kiwi"), paths);
   await p.locator(`${box} button:has-text('Nova rotina')`).click();
   await p.waitForSelector(".kn-routine-editor", { timeout: 5000 });
   await fill(p, { name: "Pendentes do dia", prompt: "Junta as caixas em aberto das notas de hoje, por projeto.", time: "08:30", days: "chosen" });
@@ -190,16 +190,16 @@ try {
   await p.locator(`${card} [role=switch]`).click();
   await p.waitForSelector(`${card} [role=switch][aria-checked=true]`, { timeout: 5000 });
   assert.equal((await custom()).find((r) => r.id === made.id)!.on, true);
-  report.checks.push("Settings › Agent › Rotinas says both ways (the button and asking the Kiwi Cat); Nova rotina creates a routine off, with the chosen days; edit and turn it on");
+  report.checks.push("Settings › Agent › Rotinas says both ways (the button and asking Kiwi); Nova rotina creates a routine off, with the chosen days; edit and turn it on");
 
   // 3. Pedir ao agente: a proposta no balão, com [Criar] [Ajustar] [Descartar].
   await invoke("agent.ask", { text: "todo dia às 7h, faz a lista do que vence hoje" });
   await p.waitForSelector(".kn-proposal-bubble button:has-text('Ajustar')", { timeout: 60000 });
   await idle();
   const line = (await p.locator(".kn-proposal-bubble .kn-proposal-line").textContent()) ?? "";
-  assert.equal(line, "O Kiwi Cat propõe a rotina “A lista do que vence hoje”: todo dia às 07:00. Ela entra desligada.");
+  assert.equal(line, "O Kiwi propõe a rotina “A lista do que vence hoje”: todo dia às 07:00. Ela entra desligada.");
   assert.deepEqual(await p.locator(".kn-proposal-bubble .kn-proposal-actions button").allTextContents(), ["Criar", "Ajustar", "Descartar"]);
-  await cornerShot(p, ".kn-proposal-bubble", "3-proposta.png", "3. Pedindo ao Kiwi Cat: a proposta no balão");
+  await cornerShot(p, ".kn-proposal-bubble", "3-proposta.png", "3. Pedindo ao Kiwi: a proposta no balão");
   // [Ajustar]: o cartão em Ajustes, preenchido; a pessoa muda a hora e cria.
   await p.locator(".kn-proposal-bubble button:has-text('Ajustar')").click();
   await p.waitForSelector('.kn-routine-editor[aria-label^="Ajustar"]', { timeout: 10000 });
@@ -249,7 +249,7 @@ try {
   const img = (f: string) => `data:image/png;base64,${readFileSync(join(out, f)).toString("base64")}`;
   await sheet.setContent(
     `<body style="margin:0;padding:24px;background:#eceae4;font:600 20px -apple-system,sans-serif;color:#222">` +
-      `<h1 style="margin:0 0 16px;font-size:30px">Rotinas novas: pelo botão ou pedindo ao Kiwi Cat (spec #12944)</h1>` +
+      `<h1 style="margin:0 0 16px;font-size:30px">Rotinas novas: pelo botão ou pedindo ao Kiwi (spec #12944)</h1>` +
       `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start">` +
       shots.map((x) => `<figure style="margin:0"><figcaption style="margin-bottom:8px">${x.caption}</figcaption><img src="${img(x.file)}" style="width:100%;border-radius:10px;box-shadow:0 1px 4px #0003"></figure>`).join("") +
       `</div></body>`,

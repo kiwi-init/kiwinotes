@@ -167,10 +167,11 @@ describe("o atalho do Kiwi Cat (spec #12946)", () => {
 
 // O app em inglês (T28297, spec #28171): o nome e a dica de cada atalho saem do catálogo; os do `SHORTCUTS` são os
 // mesmos em português (o main e os scripts ainda leem de lá), e as teclas com nome mudam de língua.
+// O grupo "Kiwi Cat" é só o id; na tela o mascote se chama Kiwi (spec #31199).
 describe("na língua do app", () => {
   test("o nome, a dica e o grupo do catálogo em português são os do SHORTCUTS", () => {
     for (const s of SHORTCUTS) {
-      expect({ id: s.id, name: shortcutName(s.id, "pt"), hint: shortcutHint(s.id, "pt"), group: shortcutGroupName(s.group, "pt") }).toEqual({ id: s.id, name: s.label, hint: s.hint, group: s.group });
+      expect({ id: s.id, name: shortcutName(s.id, "pt"), hint: shortcutHint(s.id, "pt"), group: shortcutGroupName(s.group, "pt") }).toEqual({ id: s.id, name: s.label, hint: s.hint, group: s.group === "Kiwi Cat" ? "Kiwi" : s.group });
     }
   });
 

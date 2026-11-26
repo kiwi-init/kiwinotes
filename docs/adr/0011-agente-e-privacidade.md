@@ -50,19 +50,19 @@ Só com o agente ligado, e só nestes dois momentos:
 >
 > **O que vai para o {agente}**
 > - O que você pedir a ele. A sua voz vira texto aqui no Mac, e o áudio não vai.
-> - Os trechos das suas notas, reuniões e arquivos que ele ler para atender o pedido, e o que o Kiwi achou nas suas notas sobre o pedido.
+> - Os trechos das suas notas, reuniões e arquivos que ele ler para atender o pedido, e o que o Kiwi Notes achou nas suas notas sobre o pedido.
 > - A transcrição de uma reunião que você gravou, quando ela termina, para ele preparar o resumo. Você aprova antes de entrar na nota, e pode desligar só isso em Ajustes › Agente.
 >
 > **O que nunca vai**
 > - O áudio do ditado e das reuniões.
 > - Nada enquanto ele estiver desligado.
-> - Senhas, tokens, credenciais e dados pessoais sensíveis: o Kiwi troca cada um por um marcador antes de o texto sair, e na dúvida também segura. Nenhum detector pega 100%.
+> - Senhas, tokens, credenciais e dados pessoais sensíveis: o Kiwi Notes troca cada um por um marcador antes de o texto sair, e na dúvida também segura. Nenhum detector pega 100%.
 >
 > **Quem envia**
 >
-> O Kiwi conversa com o {agente} aqui no seu Mac. Quem manda para a nuvem é o {agente}, com a sua conta, e vale a política de dados da {empresa}. O Kiwi não tem servidor e nunca vê a sua senha.
+> O Kiwi Notes conversa com o {agente} aqui no seu Mac. Quem manda para a nuvem é o {agente}, com a sua conta, e vale a política de dados da {empresa}. O Kiwi Notes não tem servidor e nunca vê a sua senha.
 >
-> Para conversar com o {agente}, o Kiwi baixa um adaptador agora. Nada seu vai junto.
+> Para conversar com o {agente}, o Kiwi Notes baixa um adaptador agora. Nada seu vai junto.
 >
 > Você desliga quando quiser, em Ajustes › Agente.
 >

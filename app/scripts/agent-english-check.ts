@@ -153,7 +153,7 @@ try {
   const a = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "dark", width: 900, height: 2600, motion: false, browser: "webkit", query: { section: "settings", topic: "activity" } });
   page = a.page;
   await check(a.page, ".kn-activity-list, .kn-activity-empty", "6-atividade", [en("common.undo"), en("common.see"), "today, ", "Read 1 note", "Noted in the memory"]);
-  await check(a.page, ".kn-proposal", "7-proposta", [en("proposal.create"), en("proposal.adjust"), en("common.discard"), "The Kiwi Cat proposes the routine"]);
+  await check(a.page, ".kn-proposal", "7-proposta", [en("proposal.create"), en("proposal.adjust"), en("common.discard"), "Kiwi proposes the routine"]);
   await a.close();
 } catch (e) {
   // O print de onde parou, para ver o porquê.

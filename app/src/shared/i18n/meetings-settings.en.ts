@@ -12,7 +12,7 @@ export const enMeetingsSettings: { readonly [K in keyof typeof ptMeetingsSetting
   "settings.meetings.propose.auto": "Suggest on its own",
   "settings.meetings.propose.onRequest": "Only when I ask",
   "settings.meetings.propose.hint.onRequest": 'Only when you ask, like "update the project with the meeting I just had".',
-  "settings.meetings.propose.hint.economy": "In Saver mode, Kiwi asks first, because each suggestion uses one request from your plan.",
+  "settings.meetings.propose.hint.economy": "In Saver mode, Kiwi Notes asks first, because each suggestion uses one request from your plan.",
   "settings.meetings.propose.hint.auto": "Each suggestion uses one request from your plan.",
   "settings.meetings.where": "Where the note goes",
   "settings.meetings.folder.project": "In the project's folder",

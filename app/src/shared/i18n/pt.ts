@@ -39,7 +39,7 @@ const ptBase = {
   // Ajustes › Geral: o idioma do app (T28190).
   "settings.language.section": "Idioma",
   "settings.language.label": "Idioma do app",
-  "settings.language.hint": "Automático segue a língua do macOS. O ditado, a voz do gato e as respostas do agente não mudam aqui.",
+  "settings.language.hint": "Automático segue a língua do macOS. O ditado, a voz do Kiwi e as respostas do agente não mudam aqui.",
   "settings.language.auto": "Automático",
   "settings.language.autoNow": "Pelo macOS, agora em {language}.",
 

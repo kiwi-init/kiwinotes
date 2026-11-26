@@ -87,7 +87,7 @@ try {
       assert.equal(await p.locator(".kn-onb-actions button:has-text('Pular')").isDisabled(), false);
       assert.equal(await p.evaluate(() => document.activeElement?.id), "kn-onb-title");
       // Spec #17709: o título é o do gato; o Claude Code fica na frase de baixo.
-      assert.equal(await p.locator("#kn-onb-title").textContent(), "Oi! Vamos acordar o Kiwi Cat");
+      assert.equal(await p.locator("#kn-onb-title").textContent(), "Oi! Vamos acordar o Kiwi");
       await shot(p, "1-claude-antes-light.png");
       await p.locator(".kn-onb-check button:has-text('Baixar')").click();
       await p.waitForFunction(() => !document.querySelector(".kn-onb-actions button:last-child")?.hasAttribute("disabled"), undefined, { timeout: 30000 });
@@ -134,7 +134,7 @@ try {
       // Passo 2 (T12002): a linha do Control de Ajustes liga o atalho, e a frase pede para segurar o Control.
       // O hub atrás fica inerte (fora do Tab, do clique e do VoiceOver) enquanto o onboarding está aberto.
       assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll<HTMLElement>(".kn-hub-top, .kn-hub-main")].map((el) => el.inert)), [true, true]);
-      await p.getByRole("dialog").getByRole("switch", { name: "Falar com o Kiwi Cat" }).click();
+      await p.getByRole("dialog").getByRole("switch", { name: "Falar com o Kiwi" }).click();
       await p.waitForSelector(".kn-onb-try kbd", { timeout: 15000 });
       assert.equal((await invoke("agent.status")).controlShortcut, true);
       await shot(p, "2-control-light.png");
@@ -198,10 +198,10 @@ try {
       await stepIs(p, 7);
       // Passo 7: as 5 paletas de Ajustes (spec #14963), com a prisma-original marcada; trocar salva na hora. O título chama para
       // escolher (spec #12917).
-      assert.equal(await p.locator("#kn-onb-title").textContent(), "Escolha a cor do Kiwi Cat!");
+      assert.equal(await p.locator("#kn-onb-title").textContent(), "Escolha a cor do Kiwi!");
       const swatch = p.getByRole("dialog").getByRole("radio", { name: "Prisma Original" });
       assert.equal(await swatch.getAttribute("aria-checked"), "true");
-      const swatches = p.getByRole("dialog").getByRole("radiogroup", { name: "Cor do Kiwi Cat" }).getByRole("radio");
+      const swatches = p.getByRole("dialog").getByRole("radiogroup", { name: "Cor do Kiwi" }).getByRole("radio");
       assert.deepEqual(await swatches.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label"))), ["Prisma Original", "Kiwi Elétrico", "Âmbar Noturno", "Soul Mist", "Névoa Violeta"]);
       assert.match(await swatch.evaluate((e) => getComputedStyle(e).backgroundImage), /linear-gradient/, "a amostra é o gradiente da paleta");
       assert.equal(await p.locator(".kn-onb-color .kn-cat-color canvas, .kn-onb-color .kn-cat-preview").count(), 0, "sem o gatinho da linha: um gato só");
@@ -265,7 +265,7 @@ try {
       // O passo da cor no escuro também (spec #12917).
       await invoke("agent.configure", { onboarding: { step: 7 } });
       await stepIs(p, 7);
-      await p.waitForSelector("#kn-onb-title:text-is('Escolha a cor do Kiwi Cat!')", { timeout: 15000 });
+      await p.waitForSelector("#kn-onb-title:text-is('Escolha a cor do Kiwi!')", { timeout: 15000 });
       // O foco que o passo põe no título (para o leitor de tela) não desenha o anel, nem depois de uma tecla.
       assert.equal(await p.evaluate(() => getComputedStyle(document.activeElement!).boxShadow), "none");
       await shot(p, "7-cor-dark.png");
@@ -293,7 +293,7 @@ try {
     if (theme === "light") {
       report.checks.push("the final card shows the colour, the tone, the projects and the shortcut, with no colour stripe on top (spec #17709); Pronto ends it");
       // Spec #17709 (T18615): em Ajustes, a mesma linha da cor tem a mesma altura com as 5, e a frase numa linha.
-      const row = p.locator(".kn-row", { has: p.getByRole("radiogroup", { name: "Cor do Kiwi Cat" }) }).first();
+      const row = p.locator(".kn-row", { has: p.getByRole("radiogroup", { name: "Cor do Kiwi" }) }).first();
       await row.scrollIntoViewIfNeeded();
       const settingsHeights: Record<string, number> = {};
       for (const [id, name] of [["prisma-original", "Prisma Original"], ["kiwi-neon", "Kiwi Elétrico"], ["ambar-solar", "Âmbar Noturno"], ["soul-claro", "Soul Mist"], ["nevoa-violeta", "Névoa Violeta"]] as const) {
