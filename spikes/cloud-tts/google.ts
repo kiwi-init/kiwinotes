@@ -51,7 +51,26 @@ function credentials(env: Record<string, string | undefined>): { endpoint: strin
     return { endpoint: HOST, creds: grpc.credentials.combineChannelCredentials(ssl, call) };
   }
   const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
-  return { endpoint: HOST, creds: grpc.credentials.combineChannelCredentials(ssl, grpc.credentials.createFromGoogleCredential(auth)) };
+  return { endpoint: HOST, creds: grpc.credentials.combineChannelCredentials(ssl, grpc.credentials.createFromMetadataGenerator(authMetadata(auth))) };
+}
+
+/**
+ * Os cabeçalhos das ADC como metadata do gRPC. O `createFromGoogleCredential` do grpc-js lê os cabeçalhos com
+ * `Object.keys`, e o google-auth-library 10+ devolve um `Headers`: sairia sem o `authorization`, e a chamada iria sem
+ * credencial nenhuma.
+ */
+export function authMetadata(auth: { getRequestHeaders(url?: string): Promise<Headers | Record<string, string>> }): Parameters<typeof grpc.credentials.createFromMetadataGenerator>[0] {
+  return (params, cb) => {
+    auth.getRequestHeaders(params.service_url).then(
+      (h) => {
+        const md = new grpc.Metadata();
+        const entries = h instanceof Headers ? [...h.entries()] : Object.entries(h);
+        for (const [k, v] of entries) md.add(k, v);
+        cb(null, md);
+      },
+      (e: Error) => cb(new Error(`google: sem as credenciais padrão (${e.message.split("\n")[0]!.slice(0, 120)})`)),
+    );
+  };
 }
 
 /** Um erro do gRPC sem nada da credencial: só o código e a primeira linha da mensagem. */

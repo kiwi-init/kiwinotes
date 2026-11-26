@@ -145,3 +145,10 @@ test("wav: o cabeçalho de 44 bytes", () => {
   expect(v.getUint32(24, true)).toBe(24000);
   expect(v.getUint32(40, true)).toBe(10);
 });
+
+test("as ADC viram o cabeçalho authorization (o google-auth-library devolve um Headers)", async () => {
+  const { authMetadata } = await import("./google.ts");
+  const gen = authMetadata({ getRequestHeaders: async () => new Headers({ authorization: "Bearer exemplo" }) });
+  const md = await new Promise<grpc.Metadata>((res, rej) => gen({ service_url: "https://exemplo.local", method_name: "x" }, (e: Error | null, m?: grpc.Metadata) => (e ? rej(e) : res(m!))));
+  expect(md.get("authorization")).toEqual(["Bearer exemplo"]);
+});
