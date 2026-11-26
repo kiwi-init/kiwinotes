@@ -38,17 +38,33 @@ export interface VozDoGatoOpts<P extends PreviaDaVoz> extends FalaPlayerWiring {
 export interface VozDoGato<P extends PreviaDaVoz> {
   player: FalaPlayer;
   previa: P | undefined;
+  /**
+   * Fala um texto uma vez numa síntese dada, na mesma saída: o "Testar" do ElevenLabs nos Ajustes (spec #31616). Cala o
+   * gato e a prévia antes, e para se o gato voltar a falar. Rejeita com o erro da síntese (o `ElevenLabsError`, com o
+   * motivo), sem cair para a voz local: o teste é da voz escolhida.
+   */
+  falarUmaVez(sintese: SinteseFala, texto: string): Promise<void>;
   /** Desliga: a prévia para, o player se cala e solta o agente e o helper. A saída é de quem a criou. */
   stop(): void;
 }
 
 export function ligarVozDoGato<P extends PreviaDaVoz>(o: VozDoGatoOpts<P>): VozDoGato<P> {
   let previa: P | undefined;
+  let umaVez: AbortController | undefined;
+  const pararUmaVez = () => {
+    if (!umaVez) return;
+    umaVez.abort();
+    umaVez = undefined;
+    o.saida.limpar();
+  };
   const player = new FalaPlayer({
     sintese: o.sintese,
     saida: o.saida,
     ...(o.midia ? { midia: o.midia } : {}),
-    antesDeFalar: () => previa?.parar(),
+    antesDeFalar: () => {
+      pararUmaVez();
+      previa?.parar();
+    },
     evento: falaNaTela((e) => o.naTela(e)),
     ...(o.log ? { log: o.log } : {}),
   });
@@ -61,7 +77,20 @@ export function ligarVozDoGato<P extends PreviaDaVoz>(o: VozDoGatoOpts<P>): VozD
   return {
     player,
     previa,
+    async falarUmaVez(sintese, texto) {
+      player.cancelar();
+      previa?.parar();
+      pararUmaVez();
+      const ac = (umaVez = new AbortController());
+      for await (const pcm of sintese.sintetizar(texto, ac.signal)) {
+        if (ac.signal.aborted) return;
+        await o.saida.tocar(pcm, () => {});
+      }
+      if (!ac.signal.aborted) await o.saida.drenar?.();
+      if (umaVez === ac) umaVez = undefined;
+    },
     stop: () => {
+      pararUmaVez();
       previa?.parar();
       off();
     },
