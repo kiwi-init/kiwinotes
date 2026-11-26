@@ -78,7 +78,9 @@ describe("google (servidor falso)", () => {
     await measure(p, p.voices("pt-BR")[0]!, { id: "token", text }, { rounds: 1 });
     const sent = seen.flatMap((s) => s.texts).join("\n");
     expect(sent).not.toContain(FAKE_TOKEN);
-    expect(sent).not.toContain("ghp_");
+    expect(sent).not.toMatch(/ghp|B dois|a1B2/i);
+    // O fala.ts soletra o que sobra (`ghp a um B dois…`): o texto enviado é exatamente a frase sem o token.
+    expect(sent).toBe("Achei a chave do Projeto X:. Guarde bem.");
     expect(sent).not.toContain("segredo");
     expect(sent).toContain("Projeto X");
   });
