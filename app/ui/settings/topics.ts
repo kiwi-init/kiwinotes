@@ -63,6 +63,10 @@ export const SETTINGS_BLOCKS = [
   "shortcuts:Reuniões", // i18n-ok: o id do grupo de atalhos, não aparece
   "agentMeetings",
   "agent",
+  "agentKiwi",
+  "agentVoice",
+  "agentMemory",
+  "agentAdvanced",
   "usage",
   "trails",
   "doubtAnswers",
@@ -108,8 +112,16 @@ export const TOPIC_TABS: Record<SettingsTopic, readonly TopicTab[]> = {
     tab("shortcuts", "settings.tab.shortcuts", ["shortcuts:Reuniões"]), // i18n-ok: o id do grupo de atalhos, não aparece
     tab("yours", "settings.tab.yours", ["agentMeetings"]),
   ],
-  // Ligar e testar, a cor, o Control, o aviso, o modo econômico e o gasto, a memória, as instruções, o Modelo, as trilhas e as respostas.
-  agent: [tab("general", "settings.tab.general", ["agent", "usage", "trails", "doubtAnswers"])],
+  // Geral: ligar e qual agente, o Modelo, o econômico e a web. Kiwi: o Kiwi, o Control e o aviso. Voz: o Kiwi fala e o
+  // que eu falei. Memória: a memória, as instruções, as rotinas, as trilhas e as respostas. Avançado: o gasto, o
+  // onboarding, o teste e o Modelo de nota (T31765).
+  agent: [
+    tab("general", "settings.tab.general", ["agent"]),
+    tab("kiwi", "settings.tab.kiwi", ["agentKiwi"]),
+    tab("voice", "settings.tab.voice", ["agentVoice"]),
+    tab("memory", "settings.tab.memory", ["agentMemory", "trails", "doubtAnswers"]),
+    tab("advanced", "settings.tab.advanced", ["usage", "agentAdvanced"]),
+  ],
   activity: [tab("requests", "settings.tab.requests", ["activity"])],
   privacy: [tab("data", "settings.tab.data", ["privacy"])],
   // A versão, a atualização, o diagnóstico e as licenças; a aparência de cada janela e o voltar (spec #25011).
@@ -133,6 +145,15 @@ export function stepTab(topic: SettingsTopic, current: string, dir: 1 | -1): str
   const tabs = TOPIC_TABS[topic];
   const i = Math.max(0, tabs.findIndex((x) => x.id === current));
   return tabs[Math.max(0, Math.min(tabs.length - 1, i + dir))]!.id;
+}
+
+/**
+ * O que a busca por linha (`row=`) destaca: a linha com esse nome, senão a seção. A linha vem antes porque, com as abas,
+ * uma seção pode ter o nome de uma linha dela (Agente › Memória, #31832).
+ */
+export function pickNamed<T>(rows: Iterable<T>, sections: Iterable<T>, text: (e: T) => string | null | undefined, name: string): T | undefined {
+  const find = (list: Iterable<T>) => [...list].find((e) => text(e)?.trim() === name);
+  return find(rows) ?? find(sections);
 }
 
 /** A última aba aberta de cada assunto, no `localStorage` da janela, como o último assunto. */

@@ -30,7 +30,7 @@ import { ShortcutsSection, SidebarKeysSection } from "./Shortcuts.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
 import { TopicIcon } from "./topicIcons.tsx";
 import { TrailsSection } from "./Trails.tsx";
-import { isSettingsTopic, isTopicTab, NARROW_PX, readLastTab, readLastTopic, saveLastTab, saveLastTopic, SHOWN_TOPICS, type SettingsBlock, type SettingsTopic, stepTab, stepTopic, TOPIC_LABEL_KEYS, TOPIC_TABS } from "./topics.ts";
+import { isSettingsTopic, isTopicTab, NARROW_PX, pickNamed, readLastTab, readLastTopic, saveLastTab, saveLastTopic, SHOWN_TOPICS, type SettingsBlock, type SettingsTopic, stepTab, stepTopic, TOPIC_LABEL_KEYS, TOPIC_TABS } from "./topics.ts";
 import { UsageMeter } from "./UsageMeter.tsx";
 
 /** A Transcrição de antes: o idioma e o "Guardar o áudio" ainda só guardam estado local. */
@@ -90,7 +90,11 @@ const BLOCKS: Record<SettingsBlock, () => ReactNode> = {
   "shortcuts:Reuniões": () => <ShortcutsSection group="Reuniões" />, // i18n-ok: o id do grupo de atalhos, não aparece
   agentMeetings: () => <AgentMeetingsSection />,
   // O agente (spec #8373), o medidor (spec #11084) e o que a pessoa já respondeu na dúvida do guardrail (spec #9873).
-  agent: () => <AgentSection />,
+  agent: () => <AgentSection part="general" />,
+  agentKiwi: () => <AgentSection part="kiwi" />,
+  agentVoice: () => <AgentSection part="voice" />,
+  agentMemory: () => <AgentSection part="memory" />,
+  agentAdvanced: () => <AgentSection part="advanced" />,
   usage: () => <UsageMeter />,
   // As trilhas da Bússola (T14682): visíveis e apagáveis, uma a uma.
   trails: () => <TrailsSection />,
@@ -132,7 +136,8 @@ function reveal(panel: HTMLElement, row: string, showTab: (id: string) => void):
   let tries = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const find = () => {
-    const label = [...panel.querySelectorAll<HTMLElement>(".kn-row-label, .kn-section-title")].find((e) => e.textContent?.trim() === row);
+    // A linha antes da seção de mesmo nome (#31832): o `pickNamed` explica.
+    const label = pickNamed(panel.querySelectorAll<HTMLElement>(".kn-row-label"), panel.querySelectorAll<HTMLElement>(".kn-section-title"), (e) => e.textContent, row);
     const target = label?.closest<HTMLElement>(".kn-row, .kn-section") ?? label;
     if (!target) {
       if (++tries < 30) timer = setTimeout(find, 100);

@@ -190,6 +190,9 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       ? { live: () => session.setupLive(), request: async (p) => void console.log(`[headless] setup.request (not asked): ${p}`), done: () => {} }
       : undefined;
   // A aparência de mentira (T25031): `KIWI_FAKE_UI` é a UI das janelas, para a faixa "Nova aparência pronta" e o Sobre.
+  // A voz pelo ElevenLabs de mentira (T31628): `KIWI_FAKE_ELEVENLABS` é o estado dos Ajustes. Sem ela, o headless não tem
+  // ElevenLabs: ele nunca usa o Keychain nem a rede.
+  const elevenLabs = process.env.KIWI_FAKE_ELEVENLABS ? (await import("./fake-elevenlabs.ts")).fakeElevenLabs(process.env.KIWI_FAKE_ELEVENLABS) : undefined;
   const appearance = process.env.KIWI_FAKE_UI ? (await import("./fake-ui.ts")).fakeAppearance(process.env.KIWI_FAKE_UI) : undefined;
   const capabilities = uiCapabilities({
     about,
@@ -237,6 +240,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       });
       return { catVoice: pair.model, catVoicePreview: createCatVoicePreview(pair, { saida: saidaMuda() }) };
     })()),
+    elevenLabs,
     ocr: stores.ocr,
     textIndex: stores.textIndex,
     semanticEngine: stores.semantic,

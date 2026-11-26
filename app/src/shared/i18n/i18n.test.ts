@@ -59,6 +59,7 @@ describe("catálogo", () => {
     "app.name": "nome próprio",
     "about.window.hub": "nome próprio (o app)",
     "hub.cat.name": "nome próprio (o gato)",
+    "settings.tab.kiwi": "nome próprio (o mascote, a aba do Agente)",
     "shortcuts.group.Kiwi Cat": "nome próprio (o gato)",
     "agent.cat.color.soul-claro": "nome da cor, igual nas duas",
     "notes.draft.when": "só o parâmetro",
@@ -85,6 +86,7 @@ describe("catálogo", () => {
     "editor.slash.todo": "palavra igual nas duas",
     "editor.callout.info": "o nome do tipo do Obsidian",
     "editor.callout.bug": "o nome do tipo do Obsidian",
+    "agent.voice.provider.option.elevenLabs": "o nome do serviço",
   };
 
   test("o inglês igual ao português só passa na lista de propósito (T30218)", () => {
