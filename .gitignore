@@ -13,3 +13,6 @@ models/
 *.log
 # A fixture do .log da régua dos arquivos (T21236): o `arquivos.ts --write` gera, e o teste lê do repo.
 !app/test/regua/arquivos/estoque.log
+
+# O áudio das rodadas do lab da voz na nuvem (spec #30991): fica no Mac de quem roda, nunca no repo.
+docs/design/voices-cloud/
