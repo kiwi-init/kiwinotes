@@ -1,6 +1,6 @@
 // A língua do processo principal (spec #28171, T28192): o menu do app, a bandeja, as notificações, os diálogos e as
 // mensagens da pílula do ditado saem nela. Ela vem dos Ajustes pela mesma função das telas (`appLocale`, com o
-// `AUTO_FOLLOWS_SYSTEM`), ao abrir e a cada `app.localeChanged`; até lá, português, como o app era antes.
+// `AUTO_FOLLOWS_SYSTEM`), ao abrir e a cada `app.localeChanged`.
 
 import { type Locale, type Params, type TextKey, translate } from "../shared/i18n/index.ts";
 

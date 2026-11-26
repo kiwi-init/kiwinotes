@@ -138,24 +138,25 @@ describe("a língua do app", () => {
     expect(resolveLocale("auto", ["en-GB"], true)).toBe("en");
   });
 
-  test("a chave do spec #28171: até a última parte, o Automático fica em português (lead, #28346)", () => {
-    // A última parte (T28191/T28192/T28297) liga a chave e troca este teste.
-    expect(AUTO_FOLLOWS_SYSTEM).toBe(false);
-    expect(resolveLocale("auto", ["en-US"])).toBe("pt");
-    expect(appLocale("auto", ["en-US"])).toEqual({ setting: "auto", locale: "pt", system: "en" });
+  test("a chave do spec #28171 ligada (T30629): o Automático segue o macOS", () => {
+    expect(AUTO_FOLLOWS_SYSTEM).toBe(true);
+    expect(resolveLocale("auto", ["en-US"])).toBe("en");
+    expect(resolveLocale("auto", ["pt-BR"])).toBe("pt");
+    expect(appLocale("auto", ["en-US"])).toEqual({ setting: "auto", locale: "en", system: "en" });
+    // Com a chave desligada (antes da T30629), o Automático ficava em português.
+    expect(resolveLocale("auto", ["en-US"], false)).toBe("pt");
     // O English, à mão, já vale.
     expect(appLocale("en", ["pt-BR"])).toEqual({ setting: "en", locale: "en", system: "pt" });
     expect(appLocale("auto", ["en-US"], true)).toEqual({ setting: "auto", locale: "en", system: "en" });
   });
 
-  test("T29319 (harry #29314): sem a escolha, o app fica em português, também com English salvo de um build de antes", () => {
-    expect(LANGUAGE_CHOICE).toBe(false);
+  test("T30629: a escolha da língua vale no app de release; sem ela (T29319, harry #29314), o app ficava em português", () => {
+    expect(LANGUAGE_CHOICE).toBe(true);
+    expect(languageChoice()).toBe(true);
     for (const setting of ["en", "pt", "auto"] as const) {
       expect(resolveLocale(setting, ["en-US"], true, false)).toBe("pt");
       expect(appLocale(setting, ["en-US"], true, false)).toEqual({ setting, locale: "pt", system: "en" });
     }
-    // O `bun test` liga a escolha pelo ambiente (o preload), para os testes do inglês.
-    expect(languageChoice()).toBe(process.env.KIWI_LANGUAGE_CHOICE === "1");
   });
 
   test("só auto, pt e en são escolhas válidas", () => {

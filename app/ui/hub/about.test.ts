@@ -7,7 +7,7 @@ import { directInvoke } from "../../src/bun/ui-engine.ts";
 import { releaseNotesUrl, UPDATES_OFF_BY_SETTING, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { formatTime } from "../../src/shared/i18n/index.ts";
 import { appLocale, setAppLocale } from "../src/i18n.ts";
-import { appearanceLine, CREDITS, creditsLine, creditUse, downloadProgress, updateBand } from "./aboutText.ts";
+import { appearanceLine, CREDITS, creditUse, downloadProgress, updateBand } from "./aboutText.ts";
 
 const at = "2026-11-04T12:30:00.000Z";
 const hhmm = formatTime("pt", new Date(at));
@@ -118,11 +118,6 @@ describe("os créditos (spec #7079)", () => {
       const j = JSON.parse(readFileSync(new URL(`../../node_modules/${pkg}/package.json`, import.meta.url), "utf8")) as { license: string };
       expect(CREDITS.find((c) => c.pkg === pkg)?.license).toBe(j.license);
     }
-    expect(creditsLine()).toBe(
-      "Com PDF.js, da Mozilla (Apache-2.0); Mammoth, de Michael Williamson (BSD-2-Clause); docx-editor, de eigenpal (Apache-2.0); SheetJS Community Edition, de SheetJS LLC (Apache-2.0); draw.io, de JGraph Ltd (Apache-2.0); pdf-lib, de Andrew Dillon (MIT); docx, de Dolan Miu (MIT); Agent Client Protocol SDK, de Zed Industries (Apache-2.0).",
-    );
-    expect(creditsLine([])).toBe("");
-    expect(creditsLine([CREDITS[0]!, { name: "X", by: "Y", license: "MIT", use: "z", pkg: "x" }])).toBe("Com PDF.js, da Mozilla (Apache-2.0); X, de Y (MIT).");
   });
 });
 

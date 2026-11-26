@@ -124,12 +124,6 @@ export function noticesText(items: readonly { name: string; by: string; license:
   return [head, ...items.map((i) => `${"=".repeat(78)}\n${i.name} ${i.version} (${i.pkg}), de ${i.by}: ${i.use}\nLicença: ${i.license}\n\n${i.text.trim()}\n`)].join("\n");
 }
 
-/** A linha de créditos do Sobre: "Com PDF.js, da Mozilla (Apache-2.0); Mammoth, …". */
-export function creditsLine(credits = CREDITS): string {
-  if (!credits.length) return "";
-  return `Com ${credits.map((c) => `${c.name}, ${c.by.startsWith("Mozilla") ? "da" : "de"} ${c.by} (${c.license})`).join("; ")}.`;
-}
-
 /** O nome de cada janela na lista "Aparência" do Sobre (spec #25011). */
 export const WINDOW_NAME: Record<UiWindow, TextKey> = {
   hub: "about.window.hub",
