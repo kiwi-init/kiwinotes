@@ -24,7 +24,7 @@ export class MeetingNoteSession {
       this.events.on("meeting.started", (event) => {
         this.active = event.session;
         void this.notes
-          .start(event.session, event.app ?? "Reunião", new Date(this.now()))
+          .start(event.session, event.app ?? "Reunião", new Date(this.now())) // i18n-ok: o valor que o meetings.ts compara; o título sai pelo catálogo
           .catch(this.onError);
       }),
       this.events.on("meeting.segment", (event) => {
