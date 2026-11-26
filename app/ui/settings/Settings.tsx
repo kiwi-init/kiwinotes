@@ -30,7 +30,7 @@ import { ShortcutsSection, SidebarKeysSection } from "./Shortcuts.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
 import { TopicIcon } from "./topicIcons.tsx";
 import { TrailsSection } from "./Trails.tsx";
-import { isSettingsTopic, NARROW_PX, readLastTopic, saveLastTopic, SHOWN_TOPICS, type SettingsBlock, type SettingsTopic, stepTopic, TOPIC_BLOCKS, TOPIC_LABEL_KEYS } from "./topics.ts";
+import { isSettingsTopic, isTopicTab, NARROW_PX, readLastTab, readLastTopic, saveLastTab, saveLastTopic, SHOWN_TOPICS, type SettingsBlock, type SettingsTopic, stepTab, stepTopic, TOPIC_LABEL_KEYS, TOPIC_TABS } from "./topics.ts";
 import { UsageMeter } from "./UsageMeter.tsx";
 
 /** A Transcrição de antes: o idioma e o "Guardar o áudio" ainda só guardam estado local. */
@@ -112,10 +112,20 @@ function initialTopic(): SettingsTopic {
   return readLastTopic(typeof localStorage === "undefined" ? null : localStorage);
 }
 
+/** A aba ao abrir um assunto: `?tab=` (a CLI e o print) no assunto do `?topic=`, senão a última aberta nele. */
+function initialTab(topic: SettingsTopic): string {
+  const q = new URLSearchParams(location.search);
+  const want = q.get("tab");
+  if (q.get("topic") === topic && isTopicTab(topic, want)) return want;
+  return readLastTab(store(), topic);
+}
+
+const store = () => (typeof localStorage === "undefined" ? null : localStorage);
+
 const reducedMotion = () => document.documentElement.dataset.motion === "reduced" || matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** Rola até a linha (ou a seção) com esse rótulo e a destaca um instante. A linha pode chegar depois (as que leem o app). */
-function reveal(panel: HTMLElement, row: string): () => void {
+function reveal(panel: HTMLElement, row: string, showTab: (id: string) => void): () => void {
   let tries = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const find = () => {
@@ -123,6 +133,13 @@ function reveal(panel: HTMLElement, row: string): () => void {
     const target = label?.closest<HTMLElement>(".kn-row, .kn-section") ?? label;
     if (!target) {
       if (++tries < 30) timer = setTimeout(find, 100);
+      return;
+    }
+    // A linha numa aba escondida (spec #31754): abre a aba dela e rola no render seguinte, já à vista.
+    const tabPanel = target.closest<HTMLElement>(".kn-prefs-tabpanel");
+    if (tabPanel?.hidden && tabPanel.dataset.tab) {
+      showTab(tabPanel.dataset.tab);
+      if (++tries < 30) timer = setTimeout(find, 50);
       return;
     }
     target.scrollIntoView({ block: "center", behavior: reducedMotion() ? "auto" : "smooth" });
@@ -148,13 +165,23 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
   const root = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLElement>(null);
   const panels = useRef<Partial<Record<SettingsTopic, HTMLDivElement | null>>>({});
+  /** A aba aberta de cada assunto já visto (spec #31754). */
+  const [tabs, setTabs] = useState<Partial<Record<SettingsTopic, string>>>(() => ({ [topic]: initialTab(topic) }));
+  const tabOfTopic = (t: SettingsTopic) => tabs[t] ?? readLastTab(store(), t);
+  const tabBars = useRef<Partial<Record<SettingsTopic, HTMLDivElement | null>>>({});
+  const showTab = (t: SettingsTopic, id: string) => {
+    if (!isTopicTab(t, id)) return;
+    setTabs((m) => (m[t] === id ? m : { ...m, [t]: id }));
+    saveLastTab(store(), t, id);
+  };
 
   const open = (t: SettingsTopic) => {
     setTopic(t);
     setFocusTopic(t);
     setVisited((v) => (v.has(t) ? v : new Set(v).add(t)));
+    setTabs((m) => (m[t] ? m : { ...m, [t]: readLastTab(store(), t) }));
     setNarrowOpen(true);
-    saveLastTopic(typeof localStorage === "undefined" ? null : localStorage, t);
+    saveLastTopic(store(), t);
   };
 
   // A largura de Ajustes (não a da tela): abaixo de 720 px, a lista e o assunto se revezam.
@@ -189,7 +216,7 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
     const panel = panels.current[want.topic];
     if (!panel || panel.hidden) return;
     pendingRow.current = null;
-    stopReveal.current = reveal(panel, want.row);
+    stopReveal.current = reveal(panel, want.row, (id) => showTab(want.topic, id));
   });
   useEffect(() => () => stopReveal.current?.(), []);
 
@@ -200,6 +227,15 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
     const next = stepTopic(focusTopic, e.key === "ArrowDown" ? 1 : -1);
     setFocusTopic(next);
     list.current?.querySelector<HTMLElement>(`[data-topic="${next}"]`)?.focus();
+  };
+
+  // ← e → andam pelas abas e já abrem a do foco (como o Segmented); ↑ e ↓ ficam com a lista.
+  const onTabKey = (t: SettingsTopic) => (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const next = stepTab(t, tabOfTopic(t), e.key === "ArrowRight" ? 1 : -1);
+    showTab(t, next);
+    tabBars.current[t]?.querySelector<HTMLElement>(`[data-tab="${next}"]`)?.focus();
   };
 
   const showList = !narrow || !narrowOpen;
@@ -237,7 +273,6 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
                 role="region"
                 aria-label={label(t)}
                 data-topic={t}
-                data-single={TOPIC_BLOCKS[t].length === 1 || undefined}
                 hidden={t !== topic}
                 ref={(el) => {
                   panels.current[t] = el;
@@ -256,9 +291,52 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
                   </button>
                 ) : null}
                 <h1 className="kn-prefs-title">{label(t)}</h1>
-                {TOPIC_BLOCKS[t].map((b) => (
-                  <div key={b} className="kn-prefs-block" data-block={b}>
-                    {BLOCKS[b]()}
+                <div
+                  className="kn-prefs-tabs"
+                  role="tablist"
+                  aria-label={tr("settings.tabs.aria")}
+                  onKeyDown={onTabKey(t)}
+                  ref={(el) => {
+                    tabBars.current[t] = el;
+                  }}
+                >
+                  {TOPIC_TABS[t].map((x) => {
+                    const on = x.id === tabOfTopic(t);
+                    return (
+                      <button
+                        type="button"
+                        key={x.id}
+                        role="tab"
+                        id={`kn-tab-${t}-${x.id}`}
+                        className="kn-prefs-tab"
+                        data-tab={x.id}
+                        aria-selected={on}
+                        aria-controls={`kn-tabpanel-${t}-${x.id}`}
+                        tabIndex={on ? 0 : -1}
+                        onClick={() => showTab(t, x.id)}
+                      >
+                        {tr(x.label)}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Todas as abas ficam montadas (só escondidas), como os assuntos: a edição não se perde e a busca por linha acha a aba. */}
+                {TOPIC_TABS[t].map((x) => (
+                  <div
+                    key={x.id}
+                    className="kn-prefs-tabpanel"
+                    role="tabpanel"
+                    id={`kn-tabpanel-${t}-${x.id}`}
+                    aria-labelledby={`kn-tab-${t}-${x.id}`}
+                    data-tab={x.id}
+                    data-single={x.blocks.length === 1 || undefined}
+                    hidden={x.id !== tabOfTopic(t)}
+                  >
+                    {x.blocks.map((b) => (
+                      <div key={b} className="kn-prefs-block" data-block={b}>
+                        {BLOCKS[b]()}
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>

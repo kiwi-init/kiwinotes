@@ -77,6 +77,7 @@ describe("catálogo", () => {
     "proposal.refs.links": "palavra igual nas duas",
     "notes.side.tags": "palavra igual nas duas",
     "snippets.section": "palavra igual nas duas",
+    "settings.tab.snippets": "palavra igual nas duas (a aba do Ditado, spec #31754)",
     "agent.onboarding": "palavra igual nas duas",
     "onb.tone.formal": "palavra igual nas duas",
     "editor.menu.callout": "o nome do bloco do Obsidian",

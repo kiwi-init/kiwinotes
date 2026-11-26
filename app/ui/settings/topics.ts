@@ -71,22 +71,85 @@ export const SETTINGS_BLOCKS = [
 ] as const;
 export type SettingsBlock = (typeof SETTINGS_BLOCKS)[number];
 
-/** O que cada assunto mostra, na ordem da tela. */
-export const TOPIC_BLOCKS: Record<SettingsTopic, readonly SettingsBlock[]> = {
-  general: ["language"],
-  appearance: ["appearance"],
-  // O microfone, o atalho Fn, a transcrição, o dicionário, os snippets e os sons (o som fica na Transcrição).
-  dictation: ["shortcuts:Ditado", "transcription", "dictionary", "snippets"],
-  // A pasta de notas, as opções das notas e os atalhos (os do app e os da barra lateral).
-  notes: ["notes", "shortcuts:Notas", "sidebarKeys"],
-  // A gravação (os ajustes de reunião e os atalhos) e "Suas reuniões" (o resumo do agente).
-  meetings: ["meetingSettings", "shortcuts:Reuniões", "agentMeetings"], // i18n-ok: o id do grupo de atalhos, não aparece
+/**
+ * As abas de cada assunto (spec #31754, a proposta 2 do harry): cada uma junta blocos de hoje, para a página não rolar.
+ * Todo assunto tem a barra de abas, mesmo com uma aba só, para a tela ser igual em todo lugar. O `id` vai no `?tab=`, no
+ * `data-tab` da tela (os roteiros clicam em `.kn-prefs-tab[data-tab=…]`) e no último aberto.
+ */
+export interface TopicTab {
+  readonly id: string;
+  readonly label: TextKey;
+  readonly blocks: readonly SettingsBlock[];
+}
+
+const tab = (id: string, label: TextKey, blocks: readonly SettingsBlock[]): TopicTab => ({ id, label, blocks });
+
+export const TOPIC_TABS: Record<SettingsTopic, readonly TopicTab[]> = {
+  general: [tab("general", "settings.tab.general", ["language"])],
+  appearance: [tab("general", "settings.tab.general", ["appearance"])],
+  // O microfone e o atalho Fn ficam nos Atalhos; o som, na Transcrição.
+  dictation: [
+    tab("shortcuts", "settings.tab.shortcuts", ["shortcuts:Ditado"]),
+    tab("transcription", "settings.tab.transcription", ["transcription"]),
+    tab("dictionary", "settings.tab.dictionary", ["dictionary"]),
+    tab("snippets", "settings.tab.snippets", ["snippets"]),
+  ],
+  notes: [
+    tab("folder", "settings.tab.folder", ["notes"]),
+    tab("shortcuts", "settings.tab.shortcuts", ["shortcuts:Notas"]),
+    tab("sidebar", "settings.tab.sidebar", ["sidebarKeys"]),
+  ],
+  meetings: [
+    tab("recording", "settings.tab.recording", ["meetingSettings"]),
+    tab("shortcuts", "settings.tab.shortcuts", ["shortcuts:Reuniões"]), // i18n-ok: o id do grupo de atalhos, não aparece
+    tab("yours", "settings.tab.yours", ["agentMeetings"]),
+  ],
   // Ligar e testar, a cor, o Control, o aviso, o modo econômico e o gasto, a memória, as instruções, o Modelo, as trilhas e as respostas.
-  agent: ["agent", "usage", "trails", "doubtAnswers"],
-  activity: ["activity"],
-  privacy: ["privacy"],
-  about: ["about"],
+  agent: [tab("general", "settings.tab.general", ["agent", "usage", "trails", "doubtAnswers"])],
+  activity: [tab("general", "settings.tab.general", ["activity"])],
+  privacy: [tab("general", "settings.tab.general", ["privacy"])],
+  about: [tab("general", "settings.tab.general", ["about"])],
 };
+
+/** O que cada assunto mostra, na ordem da tela: os blocos das abas, uma depois da outra. */
+export const TOPIC_BLOCKS: Record<SettingsTopic, readonly SettingsBlock[]> = Object.fromEntries(
+  SETTINGS_TOPICS.map((t) => [t, TOPIC_TABS[t].flatMap((x) => x.blocks)]),
+) as unknown as Record<SettingsTopic, readonly SettingsBlock[]>;
+
+export const isTopicTab = (topic: SettingsTopic, v: unknown): v is string => TOPIC_TABS[topic].some((x) => x.id === v);
+
+/** A aba de um bloco, no assunto dele. */
+export function tabOf(block: SettingsBlock): string {
+  return TOPIC_TABS[topicOf(block)].find((x) => x.blocks.includes(block))!.id;
+}
+
+/** ← e → nas abas: param na primeira e na última, como ↑ e ↓ na lista. */
+export function stepTab(topic: SettingsTopic, current: string, dir: 1 | -1): string {
+  const tabs = TOPIC_TABS[topic];
+  const i = Math.max(0, tabs.findIndex((x) => x.id === current));
+  return tabs[Math.max(0, Math.min(tabs.length - 1, i + dir))]!.id;
+}
+
+/** A última aba aberta de cada assunto, no `localStorage` da janela, como o último assunto. */
+export const lastTabKey = (topic: SettingsTopic) => `kn-settings-tab:${topic}`;
+
+export function readLastTab(storage: Pick<Storage, "getItem"> | null | undefined, topic: SettingsTopic): string {
+  try {
+    const v = storage?.getItem(lastTabKey(topic));
+    if (isTopicTab(topic, v)) return v;
+  } catch {
+    // Sem o storage, abre a primeira.
+  }
+  return TOPIC_TABS[topic][0]!.id;
+}
+
+export function saveLastTab(storage: Pick<Storage, "setItem"> | null | undefined, topic: SettingsTopic, id: string): void {
+  try {
+    storage?.setItem(lastTabKey(topic), id);
+  } catch {
+    // Sem o storage, o app só não lembra.
+  }
+}
 
 /** O bloco dos atalhos de um grupo. */
 export const shortcutBlock = (group: ShortcutGroup) => `shortcuts:${group}` as SettingsBlock;

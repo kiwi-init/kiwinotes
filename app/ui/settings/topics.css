@@ -105,8 +105,49 @@
   letter-spacing: var(--tracking-display, 0);
   color: var(--text);
 }
-/* Um assunto de uma seção só: o título dela repetiria o do assunto. */
-.kn-prefs-topic[data-single] .kn-section-title {
+/* As abas de cada assunto (spec #31754, mockup 2): texto, sublinhado na ativa, a mesma família do Segmented. */
+.kn-prefs-tabs {
+  display: flex;
+  gap: 4px;
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+  border-bottom: 0.5px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.kn-prefs-tab {
+  flex: none;
+  margin-bottom: -1px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--text-2);
+  font-weight: 500;
+  font: inherit;
+  font-size: var(--t-ui);
+  cursor: default;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.kn-prefs-tab:hover {
+  color: var(--text);
+}
+.kn-prefs-tab[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.kn-prefs-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-row, 8px) var(--r-row, 8px) 0 0;
+}
+.kn-prefs-tabpanel[hidden] {
+  display: none;
+}
+/* Uma aba de uma seção só: o título dela repetiria o da aba. */
+.kn-prefs-tabpanel[data-single] .kn-section-title {
   display: none;
 }
 
