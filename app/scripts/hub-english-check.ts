@@ -17,14 +17,7 @@ const FAKE = { permissions: { inputMonitoring: "undetermined", accessibility: "d
 const EN = { ...enCommon, ...enHub } as Record<string, Entry>;
 const en = (key: keyof typeof enHub | keyof typeof enCommon) => EN[key] as string;
 
-// O português que a T30631 traduz: a linha do agente no passo 1 do onboarding e o nome da cor no cartão final.
-const KNOWN: [string, string][] = [
-  ["O login é dele", "T30631"],
-  ["com a sua conta do Claude", "T30631"],
-  ["Nada seu vai junto", "T30631"],
-  ["Prisma Original", "T30631"],
-];
-const s = await startEnglish({ name: "T28191-english", settings: { firstRun: "pending" }, env: { KIWI_FAKE_SETUP: JSON.stringify(FAKE) }, known: KNOWN });
+const s = await startEnglish({ name: "T28191-english", settings: { firstRun: "pending" }, env: { KIWI_FAKE_SETUP: JSON.stringify(FAKE) } });
 const { invoke } = s;
 // O motivo do atualizador desligado só aparece no headless e nos testes (`UPDATES_OFF`), nunca no app.
 const check = (p: Page, name: string) => s.check(p, name, { skip: [/\(sem o atualizador no headless e nos testes\)\.?/] });
