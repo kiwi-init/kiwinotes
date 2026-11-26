@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { cortarFrases, FRASE_MAX, frasesParaFala, porExtenso, semMarkdown, textoParaFala } from "./fala.ts";
+import { numberWords, ordinalWords, yearWords } from "./fala-en.ts";
+import { cortarFrases, FRASE_MAX, frasesComLingua, frasesParaFala, porExtenso, semMarkdown, textoParaFala } from "./fala.ts";
 
 describe("porExtenso (T26709)", () => {
   test("os números em pt-BR, com o 'e' onde se fala", () => {
@@ -170,5 +171,101 @@ describe("cortarFrases (T26709)", () => {
 
   test("um pedaço sem letra nem número não vira frase", () => {
     expect(cortarFrases("Oi. … !")).toEqual(["Oi."]);
+  });
+});
+
+describe("a fala em inglês (T31029, harry #31028)", () => {
+  test("os números em inglês, com hífen e sem 'and'", () => {
+    const casos: [number, string][] = [
+      [0, "zero"],
+      [13, "thirteen"],
+      [21, "twenty-one"],
+      [105, "one hundred five"],
+      [1234, "one thousand two hundred thirty-four"],
+      [60_000, "sixty thousand"],
+      [2_000_100, "two million one hundred"],
+      [3_000_000_000, "three billion"],
+    ];
+    for (const [n, s] of casos) expect(numberWords(n)).toBe(s);
+    expect(() => numberWords(1e12)).toThrow();
+  });
+
+  test("ordinais e anos como se falam", () => {
+    expect([1, 2, 3, 5, 12, 20, 24, 100].map(ordinalWords)).toEqual(["first", "second", "third", "fifth", "twelfth", "twentieth", "twenty-fourth", "one hundredth"]);
+    expect([2026, 2005, 2010, 1999, 1905, 1900].map(yearWords)).toEqual(["twenty twenty-six", "two thousand five", "twenty ten", "nineteen ninety-nine", "nineteen oh five", "nineteen hundred"]);
+  });
+
+  test("a frase do harry: o disco em inglês não fala português", () => {
+    expect(textoParaFala("The disk has 60 TB free.")).toBe("The disk has sixty terabytes free.");
+  });
+
+  test("números, datas, horas, dinheiro, porcentagens, unidades e siglas", () => {
+    const casos: [string, string][] = [
+      ["It costs $1,250.50.", "It costs one thousand two hundred fifty dollars and fifty cents."],
+      ["The budget is $2 million.", "The budget is two million dollars."],
+      ["It was R$ 12 and US$ 1.", "It was twelve reais and one dollar."],
+      ["Sales are up 12.5% this week.", "Sales are up twelve point five percent this week."],
+      ["The meeting is on 11/24/2026.", "The meeting is on November twenty-fourth, twenty twenty-six."],
+      ["It was on 24/11/2026.", "It was on November twenty-fourth, twenty twenty-six."],
+      ["The meeting is on 2026-11-03.", "The meeting is on November third, twenty twenty-six."],
+      ["See you on Nov 3rd.", "See you on November third."],
+      ["The call is at 2:30 PM.", "The call is at two thirty P M."],
+      ["The call is at 14:05.", "The call is at two oh five P M."],
+      ["It starts at 9am and ends at 12:00.", "It starts at nine A M and ends at noon."],
+      ["Call at 9 a.m. tomorrow.", "Call at nine A M tomorrow."],
+      ["It has been there since 1999.", "It has been there since nineteen ninety-nine."],
+      ["Pages 10-20 are done.", "Pages ten to twenty are done."],
+      ["It is -4°C outside.", "It is minus four degrees Celsius outside."],
+      ["The file has 2.5 GB and 1 MB.", "The file has two point five gigabytes and one megabyte."],
+      ["She came 1st and he came 22nd.", "She came first and he came twenty-second."],
+      ["Open the PDF and the HTML.", "Open the P D F and the H T M L."],
+      ["It is OK, NASA said so.", "It is okay, NASA said so."],
+      ["Ana & Bruno, see #12.", "Ana and Bruno, see number twelve."],
+      ["Version 2026.11.13 is out.", "Version two thousand twenty-six dot eleven dot thirteen is out."],
+      ["Mr. Silva, e.g. the boss.", "mister Silva, for example the boss."],
+    ];
+    for (const [entrada, saida] of casos) expect(textoParaFala(entrada, "en"), entrada).toBe(saida);
+  });
+
+  test("o português continua como era", () => {
+    expect(textoParaFala("O disco tem 60 TB livres.")).toBe("O disco tem sessenta terabytes livres.");
+    expect(textoParaFala("Anotei 2 reuniões às 14h30.")).toBe("Anotei duas reuniões às catorze e trinta.");
+    expect(textoParaFala("Custa R$ 12,50.")).toBe("Custa doze reais e cinquenta centavos.");
+  });
+
+  test("cada frase na língua dela, e a sem pista fica com a vizinha", () => {
+    expect(frasesComLingua("Anotei 2 reuniões. The disk has 60 TB free. OK. Pronto, são 3 notas.")).toEqual([
+      { frase: "Anotei duas reuniões.", lingua: "pt" },
+      { frase: "The disk has sixty terabytes free.", lingua: "en" },
+      { frase: "okay.", lingua: "en" },
+      { frase: "Pronto, são três notas.", lingua: "pt" },
+    ]);
+    expect(frasesComLingua("42.")).toEqual([{ frase: "quarenta e dois.", lingua: "pt" }]);
+    expect(frasesComLingua("42.", "en")).toEqual([{ frase: "forty-two.", lingua: "en" }]);
+    expect(frasesComLingua("OK. I saved the note.").map((f) => f.lingua)).toEqual(["en", "en"]);
+  });
+
+  test("frações simples e a meia-noite e meia (warm-newt #31080)", () => {
+    expect(textoParaFala("Mix 1/2 cup and 3/4 cup, 2/3 of it.", "en")).toBe("Mix one half cup and three quarters cup, two thirds of it.");
+    expect(textoParaFala("It ends at 0:30.", "en")).toBe("It ends at twelve thirty A M.");
+    expect(textoParaFala("See you on 4/3.", "en")).toBe("See you on April third.");
+  });
+
+  test("um número enorme nunca derruba a fala, em nenhum formato e em nenhuma língua (warm-newt #31080)", () => {
+    expect(textoParaFala("The total is $1,000,000,000,000 now.", "en")).toBe("The total is one zero zero zero zero zero zero zero zero zero zero zero zero dollars now.");
+    expect(textoParaFala("O total é R$ 1.234.567.890.123 agora.", "pt")).toBe("O total é um dois três quatro cinco seis sete oito nove zero um dois três reais agora.");
+    expect(textoParaFala("O total é US$ 1.234.567.890.123 agora.", "pt")).toEndWith("dólares agora.");
+    const enorme = ["1234567890123", "1,234,567,890,123", "1.234.567.890.123", "99999999999999999999"];
+    const formatos = ["$#", "US$ #", "R$ #", "€#", "#%", "#°C", "# km", "# GB", "-#", "#.5", "#,5", "#st", "#º", "#h", "# x 2", "## de", "#-#"];
+    for (const n of enorme)
+      for (const f of formatos)
+        for (const lingua of ["pt", "en"] as const) {
+          const texto = `Total ${f.replaceAll("#", n)} hoje.`;
+          expect(() => textoParaFala(texto, lingua), `${lingua}: ${texto}`).not.toThrow();
+        }
+  });
+
+  test("uma abreviação com ponto não troca a língua no meio da frase", () => {
+    expect(frasesParaFala("Call Dr. Ana at 9am.")).toEqual(["Call doctor Ana at nine A M."]);
   });
 });
