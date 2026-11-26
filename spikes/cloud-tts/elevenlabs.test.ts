@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { elevenLabs, HISTORY_PERMISSION, sameText } from "./elevenlabs";
+import { elevenLabs, HISTORY_PERMISSION, INVALID_KEY, sameText } from "./elevenlabs";
 import { main } from "./run.ts";
 
 const KEY = "sk_exemplo_0000000000000000000000000000000000000000";
@@ -45,7 +45,8 @@ beforeAll(() => {
       }
       seen.httpHeaders.push(req.headers.get("xi-api-key"));
       seen.httpUrls.push(req.url);
-      if (req.headers.get("xi-api-key") !== KEY) return new Response("{}", { status: 401 });
+      // Como a API de verdade: o 401 diz o porquê no `detail.status`.
+      if (req.headers.get("xi-api-key") !== KEY) return Response.json({ detail: { status: "invalid_api_key" } }, { status: 401 });
       if (url.pathname.startsWith("/v1/history") && historyGets++ >= historyDenyFrom) return Response.json({ detail: { status: "missing_permissions" } }, { status: 401 });
       if (req.method === "GET" && url.pathname === "/v1/history") {
         if (lagGets > 0) {
@@ -199,7 +200,8 @@ describe("ElevenLabs (servidor falso)", () => {
       () => null,
       (e: Error) => e,
     );
-    expect(err?.message).toContain(HISTORY_PERMISSION);
+    expect(err?.message).toContain(INVALID_KEY);
+    expect(err?.message).not.toContain(HISTORY_PERMISSION);
     expect(err?.message).not.toContain("sk_exemplo_errada");
     expect(seen.wsHeaders).toEqual([]);
   });
@@ -283,6 +285,7 @@ test("a chave sem a permissão de histórico: a rodada para antes de qualquer fa
   const r = await runMain({ ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base });
   expect(r.code).toBe(2);
   expect(r.all).toContain(HISTORY_PERMISSION);
+  expect(r.all).not.toContain(INVALID_KEY);
   expect(r.all).not.toContain(KEY);
   expect(seen.wsHeaders).toEqual([]);
   expect(existsSync(path.join(r.out, "tabela.md"))).toBe(false);
@@ -302,4 +305,47 @@ test("a permissão some no meio da rodada: o áudio fica salvo e a tabela avisa 
   expect(tabela).toContain("| 0 de 3 |");
   expect(tabela).toContain("Aviso: 6 falas não apagadas do histórico do elevenlabs.");
   expect(seen.deleted).toEqual([]);
+});
+
+test("a mensagem da permissão pede leitura do histórico, que é o que a conferência prova (#31411)", () => {
+  expect(HISTORY_PERMISSION).toContain("leitura");
+  expect(HISTORY_PERMISSION).not.toContain("escrita");
+});
+
+test("a fala que cai e não consegue apagar conta como não apagada", async () => {
+  reset();
+  wsMode = "drop";
+  historyDenyFrom = 0;
+  const s = provider().synthesize("Uma fala que cai.", VOICE);
+  await readAll(s.audio).catch(() => {});
+  const err = (await s.done.then(
+    () => null,
+    (e: Error & { notDeleted?: number }) => e,
+  ))!;
+  expect(err.message).toContain("1011");
+  expect(err.notDeleted).toBe(1);
+});
+
+test("a fala que cai mas apaga não entra no aviso", async () => {
+  reset();
+  wsMode = "drop";
+  const s = provider().synthesize("Outra fala que cai.", VOICE);
+  await readAll(s.audio).catch(() => {});
+  const err = (await s.done.then(
+    () => null,
+    (e: Error & { notDeleted?: number }) => e,
+  ))!;
+  expect(seen.deleted.length).toBe(1);
+  expect(err.notDeleted).toBeUndefined();
+});
+
+test("na rodada, as falas que caem sem apagar aparecem no aviso da tabela", async () => {
+  reset();
+  wsMode = "drop";
+  historyDenyFrom = 1; // a conferência passa; o apagar dá 401
+  const r = await runMain({ ELEVENLABS_API_KEY: KEY, ELEVENLABS_BASE_URL: base });
+  expect(r.code).toBe(0);
+  const tabela = readFileSync(path.join(r.out, "tabela.md"), "utf8");
+  expect(tabela).toContain("| 3 de 3 |");
+  expect(tabela).toContain("Aviso: 6 falas não apagadas do histórico do elevenlabs.");
 });

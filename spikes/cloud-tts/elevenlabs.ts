@@ -5,7 +5,8 @@
 
 import type { Lang, Synthesis, TtsProvider, Voice } from "./provider";
 
-export const HISTORY_PERMISSION = "a chave do ElevenLabs precisa da permissão de histórico (escrita) para o lab apagar as falas";
+export const HISTORY_PERMISSION = "a chave do ElevenLabs não lê o histórico: dê a ela a permissão de leitura do histórico, que o lab usa para achar e apagar as falas";
+export const INVALID_KEY = "a chave do ElevenLabs está errada: confira o valor de ELEVENLABS_API_KEY";
 export const DEFAULT_BASE_URL = "https://api.elevenlabs.io";
 /** O de melhor qualidade em português; `eleven_flash_v2_5` troca qualidade por latência. */
 export const DEFAULT_MODEL = "eleven_multilingual_v2";
@@ -43,6 +44,8 @@ export interface ElevenLabsOptions {
 
 /** Erro sem o valor da chave: só o que aconteceu e o código HTTP. */
 class ElevenLabsError extends Error {
+  /** A fala falhou e a geração dela pode ter ficado no histórico (o apagar também falhou): o núcleo conta no aviso. */
+  notDeleted?: number;
   constructor(message: string) {
     super(`ElevenLabs: ${message}`);
   }
@@ -77,17 +80,21 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
    */
   async function check(): Promise<void> {
     const res = await fetch(`${base}/v1/history?page_size=1`, { method: "GET", headers });
-    if (res.status === 401 || res.status === 403) throw new ElevenLabsError(HISTORY_PERMISSION);
+    if (res.status === 401 || res.status === 403) {
+      // O ElevenLabs diz o porquê no `detail.status`: a chave errada e a chave sem permissão pedem coisas diferentes.
+      const body = (await res.json().catch(() => null)) as { detail?: { status?: string } } | null;
+      throw new ElevenLabsError(body?.detail?.status === "invalid_api_key" ? INVALID_KEY : HISTORY_PERMISSION);
+    }
     if (!res.ok) throw new ElevenLabsError(`a conferência do histórico respondeu ${res.status}`);
   }
 
-  /** O apagar não derruba a fala: o áudio já foi gerado e pago. Falhou, a fala conta como não apagada (0). */
-  async function tryDelete(text: string, voiceId: string, startedAtMs: number): Promise<number> {
+  /** O apagar não derruba a fala: o áudio já foi gerado e pago. Devolve quantas apagou, ou `null` se o apagar falhou. */
+  async function tryDelete(text: string, voiceId: string, startedAtMs: number): Promise<number | null> {
     try {
       return await deleteGeneration(text, voiceId, startedAtMs);
     } catch (e) {
       log(`elevenlabs: a fala não foi apagada do histórico (${(e as Error).message})`);
-      return 0;
+      return null;
     }
   }
 
@@ -184,9 +191,10 @@ export function elevenLabs(opts: ElevenLabsOptions = {}): TtsProvider {
 
     // O apagar roda mesmo se a fala falhar no meio: o servidor pode ter gerado e guardado parte dela.
     const done = streamDone.then(
-      async () => ({ chars: text.length, deleted: await tryDelete(text, voice.id, startedAt) }),
-      async (err) => {
-        await tryDelete(text, voice.id, startedAt);
+      async () => ({ chars: text.length, deleted: (await tryDelete(text, voice.id, startedAt)) ?? 0 }),
+      async (err: ElevenLabsError) => {
+        // A fala caiu e o apagar falhou: a geração pode estar na conta, e o aviso da tabela tem de contar.
+        if ((await tryDelete(text, voice.id, startedAt)) === null) err.notDeleted = 1;
         throw err;
       },
     );

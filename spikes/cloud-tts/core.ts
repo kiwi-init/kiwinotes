@@ -75,9 +75,16 @@ export async function oneRound(s: () => Synthesis, now = () => performance.now()
   const syn = s();
   let first = -1;
   const chunks: Uint8Array[] = [];
-  for await (const c of syn.audio) {
-    if (first < 0) first = now() - t0;
-    chunks.push(c);
+  try {
+    for await (const c of syn.audio) {
+      if (first < 0) first = now() - t0;
+      chunks.push(c);
+    }
+  } catch (e) {
+    // Espera a limpeza do provedor antes de subir o erro: sem isso o `done` rejeita solto, e o que ela marca no
+    // erro (as gerações que ficaram na conta) não chega ao aviso da tabela.
+    await syn.done.catch(() => {});
+    throw e;
   }
   const total = now() - t0;
   const done = await syn.done;
@@ -125,10 +132,10 @@ const slug = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/
  */
 export async function measure(p: TtsProvider, voice: Voice, fala: { id: string; text: string }, o: { rounds: number; out?: string }): Promise<Measure> {
   const base: Measure = { provider: p.name, voice: voice.name, fala: fala.id, lang: voice.lang, firstMs: 0, totalMs: 0, rounds: [], chars: 0, costUsd: 0 };
+  let notDeleted = 0;
   try {
     let last: Awaited<ReturnType<typeof oneRound>> | null = null;
     let deleted = 0;
-    let notDeleted = 0;
     let chars = 0;
     for (let i = 0; i < o.rounds; i++) {
       last = await oneRound(() => p.synthesize(fala.text, voice));
@@ -157,6 +164,9 @@ export async function measure(p: TtsProvider, voice: Voice, fala: { id: string; 
     }
   } catch (e) {
     base.error = (e as Error).message.split("\n")[0]!.slice(0, 200);
+    // As rodadas que já ficaram na conta, mais a que falhou sem conseguir apagar, entram no aviso da tabela.
+    const left = notDeleted + ((e as { notDeleted?: number }).notDeleted ?? 0);
+    if (left) base.notDeleted = left;
   }
   return base;
 }
