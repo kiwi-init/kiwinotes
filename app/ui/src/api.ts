@@ -72,6 +72,13 @@ export const api = {
     /** O Ouvir (T27778): toca o texto fixo da voz, sem mudar a escolhida; `null` para. */
     preview: (id: CatVoiceId | null) => invoke("catVoice.preview", { id }),
   },
+  /** A voz do Kiwi pelo ElevenLabs (T31628): a chave vai ao Keychain e nunca volta; a UI só sabe se há uma. */
+  elevenLabs: {
+    status: () => invoke("elevenLabs.status", {}),
+    setKey: (key: string) => invoke("elevenLabs.setKey", { key }),
+    deleteKey: () => invoke("elevenLabs.deleteKey", {}),
+    test: () => invoke("elevenLabs.test", {}),
+  },
   dictionary: {
     get: () => invoke("dictionary.get", {}),
     set: (terms: UiCapabilities["dictionary.set"]["args"]["terms"]) => invoke("dictionary.set", { terms }),
