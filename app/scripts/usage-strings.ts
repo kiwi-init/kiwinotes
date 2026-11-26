@@ -28,6 +28,21 @@ export function usageDescriptions(locale: Locale): Record<keyof typeof USAGE_KEY
   return Object.fromEntries(Object.entries(USAGE_KEYS).map(([k, key]) => [k, translate(locale, key)])) as Record<keyof typeof USAGE_KEYS, string>;
 }
 
+/**
+ * O Info.plist embutido no executável do helper (`-sectcreate __TEXT __info_plist`, `native/Package.swift`). O helper
+ * não é um bundle: não tem `.lproj` ao lado, e o macOS não traduz o plist embutido. Quando o app sobe o helper, quem
+ * pede o mic para o macOS é o app (o "processo responsável"), e a frase sai do `InfoPlist.strings` do `.app`, na língua
+ * do Mac. O plist do helper só vale quando ele roda sozinho (de um terminal, o terminal é o responsável); por isso as
+ * frases dele vão nas duas línguas, uma depois da outra (T31094).
+ */
+export const HELPER_PLIST = path.resolve(import.meta.dir, "../../native/Sources/kiwi-helper/Info.plist");
+
+/** As frases do helper: cada língua do app, na ordem do catálogo, separadas por uma linha em branco. */
+export function helperUsageDescriptions(): Record<keyof typeof USAGE_KEYS, string> {
+  const all = LOCALES.map(usageDescriptions);
+  return Object.fromEntries(Object.keys(USAGE_KEYS).map((k) => [k, all.map((d) => d[k as keyof typeof USAGE_KEYS]).join("\n\n")])) as Record<keyof typeof USAGE_KEYS, string>;
+}
+
 /** Um `.strings` (UTF-8, que o macOS lê desde o 10.6): `"Chave" = "valor";` por linha. */
 export function stringsFile(entries: Record<string, string>): string {
   const quote = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
