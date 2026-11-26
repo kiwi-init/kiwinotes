@@ -16,6 +16,7 @@ import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
 import { NOTE_WIDTH } from "../shared/note-width.ts";
 import { ONBOARDING_STEPS } from "../shared/agent-onboarding.ts";
+import { CAT_VOICE_PROVIDERS, ELEVENLABS_MODELS, isCatVoiceProvider, isElevenLabsModel, isElevenLabsVoiceId } from "../shared/elevenlabs.ts";
 import { isCatColorChoice } from "../shared/kiwicat-colors.ts";
 import { catSize, isCatPosition, isCatSize } from "../shared/kiwicat-place.ts";
 import { type CatVoiceId, isCatVoiceId } from "../shared/cat-voices.ts";
@@ -809,6 +810,16 @@ export function uiCapabilities(deps: CapabilityDeps,
           // O modo preciso do ditado (1.38.0, T6602): ligar baixa o Whisper small, desligar apaga.
           if (typeof value !== "boolean") throw bad("preciseDictation must be true or false");
           patch.preciseDictation = value;
+        } else if (key === "catVoiceProvider") {
+          // A voz do Kiwi pelo ElevenLabs (1.106.0, spec #31616): ligar não pede nem guarda a chave, que vai ao Keychain.
+          if (!isCatVoiceProvider(value)) throw bad(`catVoiceProvider must be one of ${CAT_VOICE_PROVIDERS.join(", ")}`);
+          patch.catVoiceProvider = value;
+        } else if (key === "elevenLabsVoiceId") {
+          if (!isElevenLabsVoiceId(value)) throw bad("elevenLabsVoiceId must be an ElevenLabs voice ID (letters, digits, _ and -, up to 64)");
+          patch.elevenLabsVoiceId = value;
+        } else if (key === "elevenLabsModel") {
+          if (!isElevenLabsModel(value)) throw bad(`elevenLabsModel must be one of ${ELEVENLABS_MODELS.join(", ")}`);
+          patch.elevenLabsModel = value;
         } else if (key === "showExtensions") {
           // A extensão na árvore das Notas (1.19.0, T3370).
           if (typeof value !== "boolean") throw bad("showExtensions must be true or false");

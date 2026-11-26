@@ -104,7 +104,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, language: "auto", savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: "prisma-original", posicao: "center", tamanho: 1, voz: "en-a" }, firstRun: "done" };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, checkUpdates: true, language: "auto", savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, catVoiceProvider: "local" as const, elevenLabsVoiceId: "XrExE9yKIg1WjnnlVkGX", elevenLabsModel: "eleven_v4_turbo" as const, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: "prisma-original", posicao: "center", tamanho: 1, voz: "en-a" }, firstRun: "done" };
   let t = 0;
   return {
     calls,
@@ -286,6 +286,24 @@ describe("contrato 1.0.0 (T1192)", () => {
     for (const kiwicat of [{ posicao: "meio" }, { posicao: 1 }, { tamanho: 0.5, voz: "en-a" }, { tamanho: 1.7, voz: "en-a" }, { tamanho: "1" }, { tamanho: Number.NaN }])
       expect(await directInvoke(caps, "settings.set", { kiwicat })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect(await directInvoke(caps, "settings.set", { kiwicat: { posicao: "bottom-left", tamanho: 1.33, voz: "en-a" } })).toMatchObject({ ok: true, value: { kiwicat: { cor: "prisma-original", posicao: "bottom-left", tamanho: 1.3, voz: "en-a" } } });
+  });
+
+  test("settings: a voz do Kiwi pelo ElevenLabs, o provedor, a voz e o modelo (spec #31616)", async () => {
+    const f = fakeDeps();
+    const caps = uiCapabilities(f.deps);
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+    expect((await call("settings.get", {})) as { value: AppSettings }).toMatchObject({ value: { catVoiceProvider: "local", elevenLabsVoiceId: "XrExE9yKIg1WjnnlVkGX", elevenLabsModel: "eleven_v4_turbo" } });
+    for (const args of [
+      { catVoiceProvider: "google" }, { catVoiceProvider: true }, { catVoiceProvider: null },
+      { elevenLabsVoiceId: "" }, { elevenLabsVoiceId: "voz/../x" }, { elevenLabsVoiceId: "a b" }, { elevenLabsVoiceId: "x".repeat(65) }, { elevenLabsVoiceId: 1 },
+      { elevenLabsModel: "eleven_v5" }, { elevenLabsModel: "" }, { elevenLabsModel: null },
+    ])
+      expect(await call("settings.set", args)).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("settings.set", { catVoiceProvider: "elevenlabs" })).toMatchObject({ ok: true, value: { catVoiceProvider: "elevenlabs" } });
+    expect(await call("settings.set", { elevenLabsVoiceId: "Voz_exemplo-01" })).toMatchObject({ ok: true, value: { elevenLabsVoiceId: "Voz_exemplo-01" } });
+    for (const elevenLabsModel of ["eleven_v4", "eleven_v3", "eleven_multilingual_v2", "eleven_flash_v2_5", "eleven_v4_turbo"])
+      expect(await call("settings.set", { elevenLabsModel })).toMatchObject({ ok: true, value: { elevenLabsModel } });
+    expect(f.calls.filter((c) => c.startsWith("settings.save")).slice(0, 2)).toEqual(['settings.save:{"catVoiceProvider":"elevenlabs"}', 'settings.save:{"elevenLabsVoiceId":"Voz_exemplo-01"}']);
   });
 
   test("settings: a largura da nota, em px dentro dos limites (T5299)", async () => {

@@ -329,7 +329,10 @@ export type { NoteModel };
 //   acréscimo.
 // 1.105.0 (T26829, spec #26687): a voz do gato. O evento `agent.speech`, com o nível do que a voz dele tocou (o gato
 //   fica no `falando`) e `null` no fim, no corte ou no erro. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.105.0";
+// 1.106.0 (T31626, spec #31616): a voz do Kiwi pelo ElevenLabs. O `catVoiceProvider` ("local" ou "elevenlabs"), o
+//   `elevenLabsVoiceId` e o `elevenLabsModel` nas settings (`src/shared/elevenlabs.ts`). A chave nunca passa pela UI.
+//   Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.106.0";
 /** O `reason` do `updates` desligado quando foi a pessoa, em Ajustes (1.97.0, T25110), e não o build. */
 export const UPDATES_OFF_BY_SETTING = "desligado em Buscar atualizações";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
