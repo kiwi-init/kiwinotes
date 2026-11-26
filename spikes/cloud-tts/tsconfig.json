@@ -1,5 +1,0 @@
-{
-  "extends": "../../app/tsconfig.json",
-  "compilerOptions": { "noEmit": true, "types": ["bun"] },
-  "include": ["*.ts"]
-}
