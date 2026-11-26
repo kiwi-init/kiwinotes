@@ -1,8 +1,8 @@
 # ADR 0011: o agente e a privacidade
 
-- Status: aceito (T8371, spec #7498, aprovado pelo harry em #8367).
+- Status: aceito (T8371, spec #7498, aprovado pelo harry em #8367). Emendado pelo spec #31616 (T31627): o provedor de voz que a pessoa liga, com a chave dela no Keychain (harry #31007, #31616).
 - Substitui a exceção do Claude Code no AGENTS.md (decisão #34).
-- Decisões do harry que entram aqui: #7496 e #7498 (só o agente escolhido faz o trabalho de IA), #4717 (o que o guardrail segura), #8357 (o guardrail na dúvida), #8360 (a proposta depois da reunião), #8368 (o adaptador ACP) e #8373 (a regra da Anthropic).
+- Decisões do harry que entram aqui: #7496 e #7498 (só o agente escolhido faz o trabalho de IA), #4717 (o que o guardrail segura), #8357 (o guardrail na dúvida), #8360 (a proposta depois da reunião), #8368 (o adaptador ACP), #8373 (a regra da Anthropic) e #31007/#31616 (a voz do Kiwi por um provedor que a pessoa liga).
 - Código: nenhum ainda. A ligação com o agente e a tela abaixo são do spec de Ajustes › Agente (Fase 1 do roadmap, no commit `2d5493a2` do repo antigo).
 
 ## Contexto
@@ -68,6 +68,17 @@ Só com o agente ligado, e só nestes dois momentos:
 >
 > [Ligar o {agente}] [Agora não]
 
+## A voz do Kiwi por um provedor que a pessoa liga (emenda, spec #31616)
+O Kiwi fala com a voz local (ADR 0014). Ligada pela pessoa, a fala pode sair por um **provedor de voz na nuvem**; hoje, só o ElevenLabs. É um extra: o Kiwi Notes não vende nem embute o serviço (#31613), e cada pessoa usa a própria conta.
+
+- **Vem desligado.** Sem ligar em Ajustes › Voz do Kiwi, nada vai ao provedor, e o Kiwi fala com a voz local.
+- **O que vai:** só o texto que o Kiwi vai falar, frase por frase, e a voz e o modelo que a pessoa escolheu. Antes de sair, o texto passa pelo mesmo filtro de segredos do agente, e o que ele segura não vai, nem como marcador.
+- **O que nunca vai:** o áudio do microfone, as notas, as reuniões e o resto do que o agente leu: o provedor de voz recebe só a fala.
+- **A chave é da pessoa, e fica no Keychain do macOS.** Aqui o Kiwi guarda uma credencial, diferente do agente: a pessoa cola a chave da API dela, e ela vai direto para o Keychain (`com.kiwinotes.elevenlabs`). Nunca vai para arquivo, log, settings.json nem para a tela: a tela só sabe se há uma chave. O Kiwi a lê na hora de falar e a manda só ao provedor, no cabeçalho da chamada. A pessoa apaga quando quiser.
+- **Nada guardado do nosso lado:** sem cache do áudio em disco e sem o texto no log, que só registra eventos e tempos. Do lado do provedor, vale a política de dados dele: a tela diz isso com um aviso curto.
+- **Se falhar** (sem chave, chave errada, sem crédito, sem rede, voz indisponível), o Kiwi fala com a voz local daquela vez.
+- **Um provedor novo** segue a mesma regra: desligado por padrão, só a fala, a chave da pessoa no Keychain, o filtro antes de sair.
+
 ## Consequências
 - **O AGENTS.md usa a regra nova** na seção de Privacidade, no lugar da exceção do Claude Code. A lista do que o app baixa ganha o adaptador ACP.
 - **Os testes usam um agente falso.** Nenhum agente do time liga o agente de verdade nem usa a assinatura do harry. O agente de verdade, só o harry testa, e quem pede é o lead.
@@ -75,3 +86,5 @@ Só com o agente ligado, e só nestes dois momentos:
 - **Antes de divulgar a função para outras pessoas,** a Kiwi Init confirma com a Anthropic por escrito (#8373). Até lá, ela é para o uso do harry.
 - **Um agente novo** (Codex, Gemini, OpenCode) segue a mesma regra: o login é dele, e a tela mostra o nome e a empresa dele.
 - **Um risco anotado:** a documentação do Claude Code avisa que o uso por programas pode passar a pedir uma chave paga por uso, em vez da assinatura. Se isso acontecer, a regra continua: a chave fica no programa do agente, e o Kiwi não a guarda.
+- **Com a emenda do spec #31616,** "tudo é local" ganha uma segunda exceção, que a pessoa também liga: o provedor de voz. O AGENTS.md diz isso na seção de Privacidade. Os textos de "100% local" dos Ajustes e do Sobre continuam verdadeiros com o provedor desligado; ligado, a tela de Ajustes › Voz do Kiwi mostra o aviso.
+- **Os testes do provedor usam um servidor falso e um Keychain falso.** Nenhum agente usa a chave do harry; o teste real é dele, pedido pelo lead.
