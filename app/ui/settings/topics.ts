@@ -62,6 +62,10 @@ export const SETTINGS_BLOCKS = [
   "shortcuts:Reuniões", // i18n-ok: o id do grupo de atalhos, não aparece
   "agentMeetings",
   "agent",
+  "agentKiwi",
+  "agentVoice",
+  "agentMemory",
+  "agentAdvanced",
   "usage",
   "trails",
   "doubtAnswers",
@@ -104,8 +108,16 @@ export const TOPIC_TABS: Record<SettingsTopic, readonly TopicTab[]> = {
     tab("shortcuts", "settings.tab.shortcuts", ["shortcuts:Reuniões"]), // i18n-ok: o id do grupo de atalhos, não aparece
     tab("yours", "settings.tab.yours", ["agentMeetings"]),
   ],
-  // Ligar e testar, a cor, o Control, o aviso, o modo econômico e o gasto, a memória, as instruções, o Modelo, as trilhas e as respostas.
-  agent: [tab("general", "settings.tab.general", ["agent", "usage", "trails", "doubtAnswers"])],
+  // Geral: ligar e qual agente, o Modelo, o econômico e a web. Kiwi: o Kiwi, o Control e o aviso. Voz: o Kiwi fala e o
+  // que eu falei. Memória: a memória, as instruções, as rotinas, as trilhas e as respostas. Avançado: o gasto, o
+  // onboarding, o teste e o Modelo de nota (T31765).
+  agent: [
+    tab("general", "settings.tab.general", ["agent"]),
+    tab("kiwi", "settings.tab.kiwi", ["agentKiwi"]),
+    tab("voice", "settings.tab.voice", ["agentVoice"]),
+    tab("memory", "settings.tab.memory", ["agentMemory", "trails", "doubtAnswers"]),
+    tab("advanced", "settings.tab.advanced", ["usage", "agentAdvanced"]),
+  ],
   activity: [tab("general", "settings.tab.general", ["activity"])],
   privacy: [tab("general", "settings.tab.general", ["privacy"])],
   about: [tab("general", "settings.tab.general", ["about"])],

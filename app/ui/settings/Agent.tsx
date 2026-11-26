@@ -3,9 +3,9 @@
 // programas instalados (`agent.status` com `refresh`), sem baixar nem abrir nada. O texto da tela de aviso é o do
 // ADR 0011, com a empresa do agente escolhido.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
-import type { AgentKind, AgentStatus } from "../../src/shared/ui-contract.ts";
+import type { AgentKind } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { useT } from "../src/i18n.ts";
 import { Button, Row, Section, Segmented, Switch } from "../src/kit/index.tsx";
@@ -35,79 +35,65 @@ import { MemoryRows } from "./MemoryRows.tsx";
 import { ModelRows } from "./ModelRows.tsx";
 import { RoutinesRows } from "./RoutinesRows.tsx";
 import "./agent.css";
+import { runAgent, setAgentChecking, setAgentStatus, useAgentStore } from "./agentStore.ts";
 import { CatColorRow, CatPlaceRow, CatRow, OverlayCatRow } from "./CatRow";
 
 /** O pedido do "Testar" mais longo que a seção manda. */
 const TEST_MAX = 500;
 
-export function AgentSection() {
+/** As abas de Ajustes › Agente (spec #31754): cada uma é um bloco, e todas dividem o mesmo estado (`agentStore`). */
+export type AgentPart = "general" | "kiwi" | "voice" | "memory" | "advanced";
+
+export function AgentSection({ part }: { part: AgentPart }) {
   const { t, locale } = useT();
   /** A língua para os eventos do teste, que a escuta de quando a seção abriu lê. */
   const localeRef = useRef(locale);
   localeRef.current = locale;
-  const [status, setStatus] = useState<AgentStatus | null>(null);
+  const { status, failure, checking } = useAgentStore(t("agent.readFailed"));
+  const setStatus = setAgentStatus;
   const [consenting, setConsenting] = useState(false);
   /** A troca de agente esperando a pessoa confirmar a tela "o que vai" do novo. */
   const [switching, setSwitching] = useState<AgentKind | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
   const [prompt, setPrompt] = useState(() => t("agent.test.prompt"));
   const [test, setTest] = useState<TestState>(IDLE_TEST);
   const lastPrompt = useRef("");
-  /** Conta os eventos `agent.status`: a resposta de uma chamada só vale se nenhum evento chegou durante ela. */
-  const events = useRef(0);
 
   const name = status?.name ?? "Claude Code";
 
+  // O teste vive na aba Avançado: só ela ouve as respostas.
   useEffect(() => {
-    if (!has("agent.status")) return;
+    if (part !== "advanced" || !has("agent.status")) return;
     let alive = true;
-    setChecking(true);
-    api.agent.status(true).then(
-      (s) => alive && setStatus(s),
-      () => alive && setFailure(t("agent.readFailed")),
-    ).finally(() => alive && setChecking(false));
-    const offStatus = api.agent.onStatus((s) => {
-      events.current++;
-      if (alive) setStatus(s);
-    });
     const offTurn = api.agent.onTurn((e) => alive && setTest((cur) => applyTurn(cur, e, name, localeRef.current)));
     return () => {
       alive = false;
-      offStatus();
       offTurn();
     };
     // O nome só muda de agente para agente: os eventos usam o da primeira leitura.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Desligar (na aba Geral) limpa o teste (na aba Avançado).
+  useEffect(() => {
+    if (status && !status.enabled) setTest(IDLE_TEST);
+  }, [status?.enabled]);
+
+  const title = part === "general" ? t("agent.section") : t(`settings.tab.${part}`);
+
   if (!has("agent.status") || !status) {
-    return failure ? (
-      <Section title={t("agent.section")}>
+    return failure && part === "general" ? (
+      <Section title={title}>
         <Row label={t("agent.section")} hint={failure} />
       </Section>
     ) : null;
   }
 
-  /**
-   * Chama uma capacidade e mostra o erro dela na seção, sem derrubar a tela. O estado que ela devolve é de antes do fim
-   * (o `cancel` responde antes de o download parar): se um evento chegou no meio, ele é mais novo e fica.
-   */
-  const run = async (call: () => Promise<AgentStatus | unknown>) => {
-    setFailure(null);
-    const before = events.current;
-    try {
-      const r = await call();
-      if (r && typeof r === "object" && "adapter" in r && events.current === before) setStatus(r as AgentStatus);
-    } catch (e) {
-      setFailure(e instanceof Error ? e.message : String(e));
-    }
-  };
+  const run = runAgent;
 
   const refresh = async () => {
-    setChecking(true);
+    setAgentChecking(true);
     await run(() => api.agent.status(true));
-    setChecking(false);
+    setAgentChecking(false);
   };
 
   /** Ligar: na primeira vez, a tela de aviso antes; depois, liga e começa o download, se faltar. */
@@ -168,152 +154,192 @@ export function AgentSection() {
   const ready = canTest(status);
   const running = test.phase === "running";
 
-  return (
-    <Section title={t("agent.section")}>
-      <Row label={t("agent.kind.label")} hint={kindHint(kind, status.enabled, locale)}>
-        <Segmented label={t("agent.kind.label")} value={switching ?? kind} options={KIND_OPTIONS} onChange={choose} />
-      </Row>
-
-      {switching ? (
-        <Consent kind={switching} switching onYes={() => void confirmSwitch(switching)} onNo={() => setSwitching(null)} />
-      ) : null}
-
-      {/* O estado de cada agente (spec #24666): o escolhido primeiro, e o outro embaixo, para comparar antes de trocar. */}
-      {[kind, ...KIND_OPTIONS.map((o) => o.value).filter((k) => k !== kind)].map((k) => {
-        const line = agentLine(k, AGENTS[k].name, programOf({ ...status, kind: k }), locale);
-        return (
-          <Row key={k} label={k === kind ? AGENTS[k].name : t("agent.notChosen", { name: AGENTS[k].name })} hint={line.text}>
-            <Button onClick={() => void refresh()} disabled={checking}>
-              {checking ? t("agent.checking") : line.ok ? t("agent.checkAgain") : t("agent.retry")}
-            </Button>
+  // Cada aba com as suas linhas, as mesmas de antes, só mudadas de lugar (spec #31754).
+  const rows: Record<AgentPart, ReactNode> = {
+    general: (
+      <>
+          <Row label={t("agent.kind.label")} hint={kindHint(kind, status.enabled, locale)}>
+            <Segmented label={t("agent.kind.label")} value={switching ?? kind} options={KIND_OPTIONS} onChange={choose} />
           </Row>
-        );
-      })}
 
-      <Row label={t("agent.enable")} hint={switchHint(status, consenting, locale)}>
-        <Switch label={t("agent.enable")} checked={status.enabled} onChange={toggle} />
-      </Row>
+          {switching ? (
+            <Consent kind={switching} switching onYes={() => void confirmSwitch(switching)} onNo={() => setSwitching(null)} />
+          ) : null}
 
-      <CatRow />
-      <CatColorRow agentEnabled={status.enabled} />
-      <OverlayCatRow />
-      <CatPlaceRow />
+          {/* O estado de cada agente (spec #24666): o escolhido primeiro, e o outro embaixo, para comparar antes de trocar. */}
+          {[kind, ...KIND_OPTIONS.map((o) => o.value).filter((k) => k !== kind)].map((k) => {
+            const line = agentLine(k, AGENTS[k].name, programOf({ ...status, kind: k }), locale);
+            return (
+              <Row key={k} label={k === kind ? AGENTS[k].name : t("agent.notChosen", { name: AGENTS[k].name })} hint={line.text}>
+                <Button onClick={() => void refresh()} disabled={checking}>
+                  {checking ? t("agent.checking") : line.ok ? t("agent.checkAgain") : t("agent.retry")}
+                </Button>
+              </Row>
+            );
+          })}
 
-      {consenting ? <Consent kind={kind} onYes={() => void turnOn(true)} onNo={() => setConsenting(false)} /> : null}
+          <Row label={t("agent.enable")} hint={switchHint(status, consenting, locale)}>
+            <Switch label={t("agent.enable")} checked={status.enabled} onChange={toggle} />
+          </Row>
 
-      {/* O adaptador é só do Claude Code: o Gemini fala ACP sozinho (spec #24666). */}
-      {!needsAdapter ? null : status.enabled ? (
-        <Row label={t("agent.adapter")} hint={adapterLine(status, locale)}>
-          {a.phase === "downloading" ? (
-            <Button onClick={() => void run(() => api.agent.cancel())}>{t("agent.cancel")}</Button>
+          {consenting ? <Consent kind={kind} onYes={() => void turnOn(true)} onNo={() => setConsenting(false)} /> : null}
+
+          {/* O adaptador é só do Claude Code: o Gemini fala ACP sozinho (spec #24666). */}
+          {!needsAdapter ? null : status.enabled ? (
+            <Row label={t("agent.adapter")} hint={adapterLine(status, locale)}>
+              {a.phase === "downloading" ? (
+                <Button onClick={() => void run(() => api.agent.cancel())}>{t("agent.cancel")}</Button>
+              ) : a.phase === "ready" ? (
+                <Button onClick={() => void run(() => api.agent.remove())}>{t("agent.adapter.remove")}</Button>
+              ) : (
+                <Button variant="primary" onClick={() => void run(() => api.agent.download())}>
+                  {a.phase === "error" ? t("agent.retry") : t("agent.adapter.download")}
+                </Button>
+              )}
+            </Row>
           ) : a.phase === "ready" ? (
-            <Button onClick={() => void run(() => api.agent.remove())}>{t("agent.adapter.remove")}</Button>
-          ) : (
-            <Button variant="primary" onClick={() => void run(() => api.agent.download())}>
-              {a.phase === "error" ? t("agent.retry") : t("agent.adapter.download")}
-            </Button>
-          )}
-        </Row>
-      ) : a.phase === "ready" ? (
-        <Row label={t("agent.adapter")} hint={`${adapterLine(status, locale)} ${t("agent.adapter.offNote")}`}>
-          <Button onClick={() => void run(() => api.agent.remove())}>{t("agent.adapter.remove")}</Button>
-        </Row>
-      ) : null}
+            <Row label={t("agent.adapter")} hint={`${adapterLine(status, locale)} ${t("agent.adapter.offNote")}`}>
+              <Button onClick={() => void run(() => api.agent.remove())}>{t("agent.adapter.remove")}</Button>
+            </Row>
+          ) : null}
 
-      {/* O Modelo e o esforço salvo para ele (spec #16793), as mesmas linhas do passo "claude" do onboarding. */}
-      {status.enabled && (!needsAdapter || a.phase === "ready") ? <ModelRows status={status} run={(fn) => void run(fn)} /> : null}
+          {/* O Modelo e o esforço salvo para ele (spec #16793), as mesmas linhas do passo "claude" do onboarding. */}
+          {status.enabled && (!needsAdapter || a.phase === "ready") ? <ModelRows status={status} run={(fn) => void run(fn)} /> : null}
 
-      {/* O modo econômico (spec #11084): só aqui, em Ajustes › Agente. */}
-      {status.enabled && (!needsAdapter || a.phase === "ready") ? (
-        <Row label={t("agent.economy.label")} hint={economyHint(status, locale)}>
-          <Switch label={t("agent.economy.label")} checked={status.economy === true} onChange={(economy) => void run(() => api.agent.configure({ economy }))} />
-        </Row>
-      ) : null}
+          {/* O modo econômico (spec #11084): só aqui, em Ajustes › Agente. */}
+          {status.enabled && (!needsAdapter || a.phase === "ready") ? (
+            <Row label={t("agent.economy.label")} hint={economyHint(status, locale)}>
+              <Switch label={t("agent.economy.label")} checked={status.economy === true} onChange={(economy) => void run(() => api.agent.configure({ economy }))} />
+            </Row>
+          ) : null}
 
-      {/* "Pesquisar na web" (spec #11908): ligado por padrão (spec #19273); vale já no próximo pedido. */}
-      {status.enabled && (!needsAdapter || a.phase === "ready") ? (
-        <Row label={t("agent.web.label")} hint={webHint(status, locale)}>
-          <Switch label={t("agent.web.label")} checked={status.webSearch === true} onChange={(webSearch) => void run(() => api.agent.configure({ webSearch }))} />
-        </Row>
-      ) : null}
+          {/* "Pesquisar na web" (spec #11908): ligado por padrão (spec #19273); vale já no próximo pedido. */}
+          {status.enabled && (!needsAdapter || a.phase === "ready") ? (
+            <Row label={t("agent.web.label")} hint={webHint(status, locale)}>
+              <Switch label={t("agent.web.label")} checked={status.webSearch === true} onChange={(webSearch) => void run(() => api.agent.configure({ webSearch }))} />
+            </Row>
+          ) : null}
 
-      {/* "Suas reuniões" (spec #8360) foi para o assunto Reuniões (spec #11966): `AgentMeetingsSection`. */}
+          {/* "Suas reuniões" (spec #8360) foi para o assunto Reuniões (spec #11966): `AgentMeetingsSection`. */}
+      </>
+    ),
+    kiwi: (
+      <>
+          <CatRow />
+          <CatColorRow agentEnabled={status.enabled} />
+          <OverlayCatRow />
+          <CatPlaceRow />
 
-      {/* A memória do agente e as instruções da pessoa (spec #11469): só com o agente ligado. */}
-      {status.enabled ? <MemoryRows status={status} run={run} /> : null}
 
-      {/* As rotinas (spec #12150): o resumo do dia e os pendentes da semana. Só com o agente ligado (desligar as desliga). */}
-      {status.enabled && status.routines ? <RoutinesRows status={status} run={run} /> : null}
+          {/* A notificação quando o agente espera uma resposta (spec #9839): só com o agente ligado. */}
+          {status.enabled ? <NoticeRow /> : null}
 
-      {/* A notificação quando o agente espera uma resposta (spec #9839): só com o agente ligado. */}
-      {status.enabled ? <NoticeRow /> : null}
 
-      {/* O atalho Control (spec #9876): só com o agente ligado. */}
-      {status.enabled ? <ControlRow status={status} onStatus={setStatus} /> : null}
+          {/* O atalho Control (spec #9876): só com o agente ligado. */}
+          {status.enabled ? <ControlRow status={status} onStatus={setStatus} /> : null}
 
-      {/* "Mostrar o que eu falei" (spec #26055): só com o agente ligado. */}
-      {status.enabled ? <SpokenTextRow status={status} onStatus={setStatus} /> : null}
+      </>
+    ),
+    voice: (
+      <>
+          {/* "Mostrar o que eu falei" (spec #26055): só com o agente ligado. */}
+          {status.enabled ? <SpokenTextRow status={status} onStatus={setStatus} /> : null}
 
-      {/* "O Kiwi fala" (spec #26687): só com o agente ligado; a voz baixa no clique, nunca ao abrir os Ajustes. */}
-      {status.enabled ? <CatSpeaksRow status={status} onStatus={setStatus} /> : null}
+          {/* "O Kiwi fala" (spec #26687): só com o agente ligado; a voz baixa no clique, nunca ao abrir os Ajustes. */}
+          {status.enabled ? <CatSpeaksRow status={status} onStatus={setStatus} /> : null}
 
-      {/* O onboarding (spec #11955): abre de novo, do passo 1, por cima do hub. */}
-      {status.enabled ? (
-        <Row label={t("agent.onboarding")} hint={t("agent.onboarding.hint")}>
-          <Button onClick={() => void run(() => api.agent.configure({ onboarding: { state: "open", step: 1 } }))} disabled={status.onboarding?.state === "open"}>
-            {t("agent.onboarding.redo")}
-          </Button>
-        </Row>
-      ) : null}
+      </>
+    ),
+    memory: (
+      <>
+          {/* A memória do agente e as instruções da pessoa (spec #11469): só com o agente ligado. */}
+          {status.enabled ? <MemoryRows status={status} run={run} /> : null}
 
-      {ready ? (
-        <div className="kn-agent-test">
-          <div className="kn-row-text">
-            <div className="kn-row-label">{t("agent.test")}</div>
-            <div className="kn-row-hint">{t("agent.test.hint")}</div>
-          </div>
-          <form
-            className="kn-agent-test-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!running) void sendTest(prompt);
-            }}
-          >
-            <input
-              className="kn-input kn-agent-test-input"
-              aria-label={t("agent.test.input")}
-              value={prompt}
-              maxLength={TEST_MAX}
-              disabled={running}
-              onChange={(e) => setPrompt(e.target.value)}
-            />
-            {running ? (
-              <Button onClick={() => void run(() => api.agent.cancel())}>{t("agent.cancel")}</Button>
-            ) : (
-              <Button variant="primary" type="submit" disabled={!prompt.trim()}>
-                {t("agent.test")}
+          {/* As rotinas (spec #12150): o resumo do dia e os pendentes da semana. Só com o agente ligado (desligar as desliga). */}
+          {status.enabled && status.routines ? <RoutinesRows status={status} run={run} /> : null}
+
+      </>
+    ),
+    advanced: (
+      <>
+          {/* O onboarding (spec #11955): abre de novo, do passo 1, por cima do hub. */}
+          {status.enabled ? (
+            <Row label={t("agent.onboarding")} hint={t("agent.onboarding.hint")}>
+              <Button onClick={() => void run(() => api.agent.configure({ onboarding: { state: "open", step: 1 } }))} disabled={status.onboarding?.state === "open"}>
+                {t("agent.onboarding.redo")}
               </Button>
-            )}
-          </form>
-          {test.phase !== "idle" ? (
-            <div className="kn-agent-test-out" data-phase={test.phase} aria-live="polite">
-              {test.status ? <p className="kn-agent-test-status">{test.status}</p> : null}
-              {test.text ? <p className="kn-agent-test-text">{test.text}</p> : null}
-              {test.phase === "error" && test.error ? (
-                <p className="kn-agent-test-error">
-                  {test.error.message}{" "}
-                  <button type="button" className="kn-agent-link" onClick={() => void sendTest(lastPrompt.current)}>
-                    {t("agent.retry")}
-                  </button>
-                </p>
+            </Row>
+          ) : null}
+
+          {ready ? (
+            <div className="kn-agent-test">
+              <div className="kn-row-text">
+                <div className="kn-row-label">{t("agent.test")}</div>
+                <div className="kn-row-hint">{t("agent.test.hint")}</div>
+              </div>
+              <form
+                className="kn-agent-test-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!running) void sendTest(prompt);
+                }}
+              >
+                <input
+                  className="kn-input kn-agent-test-input"
+                  aria-label={t("agent.test.input")}
+                  value={prompt}
+                  maxLength={TEST_MAX}
+                  disabled={running}
+                  onChange={(e) => setPrompt(e.target.value)}
+                />
+                {running ? (
+                  <Button onClick={() => void run(() => api.agent.cancel())}>{t("agent.cancel")}</Button>
+                ) : (
+                  <Button variant="primary" type="submit" disabled={!prompt.trim()}>
+                    {t("agent.test")}
+                  </Button>
+                )}
+              </form>
+              {test.phase !== "idle" ? (
+                <div className="kn-agent-test-out" data-phase={test.phase} aria-live="polite">
+                  {test.status ? <p className="kn-agent-test-status">{test.status}</p> : null}
+                  {test.text ? <p className="kn-agent-test-text">{test.text}</p> : null}
+                  {test.phase === "error" && test.error ? (
+                    <p className="kn-agent-test-error">
+                      {test.error.message}{" "}
+                      <button type="button" className="kn-agent-link" onClick={() => void sendTest(lastPrompt.current)}>
+                        {t("agent.retry")}
+                      </button>
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           ) : null}
-        </div>
-      ) : null}
 
-      {/* O Modelo de nota (spec #11102): depois do teste; na primeira vez, aberto e com "Pular". */}
-      {ready && has("agent.noteModel") ? <NoteModelRow /> : null}
+          {/* O Modelo de nota (spec #11102): depois do teste; na primeira vez, aberto e com "Pular". */}
+          {ready && has("agent.noteModel") ? <NoteModelRow /> : null}
+
+      </>
+    ),
+  };
+
+  // Com o agente desligado, Voz, Memória e Avançado não teriam linha nenhuma: uma linha leva à aba Geral (lead #31811).
+  const off = !status.enabled && part !== "general" && part !== "kiwi";
+  const openGeneral = (e: MouseEvent<HTMLElement>) =>
+    e.currentTarget.closest(".kn-prefs-topic")?.querySelector<HTMLElement>('.kn-prefs-tab[data-tab="general"]')?.click();
+
+  return (
+    <Section title={title}>
+      {off ? (
+        <Row label={part === "voice" ? t("agent.offTab.voice") : part === "memory" ? t("agent.offTab.memory") : t("agent.offTab")}>
+          <button type="button" className="kn-agent-link" onClick={openGeneral}>
+            {t("agent.offTab.open")}
+          </button>
+        </Row>
+      ) : (
+        rows[part]
+      )}
 
       {failure ? <Row label={t("agent.failed")} hint={failure} /> : null}
     </Section>

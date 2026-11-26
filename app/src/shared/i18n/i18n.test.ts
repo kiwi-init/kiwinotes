@@ -59,6 +59,7 @@ describe("catálogo", () => {
     "app.name": "nome próprio",
     "about.window.hub": "nome próprio (o app)",
     "hub.cat.name": "nome próprio (o gato)",
+    "settings.tab.kiwi": "nome próprio (o mascote, a aba do Agente)",
     "shortcuts.group.Kiwi Cat": "nome próprio (o gato)",
     "agent.cat.color.soul-claro": "nome da cor, igual nas duas",
     "notes.draft.when": "só o parâmetro",

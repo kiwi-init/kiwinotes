@@ -164,6 +164,11 @@ export const ptAgent = {
   "agent.test.input": "Pedido de teste",
   "agent.test.prompt": "Diga oi em uma frase.",
   "agent.failed": "Não deu certo",
+  // A aba do Agente vazia com ele desligado (T31765, lead #31811).
+  "agent.offTab.voice": "Ligue o agente na aba Geral para o Kiwi falar.",
+  "agent.offTab": "Ligue o agente na aba Geral para usar estes ajustes.",
+  "agent.offTab.memory": "Ligue o agente na aba Geral para a memória, as instruções e as rotinas.",
+  "agent.offTab.open": "Abrir a aba Geral",
   "agent.saveFailed": "Não deu para salvar. Tente de novo.",
   "agent.consent.goesTo": "O que vai para o {name}",
   "agent.consent.never": "O que nunca vai",
