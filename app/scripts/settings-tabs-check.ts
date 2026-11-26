@@ -133,6 +133,7 @@ try {
     await v.page.keyboard.press("Enter");
     await expectTab(v.page, "agent", "general");
     assert.equal((await state(v.page, "agent")).focused, "general", "o foco vai para a aba Geral");
+    await v.page.screenshot({ path: join(out, "foco-aba-geral.png") });
     problems.push(...v.report.problems);
     await v.close();
     checks.push("with the agent off, Agente › Voz links to the Geral tab, and the keyboard focus goes to that tab");
