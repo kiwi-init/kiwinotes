@@ -10,6 +10,8 @@ DerivedData/
 .env
 .env.*
 models/
+# Os labs (experimentos) ficam só no Mac de quem roda: nunca sobem (AGENTS.md, "Labs").
+/lab/
 *.log
 # A fixture do .log da régua dos arquivos (T21236): o `arquivos.ts --write` gera, e o teste lê do repo.
 !app/test/regua/arquivos/estoque.log

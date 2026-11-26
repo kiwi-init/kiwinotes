@@ -57,6 +57,13 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 - Cada task tem o próprio worktree: `git worktree add ../kiwinotes-wt/T<n> -b kn/T<n>-<slug> origin/main`. Trabalhe, faça os commits e o push dali.
 - Depois do merge: `git worktree remove ../kiwinotes-wt/T<n>`.
 
+## Labs (experimentos)
+- **Todo lab é só local** (harry #31554). Quando uma pessoa pede um lab para testar algo, ele nasce numa pasta `lab/` só no Mac e não sobe ao repo. Não tem PR, issue, CI nem `bun test` do time.
+- O lab mora em `lab/<nome>/`, no checkout principal (`kiwinotes/lab/`), que nunca troca de branch. Ele pode importar `../../app/src/…` e lê a `main`. O `.gitignore` tem `/lab/`.
+- As saídas (áudio, medidas) ficam em `lab/<nome>/saidas/`.
+- Quem decide levar o lab ao app é a pessoa que o pediu. Aí se abrem o spec, a issue e o PR, como sempre.
+- Um lab nunca entra num worktree de task nem num commit.
+
 ## Código do VoiceInk (GPL-3.0)
 - O Kiwi porta o motor local do VoiceInk (ADR 0004). Todo arquivo portado, em Swift ou TS, leva no topo: `// Portado de VoiceInk/<caminho> @ <commit> (GPL-3.0). Mudanças: …`.
 - Só a parte local: nada de provedores de nuvem, Sparkle, RemoteConfig ou anúncios.
