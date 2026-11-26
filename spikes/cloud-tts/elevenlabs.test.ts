@@ -1,6 +1,11 @@
 // T31096: o provedor ElevenLabs contra um servidor falso local. Nenhuma conta de verdade: a rodada real é do harry.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import { elevenLabs, sameText } from "./elevenlabs";
+import { main } from "./run.ts";
 
 const KEY = "sk_exemplo_0000000000000000000000000000000000000000";
 const VOICE = { id: "voz-exemplo", name: "Exemplo", lang: "pt-BR" as const };
@@ -62,10 +67,16 @@ beforeAll(() => {
         if (msg.text.trim()) data.text += msg.text;
         if (msg.text !== "") return;
         // O fim do texto: a conta guarda a geração no histórico e o áudio sai em pedaços.
-        if (wsMode === "error") return ws.send(JSON.stringify({ error: "quota_exceeded", message: "sem créditos" }));
+        if (wsMode === "error") {
+          ws.send(JSON.stringify({ error: "quota_exceeded", message: "sem créditos" }));
+          return;
+        }
         history.push({ history_item_id: `item-${++gen}`, text: data.text.trim(), voice_id: data.voice });
         ws.send(JSON.stringify({ audio: Buffer.from("ID3-parte-1").toString("base64"), isFinal: false }));
-        if (wsMode === "drop") return ws.close(1011, "caiu");
+        if (wsMode === "drop") {
+          ws.close(1011, "caiu");
+          return;
+        }
         ws.send(JSON.stringify({ audio: Buffer.from("-parte-2").toString("base64"), isFinal: false }));
         ws.send(JSON.stringify({ audio: null, isFinal: true }));
       },
@@ -199,4 +210,37 @@ describe("ElevenLabs (servidor falso)", () => {
     expect(sameText("  Oi,  Ana. ", "Oi, Ana.")).toBe(true);
     expect(sameText("Oi, Ana.", "Oi, Bruno.")).toBe(false);
   });
+});
+
+test("a rodada com o ElevenLabs falso: os tokens de exemplo não saem, cada geração é apagada e a chave não aparece", async () => {
+  reset();
+  const out = mkdtempSync(path.join(tmpdir(), "cloud-tts-el-"));
+  const printed: string[] = [];
+  const orig = { log: console.log, error: console.error };
+  console.log = (...a) => printed.push(a.join(" "));
+  console.error = (...a) => printed.push(a.join(" "));
+  let code: number;
+  try {
+    code = await main(["--providers", "elevenlabs", "--rounds", "1", "--only", "pt01,pt10,en09,mix01", "--out", out], {
+      ELEVENLABS_API_KEY: KEY,
+      ELEVENLABS_BASE_URL: base,
+    });
+  } finally {
+    Object.assign(console, orig);
+  }
+  const all = printed.join("\n");
+  expect(code).toBe(0);
+  expect(all).toContain("credenciais: nenhuma");
+  expect(all).not.toContain(KEY);
+  // 4 falas × 3 vozes: o que chegou ao servidor não tem os tokens de exemplo, e cada geração saiu do histórico.
+  const sent = seen.wsMessages.map((m) => (JSON.parse(m) as { text: string }).text).join("\n");
+  expect(seen.wsHeaders.length).toBe(12);
+  expect(sent).not.toMatch(/ghp|AKIA|segredo/i);
+  expect(seen.deleted.length).toBe(12);
+  expect(history).toEqual([]);
+  expect(existsSync(path.join(out, "tabela.md"))).toBe(true);
+  for (const f of readdirSync(out, { recursive: true }) as string[]) {
+    if (!f.includes(".")) continue;
+    expect(readFileSync(path.join(out, f)).toString("latin1")).not.toContain(KEY);
+  }
 });
