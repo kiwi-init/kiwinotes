@@ -187,7 +187,6 @@ try {
   assert.ok(box && top);
   await p.screenshot({ path: join(out, "6-ajustes.png"), clip: { x: box.x, y: top.y - 12, width: box.width, height: box.y + box.height - top.y + 12 }, fullPage: true });
   shots.push({ file: "6-ajustes.png", caption: "6. Ajustes › Agente: os 6 blocos e o período do primeiro resumo" });
-  await peekKiwi(q); // o balão só aparece com o mouse no Kiwi (spec #32534)
   await invoke("agent.ask", { text: "resumo executivo do Mudança" });
   await idle();
   const fresh = (await invoke("agent.proposals")).proposals.find((x: any) => x.kind === "summary" && x.status === "pending" && x.project?.folder === "Projetos/Mudança");
