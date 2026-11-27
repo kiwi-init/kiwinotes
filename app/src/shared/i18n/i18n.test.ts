@@ -87,6 +87,9 @@ describe("catálogo", () => {
     "editor.callout.info": "o nome do tipo do Obsidian",
     "editor.callout.bug": "o nome do tipo do Obsidian",
     "agent.voice.provider.option.elevenLabs": "o nome do serviço",
+    "calendarKiwi.alert.title": "só o molde, as palavras vêm traduzidas",
+    "calendarKiwi.alert.bodyProject": "só o molde, as palavras vêm traduzidas",
+    "calendarKiwi.alert.speech": "só o molde, as palavras vêm traduzidas",
   };
 
   test("o inglês igual ao português só passa na lista de propósito (T30218)", () => {
