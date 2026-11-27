@@ -454,6 +454,24 @@ async function frames(p: Page, lab: Page, rest: Buffer, dir: string, section: st
     const boxes = await dropBoxes(p);
     list.push({ t: f, ...boxes, shape: { start: dropShape(a.start), end: dropShape(a.end) }, cols: { start: a.start, end: a.end }, trail: a.trail, ring: a.ring });
   }
+  // A soltura da mola é curta (o pescoço dura poucos quadros, spec #32446) e os 12 quadros podem pular por cima dela:
+  // na ida, entre o último quadro presa e o 1º solta de cada lado, a forma também se lê a cada quadro de 60 Hz. Só para
+  // a forma (o `dripProblem`); a tira continua com os 12.
+  const extra: { t: number; shape: Record<Side, DropShape> }[] = [];
+  if (kind === "in") {
+    const ms = Math.max(...drops.map((a) => a.ms));
+    const between = new Set<number>();
+    for (const side of SIDES) {
+      const i = list.findIndex((f, k) => f.shape[side].kind === "attached" && list[k + 1]?.shape[side].kind === "detached");
+      if (i < 0) continue;
+      for (let t = list[i]!.t * ms + FRAME_MS; t < list[i + 1]!.t * ms; t += FRAME_MS) between.add(t / ms);
+    }
+    for (const f of [...between].sort((a, b) => a - b)) {
+      await seek(p, f);
+      const a = await analyze(lab, scale, await geometry(p), rest, await shot(p), await maskShot(p), before?.buttons);
+      extra.push({ t: f, shape: { start: dropShape(a.start), end: dropShape(a.end) } });
+    }
+  }
   assert.deepEqual(problems, [], `texto ou ícone fora do lugar durante a ${kind === "in" ? "ida" : "volta"}`);
   if (before) {
     const early = inks.find((i) => i.t > 0 && i.t < 0.25)!;
@@ -463,7 +481,7 @@ async function frames(p: Page, lab: Page, rest: Buffer, dir: string, section: st
   assert.deepEqual(trail, [], `rastro durante a ${kind === "in" ? "ida" : "volta"} (a faixa diferente da barra parada, fora da gota)`);
   await release(p);
   await waitPhase(p, kind === "in" ? "shown" : "hidden");
-  return { anims, frames: list, shownInk, inks };
+  return { anims, frames: list, extra, shownInk, inks };
 }
 
 /** O maior intervalo entre quadros do clique até WATCH_MS depois, com o clique de verdade do Playwright. */
@@ -722,8 +740,9 @@ try {
       const rest = await shot(w.page, join(out, theme, "parada.png"));
       const ida = await frames(w.page, lab, rest, join(out, theme, "ida"), "notes", "in");
       for (const side of SIDES) {
-        const why = dripProblem(ida.frames.map((f) => f.shape[side]));
-        assert.equal(why, null, `a ida do lado ${side} não pinga como gota: ${why} (${JSON.stringify(ida.frames.map((f) => f.shape[side]))})`);
+        const shapes = [...ida.frames, ...ida.extra].sort((a, b) => a.t - b.t).map((f) => f.shape[side]);
+        const why = dripProblem(shapes);
+        assert.equal(why, null, `a ida do lado ${side} não pinga como gota: ${why} (${JSON.stringify(shapes)})`);
       }
       const shown = await phases(w.page);
       assert.deepEqual([shown.slotStart, shown.slotEnd], ["shown", "shown"], JSON.stringify(shown));
