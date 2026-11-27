@@ -103,7 +103,7 @@ bun run cli agent remove --data /tmp/kn-test
 
 O `proof` abre uma sessão sem mandar pedido e mostra o processo que o adaptador abriu, as opções de isolamento e o que a sessão recebeu. **O `proof --real` abre o Claude Code de verdade: só o harry roda, quando o lead pede** (ADR 0011). `KIWI_ADAPTER_PROOF=1 bun test src/agent/adapter` roda a mesma prova do builder como teste (ela vai ao npm, por isso fica fora do `bun test` comum).
 
-**O agente dentro do app (T8678, spec #8339)**, pelas capacidades do contrato, com o headless de pé. As chaves de teste só valem no headless: `KIWI_FAKE_AGENT=1` (o agente falso), `KIWI_ADAPTER_REGISTRY` e `KIWI_ADAPTER_PACKAGES` (um registro do npm falso e a lista dele) e `KIWI_AGENT_IDLE_MS`:
+**O agente dentro do app (T8678, spec #8339)**, pelas capacidades do contrato, com o headless de pé. **No headless, o agente é sempre o falso** (T32699, issue #461): o agente falso, o `claude` e o `agy` falsos, e o download sem `KIWI_ADAPTER_REGISTRY` falha (`E_ADAPTER_OFFLINE`) em vez de ir ao npm. O de verdade só com `KIWI_REAL_AGENT=1`, que só o harry usa, a pedido do lead; nenhum roteiro do repo a passa. `KIWI_FAKE_AGENT=1`, que os roteiros antigos passam, não muda mais nada. As outras chaves de teste só valem no headless: `KIWI_ADAPTER_REGISTRY` e `KIWI_ADAPTER_PACKAGES` (um registro do npm falso e a lista dele) e `KIWI_AGENT_IDLE_MS`:
 
 ```sh
 bun run cli invoke agent.enable '{"consent":true}' --data /tmp/kn-test   # liga (a 1ª vez pede o aceite)
