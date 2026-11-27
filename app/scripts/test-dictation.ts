@@ -24,6 +24,7 @@ import path from "node:path";
 
 import { WHISPER_SMALL } from "../src/bun/precise-dictation.ts";
 import { modelDir } from "../src/notes/semantic/model.ts";
+import { notRunMessage } from "./dictation-failure.ts";
 import { FALSE_POSITIVE_CASES, loadSpoken, makeFixtures, missingVoices, PRECISE_CASES } from "./dictation-fixtures.ts";
 
 const APP = path.resolve(import.meta.dir, "..");
@@ -279,7 +280,8 @@ async function main(): Promise<number> {
       }
     }
   } catch (e) {
-    console.error(`a bateria não rodou: ${(e as Error).message}`);
+    // O motivo sai antes do stop(), que apaga a pasta com o headless.out (#454).
+    console.error(notRunMessage((e as Error).message, [data, preciseData], a.keep));
     stop();
     return 1;
   } finally {
