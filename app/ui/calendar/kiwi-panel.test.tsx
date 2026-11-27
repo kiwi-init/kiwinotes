@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { CalendarItem, CalendarItems } from "../../src/shared/calendar.ts";
 import { suggestion } from "../../src/shared/calendar-kiwi.ts";
 import { setAppLocale } from "../src/i18n.ts";
-import { DISMISS_KEEP_MS, DISMISS_STORAGE_KEY, dismissedStore, dropStart, panelRange, todayItems } from "./kiwi-panel.ts";
+import { DISMISS_KEEP_MS, DISMISS_STORAGE_KEY, dismissedStore, dropStart, dropUpdate, panelRange, todayItems } from "./kiwi-panel.ts";
 import { KiwiPanel } from "./KiwiPanel.tsx";
 import { isAskShortcut, KiwiAskBox } from "./KiwiAsk.tsx";
 import { openKiwiAsk, provideKiwiAsk } from "../hub/kiwi-ask.ts";
@@ -57,6 +57,9 @@ describe("o lado puro", () => {
   test("a hora onde a pendência cai: passos de 15 min, dentro do dia; sem hora, o dia todo", () => {
     expect(dropStart("2026-11-27", 9 * 60 + 7)).toBe("2026-11-27T09:00");
     expect(dropStart("2026-11-27", 9 * 60 + 8)).toBe("2026-11-27T09:15");
+    // O allDay vai sempre: sem ele, a pendência sem data cai como "dia todo" mesmo solta às 9h.
+    expect(dropUpdate("n:a.md#3:x", "2026-11-27T09:15")).toEqual({ id: "n:a.md#3:x", start: "2026-11-27T09:15", allDay: false });
+    expect(dropUpdate("n:a.md#3:x", "2026-11-27")).toEqual({ id: "n:a.md#3:x", start: "2026-11-27", allDay: true });
     expect(dropStart("2026-11-27", -30)).toBe("2026-11-27T00:00");
     expect(dropStart("2026-11-27", 24 * 60 + 40)).toBe("2026-11-27T23:45");
     expect(dropStart("2026-11-27", null)).toBe("2026-11-27");

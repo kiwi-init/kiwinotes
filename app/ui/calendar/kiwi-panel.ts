@@ -28,6 +28,9 @@ export function dropStart(day: string, minutes: number | null): string {
   return `${day}T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
+/** O que o arrasto grava: o `allDay` vai sempre, senão a pendência sem data vira "dia todo" mesmo com a hora. */
+export const dropUpdate = (id: string, start: string) => ({ id, start, allDay: start.length === 10 });
+
 /** Quanto tempo o "Agora não" vale: depois, a sugestão pode voltar. */
 export const DISMISS_KEEP_MS = 7 * 86_400_000;
 export const DISMISS_STORAGE_KEY = "kn.calendar.kiwi.dismissed";

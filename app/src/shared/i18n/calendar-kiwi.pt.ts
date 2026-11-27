@@ -25,6 +25,7 @@ export const ptCalendarKiwi = {
   "calendarKiwi.day.yesterday": "ontem",
   // A sugestão do painel ("quer que eu te lembre?"), uma por regra, e os botões.
   "calendarKiwi.suggest.overdue": "“{title}” ficou para trás desde {day}. Quer que eu passe para amanhã, {time}?",
+  "calendarKiwi.suggest.overdueToday": "“{title}” era hoje, {at}, e ficou para trás. Quer que eu passe para amanhã, {time}?",
   "calendarKiwi.suggest.deadline": "“{title}” é {day}, {time}. Quer que eu te lembre?",
   "calendarKiwi.suggest.deadlineDay": "“{title}” é {day}. Quer que eu te lembre?",
   "calendarKiwi.suggest.meetingTomorrow": "Amanhã às {time} tem “{title}”. Quer um aviso 30 minutos antes?",

@@ -44,7 +44,7 @@
 }
 .kn-cal-kiwi li:first-child { border-top: 0; }
 .kn-cal-kiwi li[data-done] .kn-cal-kiwi-name { text-decoration: line-through; opacity: 0.6; }
-.kn-cal-kiwi-tm { width: 44px; flex: none; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.kn-cal-kiwi-tm { min-width: 44px; flex: none; white-space: nowrap; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .kn-cal-kiwi-dot { width: 8px; height: 8px; flex: none; margin-top: 5px; border-radius: 50%; background: var(--c); }
 .kn-cal-kiwi-name { min-width: 0; overflow-wrap: anywhere; }
 .kn-cal-kiwi-name small { display: block; margin-top: 1px; font-size: 11px; color: var(--text-3); }

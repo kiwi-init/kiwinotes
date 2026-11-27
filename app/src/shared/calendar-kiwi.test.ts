@@ -61,6 +61,12 @@ describe("a sugestão da vez", () => {
     expect(s.accept).toEqual({ label: "Passar para amanhã", patch: { start: "2026-11-27T09:00" } });
   });
 
+  test("a atrasada de hoje diz a hora, não o \"desde hoje\"", () => {
+    const at10 = [item({ title: "Ligar para a Ana", start: "2026-11-26T10:00" })];
+    expect(suggestion(at10, NOW, "pt")!.text).toBe("“Ligar para a Ana” era hoje, 10h, e ficou para trás. Quer que eu passe para amanhã, 9h?");
+    expect(suggestion(at10, NOW, "en")!.text).toBe("“Ligar para a Ana” was due today, 10 AM. Want me to move it to tomorrow, 9 AM?");
+  });
+
   test("a atrasada de dia todo passa de hoje para amanhã só no dia seguinte, e continua de dia todo", () => {
     expect(suggestion([item({ title: "Hoje", start: "2026-11-26" })], NOW, "pt")?.rule).not.toBe("overdue");
     const s = suggestion([item({ title: "Ontem", start: "2026-11-25" })], NOW, "pt")!;

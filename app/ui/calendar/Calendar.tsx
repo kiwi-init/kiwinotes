@@ -175,7 +175,14 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
   const save = async (u: CalendarUpdate) => {
     try {
       const fresh = await source.update(u);
-      setLoad((l) => (l.state === "ready" ? { state: "ready", data: { ...l.data, items: l.data.items.map((i) => (i.id === u.id ? fresh : i)) } } : l));
+      // A pendência sem data que ganhou dia (o arrasto do painel do Kiwi, T32156) ainda não está na grade: entra agora.
+      setLoad((l) =>
+        l.state !== "ready"
+          ? l
+          : l.data.items.some((i) => i.id === u.id)
+            ? { state: "ready", data: { ...l.data, items: l.data.items.map((i) => (i.id === u.id ? fresh : i)) } }
+            : { state: "ready", data: { ...l.data, items: [...l.data.items, fresh], undated: l.data.undated.filter((i) => i.id !== u.id) } },
+      );
       setOpen((o) => (o && o.item.id === u.id ? { ...o, item: fresh } : o));
       setHover((h) => (h && h.item.id === u.id ? { ...h, item: fresh } : h));
     } catch (e) {

@@ -139,9 +139,11 @@ export function suggestion(items: readonly SuggestItem[], now: number, locale: L
       rule: "overdue",
       key: keyOf("overdue", late),
       itemId: late.id,
-      text: translate(locale, "calendarKiwi.suggest.overdue", {
+      // A de hoje (passou a hora) diz a hora; "desde hoje" soa errado.
+      text: translate(locale, dayOf(startMs(late.start)) === dayOf(now) ? "calendarKiwi.suggest.overdueToday" : "calendarKiwi.suggest.overdue", {
         title: late.title,
         day: spokenDay(startMs(late.start), now, locale),
+        at: spokenTime(startMs(late.start), locale),
         time: spokenTime(new Date(tomorrow).setHours(MOVE_TO_HOUR, 0, 0, 0), locale),
       }),
       accept: { label: translate(locale, "calendarKiwi.suggest.move"), patch: { start: isoLocal(target, late.allDay) } },

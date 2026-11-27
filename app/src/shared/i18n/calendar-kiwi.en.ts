@@ -21,6 +21,7 @@ export const enCalendarKiwi: { readonly [K in keyof typeof ptCalendarKiwi]: Entr
   "calendarKiwi.day.tomorrow": "tomorrow",
   "calendarKiwi.day.yesterday": "yesterday",
   "calendarKiwi.suggest.overdue": "“{title}” has been overdue since {day}. Want me to move it to tomorrow, {time}?",
+  "calendarKiwi.suggest.overdueToday": "“{title}” was due today, {at}. Want me to move it to tomorrow, {time}?",
   "calendarKiwi.suggest.deadline": "“{title}” is due {day}, {time}. Want me to remind you?",
   "calendarKiwi.suggest.deadlineDay": "“{title}” is due {day}. Want me to remind you?",
   "calendarKiwi.suggest.meetingTomorrow": "“{title}” is tomorrow at {time}. Want a reminder 30 minutes before?",

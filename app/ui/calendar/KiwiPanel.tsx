@@ -10,7 +10,7 @@ import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo
 import { type CalendarItem, type CalendarItems, type CalendarUpdate } from "../../src/shared/calendar.ts";
 import { suggestion } from "../../src/shared/calendar-kiwi.ts";
 import { useT } from "../src/i18n.ts";
-import { dismissedStore, dropStart, panelRange, todayItems } from "./kiwi-panel.ts";
+import { dismissedStore, dropStart, dropUpdate, panelRange, todayItems } from "./kiwi-panel.ts";
 import type { CalendarStore } from "./source.ts";
 import { HOUR_PX } from "./views.tsx";
 
@@ -130,7 +130,7 @@ export function KiwiPanel({
       setTarget(null);
       if (!c?.moved) return;
       const start = dropAt(e.clientX, e.clientY);
-      if (start) void save({ id: c.item.id, start }).finally(reload);
+      if (start) void save(dropUpdate(c.item.id, start)).finally(reload);
     };
     addEventListener("pointermove", move);
     addEventListener("pointerup", up);
