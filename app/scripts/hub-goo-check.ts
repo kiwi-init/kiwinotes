@@ -520,7 +520,9 @@ const PAINT_BLOCK_MS = 40;
 /** O desenho em que o quadro preso cai: o 3º com o relógio andando, já na barriga. */
 const SLOW_AT_DRAW = 3;
 
-type Draw = { at: number; t: number; ms: number; phase: string; waiting: boolean };
+/** A camada da cabeça num desenho: a animação de `transform` da `.kn-goo-run` (o compositor, #231), ou null sem ela. */
+type Run = { state: string; ms: number; t: number } | null;
+type Draw = { at: number; t: number; ms: number; phase: string; waiting: boolean; clock: string; run: Run };
 
 /**
  * A troca com `CLICK_BLOCK_MS` presos no clique e um quadro de `SLOW_BLOCK_MS` no `SLOW_AT_DRAW`º desenho. Devolve, a
@@ -534,6 +536,9 @@ async function slowSection(p: Page, section: string) {
     const head = document.querySelector('.kn-goo-path[data-side="end"][data-part="head"]')!;
     const drop = document.querySelector<HTMLElement>('.kn-goo-clock[data-side="end"]')!;
     const clock = () => drop.getAnimations()[0];
+    const runLayer = document.querySelector('.kn-goo-run[data-side="end"]')!;
+    const run = () => runLayer.getAnimations().find((a) =>
+      ((a.effect as KeyframeEffect | null)?.getKeyframes() ?? []).some((k) => "transform" in k));
     w.__slow = { draws: [], waitingAtClick: null };
     let moving = 0;
     const draws = new MutationObserver(() => {
@@ -542,7 +547,8 @@ async function slowSection(p: Page, section: string) {
       w.__slow.draws.push({
         at: Number(document.timeline.currentTime ?? performance.now()),
         t: c ? Number(c.currentTime ?? 0) : -1, ms: Number(timing?.duration ?? 0),
-        phase: goo.dataset.end ?? "", waiting: drop.dataset.waiting !== undefined,
+        phase: goo.dataset.end ?? "", waiting: drop.dataset.waiting !== undefined, clock: c?.playState ?? "",
+        run: ((r) => r ? { state: r.playState, ms: Number(r.effect?.getComputedTiming().duration ?? 0), t: Number(r.currentTime ?? -1) } : null)(run()),
       });
       if (c && ++moving === at) {
         const until = performance.now() + block;
@@ -599,7 +605,13 @@ function slowReport(draws: Draw[]) {
   // A largada: o intervalo do 1º desenho com o relógio ao 2º. Se a gota larga antes de a seção pintar, o quadro
   // longo cai aqui, e a barriga perde quadros.
   const launch = moving.length > 1 ? moving[1]!.at - moving[0]!.at : null;
-  return { first: moving[0]?.t ?? null, launch, gap, worst, waited: draws.some((d) => d.waiting) };
+  // O compositor (#231): com o relógio andando, a cabeça anda numa animação de `transform` rodando na camada dela, com
+  // a duração e o tempo do relógio. Pôr o lugar no `style` pela thread principal congela a cabeça num quadro preso.
+  const running = moving.filter((d) => d.clock === "running");
+  const offRun = running.find((d) => !d.run || d.run.state !== "running" || Math.abs(d.run.ms - d.ms) > 0.5 ||
+    Math.abs(d.run.t - d.t) > STEP_SLACK_MS);
+  const compositor = { checked: running.length, off: offRun ? { clockMs: offRun.ms, clockT: offRun.t, run: offRun.run } : null };
+  return { first: moving[0]?.t ?? null, launch, gap, worst, waited: draws.some((d) => d.waiting), compositor };
 }
 
 type Head = { x: number; w: number } | null;
@@ -874,6 +886,8 @@ try {
         `a ${dir} largou antes de a seção pintar: o 2º desenho veio ${r.launch?.toFixed(1)} ms depois do 1º (máximo ${(FRAME_MS + STEP_SLACK_MS).toFixed(0)})`);
       assert.ok(r.gap >= SLOW_BLOCK_MS * 0.9, `a ${dir} não pegou o quadro preso de ${SLOW_BLOCK_MS} ms (maior intervalo ${r.gap.toFixed(0)} ms)`);
       assert.ok(r.worst, `a ${dir} não teve dois desenhos com o relógio para medir`);
+      assert.ok(r.compositor.checked > 0 && r.compositor.off === null,
+        `a cabeça da ${dir} não anda no compositor (#231): com o relógio andando, a .kn-goo-run não tem a animação de transform rodando no tempo dele (${r.compositor.checked} desenhos; o primeiro fora: ${JSON.stringify(r.compositor.off)})`);
       assert.ok(r.worst.off <= STEP_SLACK_MS,
         `o relógio da ${dir} se afastou do tempo real: andou ${r.worst.stepMs.toFixed(1)} ms num desenho de ${r.worst.gapMs.toFixed(1)} ms (folga ${STEP_SLACK_MS})`);
     }
@@ -922,7 +936,7 @@ try {
     const t = metrics[`${theme}.tempoReal`] as { worst: number };
     console.log(`ok ${theme}: ida e volta quadro a quadro, com pescoço, gota solta e sem rastro; pior quadro em tempo real ${t.worst.toFixed(1)} ms (meta ${SLOW_FRAME_MS})`);
   }
-  console.log(`ok seção lenta: a gota espera a seção pintar, larga do começo e anda com o tempo real no quadro preso de ${SLOW_BLOCK_MS} ms`);
+  console.log(`ok seção lenta: a gota espera a seção pintar, larga do começo e anda com o tempo real no quadro preso de ${SLOW_BLOCK_MS} ms, com a cabeça no compositor`);
   console.log("ok troca no meio: na ida e na volta, a cabeça não anda mais que um quadro normal");
   console.log("ok reduzir movimento (Mac e Kiwi): sem gota; os botões entram com o fade, que o base.css corta para 0,01 ms");
   console.log(`quadros, vídeos e metrics.json em ${out}`);
