@@ -149,6 +149,37 @@ try {
       assert.equal(await p.locator(`${pane} .kn-cal-item[data-open]`).count(), 0, "nenhum item marcado depois do ⤡");
       checks.push(`${lang}: o hover com um só ⤢ no canto, o painel largo com Item · Nota · Ligações, e o ⤡ de volta`);
 
+      // 3b. O filtro (T32408): esconder um projeto e um tipo, na grade e no painel do Kiwi, e ele fica ao recarregar.
+      const gone = (sel: string) => p.waitForSelector(sel, { state: "detached" });
+      const undated = (t: string) => `${pane} .kn-cal-kiwi-undated li:has-text("${t}")`;
+      await p.waitForSelector(undated("Escolher o fornecedor"));
+      await p.locator(`${pane} .kn-cal-projects-bt`).click();
+      await p.locator(`${pane} .kn-cal-projects [data-project="Projeto X"] input`).uncheck();
+      await gone(item("Revisar o orçamento"));
+      await gone(undated("Escolher o fornecedor"));
+      await p.waitForSelector(item("Revisão do Projeto X"));
+      await p.waitForSelector(undated("Levar a geladeira"));
+      assert.equal(await p.locator(`${pane} .kn-cal-projects[data-filtered]`).count(), 1, "o botão mostra que há filtro");
+      await p.screenshot({ path: join(shots, "filtro-projeto.png") });
+      await p.locator(`${pane} .kn-cal-projects [data-project-all] input`).check();
+      await p.waitForSelector(item("Revisar o orçamento"));
+      await p.keyboard.press("Escape");
+      await gone(`${pane} .kn-cal-projects-pop`);
+      const meeting = p.locator(`${pane} .kn-cal-legend [data-kind="meeting"]`);
+      await meeting.click();
+      assert.equal(await meeting.getAttribute("aria-pressed"), "false");
+      await gone(item("Revisão do Projeto X"));
+      await p.waitForSelector(item("Revisar o orçamento"));
+      await p.screenshot({ path: join(shots, "filtro-tipo.png") });
+      await p.reload();
+      await tab(p, "calendar").click();
+      await p.waitForSelector(item("Revisar o orçamento"));
+      assert.equal(await p.locator(`${pane} .kn-cal-legend [data-kind="meeting"]`).getAttribute("aria-pressed"), "false", "o filtro fica ao recarregar");
+      assert.equal(await p.locator(item("Revisão do Projeto X")).count(), 0, "a reunião segue escondida ao recarregar");
+      await p.locator(`${pane} .kn-cal-legend [data-kind="meeting"]`).click();
+      await p.waitForSelector(item("Revisão do Projeto X"));
+      checks.push(`${lang}: o filtro esconde o Projeto X (na grade e no sem data) e as reuniões, e fica ao recarregar`);
+
       if (lang === "pt") {
         // 4a. Arrastar uma hora para baixo muda a hora na linha da nota; esticar a borda põe o fim.
         const line = async () => ((await invoke("notes.get", { path: "Projeto X/Pendências.md" })).content as string).split("\n")[2];

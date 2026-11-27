@@ -10,6 +10,7 @@ import { addDays, type CalendarItem, type CalendarItems, type CalendarNotify, ty
 import { kiwiFace } from "../notes/editor/kiwi-face.ts";
 import { useT } from "../src/i18n.ts";
 import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WIDE_PX, WidePanel, type WideState } from "./Detail.tsx";
+import { type CalendarFilter, filterStorage, passes, readFilter, shownProjects, toggleAllProjects, toggleKind, toggleProject, writeFilter } from "./filter.ts";
 import { periodTitle } from "./format.ts";
 import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, noteLine, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
 import { KiwiAskBox } from "./KiwiAsk.tsx";
@@ -65,6 +66,12 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
   const [notice, setNotice] = useState<string | null>(null);
   const [face, setFace] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // O filtro por tipo e por projeto (T32408): vale nas quatro vistas e no painel do Kiwi, e fica no aparelho.
+  const [filter, setFilterState] = useState<CalendarFilter>(() => readFilter(filterStorage()));
+  const setFilter = (f: CalendarFilter) => {
+    setFilterState(f);
+    writeFilter(filterStorage(), f);
+  };
   const range = useMemo(() => viewRange(view, anchor), [view, anchor]);
   const root = useRef<HTMLDivElement>(null);
   const side = useRef<HTMLDivElement>(null);
@@ -267,14 +274,15 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
   }, [items, view]);
 
   /** Os itens com a prévia do arrastar aplicada (o item vai junto com o ponteiro, em passos de 15 min). */
+  const visible = useMemo(() => items.filter((i) => passes(filter, i)), [items, filter]);
   const shown = useMemo(() => {
-    if (!dragView?.moved) return items;
-    return items.map((i) => {
+    if (!dragView?.moved) return visible;
+    return visible.map((i) => {
       if (i.id !== dragView.id) return i;
       const p = dragView.mode === "move" ? moveItem(i, dragView.dm, dragView.dd) : resizeItem(i, dragView.dm);
       return p ? { ...i, ...p } : i;
     });
-  }, [items, dragView]);
+  }, [visible, dragView]);
 
   const handlers: ItemHandlers = {
     onEnter: showCard,
@@ -296,7 +304,12 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     [wide, view, range.days, shown],
   );
 
-  const counts = useMemo(() => Object.fromEntries(KINDS.map((k) => [k, items.filter((i) => i.kind === k).length])), [items]);
+  // A conta de cada tipo segue o filtro de projeto, não o de tipo: o tipo escondido ainda mostra quantos tem.
+  const counts = useMemo(() => {
+    const inProjects = items.filter((i) => passes({ kinds: [], projects: filter.projects }, i));
+    return Object.fromEntries(KINDS.map((k) => [k, inProjects.filter((i) => i.kind === k).length]));
+  }, [items, filter.projects]);
+  const projects = load.state === "ready" ? load.data.projects : [];
 
   return (
     <div className="kn-cal" ref={root} data-view={view} data-wide={wide ? "" : undefined} aria-label={t("calendar.aria")}>
@@ -330,13 +343,21 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
       </div>
       <div className="kn-cal-legend">
         {KINDS.map((k) => (
-          <span key={k} data-kind={k}>
+          <button
+            type="button"
+            key={k}
+            data-kind={k}
+            aria-pressed={!filter.kinds.includes(k)}
+            title={t(filter.kinds.includes(k) ? "calendar.filter.show" : "calendar.filter.hide", { kind: t(`calendar.kind.${k}`) })}
+            onClick={() => setFilter(toggleKind(filter, k))}
+          >
             <i />
             {t(`calendar.kind.${k}`)}
             {counts[k] ? <em>{counts[k]}</em> : null}
-          </span>
+          </button>
         ))}
-        <span>
+        {projects.length ? <ProjectPicker projects={projects} filter={filter} onChange={setFilter} /> : null}
+        <span className="kn-cal-legend-kiwi">
           {face ? <img src={face} alt="" /> : null}
           {t("calendar.legend.kiwi")}
         </span>
@@ -370,7 +391,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
         </div>
         {/* O lugar do painel do Kiwi (T32156): ele estica embaixo do painel largo e contrai junto na volta. */}
         <aside className="kn-cal-side" ref={side}>
-          <KiwiPanel source={source} today={today} now={now} face={face} save={save} />
+          <KiwiPanel source={source} today={today} now={now} face={face} save={save} filter={filter} />
         </aside>
       </div>
       {hover && !open ? (
@@ -414,6 +435,57 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
             }
           }}
         />
+      ) : null}
+    </div>
+  );
+}
+
+/** O seletor de projetos ao lado da legenda: uma caixa por pasta de primeiro nível, e o "Todos". */
+function ProjectPicker({ projects, filter, onChange }: { projects: readonly string[]; filter: CalendarFilter; onChange(f: CalendarFilter): void }) {
+  const { t } = useT();
+  const [isOpen, setIsOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const n = shownProjects(filter, projects);
+  const all = n === projects.length;
+
+  // Fecha com o clique fora e com o Esc.
+  useEffect(() => {
+    if (!isOpen) return;
+    const down = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setIsOpen(false);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsOpen(false);
+    };
+    addEventListener("pointerdown", down, true);
+    addEventListener("keydown", key);
+    return () => {
+      removeEventListener("pointerdown", down, true);
+      removeEventListener("keydown", key);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="kn-cal-projects" ref={box} data-open={isOpen ? "" : undefined} data-filtered={all ? undefined : ""}>
+      <button type="button" className="kn-cal-projects-bt" aria-haspopup="true" aria-expanded={isOpen} onClick={() => setIsOpen((o) => !o)}>
+        {all ? t("calendar.projects.all") : t("calendar.projects.some", { n, total: projects.length })}
+        <span aria-hidden="true">▾</span>
+      </button>
+      {isOpen ? (
+        <div className="kn-cal-projects-pop" role="group" aria-label={t("calendar.projects")}>
+          <label data-project-all="">
+            <input type="checkbox" checked={all} ref={(el) => {
+              if (el) el.indeterminate = !all && n > 0;
+            }} onChange={() => onChange(toggleAllProjects(filter, projects))} />
+            {t("calendar.projects.allOption")}
+          </label>
+          {projects.map((p) => (
+            <label key={p} data-project={p}>
+              <input type="checkbox" checked={!filter.projects.includes(p)} onChange={() => onChange(toggleProject(filter, p))} />
+              {p}
+            </label>
+          ))}
+        </div>
       ) : null}
     </div>
   );

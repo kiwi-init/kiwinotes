@@ -10,6 +10,7 @@ import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo
 import { type CalendarItem, type CalendarItems, type CalendarUpdate } from "../../src/shared/calendar.ts";
 import { suggestion } from "../../src/shared/calendar-kiwi.ts";
 import { useT } from "../src/i18n.ts";
+import { type CalendarFilter, NO_FILTER, passes } from "./filter.ts";
 import { dismissedStore, dropStart, dropUpdate, panelRange, todayItems } from "./kiwi-panel.ts";
 import type { CalendarStore } from "./source.ts";
 import { HOUR_PX } from "./views.tsx";
@@ -48,6 +49,7 @@ export function KiwiPanel({
   save,
   storage: given,
   initial = null,
+  filter = NO_FILTER,
 }: {
   source: CalendarStore;
   today: string;
@@ -58,6 +60,8 @@ export function KiwiPanel({
   storage?: Pick<Storage, "getItem" | "setItem"> | null;
   /** Os itens já lidos (os testes desenhados e o print); sem eles, o painel lê sozinho. */
   initial?: CalendarItems | null;
+  /** O filtro da tela (T32408): vale no Hoje e no sem data, não na sugestão. */
+  filter?: CalendarFilter;
 }) {
   const { t, locale } = useT();
   const [data, setData] = useState<CalendarItems | null>(initial);
@@ -81,8 +85,8 @@ export function KiwiPanel({
 
   const items = data?.items ?? [];
   const sug = useMemo(() => (data ? suggestion(items, now, locale, hidden) : null), [data, items, now, locale, hidden]);
-  const day = useMemo(() => todayItems(items, today), [items, today]);
-  const undated = data?.undated ?? [];
+  const day = useMemo(() => todayItems(items, today).filter((i) => passes(filter, i)), [items, today, filter]);
+  const undated = useMemo(() => (data?.undated ?? []).filter((i) => passes(filter, i)), [data, filter]);
 
   const accept = async () => {
     if (!sug || busy) return;
