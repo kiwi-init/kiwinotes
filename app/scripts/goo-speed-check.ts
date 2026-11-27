@@ -134,10 +134,12 @@ export function speedOf(fronts: number[], ms: number): SpeedReport {
   const last = fronts.at(-1)!;
   const dir = Math.sign(last - first) || 1;
   const v = fronts.slice(1).map((f, i) => (f - fronts[i]!) * dir);
-  // Entre a largada (a 1ª vez que a frente sai do lugar) e a chegada (a última vez que ainda falta caminho).
-  const go = fronts.findIndex((f) => Math.abs(f - first) > MOVED_PX);
-  const arrive = fronts.findLastIndex((f) => Math.abs(last - f) > MOVED_PX);
-  const mid = go >= 1 && arrive >= go ? v.slice(go - 1, arrive) : v;
+  // Como no T32464 (#32544): da largada (o 1º quadro em que a frente anda 1 px; antes é a mola entrando) até a
+  // chegada (o 1º quadro em que a frente alcança o lugar final; o que vem depois é o assentar do passar do ponto). Na
+  // volta, o último quadro é o último antes de a cabeça sumir.
+  const go = v.findIndex((x) => x >= 1);
+  const reach = fronts.findIndex((f) => (f - last) * dir >= -MOVED_PX);
+  const mid = go >= 0 && reach > go ? v.slice(go, reach) : v;
   const jumps = v.slice(1).map((x, i) => Math.abs(x - v[i]!));
   const r = (n: number) => Math.round(n * 100) / 100;
   return {
