@@ -157,6 +157,7 @@ export const ptHub = {
   "home.pending.emptyNotes": "Nenhum - [ ] aberto nas notas.",
   "home.pending.more": "e mais {n}",
   "home.week.title": "A sua semana",
+  "home.week.openCalendar": "Abrir o calendário",
   "home.week.readFailed": "Não deu para ler a semana.",
   "home.week.notesEdited": { one: "nota editada", other: "notas editadas" },
   "home.week.meetings": { one: "reunião", other: "reuniões" },

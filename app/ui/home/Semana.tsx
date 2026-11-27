@@ -7,12 +7,19 @@ import { dayLabel, hours, thousands, weekRange } from "./when.ts";
 import { useHome } from "./useHome.ts";
 import { useT } from "../src/i18n.ts";
 
-export function Semana({ onOpen }: { onOpen(path: string, internal: boolean): void }) {
+export function Semana({ onOpen, onCalendar }: { onOpen(path: string, internal: boolean): void; onCalendar?(): void }) {
   const { t } = useT();
   const load = useHome(api.home.week);
   return (
     <div className="kn-home-v-page" data-view="semana">
-      <h1 className="kn-home-v-title">{t("home.week.title")}</h1>
+      <div className="kn-home-v-head">
+        <h1 className="kn-home-v-title">{t("home.week.title")}</h1>
+        {onCalendar ? (
+          <button type="button" className="kn-home-week-open" onClick={onCalendar}>
+            {t("home.week.openCalendar")} →
+          </button>
+        ) : null}
+      </div>
       {load.state === "ready" ? <Week week={load.data} onOpen={onOpen} /> : load.state === "error" ? <p className="kn-home-v-empty">{t("home.week.readFailed")}</p> : null}
     </div>
   );

@@ -36,6 +36,8 @@ export interface HomeProps {
   onOpenNote(path: string, internal: boolean): void;
   onDictation(): void;
   onAgentSettings(): void;
+  /** "Abrir o calendário" na Semana (T32155). */
+  onCalendar?(): void;
   /** A tela que o menu da aba escolheu (T15875): o dia, as Pendências ou a Semana. */
   view?: InicioView;
 }
@@ -81,7 +83,7 @@ function useCatAnchor(el: HTMLElement | null, on: boolean) {
   }, [on, el]);
 }
 
-export function Home({ active, cat, searchShortcut, onSearch, onOpenNote, onDictation, onAgentSettings, view = "inicio" }: HomeProps) {
+export function Home({ active, cat, searchShortcut, onSearch, onOpenNote, onDictation, onAgentSettings, onCalendar, view = "inicio" }: HomeProps) {
   const { t, locale } = useT();
   // A frase é uma por abertura (a chave fica guardada); a saudação e a data seguem a língua quando ela troca.
   const [phrase] = useState(() => nextPhraseKey(safeStorage()));
@@ -91,7 +93,7 @@ export function Home({ active, cat, searchShortcut, onSearch, onOpenNote, onDict
   // Fora da vista Início não há o lugar do gato: ele fica no canto, como nas outras abas (lead #16013).
   useCatAnchor(slot, active && cat === "live" && view === "inicio");
   if (view === "pendencias") return <Pendencias onOpen={onOpenNote} />;
-  if (view === "semana") return <Semana onOpen={onOpenNote} />;
+  if (view === "semana") return <Semana onOpen={onOpenNote} onCalendar={onCalendar} />;
   return (
     <div className="kn-home" data-cat={cat}>
       <div className="kn-home-hero">

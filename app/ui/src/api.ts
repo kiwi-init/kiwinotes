@@ -135,6 +135,8 @@ export const api = {
     reveal: (path: string) => invoke("notes.reveal", { path }),
     /** Abre uma nota ou um arquivo da pasta no lugar certo (spec #17683): o clique num link do balão. */
     openPath: (path: string) => invoke("notes.openPath", { path }),
+    /** Para onde aponta um `[[link]]` (o painel largo do Calendário, T32155). */
+    resolve: (link: string) => invoke("notes.resolve", { link }),
   },
   /** A seção Sobre (T2386): a versão, o canal e as atualizações. */
   app: {

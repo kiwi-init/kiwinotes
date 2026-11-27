@@ -376,3 +376,23 @@ button.kn-home-v-chip:hover {
 .kn-home-v-quiet {
   font-size: var(--text-sm);
 }
+
+/* O título da Semana com o "Abrir o calendário" ao lado (T32155). */
+.kn-home-v-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kn-home-week-open {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent-text, var(--accent));
+  cursor: pointer;
+  white-space: nowrap;
+}
+.kn-home-week-open:hover {
+  text-decoration: underline;
+}

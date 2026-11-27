@@ -159,6 +159,7 @@ export const enHub: { readonly [K in keyof typeof ptHub]: Entry } = {
   "home.pending.emptyNotes": "No open - [ ] in the notes.",
   "home.pending.more": "and {n} more",
   "home.week.title": "Your week",
+  "home.week.openCalendar": "Open the calendar",
   "home.week.readFailed": "Couldn't read the week.",
   "home.week.notesEdited": { one: "note edited", other: "notes edited" },
   "home.week.meetings": { one: "meeting", other: "meetings" },

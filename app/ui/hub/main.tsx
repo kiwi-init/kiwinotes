@@ -68,10 +68,11 @@ interface HomeNav {
   onSearch(): void;
   onDictation(): void;
   onAgentSettings(): void;
+  onCalendar(): void;
 }
 
 /** `active`: a seção está na tela. As outras ficam montadas e escondidas (o estado não se perde ao trocar). */
-function Pane({ section, active, openRequest, searchRequest, searchSeen, onShowNotes, settingsRequest, onOpenNote, home }: { section: Tab; active: boolean; openRequest: OpenRequest | null; searchRequest: number; searchSeen: { current: number }; onShowNotes(): void; settingsRequest: SettingsRequest | null; onOpenNote(path: string, internal?: boolean, line?: number): void; home: HomeNav }) {
+function Pane({ section, active, openRequest, searchRequest, searchSeen, onShowNotes, settingsRequest, onOpenNote, home, catColor }: { section: Tab; catColor?: unknown; active: boolean; openRequest: OpenRequest | null; searchRequest: number; searchSeen: { current: number }; onShowNotes(): void; settingsRequest: SettingsRequest | null; onOpenNote(path: string, internal?: boolean, line?: number): void; home: HomeNav }) {
   switch (section) {
     case "home":
       return <Home active={active} onOpenNote={onOpenNote} {...home} />;
@@ -84,7 +85,7 @@ function Pane({ section, active, openRequest, searchRequest, searchSeen, onShowN
     case "meetings":
       return <Meetings onOpen={onOpenNote} />;
     case "calendar":
-      return <Calendar active={active} onOpenNote={onOpenNote} />;
+      return <Calendar active={active} catColor={catColor} onOpenNote={(path, internal, line) => onOpenNote(path, internal, line)} />;
   }
 }
 
@@ -348,7 +349,8 @@ function Hub() {
                   onShowNotes={() => go("notes")}
                   settingsRequest={settingsRequest}
                   onOpenNote={openNote}
-                  home={{ cat: homeCat, view: homeView, searchShortcut, onSearch: openSearch, onDictation: () => go("dictation"), onAgentSettings: () => openSettings("agent") }}
+                  catColor={settings?.kiwicat?.cor}
+                  home={{ cat: homeCat, view: homeView, searchShortcut, onSearch: openSearch, onDictation: () => go("dictation"), onAgentSettings: () => openSettings("agent"), onCalendar: () => go("calendar") }}
                 />
               </HubBarContext.Provider>
             </section>

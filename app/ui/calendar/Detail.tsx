@@ -9,7 +9,8 @@ import { CALENDAR_NOTIFY, type CalendarItem, type CalendarNotify } from "../../s
 import { useT } from "../src/i18n.ts";
 import { whenLine } from "./format.ts";
 import { noteLine } from "./model.ts";
-import type { CalendarSource, CalendarSourceText } from "./source.ts";
+import type { CalendarSource } from "../../src/shared/calendar.ts";
+import type { CalendarStore } from "./source.ts";
 
 /** Ida, volta e a piscada do item, em ms (o protótipo: 550, 600 e 650). */
 export const OPEN_MS = 550;
@@ -153,7 +154,7 @@ export function HoverCard({ item, at, face, a, onExpand, onEnter, onLeave }: { i
 }
 
 /** A nota de onde o item veio, com a linha dele marcada; cada linha abre as Notas nela. */
-function NoteTab({ item, text, onOpenLine }: { item: CalendarItem; text: CalendarSourceText | null | "loading"; onOpenLine(line?: number): void }) {
+function NoteTab({ item, text, onOpenLine }: { item: CalendarItem; text: CalendarSource | null | "loading"; onOpenLine(line?: number): void }) {
   const { t } = useT();
   if (!item.source) return <p className="kn-cal-muted">{t("calendar.noteEmpty")}</p>;
   if (text === "loading") return <p className="kn-cal-muted">{t("calendar.noteLoading")}</p>;
@@ -200,7 +201,7 @@ interface LinkRow {
 }
 
 /** As ligações: os outros itens da mesma nota e as notas citadas nela por `[[link]]`. */
-function useLinks(item: CalendarItem, text: CalendarSourceText | null | "loading", items: CalendarItem[], source: CalendarSource, openPath: (path: string, internal: boolean, line?: number) => void, openItem: (i: CalendarItem) => void): LinkRow[] {
+function useLinks(item: CalendarItem, text: CalendarSource | null | "loading", items: CalendarItem[], source: CalendarStore, openPath: (path: string, internal: boolean, line?: number) => void, openItem: (i: CalendarItem) => void): LinkRow[] {
   const { t } = useT();
   const [wiki, setWiki] = useState<LinkRow[]>([]);
   const body = text && text !== "loading" ? text.text : "";
@@ -237,7 +238,7 @@ export function WidePanel(props: {
   face: string | null;
   a: DetailActions;
   items: CalendarItem[];
-  source: CalendarSource;
+  source: CalendarStore;
   openPath(path: string, internal: boolean, line?: number): void;
   openItem(i: CalendarItem): void;
   onOpened(): void;
@@ -248,7 +249,7 @@ export function WidePanel(props: {
   const { t, locale } = useT();
   const ref = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<DetailTab>("item");
-  const [text, setText] = useState<CalendarSourceText | null | "loading">(item.source ? "loading" : null);
+  const [text, setText] = useState<CalendarSource | null | "loading">(item.source ? "loading" : null);
 
   useEffect(() => {
     let alive = true;

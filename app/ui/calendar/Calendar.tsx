@@ -13,7 +13,7 @@ import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WI
 import { periodTitle } from "./format.ts";
 import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, noteLine, resizeItem, stepAnchor, viewRange } from "./model.ts";
 import { NewItem } from "./NewItem.tsx";
-import { type CalendarSource, todayOf } from "./source.ts";
+import { apiStore, type CalendarStore, todayOf } from "./source.ts";
 import { AgendaList, type DragMode, HOUR_PX, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
 
 type Load = { state: "loading" } | { state: "ready"; data: CalendarItems } | { state: "error" };
@@ -51,8 +51,10 @@ const dayAt = (x: number, y: number): string | null =>
 
 const errCode = (e: unknown) => (e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "");
 
-export function Calendar({ active, source, onOpenNote, catColor }: { active: boolean; source: CalendarSource; onOpenNote(path: string, internal: boolean, line?: number): void; catColor?: unknown }) {
+export function Calendar({ active, source: given, onOpenNote, catColor }: { active: boolean; source?: CalendarStore; onOpenNote(path: string, internal: boolean, line?: number): void; catColor?: unknown }) {
   const { t, locale } = useT();
+  const [fallback] = useState(() => (given ? null : apiStore()));
+  const source = given ?? fallback!;
   const [view, setView] = useState<CalendarView>(initialView);
   const [today, setToday] = useState(() => todayOf());
   const [anchor, setAnchor] = useState(today);
