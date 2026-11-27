@@ -43,7 +43,7 @@ export function memorySource(seed: CalendarItem[], texts: Record<string, string>
     },
     async create(c) {
       const item: CalendarItem = {
-        id: `n:Calendário.md#${list.length}:${++n}`,
+        id: `n:Calendário.md#${list.length}:${++n}`, // i18n-ok: o arquivo que o main escreve (T32154)
         kind: c.kind,
         title: c.title,
         project: c.project ?? null,
@@ -52,7 +52,7 @@ export function memorySource(seed: CalendarItem[], texts: Record<string, string>
         allDay: c.allDay ?? c.start.length === 10,
         notify: c.notify ?? "none",
         readOnly: false,
-        source: { path: c.project ? `${c.project}/Pendências.md` : "Calendário.md", line: 0, internal: false },
+        source: { path: c.project ? `${c.project}/Pendências.md` : "Calendário.md", line: 0, internal: false }, // i18n-ok: o arquivo que o main escreve (T32154)
       };
       list.push(item);
       changed();

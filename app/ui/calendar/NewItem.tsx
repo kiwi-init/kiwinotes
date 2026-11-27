@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { CALENDAR_KINDS, type CalendarCreate, type CalendarKind } from "../../src/shared/calendar.ts";
 import { useT } from "../src/i18n.ts";
 
+const whereOf = (project: string) => (project ? `${project}/Pendências.md` : "Calendário.md"); // i18n-ok: o arquivo que o main escreve
+
 export function NewItem({ day, projects, onCancel, onCreate }: { day: string; projects: string[]; onCancel(): void; onCreate(c: CalendarCreate): void }) {
   const { t } = useT();
   const [title, setTitle] = useState("");
@@ -80,7 +82,7 @@ export function NewItem({ day, projects, onCancel, onCreate }: { day: string; pr
             <input type="time" name="end" step={900} value={end} disabled={!time} onChange={(e) => setEnd(e.target.value)} />
           </label>
         </div>
-        <p className="kn-cal-muted">{t("calendar.new.where", { path: project ? `${project}/Pendências.md` : "Calendário.md" })}</p>
+        <p className="kn-cal-muted">{t("calendar.new.where", { path: whereOf(project) })}</p>
         <div className="kn-cal-acts">
           <button type="button" className="kn-cal-btn" onClick={onCancel}>
             {t("calendar.new.cancel")}
