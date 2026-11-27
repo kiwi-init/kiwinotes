@@ -495,7 +495,13 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
         if (process.env.KIWI_FAKE_SPEECH !== "1") return { id, ok: false, code: "E_NO_FAKE_SPEECH", message: "start with KIWI_FAKE_SPEECH=1" };
         if (typeof msg.text !== "string") return { id, ok: false, code: "E_BAD_ARGS", message: "text must be a string" };
         try {
-          return { id, ok: true, value: await stores.agent.ask(msg.text, { voz: true }) };
+          const asked = await stores.agent.ask(msg.text, { voz: true });
+          // Como a fala de verdade (o `agent-voice.ts`): o "asked" com o id marca o pedido como da voz, e o gato do
+          // overlay termina com o balão (T33053).
+          const state = { phase: "asked" as const, id: asked.id };
+          event("agent.voice", state);
+          catOverlay?.overlay.voice(state);
+          return { id, ok: true, value: asked };
         } catch (e) {
           return { id, ok: false, code: (e as { code?: string }).code ?? "E_AGENT", message: (e as Error).message };
         }
