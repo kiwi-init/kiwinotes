@@ -46,6 +46,8 @@ const clamp = (x: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, x));
 const lerp = (a: number, b: number, s: number) => a + (b - a) * s;
 const span = (t: number, a: number, b: number) => (b === a ? (t >= b ? 1 : 0) : clamp((t - a) / (b - a)));
 const smooth = (s: number) => s * s * (3 - 2 * s);
+/** Na volta, a parte da corrida (perto da pílula) em que a cauda se estica até o pescoço. */
+const MEET = 0.45;
 const n2 = (x: number) => (Math.round(x * 100) / 100).toString();
 const NONE: GooParts = { head: "", edge: "", speck: "" };
 
@@ -124,7 +126,10 @@ export function gooStep(g: GooGeom, s: GooDrop, has: boolean, dt: number): GooDr
  * O caminho do estado `s` até o repouso no alvo `has`, um estado por quadro de `hz` (o primeiro é `s`, com `since` 0: a
  * mola recomeça a entrar). Acaba no repouso; se a mola não assentar em `GOO_PLAN_MAX_MS`, o último é o repouso mesmo assim.
  */
-export function gooPlan(g: GooGeom, s: GooDrop, has: boolean, hz = GOO_PLAN_HZ): GooDrop[] {
+/** Um plano: os estados, um por quadro de `hz`. O `hz` vai junto para quem lê o plano não usar outro. */
+export type GooPlan = { readonly hz: number; readonly states: readonly GooDrop[] };
+
+export function gooPlan(g: GooGeom, s: GooDrop, has: boolean, hz = GOO_PLAN_HZ): GooPlan {
   const dt = 1000 / hz;
   let at: GooDrop = { ...s, since: 0 };
   const plan = [at];
@@ -137,17 +142,17 @@ export function gooPlan(g: GooGeom, s: GooDrop, has: boolean, hz = GOO_PLAN_HZ):
     at = gooStep(g, at, has, dt);
     plan.push(at);
   }
-  return plan;
+  return { hz, states: plan };
 }
 
 /** O estado do plano no tempo `ms` desde o começo dele, preso nas pontas (um quadro além do fim é o último). */
-export function gooAt(plan: readonly GooDrop[], ms: number, hz = GOO_PLAN_HZ): GooDrop {
+export function gooAt({ hz, states }: GooPlan, ms: number): GooDrop {
   const i = Math.round((ms * hz) / 1000);
-  return plan[Math.min(plan.length - 1, Math.max(0, Number.isFinite(i) ? i : 0))]!;
+  return states[Math.min(states.length - 1, Math.max(0, Number.isFinite(i) ? i : 0))]!;
 }
 
 /** A duração do plano, em ms: a da animação de `transform` da cabeça no compositor. */
-export const gooPlanMs = (plan: readonly GooDrop[], hz = GOO_PLAN_HZ) => ((plan.length - 1) * 1000) / hz;
+export const gooPlanMs = ({ hz, states }: GooPlan) => ((states.length - 1) * 1000) / hz;
 
 /** A opacidade dos botões: entram no último trecho da corrida, depois de a gota soltar. */
 export function gooButtons(g: GooGeom, s: GooDrop): number {
@@ -223,26 +228,29 @@ export function gooParts(g: GooGeom, s: GooDrop): GooParts {
   const tw = g.target.w;
   const th = g.target.h;
   // A velocidade entra aos poucos depois de soltar: na soltura a forma é a mesma do pescoço, sem salto.
-  const fast = clamp(Math.abs(s.v) / 2) * smooth(span(p, 0, 0.15));
+  const fast = clamp(Math.abs(s.v) / 2) * smooth(span(p, 0, 0.3));
   const k = 1 + 0.45 * fast;
   const grow = smooth(span(p, 0, 0.45));
   // A meia altura: da cabeça presa à dos botões, um pouco mais baixa quanto mais rápido (o líquido estica).
   const b = Math.max(ry1 * 0.8, lerp(ry1, th / 2, grow) / k ** 0.25);
   // A chegada: a lágrima vira o retângulo dos botões. Antes disto, a frente é sempre um semicírculo.
-  const c = smooth(span(p, 0.45, 1));
-  const round = lerp(rx1, b, smooth(span(p, 0, 0.2)));
+  const c = smooth(span(p, 0.35, 1));
+  const round = lerp(rx1, b, smooth(span(p, 0, 0.45)));
   const tail0 = reach - m.bp - 1;
-  const tail = lerp(tail0, 1.5 * b, smooth(span(p, 0, 0.3))) * k;
+  const tail = lerp(tail0, 1.5 * b, smooth(span(p, 0, 0.6))) * k;
   const lf = lerp(round, tw / 2, c);
   const lr = lerp(tail, tw / 2, c);
   // A cauda fica para trás do movimento; perto da pílula, a ponta fina é sempre a do lado dela (onde o pescoço abre).
-  const o = lerp(1, clamp(s.v / 0.25, -1, 1), smooth(span(p, 0, 0.3)));
+  const o = lerp(1, clamp(s.v / 0.25, -1, 1), smooth(span(p, 0, 0.6)));
   const w = (o + 1) / 2;
   const af = lerp(lr, lf, w);
-  const ab = lerp(lf, lr, w);
+  const cu = s.U - m.off;
+  // Na volta, perto da pílula, a cauda se estica até a base do pescoço: a gota encosta na pílula antes de voltar a ficar
+  // presa, e a borda que vai para ela não pula quando a forma presa (o pescoço) entra.
+  const meet = clamp(-s.v / 0.25) * (1 - span(p, 0, MEET)) ** 2;
+  const ab = lerp(lerp(lf, lr, w), cu - shoulder(B * 0.62).ua, meet);
   const rr = Math.min(radius, tw / 2, th / 2);
   const corner = smooth(span(p, 0.75, 1));
-  const cu = s.U - m.off;
   const tv = g.target.y + th / 2 - cy;
   const cv = tv * smooth(p);
   type End = { rx: number; ry: number; point: number };
