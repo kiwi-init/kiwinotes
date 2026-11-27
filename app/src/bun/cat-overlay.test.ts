@@ -414,9 +414,13 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     const r = rig();
     talk(r);
     r.cat.turn({ type: "speech", id: "r1", text: " Achei a nota do roteiro. " } as AgentTurnEvent);
+    // O balão nasce com a fala (T33053, Cena 1), no instante do 1º pedaço da voz; o resto do pedido não o troca.
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Achei a nota do roteiro.", error: false }]);
     r.cat.turn(text("Vou ler a nota."));
     r.cat.turn(status("running"));
     r.cat.turn(text("O roteiro tem três partes."));
+    expect(bubbles(r.take())).toEqual([]);
+    // O `done` traz a resposta inteira com a fala de resumo: a página mantém o texto de cima e põe o "Ver mais".
     r.cat.turn(doneWith("Vou ler a nota.O roteiro tem três partes."));
     expect(bubbles(r.take())).toEqual([
       { type: "catOverlay.bubble", text: "Vou ler a nota.O roteiro tem três partes.", error: false, summary: "Achei a nota do roteiro." },
@@ -430,7 +434,21 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     r.cat.turn({ type: "speech", id: "r3", text: "Feito, está na nota." } as AgentTurnEvent);
     r.cat.turn(status("running", "r3"));
     r.cat.turn(doneWith("", "r3"));
-    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Feito, está na nota.", error: false }]);
+    // O mesmo balão duas vezes: na fala e no `done` (a página vê que é igual e não mexe).
+    expect(bubbles(r.take())).toEqual([
+      { type: "catOverlay.bubble", text: "Feito, está na nota.", error: false },
+      { type: "catOverlay.bubble", text: "Feito, está na nota.", error: false },
+    ]);
+  });
+
+  test("a fala de um pedido que não veio da voz não abre balão no overlay (T33053)", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.turn(started("r9"));
+    r.take();
+    expect(r.cat.visible).toBe(true);
+    r.cat.turn({ type: "speech", id: "r9", text: "Anotei na nota." } as AgentTurnEvent);
+    expect(bubbles(r.take())).toEqual([]);
   });
 
   test("um pedido com ação e sem texto no fim: o balão diz que fez", () => {

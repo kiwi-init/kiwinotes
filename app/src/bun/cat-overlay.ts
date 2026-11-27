@@ -245,6 +245,7 @@ export class CatOverlay {
       return;
     }
     if (e.type === "limit") return this.limit(e);
+    if (e.type === "speech") return this.spoke(voice);
     if (e.type === "started" && state === "acordou") {
       this.cancelTimer();
       if (this.hubInView) {
@@ -326,6 +327,25 @@ export class CatOverlay {
       this.afterWarning = null;
       next?.();
     }, readingMs(line));
+  }
+
+  /**
+   * A fala (T33053, Cena 1): o balão nasce com ela, no mesmo instante do 1º pedaço da voz (e sem a voz também), com o
+   * texto da fala. O `done` manda a resposta inteira com a fala de resumo: a página mantém o texto de cima e só põe o
+   * "Ver mais". Como a resposta, só no pedido feito por voz.
+   */
+  private spoke(voice: boolean): void {
+    if (!voice || this.phase !== "shown" || !this.speechText) return;
+    const show = () => {
+      if (this.phase !== "shown") return;
+      this.bubbleShown = true;
+      this.asking = false;
+      this.bubbleNow = { text: this.speechText, error: false };
+      this.host.send({ type: "catOverlay.bubble", ...this.bubbleNow });
+    };
+    // O aviso de limite ainda no tempo de leitura: a fala entra quando ele acaba.
+    if (this.warnTimer !== null) this.afterWarning = show;
+    else show();
   }
 
   /** O aviso de limite sai do caminho: a resposta que esperava por ele não entra mais. */

@@ -262,13 +262,18 @@ function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: 
     report();
     return;
   }
+  // A mesma resposta que cresceu (T33053, Cena 1): o balão nasceu com a fala e o `done` trouxe o texto inteiro, com a
+  // fala de resumo. O de cima não muda, e a marca fica como estava: não é um balão novo.
+  const grew = !!stats.bubble && !stats.bubble.error && b?.error !== true && (stats.bubble.summary ?? stats.bubble.text) === (summary ?? text);
   stats.bubble = { text, error: b?.error === true, links, ...(summary ? { summary } : {}) };
   setAsk(ask);
   bubbleEl.dataset.error = String(stats.bubble.error);
   bubbleEl.dataset.on = "true";
   // Uma resposta nova com o mouse longe espera ser vista: a marca no gato (spec #32534).
-  setUnseen(!stats.peek);
-  setOpen(false);
+  if (!grew) {
+    setUnseen(!stats.peek);
+    setOpen(false);
+  }
   measureMore();
   report();
 }
