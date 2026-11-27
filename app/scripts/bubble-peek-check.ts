@@ -28,6 +28,7 @@ const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T32766-balao-mouse")
 mkdirSync(out, { recursive: true });
 
 const CURTA = "Pronto: a lista da feira da Ana está na nota Casa/Feira.md.";
+const OUTRA = "Também guardei a lista da semana em Casa/Semana.md.";
 const LONGA =
   "Juntei o que a Ana anotou sobre a mudança para o apartamento novo, no fim do mês. O caminhão está marcado para o " +
   "sábado de manhã, e a chave fica com o porteiro a partir de sexta. Faltam a internet nova, que precisa de uma visita " +
@@ -249,6 +250,14 @@ async function hub(theme: "light" | "dark") {
     await Bun.sleep(PEEK_LEAVE_MS);
     assert.equal(await peekOf(p), "false", "hub: depois dos 250 ms");
     checks.push(`hub (${theme}): hidden with the mouse away (no pointer, the mark on Kiwi, the answer announced); shown with the mouse on Kiwi or the bubble; leaves ${PEEK_LEAVE_MS} ms after the mouse`);
+
+    // 3b. Um balão novo com o outro ainda na tela (T33053, nota 1 do #33047): o primeiro já foi visto, e a marca acende de novo.
+    assert.equal(await p.evaluate(() => document.querySelector<HTMLElement>(".kn-hub")!.dataset.bubbleUnseen), "false", "hub: o balão visto apaga a marca");
+    await invoke("agent.ask", { text: `/diga ${OUTRA}` });
+    await p.waitForFunction((t) => [...document.querySelectorAll(".kn-visually-hidden[aria-live]")].some((e) => e.textContent?.includes(t)), OUTRA, { timeout: 15_000 });
+    await p.waitForFunction(() => document.querySelector<HTMLElement>(".kn-hub")!.dataset.bubbleUnseen === "true", undefined, { timeout: 5_000 });
+    assert.equal(await peekOf(p), "false", "hub: o balão novo espera o mouse");
+    checks.push(`hub (${theme}): a new bubble while another is still on screen lights the mark again`);
 
     // 4. O "Ver mais" fica com o mouse longe; o Esc (sem o mouse) fecha; um clique fora também.
     await invoke("agent.ask", { text: `/diga ${LONGA}` });

@@ -260,15 +260,28 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
       peekApi.current = null;
     };
   }, []);
-  // A marca no Kiwi (spec #32534): um balão chegou com o mouse longe; some quando ele aparece.
+  // A marca no Kiwi (spec #32534): cada balão novo que chega com o mouse longe a acende, também com outro balão ainda
+  // na tela (T33053); ela some quando o mouse mostra os balões, ou quando nenhum sobra.
   const anyBubble = talking || noting || routining || proposing;
+  useEffect(() => { if (!anyBubble) setUnseen(false); }, [anyBubble]);
   useEffect(() => {
-    if (!anyBubble) return void setUnseen(false);
-    // O mouse parado em cima do Kiwi desde antes do balão (ou do Kiwi) chegar: nenhum `pointerover` veio.
-    const hovered = [...document.querySelectorAll(":hover")].some((el) => el.matches(PEEK_TARGETS));
-    if (hovered) peekApi.current?.hover("mouse", true);
-    else if (!peekRef.current) setUnseen(true);
-  }, [anyBubble]);
+    const hub = root.current?.parentElement;
+    if (!hub) return;
+    const arrived = () => {
+      // O mouse parado em cima do Kiwi desde antes do balão chegar: nenhum `pointerover` veio.
+      const hovered = [...document.querySelectorAll(":hover")].some((el) => el.matches(PEEK_TARGETS));
+      if (hovered) peekApi.current?.hover("mouse", true);
+      else if (!peekRef.current) setUnseen(true);
+    };
+    // Um balão novo é um slot novo do BubblePresence (um por balão, com a própria chave), com um balão de resposta dentro.
+    // O campo de texto (`.kn-cat-ask`) não é balão de resposta e não conta.
+    const isNew = (n: Node) => n instanceof HTMLElement && n.classList.contains("kn-bubble-slot") && !!n.querySelector(".kn-bubble-shell.kn-bubble");
+    const watch = new MutationObserver((records) => {
+      if (records.some((r) => [...r.addedNodes].some(isNew))) arrived();
+    });
+    watch.observe(hub, { childList: true, subtree: true });
+    return () => watch.disconnect();
+  }, []);
   useLayoutEffect(() => {
     const hub = root.current?.parentElement;
     if (!hub) return;
