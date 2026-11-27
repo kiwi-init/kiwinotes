@@ -38,6 +38,7 @@ import { MeetingSpeakerDialog } from "./MeetingSpeakerDialog.tsx";
 import { isMeetingNote } from "../../src/shared/meeting-note.ts";
 import { merge3, mergeNoteEdit, type MergeResult } from "../../src/shared/merge3.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
+import { bodyLine } from "./editor/flash-line.ts";
 import { Properties } from "./Properties.tsx";
 import { addProperty } from "./frontmatter-properties.ts";
 import { FolderPicker, ListPicker } from "./FolderPicker.tsx";
@@ -130,7 +131,7 @@ function useEnterAnimation() {
   return n;
 }
 
-function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen, onShow, folderController, folderRef }: { api: NotesApi; drafts: Drafts; active: boolean; openRequest?: { path: string; n: number; internal?: boolean } | null; searchRequest?: number; searchSeen?: { current: number }; onShow?: () => void; folderController?:FolderController;folderRef?:FolderRef }) {
+function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen, onShow, folderController, folderRef }: { api: NotesApi; drafts: Drafts; active: boolean; openRequest?: { path: string; n: number; internal?: boolean; line?: number } | null; searchRequest?: number; searchSeen?: { current: number }; onShow?: () => void; folderController?:FolderController;folderRef?:FolderRef }) {
   // A nota que outra seção do hub pediu (T4947): a de antes de montar abre na carga; as seguintes, pelo efeito abaixo.
   const openRequestRef = useRef(openRequest);
   const handledRequest = useRef(openRequest?.n ?? 0);
@@ -164,6 +165,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   readOnlyRef.current = note?.readOnly === true;
   const [docKey, setDocKey] = useState("");
   const [headingJump, setHeadingJump] = useState<{ path: string; heading: string; sequence: number } | null>(null);
+  /** A linha (do arquivo, 1-based) que um link de fora pediu (o Calendário, T32155). */
+  const [lineAsk, setLineAsk] = useState<{ path: string; fileLine: number; sequence: number } | null>(null);
   const shown = useRef(0);
   const [body, setBody] = useState("");
   const [title, setTitle] = useState("");
@@ -323,6 +326,15 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   /** O arquivo que não é nota que o Kiwi acabou de mudar: o aviso no cartão, por alguns segundos. */
   const [kiwiTouched, setKiwiTouched] = useState<string | null>(null);
   const current = useRef<string | null>(null);
+  // A linha pedida, no corpo (sem o frontmatter): calculada uma vez por pedido (depois do `current`, que ela lê no
+  // render: antes dele, o pedido dava ReferenceError, #32252), para o editor não pular de novo a cada
+  // tecla.
+  const lineJump = useMemo(() => {
+    if (!lineAsk || lineAsk.path !== current.current) return null;
+    const line = bodyLine(lineAsk.fileLine, frontmatter.current, body);
+    return line ? { line, fileLine: lineAsk.fileLine, sequence: lineAsk.sequence } : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineAsk]);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Um `[[relatorio.pdf]]` acha o arquivo do vault (T7616): o link não fica de quebrado, e seguir abre o arquivo.
   // Pela lista dos arquivos, não pela listagem (spec #13384): um save de nota traz a mesma lista, e o resolvedor fica.
@@ -720,7 +732,13 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
           l.notes.find((n) => n.path === asked) ??
           l.notes.find((n) => n.path === "Caixa de entrada.md") ??
           [...l.notes].sort((a, b) => b.mtime.localeCompare(a.mtime))[0];
-        if (first) void open(first.path, true);
+        if (!first) return;
+        // A linha que o Calendário pediu (T32155) vale também aqui: as Notas que montam com o pedido (a 1ª visita, ou
+        // a pasta que trocou e as remontou) abrem por este caminho, e não pelo efeito do `openRequest` (#32252).
+        const line = openRequestRef.current?.path === first.path ? openRequestRef.current.line : undefined;
+        void open(first.path, true).then(() => {
+          if (line && current.current === first.path) setLineAsk((prev) => ({ path: first.path, fileLine: line, sequence: (prev?.sequence ?? 0) + 1 }));
+        });
       },
       () => setFailed(true),
     );
@@ -835,7 +853,12 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     const p = openRequest.path;
     if (api.canvas && /\.canvas$/i.test(p)) void openCanvas(p);
     else if (!/\.md$/i.test(p) && api.files?.read) void openFileView(p);
-    else void open(p);
+    else {
+      const line = openRequest.line;
+      void open(p).then(() => {
+        if (line && current.current === p) setLineAsk((prev) => ({ path: p, fileLine: line, sequence: (prev?.sequence ?? 0) + 1 }));
+      });
+    }
   }, [openRequest, open, openCanvas, openFileView, api]);
 
   const activeRef = useRef(active);
@@ -2095,6 +2118,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
               readOnly={note.readOnly === true}
               title={note.title}
               headingJump={headingJump?.path === note.path ? headingJump : null}
+              lineJump={lineAsk?.path === note.path ? lineJump : null}
               doc={body}
               links={links}
               onChange={onChange}
@@ -2304,7 +2328,7 @@ const KIWI_EDITOR: KiwiEditor = {
  */
 
 
-export function NotesApp({ active = true, openRequest = null, searchRequest = 0, searchSeen, onShow }: { active?: boolean; openRequest?: { path: string; n: number; internal?:boolean } | null; searchRequest?: number; searchSeen?: { current: number }; onShow?: () => void } = {}) {
+export function NotesApp({ active = true, openRequest = null, searchRequest = 0, searchSeen, onShow }: { active?: boolean; openRequest?: { path: string; n: number; internal?:boolean; line?: number } | null; searchRequest?: number; searchSeen?: { current: number }; onShow?: () => void } = {}) {
   const { t: tr } = useT();
   const request = openRequest?.n ?? 0;
   const [mode,setMode] = useState({n:request,internal:openRequest?.internal===true});

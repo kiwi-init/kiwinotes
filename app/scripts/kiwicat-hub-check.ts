@@ -58,7 +58,7 @@ try {
   const identity = await p.locator(".kn-kiwicat canvas").first().evaluate(c => { (window as any).__catCanvas = c; return c.getBoundingClientRect().height; });
   assert.equal(Math.round(identity), 96); // o gato novo é quadrado: 96 × 96, embaixo da caixa de 96 × 120
   // O Sobre virou um assunto de Configurações (spec #11966): ficam as quatro abas (T12273).
-  for (const section of ["notes", "meetings", "dictation", "settings"]) {
+  for (const section of ["notes", "meetings", "dictation", "calendar", "settings"]) {
     await p.locator(`.kn-tab[data-section=${section}]`).click();
     assert.ok(await p.evaluate(() => (window as any).__catCanvas === document.querySelector(".kn-kiwicat canvas")));
     const hit = await p.locator(".kn-kiwicat").evaluate(c => { const r = c.getBoundingClientRect(); return c.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); });

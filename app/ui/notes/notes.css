@@ -1643,3 +1643,13 @@ img.kn-kiwi-face {
   .kn-kiwi-tag { animation: none; }
 }
 :root[data-motion="reduced"] .kn-kiwi-tag { animation: none; }
+
+/* A linha que o Calendário abriu (T32155): pisca uma vez e some com a marca (flash-line.ts). */
+.kn-flash-line { background: var(--accent-soft); border-radius: 4px; animation: kn-flash-line 1.2s ease-out; }
+@keyframes kn-flash-line {
+  0%, 30% { background: color-mix(in srgb, var(--accent) 38%, transparent); }
+  100% { background: var(--accent-soft); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kn-flash-line { animation: none; }
+}

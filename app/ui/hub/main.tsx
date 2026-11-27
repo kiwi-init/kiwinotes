@@ -20,6 +20,7 @@ import { INICIO_VIEWS, InicioMenu, InicioTabLabel, type InicioView } from "../ho
 import { DEFAULT_SHORTCUTS, matchesKeyEvent } from "../../src/shared/shortcuts.ts";
 import { NotesApp } from "../notes/NotesApp.tsx";
 import { Meetings } from "../meetings/Meetings.tsx";
+import { Calendar } from "../calendar/Calendar.tsx";
 import { Settings } from "../settings/Settings.tsx";
 import { api, has } from "../src/api.ts";
 import { HubNavContext, type SettingsRequest } from "../src/hubNav.ts";
@@ -36,6 +37,7 @@ const LABELS: Record<HubSection, TextKey> = {
   notes: "hub.tab.notes",
   meetings: "hub.tab.meetings",
   dictation: "hub.tab.dictation",
+  calendar: "hub.tab.calendar",
   settings: "hub.tab.settings",
   about: "hub.tab.about",
 };
@@ -54,6 +56,8 @@ export interface OpenRequest {
   path: string;
   internal?: boolean;
   n: number;
+  /** A linha do arquivo (1-based) em que a nota abre (o Calendário, T32155). */
+  line?: number;
 }
 
 /** O que a Início pede ao hub (spec #15728): abrir uma nota, a busca das Notas, o Ditado e os Ajustes do agente. */
@@ -64,10 +68,11 @@ interface HomeNav {
   onSearch(): void;
   onDictation(): void;
   onAgentSettings(): void;
+  onCalendar(): void;
 }
 
 /** `active`: a seção está na tela. As outras ficam montadas e escondidas (o estado não se perde ao trocar). */
-function Pane({ section, active, openRequest, searchRequest, searchSeen, onShowNotes, settingsRequest, onOpenNote, home }: { section: Tab; active: boolean; openRequest: OpenRequest | null; searchRequest: number; searchSeen: { current: number }; onShowNotes(): void; settingsRequest: SettingsRequest | null; onOpenNote(path: string, internal?: boolean): void; home: HomeNav }) {
+function Pane({ section, active, openRequest, searchRequest, searchSeen, onShowNotes, settingsRequest, onOpenNote, home, catColor }: { section: Tab; catColor?: unknown; active: boolean; openRequest: OpenRequest | null; searchRequest: number; searchSeen: { current: number }; onShowNotes(): void; settingsRequest: SettingsRequest | null; onOpenNote(path: string, internal?: boolean, line?: number): void; home: HomeNav }) {
   switch (section) {
     case "home":
       return <Home active={active} onOpenNote={onOpenNote} {...home} />;
@@ -79,6 +84,8 @@ function Pane({ section, active, openRequest, searchRequest, searchSeen, onShowN
       return <Settings request={settingsRequest} />;
     case "meetings":
       return <Meetings onOpen={onOpenNote} />;
+    case "calendar":
+      return <Calendar active={active} catColor={catColor} onOpenNote={(path, internal, line) => onOpenNote(path, internal, line)} />;
   }
 }
 
@@ -201,8 +208,8 @@ function Hub() {
     return (INICIO_VIEWS as readonly string[]).includes(q ?? "") ? (q as InicioView) : "inicio";
   });
   /** `internal`: a nota está na pasta das reuniões (o padrão); `false`, na pasta aberta (a Início, as Pendências e a Semana). */
-  const openNote = (path: string, internal = true) => {
-    setOpenRequest((r) => ({ path, internal, n: (r?.n ?? 0) + 1 }));
+  const openNote = (path: string, internal = true, line?: number) => {
+    setOpenRequest((r) => ({ path, internal, n: (r?.n ?? 0) + 1, ...(line ? { line } : {}) }));
     go("notes");
   };
   /**
@@ -342,7 +349,8 @@ function Hub() {
                   onShowNotes={() => go("notes")}
                   settingsRequest={settingsRequest}
                   onOpenNote={openNote}
-                  home={{ cat: homeCat, view: homeView, searchShortcut, onSearch: openSearch, onDictation: () => go("dictation"), onAgentSettings: () => openSettings("agent") }}
+                  catColor={settings?.kiwicat?.cor}
+                  home={{ cat: homeCat, view: homeView, searchShortcut, onSearch: openSearch, onDictation: () => go("dictation"), onAgentSettings: () => openSettings("agent"), onCalendar: () => go("calendar") }}
                 />
               </HubBarContext.Provider>
             </section>

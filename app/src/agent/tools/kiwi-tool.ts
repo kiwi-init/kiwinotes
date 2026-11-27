@@ -48,6 +48,8 @@ export const ACOES: readonly Acao[] = [
   { fazer: "achar", como: "pasta", tool: "notes_list", alvo: "folder" },
   { fazer: "achar", como: "reunioes", tool: "meetings_list" },
   { fazer: "achar", como: "projetos", tool: "projects_list" },
+  // O Calendário (spec #32129, T32156): os itens num período, com o id que o remarcar usa.
+  { fazer: "achar", como: "agenda", tool: "calendar_list", nomes: { de: "from", ate: "to" } },
   { fazer: "ler", como: "nota", tool: "notes_read", alvo: "path", nomes: { secao: "section" }, padrao: true },
   { fazer: "ler", como: "sumario", tool: "notes_outline", alvo: "path" },
   { fazer: "ler", como: "reuniao", tool: "meetings_get", alvo: "path" },
@@ -70,6 +72,8 @@ export const ACOES: readonly Acao[] = [
   { fazer: "escrever", como: "arquivo", tool: "files_create", alvo: "nome", cartao: true },
   { fazer: "escrever", como: "planilha", tool: "sheets_edit", alvo: "caminho", cartao: true },
   { fazer: "escrever", como: "documento", tool: "docx_edit", alvo: "caminho", cartao: true },
+  { fazer: "escrever", como: "agendar", tool: "calendar_create", alvo: "title", nomes: { titulo: "title", tipo: "kind", inicio: "start", fim: "end", projeto: "project", aviso: "notify", repetir: "repeat" }, cartao: true },
+  { fazer: "escrever", como: "remarcar", tool: "calendar_update", alvo: "id", nomes: { titulo: "title", tipo: "kind", inicio: "start", fim: "end", diaTodo: "allDay", feito: "done", aviso: "notify", repetir: "repeat" }, cartao: true },
   { fazer: "propor", como: "reuniao", tool: "meeting_propose", alvo: "reuniao", cartao: true },
   { fazer: "propor", como: "resumo", tool: "project_summary_propose", alvo: "projeto", cartao: true },
   { fazer: "propor", como: "referencias", tool: "notes_add_references", alvo: "nota", cartao: true },
@@ -91,7 +95,7 @@ export function labelOf(tool: string): string {
   return a ? acaoLabel(a) : tool;
 }
 
-const NOMES_ANTIGOS = "notes_[a-z_]+|meetings_(?:list|get)|projects_list|project_(?:status|diary_add|summary_propose)|files_(?:read|create)|sheets_(?:read|edit)|meeting_propose|routine_propose|memory_(?:remember|forget)|find";
+const NOMES_ANTIGOS = "notes_[a-z_]+|calendar_(?:list|create|update)|meetings_(?:list|get)|projects_list|project_(?:status|diary_add|summary_propose)|files_(?:read|create)|sheets_(?:read|edit)|meeting_propose|routine_propose|memory_(?:remember|forget)|find";
 const NOME_SOLTO = new RegExp(`\\b(${NOMES_ANTIGOS})\\b`, "g");
 const NOME_ENTRE_CRASES = new RegExp(`\`(${NOMES_ANTIGOS})\``, "g");
 
@@ -129,6 +133,7 @@ const FAZER_SINONIMOS: Record<string, Fazer> = {
   propor: "propor", propose: "propor",
   lembrar: "lembrar", remember: "lembrar", esquecer: "lembrar", forget: "lembrar", memoria: "lembrar",
   falar: "falar", speak: "falar", say: "falar", dizer: "falar",
+  agendar: "escrever", schedule: "escrever", remarcar: "escrever", reschedule: "escrever",
 };
 
 /**
@@ -138,6 +143,7 @@ const FAZER_SINONIMOS: Record<string, Fazer> = {
 const COMO_DO_SINONIMO: Record<string, string> = {
   criar: "criar", create: "criar", esquecer: "esquecer", forget: "esquecer", listar: "pasta", list: "pasta",
   mover: "mover", move: "mover", renomear: "renomear", rename: "renomear", juntar: "juntar", merge: "juntar",
+  agendar: "agendar", schedule: "agendar", remarcar: "remarcar", reschedule: "remarcar",
 };
 
 /** Os campos da ferramenta: o resto é lido como opção. */
@@ -308,6 +314,8 @@ export function cardsFor(request: string): Acao[] {
   if (has(/\breunia?o\b|\breunioes\b/) && has(/\b(propo\w*|proposta|ata|registr\w*|projeto)\b/)) out.push("meeting_propose");
   if (has(/\bresumo executivo\b|\b(status|ponto|situacao) d[oe]s? projeto\b|\bcomo (esta|anda|vai) o projeto\b/)) out.push("project_summary_propose");
   if (has(/\breferencias?\b|\blinks?\b|\bdocumentacao\b/)) out.push("notes_add_references");
+  // O Calendário (T32156): marcar, lembrar numa hora, mudar a hora ou dar como feito um item da agenda.
+  if (has(/\b(agend\w*|calendario|agenda|lembr[ae]\w* (de|que|amanha|hoje|as|na|no)|me avis\w*|remarc\w*|desmarc\w*|marc[ae]\w* (uma|a|o|um|reuniao)|compromissos?|lembretes?)\b/)) out.push("calendar_create", "calendar_update");
   if (has(/\brotina\b|\btodo dia\b|\btodos os dias\b|\btoda (semana|segunda|terca|quarta|quinta|sexta|manha|tarde|noite)\b|\bdiariamente\b|\bsemanalmente\b|\bdias uteis\b/)) out.push("routine_propose");
   return CARD_ACOES.filter((a) => out.includes(a.tool));
 }
@@ -336,7 +344,7 @@ export const KIWI_TOOL_DEF = {
     'fazer "achar" (opcoes.como: nome, o padrão, acha pelo nome falado e devolve o cartão; texto, busca no texto; pasta; reunioes; projetos).',
     'fazer "ler" (nota, o padrão, com opcoes.secao; sumario; reuniao; arquivo, com opcoes.parte; celulas, de uma planilha; projeto). A leitura devolve a versao.',
     'fazer "escrever" (acrescentar, o padrão; trecho, troca opcoes.de pelo texto; trocar; mover; renomear; juntar; criar, alvo Pasta/Título; diario). Só a diferença, com a versao do cartão. Nada apaga uma nota; o antes fica nas Versões.',
-    'fazer "propor" e as ações organizar, arquivo e planilha (xlsx, csv) trazem as instruções no pedido, quando ele precisa. fazer "lembrar": um fato sobre a pessoa (opcoes.como esquecer, para tirar).',
+    'fazer "propor" e as ações organizar, arquivo, planilha (xlsx, csv), agendar e remarcar (o calendário; achar/agenda lista com o id) trazem as instruções no pedido, quando ele precisa. fazer "lembrar": um fato sobre a pessoa (opcoes.como esquecer, para tirar).',
     "O alvo aceita o caminho ou o nome como a pessoa fala. Nos textos do Kiwi, kiwi ler/sumario quer dizer fazer ler, opcoes.como sumario.",
   ].join(" "),
   inputSchema: {

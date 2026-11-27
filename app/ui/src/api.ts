@@ -135,6 +135,8 @@ export const api = {
     reveal: (path: string) => invoke("notes.reveal", { path }),
     /** Abre uma nota ou um arquivo da pasta no lugar certo (spec #17683): o clique num link do balão. */
     openPath: (path: string) => invoke("notes.openPath", { path }),
+    /** Para onde aponta um `[[link]]` (o painel largo do Calendário, T32155). */
+    resolve: (link: string) => invoke("notes.resolve", { link }),
   },
   /** A seção Sobre (T2386): a versão, o canal e as atualizações. */
   app: {
@@ -268,6 +270,14 @@ export const api = {
     pending: () => invoke("home.pending", {}),
     week: () => invoke("home.week", {}),
     onChanged: (fn: () => void) => on("home.changed", fn),
+  },
+  /** O Calendário (1.107.0, T32154): os itens de um período, criar, mudar e a nota de onde veio; `onChanged` quando muda. */
+  calendar: {
+    items: (from: string, to: string) => invoke("calendar.items", { from, to }),
+    create: (args: UiCapabilities["calendar.create"]["args"]) => invoke("calendar.create", args),
+    update: (args: UiCapabilities["calendar.update"]["args"]) => invoke("calendar.update", args),
+    source: (id: string) => invoke("calendar.source", { id }),
+    onChanged: (fn: () => void) => on("calendar.changed", fn),
   },
   /** A aba Reuniões do hub (1.21.0, T4947): as notas de reunião e a gravação ao vivo. */
   meetings: {

@@ -268,6 +268,38 @@ test("falarUmaVez: o gato voltando a falar corta o teste", async () => {
   voz.stop();
 });
 
+for (const evento of ["agent.record.started", "meeting.started"] as const) {
+  test(`falarUmaVez: o ${evento} corta a fala (o aviso do Calendário não cai na transcrição, T32156)`, async () => {
+    const helper = new Map<string, Set<() => void>>();
+    let limpou = 0;
+    const saida: SaidaFala = { async tocar(_p, aoTocar) { aoTocar(1); await tick(); }, limpar() { limpou++; } };
+    const voz = ligarVozDoGato({
+      sintese: { async *sintetizar() {} },
+      saida,
+      agent: { onSpeech: () => () => {} },
+      helper: { on: (t, fn) => { const s = helper.get(t) ?? new Set(); s.add(fn); helper.set(t, s); return () => s.delete(fn); } },
+      naTela: () => {},
+    });
+    let vistos = 0;
+    const longo: SinteseFala = {
+      async *sintetizar(_f, signal) {
+        for (let i = 0; i < 1000 && !signal.aborted; i++) {
+          vistos++;
+          yield tom(10, 100);
+        }
+      },
+    };
+    const p = voz.falarUmaVez(longo, "Aviso.");
+    await esperar(() => vistos >= 3);
+    for (const fn of helper.get(evento) ?? []) fn();
+    await p;
+    expect(vistos).toBeLessThan(1000);
+    expect(limpou).toBeGreaterThan(0);
+    voz.stop();
+    expect([...helper.values()].reduce((n, s) => n + s.size, 0)).toBe(0);
+  });
+}
+
 test("falarUmaVez que falha não deixa o teste guardado: a próxima fala do gato não limpa a saída à toa", async () => {
   const fala = new Set<(e: { turnId: string; frases: string[] }) => void>();
   let limpou = 0;

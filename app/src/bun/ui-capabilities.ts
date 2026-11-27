@@ -33,6 +33,8 @@ import { isCustomRoutineId, isRoutineKind, isRoutineTime, ROUTINE_KINDS, routine
 import { type AppSettings, MAX_PINNED, type SettingsPatch,
 } from "../store/settings.ts";
 import { filePath, folderPath, notePath, VaultError } from "../notes/paths.ts";
+import type { CalendarCreate, CalendarUpdate } from "../shared/calendar.ts";
+import { CalendarError, calendarService, type CalendarVault } from "./calendar.ts";
 import { type AttachmentData, type Attachments, attachmentsFolder,
 } from "../notes/attachments.ts";
 import { openMode } from "../shared/attachments.ts";
@@ -405,6 +407,22 @@ export function uiCapabilities(deps: CapabilityDeps,
       liveSession: live.recording ? live.session : null,
       now: now(),
     };
+  };
+
+  /** O Calendário (T32154): as mesmas pastas da Início, mais a língua das tags que ele escreve. */
+  const calendar = calendarService(async () => {
+    const notes: CalendarVault = await vault();
+    const live = deps.meetings?.live() ?? NOT_RECORDING;
+    const { locale } = appLocale((await deps.settings.load()).language, deps.systemLanguages?.() ?? []);
+    return { notes, meetings: deps.meetingsVault ? await deps.meetingsVault() : notes, liveSession: live.recording ? live.session : null, locale };
+  });
+  /** O erro do Calendário com o código dele, para a tela (E_CONFLICT: ler de novo). */
+  const cal = async <T>(run: () => Promise<T>): Promise<T> => {
+    try {
+      return await run();
+    } catch (e) {
+      throw e instanceof CalendarError || e instanceof VaultError ? new CapabilityError(e.code, e.message) : e;
+    }
   };
 
   /** O passo da primeira abertura agora (T20796): o `firstRun` das settings e o que a sessão sabe do helper. */
@@ -1718,6 +1736,22 @@ export function uiCapabilities(deps: CapabilityDeps,
     "home.week": async (args) => {
       noArgs(args, "home.week");
       return homeWeek(await homeSources());
+    },
+    "calendar.items": async (args) => {
+      const a = fields(args, "calendar.items", ["from", "to"]);
+      return cal(() => calendar.items({ from: a.from as string, to: a.to as string }));
+    },
+    "calendar.create": async (args) => {
+      const a = fields(args, "calendar.create", ["kind", "title", "project", "start", "end", "allDay", "notify", "repeat"]);
+      return cal(() => calendar.create(a as unknown as CalendarCreate));
+    },
+    "calendar.update": async (args) => {
+      const a = fields(args, "calendar.update", ["id", "title", "start", "end", "allDay", "done", "notify", "kind", "repeat"]);
+      return cal(() => calendar.update(a as unknown as CalendarUpdate));
+    },
+    "calendar.source": async (args) => {
+      const a = fields(args, "calendar.source", ["id"]);
+      return cal(() => calendar.source(a.id));
     },
     "meetings.list": async (args) => {
       noArgs(args, "meetings.list");

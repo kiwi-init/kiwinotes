@@ -8,8 +8,8 @@
     },
     {
       "expectCount": ".kn-tab",
-      "count": 5,
-      "name": "Notas, Reuniões, Ditado, Configurações e Sobre"
+      "count": 6,
+      "name": "Início, Notas, Reuniões, Ditado, Calendário e Configurações"
     },
     {
       "expectCount": ".kn-hub-rail",
@@ -106,7 +106,7 @@
       "name": "→ vai para a próxima aba"
     },
     {
-      "waitFor": ".kn-tab[aria-selected='true']:has-text('Configurações')"
+      "waitFor": ".kn-tab[aria-selected='true']:has-text('Calendário')"
     },
     {
       "expectCount": ".kn-tabs-pill",

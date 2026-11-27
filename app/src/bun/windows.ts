@@ -39,6 +39,10 @@ import { MeetingHostError } from "./meetings.ts";
 import { readerFromCapabilities } from "../agent/tools/reader.ts";
 import { readNoteModel } from "../agent/note-model.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
+import { calendarFromCapabilities } from "../agent/tools/calendar-tools.ts";
+import { alertsBetween } from "./calendar.ts";
+import { alertsVia, CalendarAlerts, firedFile } from "./calendar-alerts.ts";
+import type { Notices } from "./notices.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { HomeChanges } from "./home.ts";
 import { ligarVozDoGatoNoApp } from "./cat-voice-output.ts";
@@ -153,7 +157,7 @@ export const catVoice = createCatVoice({
  * A voz do gato no alto-falante (T27825): o player da fala e o Ouvir dos Ajustes tocam pelo helper (`speech.play`),
  * ligados quando o helper sobe (`startCatVoiceOutput`). Antes disso, o Ouvir não toca.
  */
-let catVoiceOutput: { preview: CatVoicePreview; falarUmaVez: ReturnType<typeof ligarVozDoGatoNoApp>["falarUmaVez"]; stop(): void } | undefined;
+let catVoiceOutput: { preview: CatVoicePreview; falarUmaVez: ReturnType<typeof ligarVozDoGatoNoApp>["falarUmaVez"]; speaking(): boolean; stop(): void } | undefined;
 /**
  * A voz do Kiwi com o provedor dos Ajustes (spec #31616, T31626): a local, ou o ElevenLabs com a chave do Keychain e a
  * queda para a local. O `speakOnce` é o "Testar" e o `lastFallback`, o motivo da última queda. No headless, nunca o
@@ -196,7 +200,7 @@ export function startCatVoiceOutput(sidecar: Sidecar): void {
     previa: (saida, falaDoGato) => createCatVoicePreview(catVoice, { saida, falaDoGato, log }),
     log,
   });
-  catVoiceOutput = { preview: voz.previa!, falarUmaVez: voz.falarUmaVez, stop: voz.stop };
+  catVoiceOutput = { preview: voz.previa!, falarUmaVez: voz.falarUmaVez, speaking: () => voz.player.falaAtual !== undefined, stop: voz.stop };
 }
 // O motivo do Sobre sem atualizador (um build de dev). Vai ao log e ao agente; a tela não mostra.
 const UPDATER_OFF = "o atualizador ainda não subiu"; // i18n-ok: diagnóstico
@@ -398,6 +402,30 @@ stores.agent.useLinkResolver(async () => {
 });
 stores.agent.useGlossary(async () => (await stores.dictionary.load()).map((t) => t.term));
 stores.agent.useWriter(writerFromCapabilities(capabilities));
+// O Calendário para o agente (spec #32129, T32156): o mesmo da tela, pelas capacidades.
+stores.agent.useCalendar(calendarFromCapabilities(capabilities));
+
+/**
+ * Os avisos do Calendário (spec #32129, T32156): a notificação e a fala do Kiwi na hora do aviso de cada item, com a
+ * janela fechada também. Liga quando as notificações carregam (`index.ts`); a fala, quando o helper sobe. A fala fica
+ * calada com uma reunião, um ditado ou o atalho do Kiwi gravando, e não corta o Kiwi falando. Nada liga o microfone.
+ */
+export function startCalendarAlerts(notices: Pick<Notices, "post">, micOpen: () => boolean): CalendarAlerts {
+  const calendar = calendarFromCapabilities(capabilities);
+  const alerts = new CalendarAlerts({
+    now: Date.now,
+    alertsBetween: alertsVia(calendar.items, alertsBetween),
+    notices,
+    speak: (text) => (catVoiceOutput ? catVoiceOutput.falarUmaVez(kiwiVoice.sintese, text) : Promise.reject(new Error("helper_unavailable"))),
+    recording: () => micOpen() || (session.get()?.meetings.live() ?? NOT_RECORDING).recording,
+    speaking: () => catVoiceOutput?.speaking() ?? false,
+    fired: firedFile(path.join(stores.dir, "calendar-alerts.json")),
+    locale: () => mainLocale.get(),
+    log: (m) => console.log(`[calendar] ${m}`),
+  });
+  alerts.start();
+  return alerts;
+}
 // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
 stores.agent.useUndo(undoNotesFromCapabilities(capabilities));
 // As rotinas (spec #12150): o agendador confere a hora com o app aberto, e pega a que passou com o app fechado.
@@ -415,7 +443,11 @@ stores.folders.onNotesChanged((folder, paths, listing) => {
 });
 // A tela de Início (T15847): uma nota, um ditado ou uma reunião que mudou vira um `home.changed` só, depois da rajada.
 const homeChanges = new HomeChanges(() => {
-  for (const rpc of rpcs.values()) rpc.send.event({ name: "home.changed", payload: {} });
+  for (const rpc of rpcs.values()) {
+    rpc.send.event({ name: "home.changed", payload: {} });
+    // O Calendário lê as mesmas notas e reuniões (T32154).
+    rpc.send.event({ name: "calendar.changed", payload: {} });
+  }
 });
 /** Algo que a tela de Início mostra mudou (a reunião que começou ou parou vem do `index.ts`). */
 export const homeChanged = (): void => homeChanges.poke();
