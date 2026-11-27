@@ -155,6 +155,7 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
         ...(it.box !== null || kind === "task" ? { done: it.box === "x" } : {}),
         notify: when.notify ?? DEFAULT_NOTIFY[kind],
         ...(when.repeat ? { repeat: when.repeat } : {}),
+        ...(when.repeat && when.skip.length ? { skip: when.skip } : {}),
         readOnly: false,
         source: source(it.line),
       });
@@ -276,11 +277,26 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
         patch = { ...patch, ...(start !== undefined ? { start } : {}), ...(end !== undefined ? { end } : {}), ...(u.allDay !== undefined ? { allDay: u.allDay } : {}) };
         if (!cur && start === undefined) throw new CalendarError("E_BAD_ARGS", "an undated item needs start");
       }
+      // Mover a série leva junto as vezes já feitas (`⏭`), pelos mesmos dias.
+      if (cur?.skip.length && patch.start !== undefined) {
+        const days = Math.round((toMs(patch.start.slice(0, 10)) - toMs(cur.start.slice(0, 10))) / 86_400_000);
+        if (days) patch.skip = cur.skip.map((d) => addDays(d, days));
+      }
       if (u.done !== undefined) {
         if (u.done && cur?.repeat && at.occurrence) {
-          // O Feito numa repetição passa a série para a próxima vez, e a caixa continua aberta.
-          const next = addDays(at.occurrence, cur.repeat === "daily" ? 1 : 7);
-          patch = { ...patch, start: `${next}${cur.start.slice(10)}`, ...(cur.end ? { end: shiftBy(cur.end, toMs(`${next}${cur.start.slice(10)}`) - toMs(cur.start)) } : {}) };
+          const step = cur.repeat === "daily" ? 1 : 7;
+          let first = cur.start.slice(0, 10);
+          while (cur.skip.includes(first)) first = addDays(first, step);
+          if (at.occurrence !== first) {
+            // Uma vez depois da 1ª em aberto: só ela sai da agenda (`⏭`), e as de antes seguem abertas (#450).
+            patch = { ...patch, skip: [...cur.skip, at.occurrence] };
+          } else {
+            // O Feito na 1ª vez em aberto passa a série para a próxima (pulando as já feitas), e a caixa continua aberta.
+            let next = addDays(first, step);
+            while (cur.skip.includes(next)) next = addDays(next, step);
+            const start = `${next}${cur.start.slice(10)}`;
+            patch = { ...patch, start, ...(cur.end ? { end: shiftBy(cur.end, toMs(start) - toMs(cur.start)) } : {}), skip: cur.skip.filter((d) => d > next) };
+          }
         } else newBox = u.done ? "x" : " ";
       }
       const newRest = Object.keys(patch).length ? rewriteWhen(rest, patch, src.locale) : rest;
@@ -408,7 +424,7 @@ export function occurrences(it: CalendarItem, from: string, to: string): Calenda
     d = addDays(d, Math.max(0, gap - step));
   }
   for (let i = 0; d < to && i < 400; i++, d = addDays(d, step)) {
-    if (d < day) continue;
+    if (d < day || it.skip?.includes(d)) continue;
     const shift = toMs(d) - toMs(day);
     const s = shiftBy(it.start, shift);
     const e = it.end ? shiftBy(it.end, shift) : null;
@@ -500,8 +516,8 @@ function checkTimes(start: unknown, end: unknown, allDay: unknown, cap: string) 
 function checkTitle(title: unknown, cap: string): void {
   if (typeof title !== "string" || !title.trim() || title.length > CALENDAR_LIMITS.title || /[\r\n]/.test(title))
     throw new CalendarError("E_BAD_ARGS", `${cap}: title must be one line, 1 to ${CALENDAR_LIMITS.title} characters`);
-  if (parseWhen(`${title} @ 2026-01-01`)?.title !== title.replace(/\s+/g, " ").trim() || /🔔|🔕|🔁|(^|\s)@\s?\d/.test(title))
-    throw new CalendarError("E_BAD_ARGS", `${cap}: title can't have a date, a kind tag, 🔔, 🔕 or 🔁`);
+  if (parseWhen(`${title} @ 2026-01-01`)?.title !== title.replace(/\s+/g, " ").trim() || /🔔|🔕|🔁|⏭|(^|\s)@\s?\d/.test(title))
+    throw new CalendarError("E_BAD_ARGS", `${cap}: title can't have a date, a kind tag, 🔔, 🔕, 🔁 or ⏭`);
 }
 
 function checkCreate(c: CalendarCreate): void {
