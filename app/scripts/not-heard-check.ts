@@ -8,7 +8,7 @@
 //
 //   bun scripts/not-heard-check.ts [pasta] [pt|en]
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit } from "playwright-core";
@@ -98,6 +98,8 @@ try {
     assert.notEqual((await hub()).peek, "true", `${name}: o balão sem o mouse`);
     await peekKiwi(p);
     await waitFor(`${name}: the bubble on the mouse`, async () => (await hub()).peek === "true", 1000);
+    // O print depois da entrada do balão (o fade), ainda bem dentro dos 2,2 s.
+    await p.waitForFunction(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"])')?.getAnimations({ subtree: true }).every((a) => a.playState !== "running") ?? false, null, { timeout: 1000 }).catch(() => {});
     await p.screenshot({ path: join(out, `${lang}-${name}.png`), clip: { x: 560, y: 470, width: 440, height: 270 } });
     // O mouse segue no Kiwi: o aviso sai no tempo dele, e o Kiwi volta ao repouso.
     await waitFor(`${name}: the bubble leaves`, async () => !(await bubbleNow()).includes(LINE(key)), NOT_HEARD_MS + 1500);
@@ -118,4 +120,8 @@ try {
   await w?.close().catch(() => {});
   await browser.close().catch(() => {});
   await cli(["stop"]).catch(() => {});
+  // O servidor do registro falso segura o processo: sem o stop, o roteiro não sai depois do ok.
+  registry.stop?.();
+  rmSync(data, { recursive: true, force: true });
+  rmSync(wavs, { recursive: true, force: true });
 }
