@@ -119,13 +119,19 @@ async function start(data: string, argv: string[]): Promise<number> {
   const args = [path.join(import.meta.dirname, "..", "src", "headless", "main.ts"), "--data", data];
   if (argv.includes("--no-helper")) args.push("--no-helper");
   const child = spawn(process.execPath, args, { detached: true, stdio: ["ignore", out, out], env: process.env });
+  // O headless que morre ao subir (sem o kiwi-helper, por exemplo) não faz esperar os 30 s (#454): a saída dele encerra
+  // a espera, depois de uma última pergunta.
+  let exited = false;
+  child.once("exit", () => (exited = true));
   child.unref();
   for (const end = Date.now() + 30_000; Date.now() < end; ) {
+    const dead = exited;
     const r = await request(data, { cmd: "status" }, 2000);
     if (r?.ok) {
       print(r);
       return EXIT.ok;
     }
+    if (dead) break;
     await Bun.sleep(200);
   }
   print({ ok: false, code: "E_START", message: `the headless didn't come up; see ${path.join(data, "headless.out")}` });
