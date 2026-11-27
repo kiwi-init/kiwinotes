@@ -16,6 +16,7 @@ import {
   DictationNotes,
   FALLBACK_TITLE,
   INBOX,
+  MAX_TITLE,
   titleFromDictation,
 } from "./fromDictation.ts";
 import { Vault } from "./vault.ts";
@@ -278,5 +279,31 @@ describe("HistoryStore.get (T1320)", () => {
     expect(await history.get(`${a.id.slice(0, 24)}-ffff`)).toBeNull();
     await history.delete(a.id);
     expect(await history.get(a.id)).toBeNull();
+  });
+});
+
+// #453 (spec #33093, T33237): com menos de 2 letras, o ponto do fim ficava, e a nota nascia como `A..md`.
+describe("título: o ponto do fim do ditado sai sempre", () => {
+  test("ditado de uma letra: o título sai sem o ponto do fim", () => {
+    expect(titleFromDictation("A.")).toBe("A");
+    expect(titleFromDictation("5.")).toBe("5");
+  });
+  test("uma abreviação no fim do ditado também perde o ponto", () => {
+    expect(titleFromDictation("Falei com o Sr.")).toBe("Falei com o Sr");
+  });
+  test("o ponto antes de uma aspa e o do corte de 60 letras também saem", () => {
+    expect(titleFromDictation('Ele disse "sim."')).toBe("Ele disse sim");
+    expect(titleFromDictation('A."')).toBe("A");
+    // O `Sr.` termina na letra 60 (MAX_TITLE): o corte cai logo depois dele.
+    const antes = "Ontem eu finalmente falei com o diretor da escola, o";
+    const longo = `${antes.padEnd(MAX_TITLE - 4, " x").slice(0, MAX_TITLE - 4)} Sr. Exemplo sobre o plano`;
+    expect(longo.indexOf("Sr.") + 3).toBe(MAX_TITLE);
+    const t = titleFromDictation(longo);
+    expect(t.endsWith(".")).toBe(false);
+    expect(t.endsWith(" Sr")).toBe(true);
+  });
+  test("no meio, a abreviação e a letra solta seguem sem cortar a frase", () => {
+    expect(titleFromDictation("Sr. Exemplo chegou. Depois")).toBe("Sr. Exemplo chegou");
+    expect(titleFromDictation("v. 2. final")).toBe("v. 2. final");
   });
 });

@@ -81,7 +81,9 @@ export function titleFromDictation(text: string): string {
     const space = cut.lastIndexOf(" ");
     title = (space > MAX_TITLE / 2 ? cut.slice(0, space) : title.slice(0, MAX_TITLE)).trim();
   }
-  title = title.replace(/^[.\s]+/, "").replace(/[\s,;:–—-]+$/u, "");
+  // O ponto do fim sai sempre (#453): o `firstSentence` só o tira quando corta ali, e não corta em `A.`, `"sim."` nem no
+  // corte de 60 letras logo depois de um `Sr.`. Sem isto, a nota nascia como `A..md`.
+  title = title.replace(/^[.\s]+/, "").replace(/[\s.,;:–—-]+$/u, "");
   return /[\p{L}\p{N}]/u.test(title) ? title : FALLBACK_TITLE;
 }
 
