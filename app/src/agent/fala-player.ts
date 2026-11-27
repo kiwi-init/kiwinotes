@@ -272,6 +272,8 @@ export function ligarFalaPlayer(player: FalaPlayer, w: FalaPlayerWiring): () => 
     // O atalho da pessoa: ela vai falar de novo, o gato se cala.
     w.helper?.on("agent.record.started", () => player.cancelar()),
     w.helper?.on("catOverlay.close", () => player.cancelar()),
+    // O ditado começou a gravar (#459): a voz do gato cairia no texto ditado.
+    w.helper?.on("record.started", () => player.cancelar()),
     w.helper?.on("meeting.started", () => player.reuniao(true)),
     w.helper?.on("meeting.stopped", () => player.reuniao(false)),
   ];
