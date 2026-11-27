@@ -2,39 +2,56 @@
 // Quando a seção põe os botões dela na barra, a gota daquele lado brota da pílula, se solta e vira os botões; quando
 // tira, a gota faz o caminho de volta. Na cor e na borda da pílula (`--float`, o anel e o realce do `--shadow-float`).
 //
-// Desde a Gota 2 (T18948) a forma é desenhada, sem filtro: a cada quadro, um caminho SVG de `goo-shape.ts`. O relógio
-// é a animação CSS de um `.kn-goo-drop` invisível por lado (`kn-goo-in-*`/`kn-goo-out-*`, no `goo.css`): o quadro lê o
-// progresso dela, e o `animationend` anda a fase (`goo.ts`). Parar a animação (`pause`, `currentTime`) para a gota no
-// quadro. Com "reduzir movimento", não há gota: os botões só aparecem e somem com um fade.
+// A gota por mola (spec #32446, T32465): sem relógio linear e sem fases da forma. A gota tem um estado (lugar e
+// velocidade, `goo-spring.ts`) e uma mola a leva ao alvo: os botões, ou a pílula. No clique, o caminho inteiro até o
+// repouso sai de uma vez (`gooPlan`, um estado por quadro de `GOO_PLAN_HZ`), e um relógio WAAPI por lado (`.kn-goo-clock`, sem
+// nada na tela) dura o caminho: o quadro desenha o estado do `currentTime` dele, e o fim dele anda a fase. Parar o
+// relógio (`pause`, `currentTime`) para a gota no quadro. Trocar de aba no meio só troca o alvo: o caminho novo sai do
+// estado daquele instante, com a velocidade que ele tem, e o relógio novo começa em 0. Com "reduzir movimento", não há
+// gota: os botões só aparecem e somem com um fade.
 //
-// O compositor (#231, medida em #23816): o WKWebView dá o rAF a ~60 Hz mesmo na tela de 120 Hz, e na corrida a cabeça
-// andava ~35 px por quadro. A cabeça mora numa camada própria por lado (`.kn-goo-run`), que anda pelo ponto do
-// `gooHeadAnchor` numa animação WAAPI de `transform`: o Core Animation a toca na taxa da tela, fora da thread principal,
-// e ela segue lisa mesmo com a página presa. O caminho dela é desenhado relativo a esse ponto, no rAF, e só muda de
-// forma (a cauda, a mola), não de lugar. A animação segue o relógio: começa junto e para junto (o `pause` dos roteiros).
-// Um quadro longo (a seção nova montando, ~50 ms) fora da corrida segura o relógio pelo tempo perdido: a gota não pula
-// a barriga (era de 0% a 12% num quadro só). Na corrida não segura: o compositor não parou.
+// A largada (spec #32446): a seção nova monta no mesmo quadro do clique, e esse quadro é longo (~50 ms). O caminho
+// sai no 1º quadro que chega no tempo depois dele, e o relógio começa nesse quadro. Até lá, o `.kn-goo-clock` leva
+// `data-waiting`, a gota fica onde está (ou segue o caminho de antes, numa troca no meio) e os botões novos ficam
+// escondidos. Assim a barriga não pula quadros, sem "segurar o relógio".
 //
-// Os botões na volta (T18949): a seção tira os botões da barra de uma vez (o React desmonta), e a gota que voltava sem
-// eles era o "rastro preto" no escuro. Uma cópia dos últimos botões (`.kn-goo-ghost`) fica na camada e anda com a
-// cabeça da gota (o mesmo centro e a mesma escala, quadro a quadro), esmaecendo conforme a cabeça encolhe: um objeto
-// só, o botão que vira gota. É só desenho: `inert`, sem clique, fora do leitor de tela.
+// O compositor (#231, medida em #23816): o WKWebView dá o rAF a ~60 Hz mesmo na tela de 120 Hz. A cabeça mora numa
+// camada própria por lado (`.kn-goo-run`), que anda pelo centro dela (`gooAnchor`) numa animação WAAPI de `transform`
+// com um quadro-chave por estado do caminho: o Core Animation a toca na taxa da tela, fora da thread principal, e ela
+// segue lisa mesmo com a página presa. O caminho dela é desenhado relativo a esse ponto, no rAF, e só muda de forma
+// (a cauda, a mola), não de lugar. A animação segue o relógio: começa junto e para junto (o `pause` dos roteiros).
+// Numa troca no meio, ela é refeita do estado daquele instante, como o caminho.
+//
+// Os botões na ida nascem de dentro da gota: uma animação WAAPI por botão (`id` `kn-goo-buttons-in`), com a opacidade
+// do `gooButtons` em cada estado do caminho, no tempo do relógio. Na volta (T18949), a seção tira os botões da barra de
+// uma vez (o React desmonta), e a gota que voltava sem eles era o "rastro preto" no escuro. Uma cópia dos últimos
+// botões (`.kn-goo-ghost`) fica na camada e anda com a cabeça da gota (o mesmo centro e a mesma escala, quadro a
+// quadro), esmaecendo pelo `gooButtons`: um objeto só, o botão que vira gota. É só desenho: `inert`, sem clique, fora
+// do leitor de tela.
 
 import "./goo.css";
 
 import { useEffect, useId, useLayoutEffect, useRef } from "react";
 
 import { GOO_FALLBACK_MS, type GooPhase, type GooRect, type GooSide, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars, gooWatchDiff } from "./goo.ts";
-import { GOO_BEATS, GOO_HOLD_MS, type GooGeom, type GooParts, gooDropParts, gooHeadAnchor, roundRect } from "./goo-shape.ts";
+import { type GooGeom, type GooParts, roundRect } from "./goo-shape.ts";
+import { type GooDrop, type GooPlan, gooAnchor, gooAt, gooButtons, gooParts, gooPlan, gooPlanMs, gooRest, gooRunProgress } from "./goo-spring.ts";
 
 const SIDES: GooSide[] = ["start", "end"];
 /** As partes da camada de baixo; a cabeça vai na camada da corrida. */
 const PARTS = ["edge", "speck"] as const;
-const FRAME_MS = 1000 / 60;
-/** Quantos pontos do caminho da cabeça a animação do compositor leva (o erro entre eles fica abaixo de 0,5 px). */
-const RUN_KEYS = 48;
 /** O fade dos botões com "reduzir movimento" (o `--fast`, com folga). */
 const REDUCED_MS = 220;
+/** A cópia dos botões some quando a gota anda o primeiro décimo da volta (o `gooRunProgress` cai de 1 a 0,9). */
+const GHOST_FROM = 0.9;
+/** O nome das animações dos botões na ida (os roteiros param as da gota por ele). */
+const BUTTONS_ID = "kn-goo-buttons-in";
+/** A largada espera um quadro pintado no tempo (até um quadro e meio de 60 Hz desde o anterior: um de 30 ms ainda
+ *  era a seção montando, e o seguinte levou 58 ms)... */
+const LAUNCH_GAP_MS = 24;
+/** ...e, numa máquina que não dá quadro no tempo, larga assim mesmo depois disto. */
+const LAUNCH_MAX_MS = 300;
+const NONE: GooParts = { head: "", edge: "", speck: "" };
 
 const reducedMotion = () =>
   document.documentElement.dataset.motion === "reduced" ||
@@ -51,6 +68,17 @@ function contentRect(slot: HTMLElement, bar: HTMLElement) {
       : { l: r.x, t: r.y, r: r.x + r.w, b: r.y + r.h };
   }
   return box ? { x: box.l, y: box.t, w: box.r - box.l, h: box.b - box.t } : null;
+}
+
+/** Uma animação no tempo do relógio: o mesmo início, ou parada no mesmo ponto quando o relógio para. */
+function follow(a: Animation, clock: Animation) {
+  if (clock.playState === "running" && clock.startTime !== null) {
+    if (a.playState !== "running") a.play();
+    if (a.startTime !== clock.startTime) a.startTime = clock.startTime;
+  } else {
+    if (a.playState !== "paused") a.pause();
+    if (a.currentTime !== clock.currentTime) a.currentTime = clock.currentTime;
+  }
 }
 
 /** `bar` é a `.kn-hub-top`; as abas (`.kn-tabs`) estão nela. `start` e `end`, os dois lados onde as seções põem botões. */
@@ -90,14 +118,13 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
         if (r) (rects[side] = r, write(gooVars(side, r)));
         place(side);
         // A barra mudou no meio da corrida: a animação refeita para os lugares novos, no mesmo tempo do relógio.
-        if (runs[side]) startRun(side);
+        if (plans[side]) startRun(side);
         // Parada atrás dos botões, a gota não tem quadro que a redesenhe: sem isto, o caminho das Notas que encolhia
         // deixava a gota velha à direita, e o que crescia mostrava o degrau dela no meio da borda do botão (T26097, #26087).
         else draw(side);
       }
     };
 
-    // O desenho: um quadro por `requestAnimationFrame` enquanto algum lado anda (`entering`/`leaving`).
     const paths = Object.fromEntries(
       SIDES.map((side) => [side, {
         parts: Object.fromEntries(PARTS.map((p) => [p, el.querySelector<SVGPathElement>(`.kn-goo-path[data-side="${side}"][data-part="${p}"]`)])),
@@ -107,106 +134,122 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
         run: el.querySelector<HTMLElement>(`.kn-goo-run[data-side="${side}"]`),
         at: el.querySelector<SVGGElement>(`.kn-goo-run[data-side="${side}"] .kn-goo-run-at`),
         svg: el.querySelector<SVGSVGElement>(`.kn-goo-run[data-side="${side}"] svg`),
+        drop: el.querySelector<HTMLElement>(`.kn-goo-clock[data-side="${side}"]`),
       }]),
     ) as Record<GooSide, {
       parts: Record<(typeof PARTS)[number], SVGPathElement | null>; whole: SVGPathElement[];
       head: SVGPathElement | null; headWhole: SVGPathElement[];
-      run: HTMLElement | null; at: SVGGElement | null; svg: SVGSVGElement | null;
+      run: HTMLElement | null; at: SVGGElement | null; svg: SVGSVGElement | null; drop: HTMLElement | null;
     }>;
     const ghosts: Partial<Record<GooSide, HTMLElement>> = {};
-    const clockOf = (side: GooSide) =>
-      el.querySelector<HTMLElement>(`.kn-goo-drop[data-side="${side}"]`)?.getAnimations()[0] ?? null;
     const geom = (side: GooSide): GooGeom | null => {
       const target = rects[side];
-      return rects.tabs && target ? { side, tabs: rects.tabs, target, radius: rad, back: phases.current[side] === "leaving" } : null;
+      return rects.tabs && target ? { side, tabs: rects.tabs, target, radius: rad } : null;
     };
 
-    // A camada da corrida: a caixa dela fica em volta do ponto da soltura (o `gooHeadAnchor` em 0), onde a cabeça está
-    // sempre, relativa ao ponto; o `transform` a leva até o ponto do quadro.
+    // O estado de cada lado: o alvo (`want`: tem botões?), o caminho andando (`plans`) e o relógio dele (`clocks`). Sem
+    // caminho, a gota está parada no alvo de antes (`still`).
+    const want: Record<GooSide, boolean> = { start: false, end: false };
+    const still: Record<GooSide, boolean> = { start: false, end: false };
+    const plans: Partial<Record<GooSide, GooPlan>> = {};
+    const clocks: Partial<Record<GooSide, Animation>> = {};
+    /** Os lados esperando a largada: quando a troca veio e quantos quadros passaram desde ela. */
+    const waits: Partial<Record<GooSide, { at: number; frames: number }>> = {};
+    /** O estado do lado agora: o do caminho no `currentTime` do relógio, ou o repouso. */
+    const stateNow = (side: GooSide, g: GooGeom): GooDrop => {
+      const plan = plans[side];
+      const clock = clocks[side];
+      return plan && clock ? gooAt(plan, Number(clock.currentTime ?? 0)) : gooRest(still[side], g);
+    };
+
+    // A camada da corrida: a caixa dela fica em volta do centro da gota na beira da pílula, onde a cabeça está sempre,
+    // relativa ao ponto; o `transform` a leva até o ponto do quadro.
     const origin: Partial<Record<GooSide, { x: number; y: number }>> = {};
     const runs: Partial<Record<GooSide, Animation>> = {};
-    const offset = (side: GooSide, g: GooGeom, t: number) => {
+    const offset = (side: GooSide, g: GooGeom, s: GooDrop) => {
       const o = origin[side]!;
-      const a = gooHeadAnchor(t, g);
+      const a = gooAnchor(g, s);
       return { x: a.x - o.x, y: a.y - o.y };
     };
     const place = (side: GooSide) => {
       const g = geom(side);
       const { run, svg } = paths[side];
       if (!g || !run || !svg) return;
-      const o = gooHeadAnchor(0, g);
+      const o = gooAnchor(g, gooRest(false, g));
       origin[side] = o;
-      // Metade da caixa: a metade dos botões (a mola passa ~12% dela) e a gota presa à pílula, com folga para o anel.
+      // Metade da caixa: a metade dos botões (a mola passa um pouco dela) e a gota presa à pílula, com folga para o anel.
       const hw = Math.ceil(Math.max(g.target.w * 0.62, g.tabs.h * 2) + 8);
       const hh = Math.ceil(Math.max(g.target.h, g.tabs.h) + 8);
       Object.assign(run.style, { left: `${o.x - hw}px`, top: `${o.y - hh}px`, width: `${hw * 2}px`, height: `${hh * 2}px` });
       // O SVG fica na origem da barra (as coordenadas do `goo-shape.ts`), visto pela caixa.
       Object.assign(svg.style, { left: `${hw - o.x}px`, top: `${hh - o.y}px` });
     };
-    /** A animação da corrida de um lado: o `transform` do ponto, quadro a quadro do relógio. */
+    /** A animação da corrida de um lado: o `transform` do centro, um quadro-chave por estado do caminho. */
     const startRun = (side: GooSide) => {
       stopRun(side);
       const g = geom(side);
-      const clock = clockOf(side);
+      const plan = plans[side];
+      const clock = clocks[side];
       const run = paths[side].run;
-      if (!g || !clock || !run || !origin[side]) return;
-      const back = phases.current[side] === "leaving";
-      const keys = Array.from({ length: RUN_KEYS + 1 }, (_, i) => {
-        const p = i / RUN_KEYS;
-        const d = offset(side, g, back ? 1 - p : p);
-        return { offset: p, transform: `translate(${d.x}px, ${d.y}px)` };
+      if (!g || !plan || !clock || !run || !origin[side]) return;
+      const last = plan.states.length - 1;
+      const keys = plan.states.map((s, i) => {
+        const d = offset(side, g, s);
+        return { offset: i / last, transform: `translate(${d.x}px, ${d.y}px)` };
       });
-      const a = run.animate(keys, { duration: Number(clock.effect?.getComputedTiming().duration ?? 0), easing: "linear", fill: "both" });
+      const a = run.animate(keys, { duration: gooPlanMs(plan), easing: "linear", fill: "both" });
       a.pause();
       runs[side] = a;
-      syncRun(side);
+      follow(a, clock);
+    };
+    /** O ponto da camada no tempo do relógio, como a animação da corrida o põe (linear entre dois estados). */
+    const runOffset = (side: GooSide, g: GooGeom) => {
+      const plan = plans[side];
+      const clock = clocks[side];
+      if (!plan || !clock || !runs[side]) return null;
+      const last = plan.states.length - 1;
+      const i = Math.min(last, Math.max(0, (Number(clock.currentTime ?? 0) * last) / gooPlanMs(plan)));
+      const lo = Math.floor(i);
+      const a = offset(side, g, plan.states[lo]!);
+      const b = offset(side, g, plan.states[Math.min(last, lo + 1)]!);
+      const f = i - lo;
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
     };
     const stopRun = (side: GooSide) => {
       runs[side]?.cancel();
       delete runs[side];
     };
-    /** A corrida no tempo do relógio: o mesmo início, ou parada no mesmo ponto quando o relógio para. */
-    const syncRun = (side: GooSide) => {
-      const a = runs[side];
-      const clock = clockOf(side);
-      if (!a || !clock) return;
-      if (clock.playState === "running" && clock.startTime !== null) {
-        if (a.playState !== "running") a.play();
-        if (a.startTime !== clock.startTime) a.startTime = clock.startTime;
-      } else {
-        if (a.playState !== "paused") a.pause();
-        if (a.currentTime !== clock.currentTime) a.currentTime = clock.currentTime;
-      }
-    };
-    /** Um quadro longo fora da corrida: o relógio (e os botões, que andam com ele) recua o tempo perdido. */
-    const hold = (side: GooSide, debt: number) => {
-      const t = progress(side);
-      if (t > GOO_BEATS.pinch && t < GOO_BEATS.arrive) return;
+    /** Os botões nascendo de dentro da gota: a opacidade de cada estado do caminho, no tempo do relógio. */
+    const startButtons = (side: GooSide) => {
+      stopButtons(side);
+      const g = geom(side);
+      const plan = plans[side];
+      const clock = clocks[side];
       const slot = slots[side];
-      const anims = [clockOf(side), ...Array.from(slot?.children ?? []).flatMap((c) => c.getAnimations())];
-      for (const a of anims) {
-        if (a && a.playState === "running" && a.startTime !== null) a.startTime = Number(a.startTime) + debt;
+      if (!g || !plan || !clock || !slot || !want[side]) return;
+      const last = plan.states.length - 1;
+      // Um quadro-chave a cada dois estados (60 Hz) basta para uma opacidade.
+      const keys = plan.states.flatMap((s, i) => {
+        if (i % 2 && i !== last) return [];
+        const o = i === last ? 1 : gooButtons(g, s);
+        return [{ offset: i / last, opacity: o, transform: o >= 1 ? "none" : `scale(${0.96 + 0.04 * o})` }];
+      });
+      for (const child of Array.from(slot.children)) {
+        const a = child.animate(keys, { id: BUTTONS_ID, duration: gooPlanMs(plan), easing: "linear", fill: "both" });
+        a.pause();
+        follow(a, clock);
       }
     };
-    /** O `t` do lado agora (0 a 1 na ida; na volta, de 1 a 0). */
-    const progress = (side: GooSide) => {
-      const ph = phases.current[side];
-      const p = Number(clockOf(side)?.effect?.getComputedTiming().progress ?? 0);
-      return ph === "entering" ? p : ph === "leaving" ? 1 - p : ph === "shown" ? 1 : 0;
+    const buttonAnims = (side: GooSide) =>
+      Array.from(slots[side]?.children ?? []).flatMap((c) => c.getAnimations().filter((a) => a.id === BUTTONS_ID));
+    const stopButtons = (side: GooSide) => {
+      for (const a of buttonAnims(side)) a.cancel();
     };
 
     const draw = (side: GooSide) => {
-      const ph = phases.current[side];
-      const target = rects[side];
       const g = geom(side);
-      let parts: GooParts = { head: "", edge: "", speck: "" };
-      let t = 1;
-      if ((ph === "entering" || ph === "leaving") && g) {
-        t = progress(side);
-        parts = gooDropParts(t, g);
-      } else if (ph === "shown" && g) {
-        parts = gooDropParts(1, g);
-      }
+      const s = g ? stateNow(side, g) : null;
+      const parts = g && s ? gooParts(g, s) : NONE;
       for (const k of PARTS) paths[side].parts[k]?.setAttribute("d", parts[k]);
       const low = parts.edge + parts.speck;
       for (const w of paths[side].whole) w.setAttribute("d", low);
@@ -214,20 +257,29 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       const { head, headWhole, at, run } = paths[side];
       head?.setAttribute("d", parts.head);
       for (const w of headWhole) w.setAttribute("d", parts.head);
-      if (g && origin[side] && at && run) {
-        const d = offset(side, g, t);
+      if (g && s && origin[side] && at && run) {
+        // A camada está no ponto do relógio entre dois estados (a animação interpola os quadros-chave), e a forma é a
+        // do estado mais perto: o recuo usa o mesmo ponto da camada, e a forma fica no lugar dela na barra.
+        const d = runOffset(side, g) ?? offset(side, g, s);
         at.setAttribute("transform", `translate(${-d.x} ${-d.y})`);
         // Com a animação, ela leva a camada; sem ela (parada), o lugar fica no estilo.
-        if (runs[side]) syncRun(side);
+        const clock = clocks[side];
+        if (runs[side] && clock) follow(runs[side]!, clock);
         else run.style.transform = `translate(${d.x}px, ${d.y}px)`;
+        if (clock) for (const a of buttonAnims(side)) follow(a, clock);
       }
       const gh = ghosts[side];
-      if (gh && target) followHead(gh, parts.head ? head : null, target, t);
+      if (gh && g && s) followHead(gh, parts.head ? head : null, g.target, ghostFade(g, s));
     };
-    // A cópia vai no centro da cabeça, com uma escala só (o texto não deforma), por dentro dela. Some enquanto a gota
-    // desamassa, da mola até a lágrima (de `t` 1 até a chegada, `GOO_BEATS.arrive`): na corrida só há a gota, e a cópia
-    // não cobre o anel dela.
-    const followHead = (g: HTMLElement, head: SVGPathElement | null, r: GooRect, t: number) => {
+    // A cópia vai no centro da cabeça, com uma escala só (o texto não deforma), por dentro dela. Some no primeiro
+    // décimo do caminho, enquanto a pílula desamassa: com o `gooButtons` (até 30%), ela ainda cobria a gota já em
+    // lente, e a borda clara da gota se apagava sob os dois contornos (T32466). Na corrida só há a gota.
+    const ghostFade = (g: GooGeom, s: GooDrop) => {
+      if (s.attached) return 0;
+      const f = Math.min(1, Math.max(0, (gooRunProgress(g, s.U) - GHOST_FROM) / (1 - GHOST_FROM)));
+      return f * f * (3 - 2 * f);
+    };
+    const followHead = (g: HTMLElement, head: SVGPathElement | null, r: GooRect, fade: number) => {
       const b = head?.getBBox();
       if (!b || !b.width || !b.height) return void (g.style.opacity = "0");
       const sx = b.width / r.w;
@@ -235,30 +287,24 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       const dx = b.x + b.width / 2 - (r.x + r.w / 2);
       const dy = b.y + b.height / 2 - (r.y + r.h / 2);
       g.style.transform = `translate(${dx}px, ${dy}px) scale(${Math.min(1, sx, sy)})`;
-      const fade = Math.min(1, Math.max(0, (t - GOO_BEATS.arrive) / (1 - GOO_BEATS.arrive)));
       g.style.opacity = String(fade);
     };
-    /** Quanto o relógio do lado já andou desde o início dele, em ms do quadro; 0 se ainda não começou. */
-    const ranSinceStart = (side: GooSide, now: number) => {
-      const c = clockOf(side);
-      return c && c.playState === "running" && c.startTime !== null ? now - Number(c.startTime) : 0;
-    };
     let frame = 0;
+    const moving = () => SIDES.some((s) => phases.current[s] === "entering" || phases.current[s] === "leaving");
     let lastTick = 0;
     const tick = (now: number) => {
       frame = 0;
-      const first = !lastTick;
-      const gap = first ? 0 : now - lastTick;
+      // O quadro da troca é longo (a seção nova monta e pinta): a largada é no 1º quadro depois dele que chega no tempo.
+      const gap = lastTick ? now - lastTick : Infinity;
       lastTick = now;
       for (const side of SIDES) {
-        if (!runs[side]) continue;
-        // O 1º quadro do laço não tem o anterior: o relógio começou no clique (o desenho do `show`), e um quadro longo
-        // logo depois dele também se segura, medido pelo tempo que o relógio já andou (T25900).
-        const lost = first ? ranSinceStart(side, now) : gap;
-        if (lost > GOO_HOLD_MS) hold(side, lost - FRAME_MS);
+        const w = waits[side];
+        if (!w) continue;
+        w.frames++;
+        if ((w.frames >= 2 && gap <= LAUNCH_GAP_MS) || now - w.at > LAUNCH_MAX_MS) launch(side, now);
       }
       for (const side of SIDES) draw(side);
-      if (SIDES.some((s) => phases.current[s] === "entering" || phases.current[s] === "leaving")) frame = requestAnimationFrame(tick);
+      if (moving()) frame = requestAnimationFrame(tick);
       else lastTick = 0;
     };
     const loop = () => {
@@ -292,30 +338,86 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       el.append(g);
     };
 
+    /** O fim de um lado: a fase anda, se nenhuma troca está esperando a largada. */
+    const fallback = (side: GooSide, ms: number) => {
+      clearTimeout(timers.current[side]);
+      timers.current[side] = setTimeout(() => show(side, gooOnAnimationEnd(phases.current[side])), ms);
+    };
+    /** O caminho do estado de agora até o alvo, e o relógio dele (no 1º quadro pintado depois da troca). */
+    const launch = (side: GooSide, now: number) => {
+      delete waits[side];
+      const drop = paths[side].drop;
+      if (drop) delete drop.dataset.waiting;
+      const g = geom(side);
+      if (!g || !drop) return show(side, gooOnAnimationEnd(phases.current[side]));
+      const plan = gooPlan(g, stateNow(side, g), want[side]);
+      clocks[side]?.cancel();
+      if (plan.states.length < 2) return show(side, gooOnAnimationEnd(phases.current[side]));
+      const ms = gooPlanMs(plan);
+      const clock = drop.animate([{ transform: "translateX(0)" }, { transform: "translateX(1px)" }], { duration: ms, easing: "linear", fill: "both" });
+      // O início é este quadro: sem isto, o WebKit dava ao relógio o tempo de um quadro longo de antes, e a gota
+      // largava com até 60 ms andados (um salto de ~22 px).
+      clock.startTime = now;
+      plans[side] = plan;
+      clocks[side] = clock;
+      clock.onfinish = () => {
+        // Uma troca esperando a largada sai do fim deste caminho; o relógio fica no último estado (o `fill`).
+        if (clocks[side] === clock && waits[side] === undefined) show(side, gooOnAnimationEnd(phases.current[side]));
+      };
+      startRun(side);
+      startButtons(side);
+      fallback(side, Math.max(GOO_FALLBACK_MS, ms + 300));
+      draw(side);
+      loop();
+    };
+    const settle = (side: GooSide) => {
+      delete waits[side];
+      clocks[side]?.cancel();
+      delete clocks[side];
+      delete plans[side];
+      stopRun(side);
+      stopButtons(side);
+      const drop = paths[side].drop;
+      if (drop) delete drop.dataset.waiting;
+    };
+
     const show = (side: GooSide, phase: GooPhase) => {
       if (phase === "leaving") spawnGhost(side);
       else dropGhost(side);
       phases.current[side] = phase;
       el.dataset[side] = phase;
-      const drop = el.querySelector<HTMLElement>(`.kn-goo-drop[data-side="${side}"]`);
+      const drop = paths[side].drop;
       if (drop) drop.dataset.phase = phase;
       const slot = slots[side];
       if (slot) slot.dataset.goo = phase;
-      if ((phase === "entering" || phase === "leaving") && !reducedMotion()) startRun(side);
-      else stopRun(side);
+      clearTimeout(timers.current[side]);
+      const going = phase === "entering" || phase === "leaving";
+      if (!going) {
+        still[side] = phase === "shown";
+        settle(side);
+      } else if (reducedMotion()) {
+        settle(side);
+        still[side] = want[side];
+        timers.current[side] = setTimeout(() => show(side, gooOnAnimationEnd(phases.current[side])), REDUCED_MS);
+      } else {
+        // A largada espera o 1º quadro pintado depois da troca (a seção nova monta neste); a reserva cobre a página
+        // escondida, sem quadros.
+        if (drop) drop.dataset.waiting = "";
+        waits[side] = { at: performance.now(), frames: 0 };
+        fallback(side, GOO_FALLBACK_MS);
+      }
       draw(side);
       loop();
-      clearTimeout(timers.current[side]);
-      if (phase === "entering" || phase === "leaving") {
-        timers.current[side] = setTimeout(() => show(side, gooOnAnimationEnd(phases.current[side])), reducedMotion() ? REDUCED_MS : GOO_FALLBACK_MS);
-      }
     };
     const update = (side: GooSide, first = false) => {
       const slot = slots[side];
       const has = Boolean(slot && slot.childElementCount > 0);
       if (has) measure();
       const next = gooOnButtons(phases.current[side], has, first);
+      want[side] = has;
       if (first || next !== phases.current[side]) show(side, next);
+      // Os botões trocaram na ida que já andava (a seção pôs outros): eles entram no mesmo tempo.
+      else if (has && phases.current[side] === "entering" && clocks[side] && waits[side] === undefined) startButtons(side);
     };
 
     measure();
@@ -345,19 +447,11 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       return mo;
     });
 
-    const onEnd = (e: AnimationEvent) => {
-      const side = (e.target as HTMLElement).dataset?.side as GooSide | undefined;
-      if (!side || !(e.target as HTMLElement).classList.contains("kn-goo-drop")) return;
-      show(side, gooOnAnimationEnd(phases.current[side]));
-    };
-    el.addEventListener("animationend", onEnd);
-
     return () => {
       cancelAnimationFrame(frame);
       ro.disconnect();
       for (const mo of mos) mo?.disconnect();
-      el.removeEventListener("animationend", onEnd);
-      for (const side of SIDES) (clearTimeout(timers.current[side]), dropGhost(side), stopRun(side));
+      for (const side of SIDES) (clearTimeout(timers.current[side]), dropGhost(side), settle(side));
     };
   }, [bar, start, end]);
 
@@ -409,9 +503,9 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
           </svg>
         </div>
       ))}
-      {/* Os relógios da ida e da volta, um por lado: invisíveis, só a animação CSS. */}
+      {/* Os relógios dos caminhos, um por lado: invisíveis, só a animação WAAPI. */}
       {SIDES.map((side) => (
-        <span key={side} className="kn-goo-drop" data-side={side} data-phase="hidden" />
+        <span key={side} className="kn-goo-drop kn-goo-clock" data-side={side} data-phase="hidden" />
       ))}
     </div>
   );
