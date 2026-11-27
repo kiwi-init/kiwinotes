@@ -103,7 +103,72 @@
   font-size: 12px;
   margin-bottom: 10px;
 }
+.kn-cal-legend { align-items: center; }
 .kn-cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+/* Cada tipo é um botão que mostra ou esconde aquele tipo (T32408); o escondido fica apagado e riscado. */
+.kn-cal-legend > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  cursor: pointer;
+  transition: opacity 0.15s, background-color 0.15s;
+}
+.kn-cal-legend > button:hover { background: var(--surface-hover); }
+.kn-cal-legend > button[aria-pressed="false"] { opacity: 0.45; text-decoration: line-through; }
+.kn-cal-legend > button[aria-pressed="false"] i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
+.kn-cal-projects { position: relative; }
+.kn-cal-projects-bt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 1px 8px;
+  cursor: pointer;
+}
+.kn-cal-projects-bt:hover { background: var(--surface-hover); }
+.kn-cal-projects[data-filtered] .kn-cal-projects-bt { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.kn-cal-projects-bt span { font-size: 9px; color: var(--text-3); }
+.kn-cal-projects-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  min-width: 190px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  font-size: 13px;
+}
+.kn-cal-projects-pop label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.kn-cal-projects-pop label:hover { background: var(--surface-hover); }
+.kn-cal-projects-pop label[data-project-all] { border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; margin-bottom: 4px; padding-bottom: 7px; }
+.kn-cal-projects-pop input { accent-color: var(--accent); margin: 0; }
 .kn-cal-legend i { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
 .kn-cal-legend em { font-style: normal; color: var(--text-3); }
 .kn-cal-legend img,

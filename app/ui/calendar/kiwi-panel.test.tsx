@@ -103,6 +103,21 @@ describe("o painel desenhado", () => {
     expect(render(s)).not.toContain("kn-cal-kiwi-sug");
   });
 
+  test("o filtro da tela vale no Hoje e no sem data; o item sem projeto fica (T32408)", () => {
+    const html = renderToStaticMarkup(
+      <KiwiPanel source={memorySource([])} today={TODAY} now={NOW} face={null} save={async () => {}} storage={memory()} initial={data} filter={{ kinds: [], projects: ["Projeto X"] }} />,
+    );
+    expect(html).not.toContain("Revisão do Projeto X");
+    expect(html).not.toContain("Atualizar o README");
+    expect(html).toContain("Feira");
+    expect(html).toContain(">Comprar mudas<");
+    const byKind = renderToStaticMarkup(
+      <KiwiPanel source={memorySource([])} today={TODAY} now={NOW} face={null} save={async () => {}} storage={memory()} initial={data} filter={{ kinds: ["reminder"], projects: [] }} />,
+    );
+    expect(byKind).not.toContain("Feira");
+    expect(byKind).toContain("Revisão do Projeto X");
+  });
+
   test("em inglês, sem sobra de português", () => {
     setAppLocale({ setting: "en", locale: "en", system: "en" });
     const html = render();
