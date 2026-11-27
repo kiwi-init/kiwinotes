@@ -701,7 +701,8 @@ for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
     process.exit(code);
   });
 }
-const up = spawnSync(process.execPath, [cli, "start", "--data", data, "--no-helper"], { encoding: "utf8" });
+// O agente falso (#32693, #32697): nenhum roteiro roda o Claude Code ou o agy deste Mac, nem para conferir a versão.
+const up = spawnSync(process.execPath, [cli, "start", "--data", data, "--no-helper"], { encoding: "utf8", env: { ...process.env, KIWI_FAKE_AGENT: "1" } });
 if (up.status !== 0) {
   cleanup();
   throw new Error(`o headless não subiu em ${data}:\n${up.stdout}${up.stderr}`);
