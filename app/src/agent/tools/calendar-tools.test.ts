@@ -92,6 +92,10 @@ describe("kiwi achar/agenda", () => {
     const r = await rig();
     const out = await r.call({ fazer: "achar", opcoes: { como: "agenda", de: "2026-11-28", ate: "2026-11-30" } });
     expect((out.value as { items: unknown[] }).items).toEqual([]);
+    // O `ate` entra: o dia 27 sozinho traz os dois itens dele.
+    const dia = await r.call({ fazer: "achar", opcoes: { como: "agenda", de: "2026-11-27", ate: "2026-11-27" } });
+    expect((dia.value as { items: unknown[] }).items).toHaveLength(2);
+    expect(await codeOf(r.call({ fazer: "achar", opcoes: { como: "agenda", de: "2026-11-28", ate: "2026-11-27" } }))).toBe("E_BAD_ARGS");
     expect(await codeOf(r.call({ fazer: "achar", opcoes: { como: "agenda", de: "amanhã" } }))).toBe("E_BAD_ARGS");
   });
 
