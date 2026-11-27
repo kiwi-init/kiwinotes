@@ -8,8 +8,12 @@ export function errorKind(e: unknown): string {
   return typeof code === "string" || typeof code === "number" ? `${e.name} (${code})` : e.name;
 }
 
-/** Um caminho absoluto entre aspas (o `open '/…'` e o `path: '/…'` dos erros do fs) vira `'<caminho>'`. */
-const QUOTED_PATH = /(['"])(?:\/|~\/)[^'"\n]*\1/g;
+/**
+ * Um caminho absoluto entre aspas (o `open '/…'` e o `path: '/…'` dos erros do fs) vira `'<caminho>'`. O nome pode ter
+ * aspas (`Ana's plano.md`), então o caminho vai até a aspa que fecha seguida do que o erro põe depois dele: `,` `]`
+ * `}` `)` `;`, o ` -> ` do rename ou o fim da linha (T32572, rodada 1).
+ */
+const QUOTED_PATH = /(['"])(?:\/|~\/).*?\1(?=[,\]});]|[ \t]+->|[ \t]*$)/gm;
 
 export function redactQuotedPaths(text: string): string {
   return text.replace(QUOTED_PATH, "$1<caminho>$1");

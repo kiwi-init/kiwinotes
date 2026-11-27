@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rename } from "node:fs/promises";
 import path from "node:path";
 
 import { FileLog, levelFromEnv, teeConsole } from "./file-log.ts";
@@ -86,3 +86,23 @@ test("o erro do fs logado inteiro não leva o caminho da nota (#457)", async () 
   expect(text).not.toContain("Conversa com a Ana");
   expect(text).not.toContain("Projeto X");
 });
+
+for (const name of ["Nota da Ana.md", "Ana's plano secreto.md", 'o "Projeto X" de hoje.md']) {
+  test(`o erro do fs com o nome ${JSON.stringify(name)} não leva o nome ao log (T32572)`, async () => {
+    fresh();
+    const fake = { debug: () => {}, log: () => {}, info: () => {}, warn: () => {}, error: () => {} } as unknown as Console;
+    const log = new FileLog({ dir, now: at, home: "/Users/exemplo" });
+    const undo = teeConsole(log, fake);
+    const missing = path.join(dir, "Projeto X", name);
+    const nodeErr = await readFile(missing).catch((x) => x);
+    fake.error("[notes] couldn't read:", nodeErr);
+    fake.error("[notes] couldn't read:", await Bun.file(missing).text().catch((x) => x));
+    fake.warn(`[session] couldn't read (${String(nodeErr)}); using the defaults`);
+    fake.error("[notes] couldn't move:", await rename(missing, path.join(dir, "outra.md")).catch((x) => x));
+    undo();
+    const text = readFileSync(log.file, "utf8");
+    expect(text).toContain("ENOENT");
+    expect(text).toContain("using the defaults");
+    for (const leak of [name, "plano secreto", "Projeto X", "outra.md", "Ana"]) expect(text).not.toContain(leak);
+  });
+}
