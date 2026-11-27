@@ -7,7 +7,8 @@
 // - a menor velocidade entre a largada e a chegada (px por quadro): a gota não para no meio;
 // - o maior salto de velocidade entre dois quadros seguidos (px por quadro, por quadro): sem tranco;
 // - o pico de velocidade (px por quadro): o tempo acompanha a distância.
-// Sem regra ainda: hoje imprime os números, a régua da caixa 2 do spec, medida na main.
+// A régua (caixa 2 do spec #32446): a menor velocidade no meio ≥ `MIN_MID_PX` e o maior salto abaixo do da main
+// (`MAIN_MAX_JUMP`), em cada janela, sentido e lado.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -30,6 +31,8 @@ const WIDTHS = [1000, 1600] as const;
 export const MAIN_MAX_JUMP = { 1000: { ida: 6.65, volta: 21.75 }, 1600: { ida: 19.03, volta: 28.32 } } as const;
 /** A frente andou: mais que isto da largada, ou ainda falta mais que isto para a chegada. */
 const MOVED_PX = 0.5;
+/** A gota não para no meio: a frente anda pelo menos isto por quadro, da largada à chegada. */
+const MIN_MID_PX = 1;
 
 const ctx: UiContext = {
   data,
@@ -202,12 +205,21 @@ if (import.meta.main) {
             console.log(`${width}px ${dir} ${side}: ${JSON.stringify(m)}`);
           }
         }
+        for (const [dir, r] of [["ida", ida], ["volta", volta]] as const) {
+          for (const side of SIDES) {
+            const m = r[side];
+            const cap = MAIN_MAX_JUMP[width][dir];
+            assert.ok(m.minMid >= MIN_MID_PX, `${width}px ${dir} ${side}: a frente quase parou no meio (${m.minMid} px/quadro, mínimo ${MIN_MID_PX}): ${JSON.stringify(m.fronts)}`);
+            assert.ok(m.maxJump < cap, `${width}px ${dir} ${side}: um salto de ${m.maxJump} px/quadro, não abaixo do da main (${cap}): ${JSON.stringify(m.fronts)}`);
+          }
+        }
         assert.deepEqual(w.report.problems, [], "erros na página");
       } finally {
         await w.close();
       }
     }
     if (jsonOut) writeFileSync(jsonOut, JSON.stringify(all, null, 2));
+    console.log(`ok velocidade: em ${WIDTHS.join(" e ")} px, a frente anda ≥ ${MIN_MID_PX} px/quadro no meio e o maior salto fica abaixo do da main`);
   } finally {
     await browser.close();
     cleanup();
