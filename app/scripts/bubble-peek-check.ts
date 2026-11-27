@@ -204,6 +204,8 @@ async function hub(theme: "light" | "dark") {
 
     // 1. A resposta chega com o mouse longe: o balão espera invisível e sem pegar o mouse; a marca aparece no Kiwi.
     await away(p);
+    // Passada a espera do mouse que saiu (o openWindow o pôs no Kiwi): um balão que chega antes ainda aparece, e é visto.
+    await p.waitForFunction(() => document.querySelector<HTMLElement>(".kn-hub")!.dataset.bubblePeek === "false");
     await invoke("agent.ask", { text: `/diga ${CURTA}` });
     await p.waitForSelector(BUBBLE, { state: "attached", timeout: 30_000 });
     await p.waitForTimeout(600);
