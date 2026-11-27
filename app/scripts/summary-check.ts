@@ -93,6 +93,7 @@ try {
 
   // 1. A pedido: o agente manda os campos, o Kiwi monta o resumo, e nada é escrito antes do [Aplicar].
   const before = await note(MAIN_PATH);
+  await peekKiwi(q); // o balão só aparece com o mouse no Kiwi (spec #32534)
   await invoke("agent.ask", { text: "faz o resumo executivo do projeto Mudança" });
   await idle();
   await q.waitForSelector(".kn-proposal-bubble", { timeout: 30000 });
@@ -133,6 +134,7 @@ try {
   // 4. Um resumo novo substitui o anterior (que fica nas Versões): o [Ver] diz de quando é o anterior.
   await invoke("notes.create", { folder: "Projetos/Kiwi", title: "Kiwi", content: KIWI_OLD });
   await invoke("projects.mark", { folder: "Projetos/Kiwi" });
+  await peekKiwi(q); // o balão só aparece com o mouse no Kiwi (spec #32534)
   await invoke("agent.ask", { text: "resumo executivo do Kiwi" });
   await idle();
   await q.waitForFunction(() => document.querySelector(".kn-proposal-bubble")?.textContent?.includes("de Kiwi está pronto"), undefined, { timeout: 30000 });
@@ -154,6 +156,7 @@ try {
   // 5. O projeto ambíguo: o resumo pergunta com botões, sem o "Nenhum" (o resumo é sempre de um projeto).
   await invoke("notes.create", { folder: "Projetos/Kiwi Notes", title: "Kiwi Notes", content: "# Kiwi Notes\n" });
   await invoke("projects.mark", { folder: "Projetos/Kiwi Notes" });
+  await peekKiwi(q); // o balão só aparece com o mouse no Kiwi (spec #32534)
   await invoke("agent.ask", { text: "resumo executivo do Kiwi" });
   await idle();
   await q.waitForFunction(() => document.querySelector(".kn-proposal-bubble")?.textContent?.includes("É do"), undefined, { timeout: 30000 });
@@ -184,6 +187,7 @@ try {
   assert.ok(box && top);
   await p.screenshot({ path: join(out, "6-ajustes.png"), clip: { x: box.x, y: top.y - 12, width: box.width, height: box.y + box.height - top.y + 12 }, fullPage: true });
   shots.push({ file: "6-ajustes.png", caption: "6. Ajustes › Agente: os 6 blocos e o período do primeiro resumo" });
+  await peekKiwi(q); // o balão só aparece com o mouse no Kiwi (spec #32534)
   await invoke("agent.ask", { text: "resumo executivo do Mudança" });
   await idle();
   const fresh = (await invoke("agent.proposals")).proposals.find((x: any) => x.kind === "summary" && x.status === "pending" && x.project?.folder === "Projetos/Mudança");
