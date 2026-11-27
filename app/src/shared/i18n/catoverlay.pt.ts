@@ -9,6 +9,9 @@ export const ptCatOverlay = {
   "catOverlay.ask": "Precisa de mais alguma coisa?",
   "catOverlay.closeBubble": "Fechar",
   "catOverlay.closeCat": "Fechar o Kiwi",
+  // O andamento do pedido (spec #32534, T33177): cancela o que o Kiwi está fazendo.
+  "catOverlay.stop": "Parar",
+  "catOverlay.heard": "O que o Kiwi ouviu",
   "catOverlay.voiceError": "Não consegui falar com o agente: {message}",
   "catOverlay.unknownError": "erro desconhecido",
   // A resposta sem texto (só o que ele fez): depois de uma ferramenta, ou sem nenhuma.
