@@ -12,6 +12,7 @@ import { useT } from "../src/i18n.ts";
 import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WIDE_PX, WidePanel, type WideState } from "./Detail.tsx";
 import { periodTitle } from "./format.ts";
 import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, noteLine, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { KiwiAskBox } from "./KiwiAsk.tsx";
 import { KiwiPanel } from "./KiwiPanel.tsx";
 import { NewItem } from "./NewItem.tsx";
 import { apiStore, type CalendarStore, todayOf } from "./source.ts";
@@ -278,6 +279,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
           ›
         </button>
         <span className="kn-cal-sp" />
+        <KiwiAskBox active={active} face={face} />
         <div className="kn-cal-views" role="radiogroup" aria-label={t("calendar.views")}>
           {CALENDAR_VIEWS.map((v) => (
             <button type="button" role="radio" key={v} data-view={v} aria-checked={view === v} onClick={() => setView(v)}>

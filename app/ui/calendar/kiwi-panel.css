@@ -81,3 +81,34 @@
   outline: 1px dashed color-mix(in srgb, var(--cal-task) 60%, transparent);
   outline-offset: -1px;
 }
+
+/* A busca do Kiwi (⌘K) na barra de cima, entre a navegação e as vistas. */
+.kn-cal-ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 420px;
+  flex: 0 1 420px;
+  margin-right: 8px;
+  padding: 5px 8px 5px 6px;
+  border: 1px solid color-mix(in srgb, var(--cal-meeting) 32%, var(--border));
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text-3);
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+.kn-cal-ask:hover { border-color: color-mix(in srgb, var(--cal-meeting) 55%, var(--border)); }
+.kn-cal-ask:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kn-cal-ask img { width: 22px; height: 22px; flex: none; }
+.kn-cal-ask span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kn-cal-ask kbd {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: 11px var(--sans);
+  color: var(--text-3);
+}

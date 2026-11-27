@@ -36,4 +36,5 @@ export const enCalendarKiwi: { readonly [K in keyof typeof ptCalendarKiwi]: Entr
   "calendarKiwi.panel.dragHint": "Drag onto the calendar to schedule.",
   "calendarKiwi.panel.inProject": "{project}: {title}",
   "calendarKiwi.panel.notify": "Kiwi reminds you {when}",
+  "calendarKiwi.ask.placeholder": "Ask Kiwi: “remind me about the delivery tomorrow at 9”",
 };

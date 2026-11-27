@@ -41,4 +41,6 @@ export const ptCalendarKiwi = {
   "calendarKiwi.panel.dragHint": "Arraste para o calendário para marcar.",
   "calendarKiwi.panel.inProject": "{project}: {title}",
   "calendarKiwi.panel.notify": "o Kiwi avisa {when}",
+  // A busca do Kiwi (⌘K) na barra do Calendário.
+  "calendarKiwi.ask.placeholder": "Peça ao Kiwi: “me lembra da entrega amanhã às 9h”",
 } as const;

@@ -10,6 +10,8 @@ import { suggestion } from "../../src/shared/calendar-kiwi.ts";
 import { setAppLocale } from "../src/i18n.ts";
 import { DISMISS_KEEP_MS, DISMISS_STORAGE_KEY, dismissedStore, dropStart, panelRange, todayItems } from "./kiwi-panel.ts";
 import { KiwiPanel } from "./KiwiPanel.tsx";
+import { isAskShortcut, KiwiAskBox } from "./KiwiAsk.tsx";
+import { openKiwiAsk, provideKiwiAsk } from "../hub/kiwi-ask.ts";
 import { memorySource } from "./source.ts";
 
 afterEach(() => setAppLocale({ setting: "auto", locale: "pt", system: "pt" }));
@@ -105,5 +107,41 @@ describe("o painel desenhado", () => {
     expect(html).toContain("Undated tasks");
     expect(html).toContain("Kiwi reminds you 10 min before");
     expect(html).not.toMatch(/Hoje|Pendências sem data|Arraste|o Kiwi avisa/);
+  });
+});
+
+describe("a busca do Kiwi (⌘K)", () => {
+  test("abre o campo do gato que está registrado; sem gato, ninguém atende; a volta só tira o próprio registro", () => {
+    expect(openKiwiAsk()).toBe(false);
+    const got: (string | undefined)[] = [];
+    const off = provideKiwiAsk((d) => void got.push(d));
+    expect(openKiwiAsk("me lembra da feira")).toBe(true);
+    expect(openKiwiAsk()).toBe(true);
+    expect(got).toEqual(["me lembra da feira", undefined]);
+    const offOther = provideKiwiAsk(() => {});
+    off();
+    expect(openKiwiAsk()).toBe(true);
+    offOther();
+    expect(openKiwiAsk()).toBe(false);
+  });
+
+  test("o atalho: ⌘K ou Ctrl+K, sem Shift nem Option", () => {
+    const k = (o: Partial<KeyboardEvent>) => isAskShortcut({ key: "k", metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...o });
+    expect(k({ metaKey: true })).toBe(true);
+    expect(k({ ctrlKey: true, key: "K" })).toBe(true);
+    expect(k({})).toBe(false);
+    expect(k({ metaKey: true, shiftKey: true })).toBe(false);
+    expect(k({ metaKey: true, altKey: true })).toBe(false);
+    expect(k({ metaKey: true, key: "j" })).toBe(false);
+  });
+
+  test("a caixa com o exemplo e o ⌘K; sem o gato, ela não aparece", () => {
+    const html = renderToStaticMarkup(<KiwiAskBox active face={null} available />);
+    expect(html).toContain('class="kn-cal-ask"');
+    expect(html).toContain("Peça ao Kiwi: “me lembra da entrega amanhã às 9h”");
+    expect(html).toContain("<kbd>⌘K</kbd>");
+    expect(renderToStaticMarkup(<KiwiAskBox active face={null} available={false} />)).toBe("");
+    setAppLocale({ setting: "en", locale: "en", system: "en" });
+    expect(renderToStaticMarkup(<KiwiAskBox active face={null} available />)).toContain("Ask Kiwi");
   });
 });
