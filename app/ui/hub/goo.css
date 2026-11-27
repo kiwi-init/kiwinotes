@@ -104,12 +104,14 @@
   overflow: visible;
 }
 
-/* "Reduzir movimento": sem gota; os botões só aparecem com um fade curto. */
+/* "Reduzir movimento": sem gota; os botões só aparecem com um fade curto. O `opacity: 1` desfaz o 0 da espera acima:
+   o `@keyframes fade` só tem o `from`, e terminaria no 0 (T32466). */
 @media (prefers-reduced-motion: reduce) {
   :root .kn-goo {
     display: none;
   }
   :root .kn-hub-slot[data-goo="entering"] > * {
+    opacity: 1;
     animation: fade var(--fast) var(--ease) both;
   }
 }
@@ -119,5 +121,6 @@
 }
 
 :root[data-motion="reduced"] .kn-hub-slot[data-goo="entering"] > * {
+  opacity: 1;
   animation: fade var(--fast) var(--ease) both;
 }

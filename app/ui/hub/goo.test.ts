@@ -97,6 +97,9 @@ describe("o CSS", () => {
     // O caminho e o tempo vêm do `gooPlan` (T32465): uma animação de CSS com duração fixa seria um 2º relógio.
     expect(css).not.toMatch(/@keyframes kn-goo|--goo-ms/);
     expect(css).toMatch(/\.kn-hub-slot\[data-goo="entering"\] > \* \{\s*opacity: 0;/);
+    // Sem gota, o fade dos botões termina em 1: o `@keyframes fade` só tem o `from`, e a espera acima deixaria em 0.
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^@]*?:root \.kn-hub-slot\[data-goo="entering"\] > \* \{\s*opacity: 1;\s*animation: fade/);
+    expect(css).toMatch(/:root\[data-motion="reduced"\] \.kn-hub-slot\[data-goo="entering"\] > \* \{\s*opacity: 1;\s*animation: fade/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.kn-goo \{\s*display: none;/);
     expect(css).toMatch(/:root\[data-motion="reduced"\] \.kn-goo \{\s*display: none;/);
   });
