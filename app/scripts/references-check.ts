@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, peekKiwi, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const app = resolve(import.meta.dir, "..");
@@ -166,6 +166,7 @@ try {
 
   // 4. [Aplicar] escreve; [Desfazer] volta a nota.
   await q.locator(".kn-proposal-big button:has-text('Aplicar')").click();
+  await peekKiwi(q); // o [Aplicar] fecha o balão grande com o mouse longe; o pequeno só aparece com ele no Kiwi (spec #32534)
   await q.waitForSelector(".kn-proposal-bubble button:has-text('Desfazer')", { timeout: 15000 });
   const after = await note(NOTE);
   assert.ok(after.startsWith(TEXT) && after.includes("](https://cloud.google.com/atlas-api/docs/concepts/orbit): Os orbitStores"), after);
