@@ -131,6 +131,23 @@ describe("o OCR dos anexos (T2709)", () => {
     expect(ocr.textOf("Anexos/b.png")).toBe("segundo");
   });
 
+  test("o anexo que falha não põe o caminho nem o nome no log (#457)", async () => {
+    const { root, ocr } = setup({});
+    writeFileSync(path.join(root, "Anexos/Contrato da Ana.png"), "1");
+    const logged: string[] = [];
+    const error = console.error;
+    console.error = (...a: unknown[]) => void logged.push(a.map(String).join(" "));
+    try {
+      ocr.enqueue(["Anexos/Contrato da Ana.png"]);
+      await ocr.idle();
+    } finally {
+      console.error = error;
+    }
+    expect(ocr.stats.failed).toBe(1);
+    expect(logged.join("\n")).toContain("[ocr] an attachment failed");
+    expect(logged.join("\n")).not.toContain("Contrato da Ana");
+  });
+
   test("o trecho e o rótulo", () => {
     expect(snippetOf("linha um\nPlanta da sala com janela", "sala", 6)).toBe("…ta da sala com j…");
     expect(whereLabel("Anexos/foto.png")).toBe("na imagem foto.png");

@@ -649,3 +649,33 @@ describe("o ditado da CLI dos agentes (T1740)", () => {
     expect(await pending).toMatchObject({ skipped: "error", error: "helper_restarted" });
   });
 });
+
+test("a nota rápida não põe o título (o começo do ditado) no log (#456)", async () => {
+  const lines: string[] = [];
+  const sidecar = { send: async () => ({ ok: true, data: {} }), on: () => () => {} };
+  const d = new Dictation({
+    sidecar: sidecar as unknown as DictationSidecar,
+    history: { add: async (e: NewHistoryEntry) => ({ ...e, id: "h1", at: "" }) as any },
+    notes: { toNew: async () => ({ note: { path: "Caixa de entrada/Comprar pão para a Ana.md", title: "Comprar pão para a Ana" } as any, created: true, already: false }) },
+    log: (m) => lines.push(m),
+  });
+  d.attach();
+  await d.dictateText("Comprar pão para a Ana.", { note: true });
+  expect(lines.some((l) => l.includes("quick note") && l.includes("created"))).toBe(true);
+  expect(lines.join("\n")).not.toContain("Comprar pão");
+});
+
+test("a nota rápida que falha não põe a mensagem do erro, com o caminho, no log (#456)", async () => {
+  const lines: string[] = [];
+  const sidecar = { send: async () => ({ ok: true, data: {} }), on: () => () => {} };
+  const d = new Dictation({
+    sidecar: sidecar as unknown as DictationSidecar,
+    history: { add: async (e: NewHistoryEntry) => ({ ...e, id: "h1", at: "" }) as any },
+    notes: { toNew: async () => { throw new Error("notes: Caixa de entrada/Comprar pão para a Ana.md kept changing"); } },
+    log: (m) => lines.push(m),
+  });
+  d.attach();
+  await d.dictateText("Comprar pão para a Ana.", { note: true });
+  expect(lines.some((l) => l.includes("quick note failed: Error"))).toBe(true);
+  expect(lines.join("\n")).not.toContain("Comprar pão");
+});

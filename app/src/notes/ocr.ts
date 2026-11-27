@@ -20,6 +20,7 @@ import { inside } from "./paths.ts";
 import type { NoteMeta, SearchHit } from "./vault.ts";
 import { parseLinks } from "../shared/wikilinks.ts";
 import { oneSpace, parseQuery } from "../shared/query.ts";
+import { errorKind } from "../shared/log-safe.ts";
 
 /** O que o helper devolve por arquivo. */
 export interface OcrLine {
@@ -193,7 +194,7 @@ export class OcrIndex {
       this.queue.delete(rel);
       await this.one(rel).catch((e) => {
         this.stats.failed++;
-        console.error(`[ocr] ${rel}:`, e instanceof Error ? e.message : e);
+        console.error(`[ocr] an attachment failed: ${errorKind(e)}`); // sem o caminho (#457)
       });
     }
   }

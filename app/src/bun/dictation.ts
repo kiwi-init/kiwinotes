@@ -16,6 +16,7 @@ import { expandSnippets, type Snippet } from "../store/snippets.ts";
 import { toneFor } from "../cleanup/tone.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
 import { type Locale, type Params, type TextKey, translate } from "../shared/i18n/index.ts";
+import { errorKind } from "../shared/log-safe.ts";
 
 type Transcript = Extract<Event, { type: "transcript.final" }>;
 type InsertResult = ResultMessage<"insert.text">;
@@ -244,7 +245,7 @@ export class Dictation {
   }
 
   private enqueue(job: () => Promise<unknown>) {
-    this.queue = this.queue.then(job).catch((e) => this.log(`dictation failed: ${String(e)}`));
+    this.queue = this.queue.then(job).catch((e) => this.log(`dictation failed: ${errorKind(e)}`));
   }
 
   private done(outcome: DictationOutcome): DictationOutcome {
@@ -460,12 +461,13 @@ export class Dictation {
       // ele fica no lugar do título; a nota está criada do mesmo jeito.
       await this.overlay("done", fellBackTo ? micFellBackNotice(fellBackTo) : noteCreated(note.note.title));
     } catch (e) {
-      this.log(`quick note failed: ${String(e)}`);
+      this.log(`quick note failed: ${errorKind(e)}`);
       await this.overlay("error", NOTE_FAILED);
     }
     const appMs = Math.round(performance.now() - started);
     await this.settleRecovery(t.recovery,!!note || !!entry,"note_failed");
-    this.log(`quick note: stt ${t.latencyMs} ms + app ${appMs} ms · ${note ? `${note.created ? "created" : "already in"} ${note.note.path}` : "failed"}`);
+    // Sem o caminho (#456): o título da nota rápida é a 1ª frase do ditado.
+    this.log(`quick note: stt ${t.latencyMs} ms + app ${appMs} ms · ${note ? (note.created ? "created" : "already in a note") : "failed"}`);
     return this.done({ ...base, entry, text, tone: result.tone, pasted: false, appMs, note });
   }
 
