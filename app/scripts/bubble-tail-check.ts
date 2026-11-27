@@ -240,7 +240,7 @@ try {
       await p.goto(`http://127.0.0.1:${server.port}/index.html?backend=none&${q}`);
       await p.waitForFunction(() => (window as any).kiwiCatReady === true, undefined, { timeout: 20_000 });
       for (const [kind, ask] of [["resposta", false], ["pergunta", true]] as const) {
-        await p.evaluate(([ask]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 112, bubble: { text: "Pronto: mudei o prazo para abril.", error: false, ask } }), [ask] as const);
+        await p.evaluate(([ask]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, bubbleHover: true, sala: 112, bubble: { text: "Pronto: mudei o prazo para abril.", error: false, ask } }), [ask] as const);
         await Bun.sleep(220); // a transição de 140 ms do balão
         const m = await measureIn(p, "#bubble", "#cat");
         const what = `overlay ${name} ${escala}×, ${kind}`;

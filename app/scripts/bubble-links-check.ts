@@ -185,7 +185,7 @@ try {
   const o = await c.newPage();
   await o.goto(`http://127.0.0.1:${server.port}/index.html?backend=none&${q}`);
   await o.waitForFunction(() => (window as any).kiwiCatReady === true, undefined, { timeout: 20_000 });
-  await o.evaluate(([text, links, sala]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala, bubble: { text, error: false, links } }), [texto, links, sala] as const);
+  await o.evaluate(([text, links, sala]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, bubbleHover: true, sala, bubble: { text, error: false, links } }), [texto, links, sala] as const);
   await Bun.sleep(220);
   await o.locator("#bubble-more").click();
   await o.waitForSelector("#bubble-text .kn-md-file");

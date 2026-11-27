@@ -341,6 +341,8 @@ export async function openWindow(browser: Browser, ctx: UiContext, opts: PageOpt
       if (problem) report.problems.push(problem);
     }
     await settle(p);
+    // O balão no mouse (spec #32534): no hub, o mouse começa em cima do Kiwi, como o de quem o olha; os balões aparecem.
+    if (opts.window === "hub") await peekKiwi(p);
     return { page: p, report, url, close };
   } catch (e) {
     await close();
@@ -360,6 +362,20 @@ export function noteProblem(asked: string, list: Record<string, unknown>): strin
 }
 
 /** Espera as fontes e dois quadros: o print sai com o layout e o texto assentados. */
+/**
+ * Põe o mouse em cima do Kiwi do hub (spec #32534): os balões só aparecem assim. Sem o Kiwi na página ainda, o mouse
+ * fica no canto dele, e o hub confere o `:hover` quando o balão chega. Um roteiro que clicou longe chama de novo.
+ */
+export async function peekKiwi(page: Page): Promise<void> {
+  const box = await page.locator(".kn-kiwicat-hit").first().boundingBox({ timeout: 500 }).catch(() => null);
+  const size = page.viewportSize() ?? { width: 1100, height: 720 };
+  // O centro do botão do Kiwi, ou o lugar dele no canto (hub.css: right 30, bottom 22, 60 × 86).
+  const x = box ? box.x + box.width / 2 : size.width - 60;
+  const y = box ? box.y + box.height / 2 : size.height - 65;
+  await page.mouse.move(x - 1, y - 1);
+  await page.mouse.move(x, y);
+}
+
 export async function settle(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await document.fonts.ready;

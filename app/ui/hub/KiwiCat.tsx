@@ -238,11 +238,13 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
   const peekRef = useRef(peekShown);
   peekRef.current = peekShown;
   const [unseen, setUnseen] = useState(false);
+  const peekApi = useRef<BubblePeek | null>(null);
   useEffect(() => {
     const peek = new BubblePeek((shown) => {
       setPeekShown(shown);
       if (shown) setUnseen(false);
     });
+    peekApi.current = peek;
     const over = (e: PointerEvent) => {
       const t = e.target;
       peek.hover("mouse", t instanceof Element && !!t.closest(PEEK_TARGETS));
@@ -255,12 +257,16 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
       document.removeEventListener("pointerover", over, true);
       document.removeEventListener("pointerout", out, true);
       peek.dispose();
+      peekApi.current = null;
     };
   }, []);
   // A marca no Kiwi (spec #32534): um balão chegou com o mouse longe; some quando ele aparece.
   const anyBubble = talking || noting || routining || proposing;
   useEffect(() => {
-    if (!anyBubble) setUnseen(false);
+    if (!anyBubble) return void setUnseen(false);
+    // O mouse parado em cima do Kiwi desde antes do balão (ou do Kiwi) chegar: nenhum `pointerover` veio.
+    const hovered = [...document.querySelectorAll(":hover")].some((el) => el.matches(PEEK_TARGETS));
+    if (hovered) peekApi.current?.hover("mouse", true);
     else if (!peekRef.current) setUnseen(true);
   }, [anyBubble]);
   useLayoutEffect(() => {
