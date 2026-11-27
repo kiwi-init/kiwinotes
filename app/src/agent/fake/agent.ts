@@ -29,7 +29,7 @@
 //                            `session/prompt` (o pedido como chegou: o teste do começo fixo, spec #11084, lê daqui)
 //                            que recebeu, com os parâmetros (os testes conferem o isolamento por ele)
 //   KIWI_FAKE_AGENT_RESUME   "resume" (o padrão), "load" ou "none": como ele retoma uma sessão
-//   KIWI_FAKE_AGENT_TOOL_DELAY_MS  uma pausa depois de cada ferramenta do Kiwi, para um print pegar o status no meio
+//   KIWI_FAKE_AGENT_TOOL_DELAY_MS  uma pausa depois de cada ferramenta do Kiwi, para um print pegar o status no meio (a pergunta com "?" respeita o cancelar entre elas)
 //   KIWI_FAKE_AGENT_USAGE_DELAY_MS o `/usage` demora isso antes de responder, e respeita o cancelar (T16712)
 //   KIWI_FAKE_AGENT_THINK_MS  uma pausa depois do "pensando…", como o agente de verdade antes da 1ª palavra: um print
 //                            pega o que o balão mostra enquanto ele pensa (T26063)
@@ -330,7 +330,9 @@ async function webSearchFake(client: AgentContext, sessionId: string, query: str
 async function answerFromNotes(client: AgentContext, sessionId: string, question: string): Promise<string> {
   const words = [...new Set(question.replace(/[?!.,;:"]/g, " ").split(/\s+/).filter((w) => w.length >= 4))].sort((a, b) => b.length - a.length);
   for (const query of [question.replace(/\?+$/, ""), ...words]) {
+    if (cancelled.has(sessionId)) return "";
     const found = await useTool(client, sessionId, "notes_search", { query, limit: 3 });
+    if (cancelled.has(sessionId)) return "";
     if (found.isError) continue;
     const first = (JSON.parse(found.text) as { resultados: { path: string }[] }).resultados[0];
     if (!first) continue;
@@ -882,7 +884,10 @@ const app = agent({ name: "kiwi-fake-agent" })
           return { stopReason: "end_turn" };
         }
         if (text.endsWith("?") && kiwiServers.has(sessionId)) {
-          await say(client, sessionId, await answerFromNotes(client, sessionId, text));
+          // Respeita o cancelar entre as ferramentas (o [Parar] do andamento, T33177): para sem responder.
+          const answer = await answerFromNotes(client, sessionId, text);
+          if (cancelled.has(sessionId)) return { stopReason: "cancelled" };
+          await say(client, sessionId, answer);
           return { stopReason: "end_turn" };
         }
         await say(client, sessionId, `Você disse: "${text}". `);

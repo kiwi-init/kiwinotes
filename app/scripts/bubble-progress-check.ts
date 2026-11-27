@@ -131,8 +131,7 @@ async function overlay() {
   const queue: Cmd[] = [];
   const sub = await connect(data, (line: any) => {
     if ("id" in line || !line.event) return;
-    if (line.event === "catOverlay.command") { log.push({ at: now(), cmd: line.payload }); queue.push(line.payload); }
-    else if (line.event === "agent.turn") log.push({ at: now(), turn: line.payload });
+    if (line.event === "catOverlay.command") queue.push(line.payload);
   });
   assert.ok(sub);
   sub.write({ id: 0, cmd: "subscribe", topics: ["events"], follow: true, backlog: false });
@@ -145,8 +144,6 @@ async function overlay() {
   })();
   const onPage = (t: string) => p.waitForFunction((s) => document.getElementById("bubble-text")!.textContent === s, t, { timeout: 30_000 });
   try {
-    await invoke("settings.set", { kiwicat: { overlay: true, show: true } });
-    await waitFor("o load", () => log.some((l) => l.cmd?.type === "catOverlay.load"));
 
     // 1. Um pedido por voz: o andamento troca a cada passo, com o que a pessoa falou em cima e o [Parar].
     const from = log.length;
@@ -199,7 +196,6 @@ async function overlay() {
     assert.deepEqual(problems, [], "overlay: erros na página");
   } finally {
     await bctx.close();
-    await invoke("settings.set", { kiwicat: { overlay: false, show: true } }).catch(() => {});
   }
 }
 
@@ -214,7 +210,18 @@ async function hub(theme: "light" | "dark") {
     await p.locator('[role="tab"][data-section="notes"]').click();
     await p.waitForFunction(() => !document.querySelector<HTMLElement>(".kn-hub")?.dataset.catAt);
     await peekKiwi(p);
-    const textIs = (t: string) => p.waitForFunction(({ sel, t }) => document.querySelector(`${sel} .kn-bubble-typed`)?.textContent === t, { sel: BUBBLE, t }, { timeout: 30_000 });
+    await p.evaluate((sel) => {
+      const w = window as any;
+      w.vistos = [];
+      setInterval(() => { const t = document.querySelector(sel)?.textContent ?? ""; if (w.vistos.at(-1) !== t) w.vistos.push(t); }, 30);
+    }, BUBBLE);
+    const textIs = async (t: string) => {
+      try {
+        await p.waitForFunction(({ sel, t }) => document.querySelector(`${sel} .kn-bubble-typed`)?.textContent === t, { sel: BUBBLE, t }, { timeout: 30_000 });
+      } catch (e) {
+        throw new Error(`hub: "${t}" não veio; o balão mostrou ${JSON.stringify(await p.evaluate(() => (window as any).vistos))}`);
+      }
+    };
 
     // 1. O andamento, com a fala em cima e o [Parar].
     const { id } = await voiceAsk(PERGUNTA);
@@ -248,9 +255,11 @@ async function hub(theme: "light" | "dark") {
 
 try {
   await cli(["start", "--no-helper"]);
-  // O registro dos eventos do agente, para o Hub também.
+  // O registro dos eventos, antes de ligar o agente: o `load` do overlay sai quando ele liga.
   const sub = await connect(data, (line: any) => {
-    if (!("id" in line) && line.event === "agent.turn" && line.payload.type === "done") log.push({ at: now(), turn: line.payload });
+    if ("id" in line || !line.event) return;
+    if (line.event === "catOverlay.command") log.push({ at: now(), cmd: line.payload });
+    else if (line.event === "agent.turn") log.push({ at: now(), turn: line.payload });
   });
   assert.ok(sub);
   sub.write({ id: 0, cmd: "subscribe", topics: ["events"], follow: true, backlog: false });
@@ -258,10 +267,13 @@ try {
   await invoke("agent.download");
   await invoke("agent.configure", { onboarding: { state: "done" } });
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
+  await waitFor("o load do overlay", () => log.some((l) => l.cmd?.type === "catOverlay.load"));
   // "Mostrar o que eu falei" vem ligado para quem nunca mexeu (T33177).
   assert.equal((await invoke("agent.status")).showSpokenText, true, "o padrão do Mostrar o que eu falei");
   await invoke("notes.create", { folder: "Casa", title: "Feira", content: "# Feira\n\nBanana, pão e café para a semana da Ana.\n" });
   await overlay();
+  // Com o overlay ligado, o pedido por voz é do gato por cima dos apps, e o do Hub fica fora (`away`). Desligado, o Hub.
+  await invoke("settings.set", { kiwicat: { overlay: false, show: true } });
   for (const theme of ["light", "dark"] as const) await hub(theme);
   sub.close();
 
