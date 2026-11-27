@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import Electrobun, { AgentControl, ApplicationMenu, PATHS, Tray, Updater, Utils } from "electrobun/bun";
 
 import { type AppChannel, type HubSection, isHubSection, releaseNotesUrl, UI_WINDOWS } from "../shared/ui-contract.ts";
-import { CALENDAR_NOTICE_PREFIX, dictationRecording } from "./calendar-alerts.ts";
+import { CALENDAR_NOTICE_PREFIX, micRecording } from "./calendar-alerts.ts";
 import { Hub } from "./hub.ts";
 import { makeIntro } from "./intro.ts";
 import { repairInstallRegistry, runningBundle } from "./install-registry.ts";
@@ -175,8 +175,8 @@ dictation.onStatus(() => void setupChanged().catch(() => {}));
 // O atalho global da janela Notas (T1499): quem vê a tecla é o helper, que já tem o Monitoramento de Entrada.
 dictation.sidecar.on("hotkey.notes", () => openHub("notes"));
 {
-  const dictating = dictationRecording((t, fn) => dictation.sidecar.on(t, fn));
-  void noticesLoaded.then((notices) => startCalendarAlerts(notices, dictating.recording));
+  const mic = micRecording((t, fn) => dictation.sidecar.on(t, fn));
+  void noticesLoaded.then((notices) => startCalendarAlerts(notices, mic.recording));
 }
 dictation.start();
 startCatOverlay(dictation.sidecar);

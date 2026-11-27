@@ -11,7 +11,7 @@ import {
   alertsVia,
   CalendarAlerts,
   type CalendarAlertsDeps,
-  dictationRecording,
+  micRecording,
   type DueAlert,
   FIRED_KEEP_MS,
   firedFile,
@@ -29,7 +29,7 @@ const reminder: AlertItem = { kind: "reminder", title: "Ligar para a Ana", proje
 const delivery: AlertItem = { kind: "task", title: "Entrega do relatório", project: "Projeto X", start: "2026-11-28T09:00", allDay: false };
 
 /** Um calendário falso: os avisos fixos, devolvidos pela janela pedida. */
-function rig(alerts: DueAlert[], o: { recording?: boolean; speakFails?: boolean; fired?: FiredStore } = {}) {
+function rig(alerts: DueAlert[], o: { recording?: boolean; speaking?: boolean; speakFails?: boolean; fired?: FiredStore } = {}) {
   let clock = at("2026-11-27T08:00");
   const posted: { id: string; title: string; body: string }[] = [];
   const spoken: string[] = [];
@@ -45,6 +45,7 @@ function rig(alerts: DueAlert[], o: { recording?: boolean; speakFails?: boolean;
       spoken.push(t);
     },
     recording: () => o.recording ?? false,
+    speaking: () => o.speaking ?? false,
     fired,
     locale: () => "pt",
     log: (m) => void logs.push(m),
@@ -127,6 +128,16 @@ describe("o agendador", () => {
     expect(r.posted.length).toBe(1);
     expect(r.spoken).toEqual([]);
     expect(r.logs).toContain("calendar-alerts: recording now, not speaking");
+  });
+
+  test("o Kiwi falando (uma resposta): o aviso não corta a fala dele, só a notificação", async () => {
+    const r = rig([alert(reminder, "2026-11-27T09:00")], { speaking: true });
+    r.set("2026-11-27T09:00");
+    await r.alerts.tick();
+    await flush();
+    expect(r.posted.length).toBe(1);
+    expect(r.spoken).toEqual([]);
+    expect(r.logs).toContain("calendar-alerts: the Kiwi is speaking, not speaking over it");
   });
 
   test("sem a voz, a notificação sai e o motivo vai ao log, sem o nome do item", async () => {
@@ -259,18 +270,30 @@ describe("as pontas do agendador", () => {
     expect(out).toHaveLength(1);
   });
 
-  test("o ditado gravando: do started ao stopped, cancelado, erro ou helper novo; o stop solta os ouvintes", () => {
+  test("o mic aberto: o ditado e o atalho do Kiwi, do started ao stopped, cancelado, erro ou helper novo; o stop solta os ouvintes", () => {
     const fns = new Map<string, () => void>();
     let offs = 0;
-    const rec = dictationRecording((t, fn) => (fns.set(t, fn), () => void offs++));
+    const rec = micRecording((t, fn) => (fns.set(t, fn), () => void offs++));
     expect(rec.recording()).toBe(false);
-    for (const end of ["record.stopped", "record.cancelled", "record.error", "ready"]) {
-      fns.get("record.started")!();
-      expect(rec.recording()).toBe(true);
-      fns.get(end)!();
-      expect(rec.recording()).toBe(false);
+    for (const [start, ends] of [
+      ["record.started", ["record.stopped", "record.cancelled", "record.error", "ready"]],
+      ["agent.record.started", ["agent.record.stopped", "agent.record.cancelled", "agent.record.error", "ready"]],
+    ] as const) {
+      for (const end of ends) {
+        fns.get(start)!();
+        expect(rec.recording()).toBe(true);
+        fns.get(end)!();
+        expect(rec.recording()).toBe(false);
+      }
     }
+    // Os dois juntos: o fim de um não fecha o outro.
+    fns.get("record.started")!();
+    fns.get("agent.record.started")!();
+    fns.get("record.stopped")!();
+    expect(rec.recording()).toBe(true);
+    fns.get("agent.record.stopped")!();
+    expect(rec.recording()).toBe(false);
     rec.stop();
-    expect(offs).toBe(5);
+    expect(offs).toBe(9);
   });
 });

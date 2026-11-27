@@ -60,8 +60,10 @@ export interface CalendarAlertsDeps {
   notices: Pick<Notices, "post">;
   /** Fala o texto na voz escolhida. Rejeita sem a voz (o helper não subiu, nada baixado): só a notificação fica. */
   speak(text: string): Promise<void>;
-  /** Uma reunião ou um ditado gravando agora: a fala espera calada (fica só a notificação). */
+  /** Uma reunião, um ditado ou o atalho do Kiwi gravando agora: a fala fica calada (só a notificação). */
   recording(): boolean;
+  /** O Kiwi falando agora (uma resposta): o aviso não corta a fala dele, e fica só a notificação. */
+  speaking(): boolean;
   fired: FiredStore;
   locale(): Locale;
   log?(m: string): void;
@@ -171,6 +173,10 @@ export class CalendarAlerts {
       this.d.log?.("calendar-alerts: recording now, not speaking");
       return;
     }
+    if (this.d.speaking()) {
+      this.d.log?.("calendar-alerts: the Kiwi is speaking, not speaking over it");
+      return;
+    }
     const speech = texts.slice(0, SPEECH_MAX).map(({ t }) => t.speech).join(" ");
     void this.d.speak(speech).catch((e) => this.d.log?.(`calendar-alerts: couldn't speak: ${e instanceof Error ? e.message : String(e)}`));
   }
@@ -196,18 +202,27 @@ export function alertsVia<I extends AlertItem>(
   };
 }
 
+/** Os eventos do helper que abrem e fecham o mic: o ditado (`record.*`) e o atalho do Kiwi (`agent.record.*`). */
+const MIC_EVENTS = {
+  dictation: { start: "record.started", end: ["record.stopped", "record.cancelled", "record.error"] },
+  kiwi: { start: "agent.record.started", end: ["agent.record.stopped", "agent.record.cancelled", "agent.record.error"] },
+} as const;
+export type MicEvent = (typeof MIC_EVENTS)[keyof typeof MIC_EVENTS]["start" | "end"] extends infer E ? (E extends readonly (infer I)[] ? I : E) : never;
+
 /**
- * O ditado gravando agora, pelos eventos do helper: do `record.started` ao `record.stopped` (ou o cancelado, o erro, ou
- * um helper novo). A fala do aviso espera calada enquanto isso.
+ * O mic aberto agora, pelos eventos do helper: o ditado e o atalho do Kiwi, cada um do started ao stopped (ou o
+ * cancelado, o erro, ou um helper novo). A fala do aviso fica calada enquanto isso, senão cai na transcrição.
  */
-export function dictationRecording(on: (type: "record.started" | "record.stopped" | "record.cancelled" | "record.error" | "ready", fn: () => void) => () => void): {
+export function micRecording(on: (type: MicEvent | "ready", fn: () => void) => () => void): {
   recording(): boolean;
   stop(): void;
 } {
-  let live = false;
-  const offs = [
-    on("record.started", () => (live = true)),
-    ...(["record.stopped", "record.cancelled", "record.error", "ready"] as const).map((t) => on(t, () => (live = false))),
-  ];
-  return { recording: () => live, stop: () => offs.forEach((off) => off()) };
+  const live = { dictation: false, kiwi: false };
+  const offs: (() => void)[] = [];
+  for (const k of ["dictation", "kiwi"] as const) {
+    offs.push(on(MIC_EVENTS[k].start, () => (live[k] = true)));
+    for (const t of MIC_EVENTS[k].end) offs.push(on(t, () => (live[k] = false)));
+  }
+  offs.push(on("ready", () => ((live.dictation = false), (live.kiwi = false))));
+  return { recording: () => live.dictation || live.kiwi, stop: () => offs.forEach((off) => off()) };
 }
