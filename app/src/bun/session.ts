@@ -191,8 +191,8 @@ export class Session {
     });
     this.sidecar.on("meeting.warning", (e) => console.warn(`[meetings] ${e.channel ?? ""} ${e.warning}`));
     // A nota da reunião sumiu no meio e foi recriada (T7723): o card ao vivo avisa a pessoa.
-    stores.meetingNotes.onRecreated((session, path) => {
-      console.warn(`[meetings] note recreated: ${path}`);
+    stores.meetingNotes.onRecreated((session) => {
+      console.warn("[meetings] note recreated"); // sem o nome da nota (#456)
       this.meetings.feed({ type: "meeting.warning", session, warning: "note_recreated" });
     });
     // O helper que caiu levou a captura junto (R6): o card ao vivo some, e a nota da reunião ganha o fim (T7938).

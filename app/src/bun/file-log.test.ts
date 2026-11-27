@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { FileLog, levelFromEnv, teeConsole } from "./file-log.ts";
@@ -66,4 +67,22 @@ test("o nível vem do ambiente", () => {
   expect(levelFromEnv({ KIWI_DEBUG: "1" })).toBe("debug");
   expect(levelFromEnv({ KIWI_LOG_LEVEL: "warn", KIWI_DEBUG: "1" })).toBe("warn");
   expect(levelFromEnv({ KIWI_LOG_LEVEL: "verbose" })).toBe("info");
+});
+
+test("o erro do fs logado inteiro não leva o caminho da nota (#457)", async () => {
+  fresh();
+  const fake = { debug: () => {}, log: () => {}, info: () => {}, warn: () => {}, error: () => {} } as unknown as Console;
+  const log = new FileLog({ dir, now: at, home: "/Users/exemplo" });
+  const undo = teeConsole(log, fake);
+  const missing = path.join(dir, "Projeto X", "Conversa com a Ana.md");
+  // Os dois formatos: o erro do Bun.file e o do node:fs (com o `path: '…'` do util.format).
+  fake.error("[notes] couldn't read:", await Bun.file(missing).text().catch((x) => x));
+  fake.error("[notes] couldn't read:", await readFile(missing).catch((x) => x));
+  fake.warn(`[notes] ENOENT: no such file or directory, open '/Users/exemplo/Notas/Conversa com a Ana.md'`);
+  undo();
+  const text = readFileSync(log.file, "utf8");
+  expect(text).toContain("ENOENT");
+  expect(text).toContain("'<caminho>'");
+  expect(text).not.toContain("Conversa com a Ana");
+  expect(text).not.toContain("Projeto X");
 });

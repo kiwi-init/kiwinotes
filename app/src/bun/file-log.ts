@@ -8,6 +8,8 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { format } from "node:util";
 
+import { redactQuotedPaths } from "../shared/log-safe.ts";
+
 export type LogLevel = "debug" | "info" | "warn" | "error";
 const RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 export const isLogLevel = (v: unknown): v is LogLevel => typeof v === "string" && v in RANK;
@@ -48,7 +50,8 @@ export class FileLog {
   /** Uma linha no arquivo, se o nível passar. Nunca lança: um disco cheio não derruba o app. */
   write(level: LogLevel, message: string): void {
     if (this.broken || RANK[level] < RANK[this.level]) return;
-    const text = this.home ? message.split(this.home).join("~") : message;
+    // A rede de segurança (#457): o erro do fs que alguém logar inteiro não leva o caminho da nota.
+    const text = redactQuotedPaths(this.home ? message.split(this.home).join("~") : message);
     const line = `${this.now().toISOString()} ${level.toUpperCase().padEnd(5)} ${text.replace(/\r?\n/g, "\n    ")}\n`;
     try {
       if (this.size < 0) {

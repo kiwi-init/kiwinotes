@@ -30,6 +30,7 @@ import { CanvasParseError, parseCanvas, stringifyCanvas } from "../shared/json-c
 import { inspectDocx } from "../shared/docx-file.ts";
 import { inspectXlsx } from "../shared/sheet/xlsx.ts";
 import { applyTextEdits, headingFor, headingKey, markdownStructure } from "../shared/markdown-structure.ts";
+import { errorKind } from "../shared/log-safe.ts";
 import { noteReferences, referenceTarget, rewriteFileReferences, rewriteHeadingReferences, rewriteNoteReferences, rewriteTag, validTag, type LinkWarning, type RefactorResult } from "./refactor.ts";
 
 export interface NoteMeta {
@@ -1885,7 +1886,7 @@ export class Vault {
       await rm(path.dirname(item.abs), { recursive: true, force: true });
       await this.remember({ path: p, kind: item.kind, deletedAt: new Date(item.at).toISOString() });
     } catch (e) {
-      console.error(`[notes] couldn't move ${item.abs} to the Trash:`, e);
+      console.error(`[notes] couldn't move a ${item.kind} to the Trash: ${errorKind(e)}`); // sem o nome (#457)
     }
   }
 
@@ -1911,7 +1912,7 @@ export class Vault {
         if (name === BOX_META) continue;
         await this.trash(path.join(boxAbs, name)).then(
           () => (moved = true),
-          (e) => console.error(`[notes] couldn't move ${name} to the Trash:`, e),
+          (e) => console.error(`[notes] couldn't move a leftover item to the Trash: ${errorKind(e)}`),
         );
       }
       await rm(boxAbs, { recursive: true, force: true });
