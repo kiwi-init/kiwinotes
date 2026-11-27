@@ -55,12 +55,14 @@ const ABBREVIATIONS = new Set([
 /**
  * A 1ª frase do texto. Um ponto só termina a frase quando a palavra antes dele não é uma abreviação e o que vem antes
  * já tem duas letras ou mais ("Sr. Exemplo…" e "v. 2. final" não viram "Sr" e "V"). Uma letra solta fecha a frase
- * ("Escolhi o plano B.").
+ * ("Escolhi o plano B."), e o ponto no fim do texto também.
  */
 function firstSentence(flat: string): string {
   for (const m of flat.matchAll(/[.!?…]+(?=\s|$)/gu)) {
     const before = flat.slice(0, m.index);
-    if (m[0] === ".") {
+    // O ponto no fim do texto termina a frase sempre (#453): senão "A." e "Falei com o Sr." ficavam com ele, e a nota
+    // nascia como `A..md`.
+    if (m[0] === "." && m.index! + 1 < flat.length) {
       const word = (/[\p{L}\p{N}º]+$/u.exec(before)?.[0] ?? "").toLowerCase();
       if (ABBREVIATIONS.has(word)) continue;
       if ((before.match(/\p{L}/gu)?.length ?? 0) < 2) continue;

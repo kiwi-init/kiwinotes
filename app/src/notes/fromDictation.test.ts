@@ -280,3 +280,18 @@ describe("HistoryStore.get (T1320)", () => {
     expect(await history.get(a.id)).toBeNull();
   });
 });
+
+// #453 (spec #33093, T33237): com menos de 2 letras, o ponto do fim ficava, e a nota nascia como `A..md`.
+describe("título: o ponto do fim do ditado sai sempre", () => {
+  test("ditado de uma letra: o título sai sem o ponto do fim", () => {
+    expect(titleFromDictation("A.")).toBe("A");
+    expect(titleFromDictation("5.")).toBe("5");
+  });
+  test("uma abreviação no fim do ditado também perde o ponto", () => {
+    expect(titleFromDictation("Falei com o Sr.")).toBe("Falei com o Sr");
+  });
+  test("no meio, a abreviação e a letra solta seguem sem cortar a frase", () => {
+    expect(titleFromDictation("Sr. Exemplo chegou. Depois")).toBe("Sr. Exemplo chegou");
+    expect(titleFromDictation("v. 2. final")).toBe("v. 2. final");
+  });
+});
