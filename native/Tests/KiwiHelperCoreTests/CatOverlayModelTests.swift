@@ -220,6 +220,23 @@ final class CatOverlayModelTests: XCTestCase {
         XCTAssertNil(CatOverlayBubble.rect(["x": Double.nan, "y": 0, "w": 10, "h": 10]))
     }
 
+    /// Spec #32534 (#32777): o Esc só é engolido com um balão à vista e o mouse no gato ou nele.
+    func testTheEscapeIsTakenOnlyWithABubbleAndTheMouseOnIt() {
+        XCTAssertTrue(CatOverlayBubble.escapeArmed(bubbleShown: true, catHover: true, overBubble: false))
+        XCTAssertTrue(CatOverlayBubble.escapeArmed(bubbleShown: true, catHover: false, overBubble: true))
+        XCTAssertFalse(CatOverlayBubble.escapeArmed(bubbleShown: true, catHover: false, overBubble: false), "o mouse longe")
+        XCTAssertFalse(CatOverlayBubble.escapeArmed(bubbleShown: false, catHover: true, overBubble: false), "nada para fechar")
+    }
+
+    /// Spec #32534: com o "Ver mais" aberto, o clique fora é o botão que desce agora, longe do balão.
+    func testAClickOutsideIsTheButtonGoingDownAwayFromTheBubble() {
+        XCTAssertTrue(CatOverlayBubble.clickedOutside(open: true, pressed: true, wasPressed: false, overBubble: false))
+        XCTAssertFalse(CatOverlayBubble.clickedOutside(open: true, pressed: true, wasPressed: false, overBubble: true), "no balão")
+        XCTAssertFalse(CatOverlayBubble.clickedOutside(open: true, pressed: true, wasPressed: true, overBubble: false), "o mesmo clique, ainda descido")
+        XCTAssertFalse(CatOverlayBubble.clickedOutside(open: false, pressed: true, wasPressed: false, overBubble: false), "fechado")
+        XCTAssertFalse(CatOverlayBubble.clickedOutside(open: true, pressed: false, wasPressed: true, overBubble: false), "o botão subindo")
+    }
+
     /// Spec #13380: o × da cabeça aparece com o mouse sobre o gato e continua enquanto ele vai até o ×.
     func testTheHeadCloseShowsOverTheCatAndStaysOnTheWayToIt() {
         let panel = CGRect(x: 100, y: 100, width: 300, height: 600)

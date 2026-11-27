@@ -31,10 +31,13 @@
         width: max-content; max-width: 280px; text-align: left;
         opacity: 0; transition: opacity var(--fast, 140ms) var(--ease, ease), transform var(--fast, 140ms) var(--ease, ease);
       }
-      #bubble[data-on="true"] { opacity: 1; transform: none; }
+      /* Só com o mouse no gato ou no balão, ou o "Ver mais" aberto (spec #32534): o main.ts põe o data-peek. Escondido, a
+         opacidade 0 deixa o #bubble-sr no leitor de tela, e o helper não deixa o clique nele. */
+      #bubble { pointer-events: none; }
+      #bubble[data-on="true"][data-peek="true"] { opacity: 1; transform: none; pointer-events: auto; }
       /* Embaixo do gato (os cantos de cima): o rabo para cima, e a entrada sobe. */
       body[data-balao="abaixo"] #bubble { transform: translateY(-4px); max-height: calc(var(--sala, 112px) - 4px); }
-      body[data-balao="abaixo"] #bubble[data-on="true"] { transform: none; }
+      body[data-balao="abaixo"] #bubble[data-on="true"][data-peek="true"] { transform: none; }
       /* Fechado: até três linhas; o main.ts corta o resumo numa palavra (sem "…" depois de um ponto). */
       #bubble-text { max-height: calc(3 * 1.35em); overflow: hidden; overflow-wrap: anywhere; white-space: pre-line; }
       /* Aberto, o markdown montado (spec #17679) leva o `.kn-md` (ui/kiwicat-v2/bubble-md.css, o mesmo do Hub). */
@@ -69,13 +72,22 @@
         transition: opacity var(--fast, 140ms) var(--ease, ease);
       }
       body[data-cat-hover="true"] #cat-close { opacity: 1; pointer-events: auto; }
+      /* A marca (spec #32534): um ponto na cor de destaque, no ombro do gato, enquanto há balão que a pessoa não viu.
+         Some com o mouse no gato, quando o balão aparece e o × da cabeça toma o lugar. */
+      #cat-mark {
+        position: absolute; top: 18%; right: 13%; z-index: 2; width: 12px; height: 12px; border-radius: 50%;
+        background: var(--kn-cat-accent, var(--accent)); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--text);
+        opacity: 0; transform: scale(0.6); pointer-events: none;
+        transition: opacity var(--fast, 140ms) var(--ease, ease), transform var(--fast, 140ms) var(--ease, ease);
+      }
+      body[data-unseen="true"]:not([data-cat-hover="true"]) #cat-mark { opacity: 1; transform: none; }
       .kn-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
       #bubble-more {
         padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; line-height: 1.2; font-weight: 600;
         text-decoration: underline; cursor: pointer;
       }
       #bubble-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
-      @media (prefers-reduced-motion: reduce) { #bubble, body[data-balao="abaixo"] #bubble { transition: none; transform: none; } }
+      @media (prefers-reduced-motion: reduce) { #cat-mark { transition: none; } #bubble, body[data-balao="abaixo"] #bubble { transition: none; transform: none; } }
       html, body { background: transparent; }
       /* O overlay fica por cima de qualquer app, e o tema do Mac não diz o que está atrás: os símbolos levam um contorno
          da cor oposta à tinta, para ler sobre fundo claro e escuro (revisão do T10830). O desenho é o mesmo. */
@@ -84,7 +96,7 @@
     </style>
   </head>
   <body>
-    <div id="bubble" class="kn-bubble-shell" data-on="false" data-open="false" data-more="false">
+    <div id="bubble" class="kn-bubble-shell" data-on="false" data-open="false" data-more="false" data-peek="false">
       <div id="bubble-text" aria-hidden="true"></div>
       <div id="bubble-ask" aria-hidden="true">Precisa de mais alguma coisa?</div>
       <div id="bubble-actions">
@@ -94,7 +106,7 @@
       <!-- O que o VoiceOver lê: a resposta inteira e a pergunta, não o resumo cortado (revisão do #526). -->
       <div id="bubble-sr" class="kn-sr" role="status" aria-live="polite"></div>
     </div>
-    <div id="cat"><button id="cat-close" class="kn-x" type="button" aria-label="Fechar o Kiwi">×</button><div id="root"></div></div>
+    <div id="cat"><button id="cat-close" class="kn-x" type="button" aria-label="Fechar o Kiwi">×</button><span id="cat-mark" aria-hidden="true"></span><div id="root"></div></div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

@@ -217,6 +217,23 @@ public enum CatOverlayBubble {
         cat.contains(mouse) || (showing && takesClick(panel: panel, rect: close, mouse: mouse))
     }
 
+    /**
+     O Esc fora do Hub (spec #32534, #32777): o painel nunca tem o teclado, então o Esc vem do tap de atalhos, que engole
+     a tecla. Só com um balão à vista (`bubbleShown`: a página só mede o balão quando ele aparece) e o mouse em cima do
+     gato ou do balão; fora disso, a tecla passa ao app da frente.
+     */
+    public static func escapeArmed(bubbleShown: Bool, catHover: Bool, overBubble: Bool) -> Bool {
+        bubbleShown && (catHover || overBubble)
+    }
+
+    /**
+     O clique fora com o "Ver mais" aberto (spec #32534): o botão do mouse desceu agora (`pressed` e não `wasPressed`),
+     longe do balão. A janela deixa esse clique passar ao app de trás; o helper só o vê pelo estado dos botões.
+     */
+    public static func clickedOutside(open: Bool, pressed: Bool, wasPressed: Bool, overBubble: Bool) -> Bool {
+        open && pressed && !wasPressed && !overBubble
+    }
+
     /// O retângulo que a página manda (`{x, y, w, h}`, em pontos); qualquer outra coisa é nenhum balão.
     public static func rect(_ body: Any?) -> CGRect? {
         guard let d = body as? [String: Any] else { return nil }
