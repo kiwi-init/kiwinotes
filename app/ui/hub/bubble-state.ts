@@ -195,6 +195,11 @@ export class BubbleFeed {
   private closedLen = 0;
   /** A fala do `cat_speak` deste pedido (spec #27881): o resumo do balão. */
   private speech = "";
+  /**
+   * O balão da fala (T33053, Cena 1): nasce no evento `speech`, junto com o 1º pedaço da voz, e fica até o `done`, que
+   * só lhe dá o [Ver mais] (o mesmo `key`, o mesmo texto). A ferramenta que corre depois da fala não o troca.
+   */
+  private spoken: Head | null = null;
   private ended = false;
   private dismissed = false;
   private announced: string | null = null;
@@ -267,10 +272,13 @@ export class BubbleFeed {
       if (this.head?.kind === "heard") this.head = null;
     } else if (e.type === "speech") {
       this.speech = plainOf(e.text).trim();
+      if (this.dismissed || this.spoken) return;
+      this.spoken = this.answer(0);
+      if (this.spoken) this.put(this.spoken, now);
     } else if (e.type === "status" && e.status === "running") {
       // A ferramenta começou: o que foi dito antes não é a resposta final.
       this.closedLen = this.said.length;
-      if (this.dismissed) return;
+      if (this.dismissed || this.spoken) return;
       // A web (spec #11908): o balão diz que o agente saiu do cofre, até a próxima ferramenta ou a resposta.
       this.put("tool" in e && e.tool === "web" ? this.line(webLine()) : null, now);
     } else if (e.type === "done") {
@@ -284,7 +292,7 @@ export class BubbleFeed {
       }
       // Fechar o balão é fechar o desenho: o leitor de tela ainda ouve a resposta, uma vez, no fim (revisão #10936).
       if (e.stopReason === "end_turn" && this.said.trim()) this.announced = this.said;
-      this.put(e.stopReason !== "end_turn" || this.dismissed ? null : this.answer(base), now);
+      this.put(e.stopReason !== "end_turn" || this.dismissed ? null : (this.spoken ?? this.answer(base)), now);
     } else if (e.type === "limit") {
       // O limite (spec #11084): o aviso do agente entra como a linha de estado, até a resposta; o limite acabado troca a
       // mensagem do erro que vem em seguida pela hora de volta, se o agente disse. A hora de volta se lê no relógio de
@@ -341,7 +349,8 @@ export class BubbleFeed {
     const h = this.head;
     if (!h || this.dismissed) return null;
     // Só a resposta pede o [Ver mais]: a linha de estado e a fala da pessoa não são o que o agente disse.
-    const more = h.kind === "answer" && !sameWords(plainOf(this.said), h.text);
+    // A fala chega antes do fim (T33053): o [Ver mais] só com o `done`, quando o `said` já é a resposta inteira.
+    const more = h.kind === "answer" && this.ended && !sameWords(plainOf(this.said), h.text);
     return { text: h.text, full: h.text, error: h.kind === "error", more, key: h.key, ...(h.links ? { links: h.links } : {}) };
   }
 
@@ -393,6 +402,7 @@ export class BubbleFeed {
     this.saidLinks = [];
     this.closedLen = 0;
     this.speech = "";
+    this.spoken = null;
     this.ended = false;
     this.dismissed = false;
     this.announced = null;

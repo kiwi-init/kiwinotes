@@ -161,6 +161,63 @@ describe("o balão único", () => {
   });
 });
 
+describe("o balão junto com a voz (T33053, Cena 1)", () => {
+  test("nasce no `speech`, com a fala; o `done` só lhe dá o [Ver mais], com o mesmo key e o mesmo texto", () => {
+    const f = new BubbleFeed(fits(80));
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "status", status: "running", tool: "cat_speak" }), 10);
+    expect(f.view(10)).toBeNull();
+    f.event(ev({ type: "speech", text: "Achei **três** notas. A mais nova é de ontem." }), 20);
+    const cedo = f.view(20)!;
+    expect(cedo).toMatchObject({ text: "Achei três notas. A mais nova é de ontem.", more: false });
+    // O agente segue: o texto e outra ferramenta não trocam o balão da fala.
+    f.event(ev({ type: "status", status: "thinking" }), 30);
+    f.event(ev({ type: "text", text: LONGA }), 40);
+    f.event(ev({ type: "status", status: "running", tool: "web" }), 50);
+    expect(f.view(50)).toEqual(cedo);
+    f.event(ev({ type: "done", stopReason: "end_turn", text: LONGA }), 60);
+    expect(f.view(60)).toEqual({ ...cedo, more: true });
+  });
+
+  test("sem voz também (o evento é o mesmo); a fala igual à resposta segue sem [Ver mais]", () => {
+    const f = new BubbleFeed(fits(60));
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "speech", text: "Anotei na nota." }), 10);
+    const cedo = f.view(10)!;
+    expect(cedo).toMatchObject({ text: "Anotei na nota.", more: false });
+    f.event(ev({ type: "done", stopReason: "end_turn", text: "Anotei na nota." }), 20);
+    expect(f.view(20)).toEqual(cedo);
+  });
+
+  test("um pedido sem fala nasce no `done`, como antes", () => {
+    const f = new BubbleFeed(fits(90));
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "text", text: LONGA }), 10);
+    expect(f.view(10)).toBeNull();
+    f.event(ev({ type: "done", stopReason: "end_turn", text: LONGA }), 20);
+    expect(f.view(20)).toMatchObject({ text: "Achei três notas sobre o Projeto X. A mais nova é de ontem, com o prazo de sexta.", more: true });
+  });
+
+  test("cancelado depois da fala: o balão sai; fechado pelo clique: o `done` não o traz de volta", () => {
+    const cancelado = run(new BubbleFeed(fits(60)), [{ type: "speech", text: "Anotei na nota." }, { type: "done", stopReason: "cancelled" }]);
+    expect(cancelado.view(0)).toBeNull();
+    const f = run(new BubbleFeed(fits(60)), [{ type: "speech", text: "Anotei na nota." }]);
+    f.close();
+    f.event(ev({ type: "done", stopReason: "end_turn", text: "Anotei na nota. E mais." }), 0);
+    expect(f.view(0)).toBeNull();
+  });
+
+  test("com o aviso de limite na tela, a fala espera o tempo de leitura dele", () => {
+    const f = new BubbleFeed(fits(80));
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "limit", status: "warning", percent: 90 }), 0);
+    const aviso = f.view(0)!.text;
+    f.event(ev({ type: "speech", text: "Anotei na nota." }), 100);
+    expect(f.view(100)!.text).toBe(aviso);
+    expect(f.view(readingMs(aviso))).toMatchObject({ text: "Anotei na nota.", more: false });
+  });
+});
+
 describe("o que fica como antes", () => {
   test("no erro, a mensagem em uma linha, que fica até o clique", () => {
     const f = new BubbleFeed(fits(60));
