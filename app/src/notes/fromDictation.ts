@@ -55,14 +55,12 @@ const ABBREVIATIONS = new Set([
 /**
  * A 1ª frase do texto. Um ponto só termina a frase quando a palavra antes dele não é uma abreviação e o que vem antes
  * já tem duas letras ou mais ("Sr. Exemplo…" e "v. 2. final" não viram "Sr" e "V"). Uma letra solta fecha a frase
- * ("Escolhi o plano B."), e o ponto no fim do texto também.
+ * ("Escolhi o plano B.").
  */
 function firstSentence(flat: string): string {
   for (const m of flat.matchAll(/[.!?…]+(?=\s|$)/gu)) {
     const before = flat.slice(0, m.index);
-    // O ponto no fim do texto termina a frase sempre (#453): senão "A." e "Falei com o Sr." ficavam com ele, e a nota
-    // nascia como `A..md`.
-    if (m[0] === "." && m.index! + 1 < flat.length) {
+    if (m[0] === ".") {
       const word = (/[\p{L}\p{N}º]+$/u.exec(before)?.[0] ?? "").toLowerCase();
       if (ABBREVIATIONS.has(word)) continue;
       if ((before.match(/\p{L}/gu)?.length ?? 0) < 2) continue;
@@ -83,7 +81,9 @@ export function titleFromDictation(text: string): string {
     const space = cut.lastIndexOf(" ");
     title = (space > MAX_TITLE / 2 ? cut.slice(0, space) : title.slice(0, MAX_TITLE)).trim();
   }
-  title = title.replace(/^[.\s]+/, "").replace(/[\s,;:–—-]+$/u, "");
+  // O ponto do fim sai sempre (#453): o `firstSentence` só o tira quando corta ali, e não corta em `A.`, `"sim."` nem no
+  // corte de 60 letras logo depois de um `Sr.`. Sem isto, a nota nascia como `A..md`.
+  title = title.replace(/^[.\s]+/, "").replace(/[\s.,;:–—-]+$/u, "");
   return /[\p{L}\p{N}]/u.test(title) ? title : FALLBACK_TITLE;
 }
 
