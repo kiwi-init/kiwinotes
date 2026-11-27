@@ -84,7 +84,13 @@ try {
     const w = window as any;
     const root = document.getElementById("root")!;
     w.amostras = [];
-    setInterval(() => w.amostras.push({ t: Math.round(performance.now()), fala: w.kiwiOverlayStats.fala, estado: root.dataset.estado, falando: root.dataset.falando }), 40);
+    const bubble = document.getElementById("bubble")!;
+    const text = document.getElementById("bubble-text")!;
+    setInterval(() => w.amostras.push({
+      t: Math.round(performance.now()), fala: w.kiwiOverlayStats.fala, estado: root.dataset.estado, falando: root.dataset.falando,
+      // O balão (T33053, Cena 1): se está na tela, o texto de cima e se tem o "Ver mais".
+      balao: bubble.dataset.on === "true" ? text.textContent : null, mais: bubble.dataset.more,
+    }), 40);
   });
 
   // O helper falso: aplica os comandos do app à página, como o CatOverlay.swift faz.
@@ -129,7 +135,7 @@ try {
   await p.screenshot({ path: join(out, "2-depois.png") });
   await Bun.sleep(600);
 
-  const amostras: { t: number; fala: number | null; estado: string; falando: string }[] = await p.evaluate(() => (window as any).amostras);
+  const amostras: { t: number; fala: number | null; estado: string; falando: string; balao: string | null; mais: string }[] = await p.evaluate(() => (window as any).amostras);
   const falando = amostras.filter((a) => a.falando === "true");
   const iFim = amostras.findLastIndex((a) => a.falando === "true");
   const depois = amostras.slice(iFim + 1);
@@ -146,6 +152,21 @@ try {
   const estadoDepois = depois[3]!.estado;
   assert.notEqual(estadoDepois, "respondendo");
   report.checks.push(`when the voice stops (null), the cat goes back to the state underneath: ${estadoDepois}`);
+  // O balão junto com a voz (T33053, Cena 1): o comando dele sai antes do 1º pedaço de áudio, e a página já o mostra,
+  // com o texto da fala, na 1ª amostra falando. O `done` só põe o "Ver mais": o texto de cima é o mesmo até o fim.
+  const iBalao = log.findIndex((l) => l.cmd?.type === "catOverlay.bubble" && !!l.cmd.text);
+  const iAudio = log.findIndex((l) => typeof l.speech === "number");
+  const iDone = log.findIndex((l) => l.turn === "done");
+  assert.ok(iBalao >= 0 && iAudio >= 0 && iBalao < iAudio && iBalao < iDone, `o balão antes do 1º áudio e do done: ${iBalao}, ${iAudio}, ${iDone}`);
+  const primeira = falando[0]!;
+  assert.ok(primeira.balao, `o balão na 1ª amostra falando: ${JSON.stringify(primeira)}`);
+  const comBalao = amostras.filter((a) => a.balao);
+  assert.ok(comBalao.every((a) => a.balao === primeira.balao), `o texto de cima mudou: ${JSON.stringify([...new Set(comBalao.map((a) => a.balao))])}`);
+  const fim = amostras.at(-1)!;
+  report.numbers.bubbleBeforeAudioMs = log[iAudio]!.at - log[iBalao]!.at;
+  report.checks.push(
+    `the bubble is born with the speech (T33053): its command ${report.numbers.bubbleBeforeAudioMs} ms before the 1st audio chunk, on the page at the 1st speaking sample ("${primeira.balao}"); the top text never changes, "See more" at the end: ${fim.mais}`,
+  );
   // O app: um nível por pedaço tocado, e o null no fim.
   const speech = log.filter((l) => "speech" in l).map((l) => l.speech);
   assert.equal(speech.at(-1), null);
