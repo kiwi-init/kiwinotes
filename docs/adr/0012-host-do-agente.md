@@ -138,7 +138,7 @@ O app passa a ligar o agente, baixar o adaptador, mandar um pedido e desligar, p
   - `E_ADAPTER_CANCELLED`: o download cancelado apaga a `.part`;
   - `E_NO_AGENT`: um build sem o serviço.
 - **Para os testes, só no headless** (`KIWI_HEADLESS=1`), e o app de verdade não lê nenhuma delas:
-  - `KIWI_FAKE_AGENT=1`: o agente falso e o `claude` falso;
+  - o agente falso, o `claude` e o `agy` falsos são o padrão (T32699): o headless nunca procura os instalados, e o download sem registro falso falha em vez de ir ao npm. O de verdade só com `KIWI_REAL_AGENT=1`, que só o harry usa; o `KIWI_FAKE_AGENT=1` antigo não muda nada;
   - `KIWI_ADAPTER_REGISTRY` e `KIWI_ADAPTER_PACKAGES`: um registro do npm falso e a lista de teste;
   - `KIWI_AGENT_IDLE_MS`.
 
