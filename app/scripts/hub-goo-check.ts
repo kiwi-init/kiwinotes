@@ -8,9 +8,9 @@
 //    entre quadros, do clique até 1 s depois, fica abaixo dos 100 ms do slowFrames (spec #12918), e o slowFrames do
 //    app (`diagnostics.slowFrame`) não acusa nada. Uma rodada lenta se repete uma vez (a máquina é dividida). No CI
 //    (`CI=1`), o tempo só vai para o log: a VM não tem um relógio de quadros confiável; o resto barra igual.
-// 3. A seção lenta (#231, spec #32446): 50 ms presos no clique, como a seção nova montando, e um quadro de 80 ms no
-//    meio do caminho. A gota espera a seção pintar (`data-waiting`, sem relógio) e larga do começo: o 1º desenho fica a
-//    até um quadro do 0, a barriga inteira. Depois, o relógio anda com o tempo real, sem congelar e sem pular.
+// 3. A seção lenta (#231, spec #32446): 50 ms presos no clique e 40 no quadro seguinte, como a seção nova montando e
+//    pintando, e um quadro de 80 ms no meio do caminho. A gota espera a seção pintar (`data-waiting`, sem relógio) e
+//    larga do começo: o 1º desenho fica a até um quadro do 0, e o 2º vem um quadro depois, a barriga inteira. Depois, o relógio anda com o tempo real, sem congelar e sem pular.
 // 4. A troca no meio (spec #32446): com a gota parada a 40% da ida, o clique na volta (e o inverso). O caminho novo sai
 //    do estado daquele instante: a cabeça não anda mais que um quadro normal entre o último quadro do relógio velho e
 //    o 0 do novo. No vídeo do item 2, a troca no meio também roda em tempo real.
@@ -515,6 +515,8 @@ const FRAME_MS = 1000 / 60;
 const SLOW_BLOCK_MS = 80;
 /** O trabalho preso de propósito no clique, como a seção nova montando (22 a 88 ms, #23816). */
 const CLICK_BLOCK_MS = 50;
+/** E no 1º quadro depois do clique, depois do desenho da gota: a seção nova pintando. */
+const PAINT_BLOCK_MS = 40;
 /** O desenho em que o quadro preso cai: o 3º com o relógio andando, já na barriga. */
 const SLOW_AT_DRAW = 3;
 
@@ -526,7 +528,7 @@ type Draw = { at: number; t: number; ms: number; phase: string; waiting: boolean
  * do quadro e o `currentTime` do relógio (−1 sem relógio), e se o lado esperava a seção no clique.
  */
 async function slowSection(p: Page, section: string) {
-  await p.evaluate(([block, clickBlock, at]) => {
+  await p.evaluate(([block, clickBlock, at, paintBlock]) => {
     const w = window as unknown as { __slow: { draws: Draw[]; waitingAtClick: boolean | null }; __slowStop: () => void };
     const goo = document.querySelector<HTMLElement>(".kn-goo")!;
     const head = document.querySelector('.kn-goo-path[data-side="end"][data-part="head"]')!;
@@ -556,10 +558,15 @@ async function slowSection(p: Page, section: string) {
       w.__slow.waitingAtClick = drop.dataset.waiting !== undefined && drop.getAnimations().length === 0;
       const until = performance.now() + clickBlock;
       while (performance.now() < until);
+      // O rAF da gota já foi pedido (a fase mudou antes deste observador): este roda depois dele, no mesmo quadro.
+      requestAnimationFrame(() => {
+        const paint = performance.now() + paintBlock;
+        while (performance.now() < paint);
+      });
     });
     start.observe(goo, { attributes: true, attributeFilter: ["data-end"] });
     w.__slowStop = () => (draws.disconnect(), start.disconnect());
-  }, [SLOW_BLOCK_MS, CLICK_BLOCK_MS, SLOW_AT_DRAW] as const);
+  }, [SLOW_BLOCK_MS, CLICK_BLOCK_MS, SLOW_AT_DRAW, PAINT_BLOCK_MS] as const);
   await p.locator(`.kn-tab[data-section="${section}"]`).click();
   await waitPhase(p, section === "notes" ? "shown" : "hidden");
   return p.evaluate(() => {
@@ -589,7 +596,10 @@ function slowReport(draws: Draw[]) {
     const off = ended ? Math.max(0, stepMs - gapMs) : Math.abs(stepMs - gapMs);
     if (!worst || off > worst.off) worst = { stepMs, gapMs, off };
   }
-  return { first: moving[0]?.t ?? null, gap, worst, waited: draws.some((d) => d.waiting) };
+  // A largada: o intervalo do 1º desenho com o relógio ao 2º. Se a gota larga antes de a seção pintar, o quadro
+  // longo cai aqui, e a barriga perde quadros.
+  const launch = moving.length > 1 ? moving[1]!.at - moving[0]!.at : null;
+  return { first: moving[0]?.t ?? null, launch, gap, worst, waited: draws.some((d) => d.waiting) };
 }
 
 type Head = { x: number; w: number } | null;
@@ -860,6 +870,8 @@ try {
       assert.equal(r.waitingAtClick, true, `na ${dir}, o lado não esperava a seção no clique (data-waiting, sem relógio)`);
       assert.ok(r.first !== null && r.first <= FRAME_MS + STEP_SLACK_MS,
         `a ${dir} não largou do começo: o 1º desenho já estava em ${r.first?.toFixed(1)} ms do relógio (máximo ${(FRAME_MS + STEP_SLACK_MS).toFixed(0)}), a barriga perdeu quadros`);
+      assert.ok(r.launch !== null && r.launch <= FRAME_MS + STEP_SLACK_MS,
+        `a ${dir} largou antes de a seção pintar: o 2º desenho veio ${r.launch?.toFixed(1)} ms depois do 1º (máximo ${(FRAME_MS + STEP_SLACK_MS).toFixed(0)})`);
       assert.ok(r.gap >= SLOW_BLOCK_MS * 0.9, `a ${dir} não pegou o quadro preso de ${SLOW_BLOCK_MS} ms (maior intervalo ${r.gap.toFixed(0)} ms)`);
       assert.ok(r.worst, `a ${dir} não teve dois desenhos com o relógio para medir`);
       assert.ok(r.worst.off <= STEP_SLACK_MS,
