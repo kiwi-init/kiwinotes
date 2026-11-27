@@ -104,9 +104,10 @@ async function overlay(theme: "light" | "dark") {
     assert.ok(await lastRect(p), "overlay: à vista, o lugar do balão vai ao helper");
     assert.equal((await stats(p)).unseen, false);
     assert.equal(await opacity(p, "#cat-mark"), 0, "overlay: a marca some quando o balão aparece");
+    // O print com o mouse ainda no Kiwi: depois de sair, a espera de 200 ms do shot já encosta nos 250 ms.
+    await shot(`overlay-mouse-${theme}.png`, `Overlay (${tema}): o mouse no Kiwi, o balão à vista`);
     await set(p, { catHover: false });
     await frames(p);
-    await shot(`overlay-mouse-${theme}.png`, `Overlay (${tema}): o mouse no Kiwi, o balão à vista`);
 
     // 3. Do Kiwi para o balão dentro dos 250 ms: fica. Saindo do balão: ainda à vista antes dos 250 ms, e some depois.
     await set(p, { bubbleHover: true });
