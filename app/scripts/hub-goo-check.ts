@@ -8,13 +8,16 @@
 //    entre quadros, do clique até 1 s depois, fica abaixo dos 100 ms do slowFrames (spec #12918), e o slowFrames do
 //    app (`diagnostics.slowFrame`) não acusa nada. Uma rodada lenta se repete uma vez (a máquina é dividida). No CI
 //    (`CI=1`), o tempo só vai para o log: a VM não tem um relógio de quadros confiável; o resto barra igual.
-// 3. A seção lenta (#231): um quadro de 80 ms de propósito logo depois de a gota começar, como a seção nova montando. O
-//    relógio, lido depois de cada desenho, não anda mais que 8% entre dois desenhos fora da corrida: a gota segura o
-//    tempo perdido em vez de pular (na main de antes, pulava de 0% para 12%, e com 80 ms, mais de 20%).
+// 3. A seção lenta (#231, spec #32446): 50 ms presos no clique e 40 no quadro seguinte, como a seção nova montando e
+//    pintando, e um quadro de 80 ms no meio do caminho. A gota espera a seção pintar (`data-waiting`, sem relógio) e
+//    larga do começo: o 1º desenho fica a até um quadro do 0, e o 2º vem um quadro depois, a barriga inteira. Depois, o relógio anda com o tempo real, sem congelar e sem pular.
+// 4. A troca no meio (spec #32446): com a gota parada a 40% da ida, o clique na volta (e o inverso). O caminho novo sai
+//    do estado daquele instante: a cabeça não anda mais que um quadro normal entre o último quadro do relógio velho e
+//    o 0 do novo. No vídeo do item 2, a troca no meio também roda em tempo real.
 // E "reduzir movimento", o do Mac (`prefers-reduced-motion`) e o do Kiwi (`data-motion="reduced"`): sem gota, os
 // botões só fazem o fade (OUT/reduzir-mac, OUT/reduzir-kiwi).
 //
-// Confere: as fases (entering → shown, leaving → hidden), a duração (350–500 ms), a gota no lugar dos botões no fim da
+// Confere: as fases (entering → shown, leaving → hidden), a duração (a da mola, até o teto do plano), a gota no lugar dos botões no fim da
 // ida, e o texto e os ícones fora da camada e por cima da gota em todos os quadros.
 //
 // A forma e o rastro, nos pixels (T18950, harry #18945), sem depender de como a gota é desenhada: em cada quadro sai
@@ -37,7 +40,7 @@ import { webkit, type Browser, type Page } from "playwright-core";
 
 import { SLOW_FRAME_MS, WATCH_MS } from "../ui/src/slowFrames.ts";
 import { request } from "./cli.ts";
-import { GOO_BEATS, GOO_HOLD_MS } from "../ui/hub/goo-shape.ts";
+import { GOO_PLAN_MAX_MS } from "../ui/hub/goo-spring.ts";
 import { dripProblem, dropShape, type DropShape } from "./goo-profile.ts";
 import { openWindow, settle, type UiContext } from "./ui-page.ts";
 
@@ -62,8 +65,8 @@ const PILL_MIN = 0.9;
 const DROP_RING = { light: 31.2, dark: 16.8 };
 /** No 1º quadro depois do clique da volta (9%), os botões ainda com esta fração do conteúdo de antes (#18974). */
 const BUTTONS_EARLY = 0.3;
-const MIN_MS = 350;
-const MAX_MS = 500;
+/** Na troca no meio em tempo real (o vídeo), o clique na outra aba sai este tempo depois do primeiro. */
+const SWITCH_REAL_MS = 150;
 /** Idas e voltas em tempo real, por tema. */
 const ROUNDS = 3;
 
@@ -149,7 +152,8 @@ const clickAndPause = (p: Page, section: string) => p.evaluate(async (s) => {
   document.querySelector<HTMLElement>(`.kn-tab[data-section="${s}"]`)!.click();
   const bar = document.querySelector(".kn-hub-top")!;
   // A gota anda por um relógio WAAPI (`.kn-goo-clock[data-side]`, T18948) ou por @keyframes `kn-goo-in|out-*`; os
-  // botões, pelo `kn-goo-buttons-in`. Tudo o que for da gota na barra para junto.
+  // botões, pela animação `kn-goo-buttons-in` (a CSS, ou uma WAAPI com esse `id` na mola, #32526). Tudo o que for da
+  // gota na barra para junto. A cabeça (`.kn-goo-run`) segue o relógio sozinha.
   const target = (a: Animation) => (a.effect as KeyframeEffect | null)?.target;
   const name = (a: Animation) => (a as CSSAnimation).animationName ?? "";
   const side = (a: Animation) => {
@@ -159,7 +163,7 @@ const clickAndPause = (p: Page, section: string) => p.evaluate(async (s) => {
   };
   const mine = () => document.getAnimations().filter((a) => {
     const t = target(a);
-    return t instanceof Element && bar.contains(t) && (t.matches(".kn-goo-clock") || name(a).startsWith("kn-goo"));
+    return t instanceof Element && bar.contains(t) && (t.matches(".kn-goo-clock") || name(a).startsWith("kn-goo") || a.id.startsWith("kn-goo"));
   });
   const deadline = performance.now() + 2000;
   let list = mine();
@@ -425,7 +429,7 @@ async function frames(p: Page, lab: Page, rest: Buffer, dir: string, section: st
   const anims = await clickAndPause(p, section);
   const drops = anims.filter((a) => a.side);
   assert.deepEqual(drops.map((a) => a.side).sort(), ["end", "start"], JSON.stringify(anims));
-  for (const a of drops) assert.ok(a.ms >= MIN_MS && a.ms <= MAX_MS, `${a.name} (${a.side}) tem ${a.ms} ms, fora de ${MIN_MS}–${MAX_MS}`);
+  for (const a of drops) assert.ok(a.ms > 0 && a.ms <= GOO_PLAN_MAX_MS, `${a.name} (${a.side}) tem ${a.ms} ms, fora de 0–${GOO_PLAN_MAX_MS}`);
   const want = kind === "in" ? "entering" : "leaving";
   const ph = await phases(p);
   assert.equal(ph.start, want, JSON.stringify(ph));
@@ -450,6 +454,24 @@ async function frames(p: Page, lab: Page, rest: Buffer, dir: string, section: st
     const boxes = await dropBoxes(p);
     list.push({ t: f, ...boxes, shape: { start: dropShape(a.start), end: dropShape(a.end) }, cols: { start: a.start, end: a.end }, trail: a.trail, ring: a.ring });
   }
+  // A soltura da mola é curta (o pescoço dura poucos quadros, spec #32446) e os 12 quadros podem pular por cima dela:
+  // na ida, entre o último quadro presa e o 1º solta de cada lado, a forma também se lê a cada quadro de 60 Hz. Só para
+  // a forma (o `dripProblem`); a tira continua com os 12.
+  const extra: { t: number; shape: Record<Side, DropShape> }[] = [];
+  if (kind === "in") {
+    const ms = Math.max(...drops.map((a) => a.ms));
+    const between = new Set<number>();
+    for (const side of SIDES) {
+      const i = list.findIndex((f, k) => f.shape[side].kind === "attached" && list[k + 1]?.shape[side].kind === "detached");
+      if (i < 0) continue;
+      for (let t = list[i]!.t * ms + FRAME_MS; t < list[i + 1]!.t * ms; t += FRAME_MS) between.add(t / ms);
+    }
+    for (const f of [...between].sort((a, b) => a - b)) {
+      await seek(p, f);
+      const a = await analyze(lab, scale, await geometry(p), rest, await shot(p), await maskShot(p), before?.buttons);
+      extra.push({ t: f, shape: { start: dropShape(a.start), end: dropShape(a.end) } });
+    }
+  }
   assert.deepEqual(problems, [], `texto ou ícone fora do lugar durante a ${kind === "in" ? "ida" : "volta"}`);
   if (before) {
     const early = inks.find((i) => i.t > 0 && i.t < 0.25)!;
@@ -459,7 +481,7 @@ async function frames(p: Page, lab: Page, rest: Buffer, dir: string, section: st
   assert.deepEqual(trail, [], `rastro durante a ${kind === "in" ? "ida" : "volta"} (a faixa diferente da barra parada, fora da gota)`);
   await release(p);
   await waitPhase(p, kind === "in" ? "shown" : "hidden");
-  return { anims, frames: list, shownInk, inks };
+  return { anims, frames: list, extra, shownInk, inks };
 }
 
 /** O maior intervalo entre quadros do clique até WATCH_MS depois, com o clique de verdade do Playwright. */
@@ -485,100 +507,174 @@ async function realtime(p: Page, section: string) {
   });
 }
 
-/**
- * Fora da corrida, o relógio da gota anda com o tempo real, mas nunca mais que `GOO_HOLD_MS` entre dois desenhos: um
- * quadro mais longo segura o relógio (Goo.tsx). Então o passo de cada par de desenhos, em ms do relógio, fica abaixo
- * do intervalo do par e do `GOO_HOLD_MS`, com esta folga. O intervalo é o do tempo do quadro
- * (`document.timeline.currentTime`, o relógio da animação), não o `performance.now()` do desenho, que o trabalho do
- * quadro atrasa. A folga cobre o arredondamento entre o relógio e o tick. Um quadro lento da VM do CI anda o que
- * o tempo real dele deixa; um salto (o relógio adiantado sem quadro lento, ou o quadro preso sem segurar, #231) não
- * (T25620). O passo cru contra 8% barrava o quadro de dois 60 Hz na volta, de 400 ms: 34 ms já são 8,5%.
- */
+/** Folga do passo do relógio contra o tempo real entre dois desenhos: o arredondamento entre o relógio e o tick. */
 const STEP_SLACK_MS = 8;
-/** O quadro preso de propósito na seção lenta. */
+/** Um quadro normal, a 60 Hz (o rAF do WKWebView, #23816). */
+const FRAME_MS = 1000 / 60;
+/** O quadro preso de propósito no meio do caminho. */
 const SLOW_BLOCK_MS = 80;
-/** O trabalho preso de propósito no clique, antes do 1º quadro da gota (T25900): acima do `GOO_HOLD_MS`. */
+/** O trabalho preso de propósito no clique, como a seção nova montando (22 a 88 ms, #23816). */
 const CLICK_BLOCK_MS = 50;
+/** E no 1º quadro depois do clique, depois do desenho da gota: a seção nova pintando. */
+const PAINT_BLOCK_MS = 40;
+/** O desenho em que o quadro preso cai: o 3º com o relógio andando, já na barriga. */
+const SLOW_AT_DRAW = 3;
+
+/** A camada da cabeça num desenho: a animação de `transform` da `.kn-goo-run` (o compositor, #231), ou null sem ela. */
+type Run = { state: string; ms: number; t: number } | null;
+type Draw = { at: number; t: number; ms: number; phase: string; waiting: boolean; clock: string; run: Run };
 
 /**
- * A troca com `CLICK_BLOCK_MS` presos no clique (antes do 1º quadro da gota) e um quadro de `SLOW_BLOCK_MS` no 2º. Devolve, a cada desenho da cabeça (um
- * MutationObserver no `d` dela, que roda logo depois do quadro da gota), o tempo do quadro e o progresso do relógio.
+ * A troca com `CLICK_BLOCK_MS` presos no clique e um quadro de `SLOW_BLOCK_MS` no `SLOW_AT_DRAW`º desenho. Devolve, a
+ * cada desenho da cabeça do lado end (um MutationObserver no `d` dela, que roda logo depois do quadro da gota), o tempo
+ * do quadro e o `currentTime` do relógio (−1 sem relógio), e se o lado esperava a seção no clique.
  */
 async function slowSection(p: Page, section: string) {
-  await p.evaluate(([block, clickBlock]) => {
-    const w = window as unknown as { __slow: { at: number; p: number; ms: number; phase: string }[]; __slowStop: () => void };
+  await p.evaluate(([block, clickBlock, at, paintBlock]) => {
+    const w = window as unknown as { __slow: { draws: Draw[]; waitingAtClick: boolean | null }; __slowStop: () => void };
     const goo = document.querySelector<HTMLElement>(".kn-goo")!;
     const head = document.querySelector('.kn-goo-path[data-side="end"][data-part="head"]')!;
-    const clock = () => document.querySelector('.kn-goo-drop[data-side="end"]')!.getAnimations()[0];
-    w.__slow = [];
+    const drop = document.querySelector<HTMLElement>('.kn-goo-clock[data-side="end"]')!;
+    const clock = () => drop.getAnimations()[0];
+    const runLayer = document.querySelector('.kn-goo-run[data-side="end"]')!;
+    const run = () => runLayer.getAnimations().find((a) =>
+      ((a.effect as KeyframeEffect | null)?.getKeyframes() ?? []).some((k) => "transform" in k));
+    w.__slow = { draws: [], waitingAtClick: null };
+    let moving = 0;
     const draws = new MutationObserver(() => {
-      const timing = clock()?.effect?.getComputedTiming();
-      w.__slow.push({ at: Number(document.timeline.currentTime ?? performance.now()), p: Number(timing?.progress ?? -1), ms: Number(timing?.duration ?? 0), phase: goo.dataset.end ?? "" });
+      const c = clock();
+      const timing = c?.effect?.getComputedTiming();
+      w.__slow.draws.push({
+        at: Number(document.timeline.currentTime ?? performance.now()),
+        t: c ? Number(c.currentTime ?? 0) : -1, ms: Number(timing?.duration ?? 0),
+        phase: goo.dataset.end ?? "", waiting: drop.dataset.waiting !== undefined, clock: c?.playState ?? "",
+        run: ((r) => r ? { state: r.playState, ms: Number(r.effect?.getComputedTiming().duration ?? 0), t: Number(r.currentTime ?? -1) } : null)(run()),
+      });
+      if (c && ++moving === at) {
+        const until = performance.now() + block;
+        while (performance.now() < until);
+      }
     });
     draws.observe(head, { attributes: true, attributeFilter: ["d"] });
     let armed = true;
     const start = new MutationObserver(() => {
       if (!armed || (goo.dataset.end !== "entering" && goo.dataset.end !== "leaving")) return;
       armed = false;
-      // O 1º quadro depois do clique também lento (o run 45258901241: 51 ms sem segurar, T25900): o trabalho do clique
-      // atrasa o 1º quadro do laço, que não tem um quadro anterior para medir. O WebKit às vezes começa o relógio já no
-      // clique e às vezes só no 1º quadro (aí não há o que segurar); aqui ele começa no clique, como no run do CI.
-      const c = clock();
-      if (c && c.startTime === null) c.startTime = document.timeline.currentTime;
-      const first = performance.now() + clickBlock;
-      while (performance.now() < first);
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const until = performance.now() + block;
-        while (performance.now() < until);
-      }));
+      // No clique: o lado já está na fase nova, esperando a seção pintar, sem relógio.
+      w.__slow.waitingAtClick = drop.dataset.waiting !== undefined && drop.getAnimations().length === 0;
+      const until = performance.now() + clickBlock;
+      while (performance.now() < until);
+      // O rAF da gota já foi pedido (a fase mudou antes deste observador): este roda depois dele, no mesmo quadro.
+      requestAnimationFrame(() => {
+        const paint = performance.now() + paintBlock;
+        while (performance.now() < paint);
+      });
     });
     start.observe(goo, { attributes: true, attributeFilter: ["data-end"] });
     w.__slowStop = () => (draws.disconnect(), start.disconnect());
-  }, [SLOW_BLOCK_MS, CLICK_BLOCK_MS] as const);
+  }, [SLOW_BLOCK_MS, CLICK_BLOCK_MS, SLOW_AT_DRAW, PAINT_BLOCK_MS] as const);
   await p.locator(`.kn-tab[data-section="${section}"]`).click();
   await waitPhase(p, section === "notes" ? "shown" : "hidden");
   return p.evaluate(() => {
-    const w = window as unknown as { __slow: { at: number; p: number; ms: number; phase: string }[]; __slowStop: () => void };
+    const w = window as unknown as { __slow: { draws: Draw[]; waitingAtClick: boolean | null }; __slowStop: () => void };
     w.__slowStop();
     return w.__slow;
   });
 }
 
-/** Um par de desenhos seguidos da gota: quanto o relógio andou (ms) e quanto tempo real passou entre eles (ms). */
-interface DrawPair {
-  stepMs: number;
-  gapMs: number;
-}
-
-/** Os pares fora da corrida (lá o compositor anda sozinho) e o maior intervalo entre dois desenhos. */
-function slowPairs(draws: { at: number; p: number; ms: number; phase: string }[]) {
-  const moving = draws.filter((d) => (d.phase === "entering" || d.phase === "leaving") && d.p >= 0);
-  const pairs: DrawPair[] = [];
+/**
+ * O que a seção lenta mostrou: onde a gota largou (o relógio no 1º desenho), o maior intervalo entre dois desenhos e
+ * o par em que o relógio mais se afastou do tempo real (à frente: pulou; atrás: congelou). O último par, no fim do
+ * relógio, não conta como congelado: ali o relógio para no fim.
+ */
+function slowReport(draws: Draw[]) {
+  const moving = draws.filter((d) => (d.phase === "entering" || d.phase === "leaving") && d.t >= 0);
   let gap = 0;
+  let worst: { stepMs: number; gapMs: number; off: number } | null = null;
   for (let i = 1; i < moving.length; i++) {
     const a = moving[i - 1]!;
     const b = moving[i]!;
-    if (b.phase !== a.phase) continue;
-    gap = Math.max(gap, b.at - a.at);
-    const t = (x: typeof a) => (x.phase === "entering" ? x.p : 1 - x.p);
-    const inRun = (x: number) => x > GOO_BEATS.pinch && x < GOO_BEATS.arrive;
-    if (inRun(t(a)) || inRun(t(b))) continue;
-    pairs.push({ stepMs: Math.abs(b.p - a.p) * b.ms, gapMs: b.at - a.at });
+    if (b.ms !== a.ms || b.t < a.t) continue;
+    const gapMs = b.at - a.at;
+    gap = Math.max(gap, gapMs);
+    const stepMs = b.t - a.t;
+    const ended = b.t >= b.ms - 0.5;
+    const off = ended ? Math.max(0, stepMs - gapMs) : Math.abs(stepMs - gapMs);
+    if (!worst || off > worst.off) worst = { stepMs, gapMs, off };
   }
-  return { pairs, gap };
+  // A largada: o intervalo do 1º desenho com o relógio ao 2º. Se a gota larga antes de a seção pintar, o quadro
+  // longo cai aqui, e a barriga perde quadros.
+  const launch = moving.length > 1 ? moving[1]!.at - moving[0]!.at : null;
+  // O compositor (#231): com o relógio andando, a cabeça anda numa animação de `transform` rodando na camada dela, com
+  // a duração e o tempo do relógio. Pôr o lugar no `style` pela thread principal congela a cabeça num quadro preso.
+  const running = moving.filter((d) => d.clock === "running");
+  const offRun = running.find((d) => !d.run || d.run.state !== "running" || Math.abs(d.run.ms - d.ms) > 0.5 ||
+    Math.abs(d.run.t - d.t) > STEP_SLACK_MS);
+  const compositor = { checked: running.length, off: offRun ? { clockMs: offRun.ms, clockT: offRun.t, run: offRun.run } : null };
+  return { first: moving[0]?.t ?? null, launch, gap, worst, waited: draws.some((d) => d.waiting), compositor };
 }
 
-/** O teto do passo de um par: o tempo real dele, até o `GOO_HOLD_MS`, mais a folga. */
-const stepCap = (pair: DrawPair) => Math.min(pair.gapMs, GOO_HOLD_MS) + STEP_SLACK_MS;
+type Head = { x: number; w: number } | null;
+/** A cabeça de cada lado (`[data-part="head"]`), na barra: o lugar da gota, sem a barriga presa à pílula. */
+const heads = (p: Page) => p.evaluate(() => {
+  const bar = document.querySelector(".kn-hub-top")!.getBoundingClientRect();
+  const box = (s: string) => {
+    const r = document.querySelector(`.kn-goo-path[data-side="${s}"][data-part="head"]`)?.getBoundingClientRect();
+    return r && r.width > 0 && r.height > 0 ? { x: r.left - bar.x, w: r.width } : null;
+  };
+  return { start: box("start"), end: box("end") };
+});
+/** O quanto a cabeça andou de um quadro a outro: a borda que mais andou. */
+const moved = (a: Head, b: Head) => (a && b ? Math.max(Math.abs(a.x - b.x), Math.abs(a.x + a.w - b.x - b.w)) : Infinity);
+/** A folga da troca no meio, em px: o arredondamento do lugar da cabeça. */
+const SWITCH_SLACK_PX = 1.5;
+/** Onde a troca no meio acontece, em fração do caminho. */
+const SWITCH_AT = 0.4;
 
-/** O par que mais passou do teto (o de maior passo, se nenhum passou). */
-function worstPair(pairs: DrawPair[]) {
-  let worst: DrawPair | null = null;
-  for (const pair of pairs) if (!worst || pair.stepMs - stepCap(pair) > worst.stepMs - stepCap(worst)) worst = pair;
-  return worst;
+/**
+ * A troca no meio: clica em `first`, para a gota em `SWITCH_AT` do caminho e clica em `second` com ela parada. Para o
+ * relógio novo no 0 e compara a cabeça com a do quadro em que o velho parou; a régua é o passo normal da cabeça ali (do
+ * quadro anterior até ele).
+ */
+async function midSwitch(p: Page, first: string, second: string) {
+  const anims = await clickAndPause(p, first);
+  const ms = Math.max(...anims.filter((a) => a.side).map((a) => a.ms));
+  const at = SWITCH_AT * ms;
+  await seek(p, (at - FRAME_MS) / ms);
+  const prev = await heads(p);
+  await seek(p, at / ms);
+  const before = await heads(p);
+  await p.evaluate(async (s) => {
+    const w = window as unknown as { __goo: Animation[] };
+    const old = new Set(w.__goo);
+    const bar = document.querySelector(".kn-hub-top")!;
+    const target = (a: Animation) => (a.effect as KeyframeEffect | null)?.target;
+    const fresh = () => document.getAnimations().filter((a) => {
+      const t = target(a);
+      return !old.has(a) && t instanceof Element && bar.contains(t) && (t.matches(".kn-goo-clock") || a.id.startsWith("kn-goo") || ((a as CSSAnimation).animationName ?? "").startsWith("kn-goo"));
+    });
+    document.querySelector<HTMLElement>(`.kn-tab[data-section="${s}"]`)!.click();
+    const deadline = performance.now() + 2000;
+    let list = fresh();
+    while (list.filter((a) => (target(a) as Element).matches(".kn-goo-clock")).length < 2) {
+      if (performance.now() > deadline) throw new Error("a troca no meio não deu relógio novo");
+      await new Promise((r) => requestAnimationFrame(r));
+      list = fresh();
+    }
+    for (const a of list) {
+      a.pause();
+      a.currentTime = 0;
+    }
+    w.__goo = list;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  }, second);
+  const after = await heads(p);
+  await release(p);
+  await waitPhase(p, second === "notes" ? "shown" : "hidden");
+  const r = (n: number) => Math.round(n * 10) / 10;
+  return Object.fromEntries(SIDES.map((side) => [side, { step: r(moved(prev[side], before[side])), jump: r(moved(before[side], after[side])), before: before[side], after: after[side] }]));
 }
 
-/** "Reduzir movimento": sem gota, os botões só fazem o fade; três quadros dele. */
 async function reduced(p: Page, dir: string) {
   mkdirSync(dir, { recursive: true });
   // As animações se leem no mesmo instante em que os botões entram (T25952): com "reduzir movimento", o base.css corta
@@ -645,7 +741,8 @@ for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
     process.exit(code);
   });
 }
-const up = spawnSync(process.execPath, [cli, "start", "--data", data, "--no-helper"], { encoding: "utf8" });
+// O agente falso (#32693, #32697): nenhum roteiro roda o Claude Code ou o agy deste Mac, nem para conferir a versão.
+const up = spawnSync(process.execPath, [cli, "start", "--data", data, "--no-helper"], { encoding: "utf8", env: { ...process.env, KIWI_FAKE_AGENT: "1" } });
 if (up.status !== 0) {
   cleanup();
   throw new Error(`o headless não subiu em ${data}:\n${up.stdout}${up.stderr}`);
@@ -665,8 +762,9 @@ try {
       const rest = await shot(w.page, join(out, theme, "parada.png"));
       const ida = await frames(w.page, lab, rest, join(out, theme, "ida"), "notes", "in");
       for (const side of SIDES) {
-        const why = dripProblem(ida.frames.map((f) => f.shape[side]));
-        assert.equal(why, null, `a ida do lado ${side} não pinga como gota: ${why} (${JSON.stringify(ida.frames.map((f) => f.shape[side]))})`);
+        const shapes = [...ida.frames, ...ida.extra].sort((a, b) => a.t - b.t).map((f) => f.shape[side]);
+        const why = dripProblem(shapes);
+        assert.equal(why, null, `a ida do lado ${side} não pinga como gota: ${why} (${JSON.stringify(shapes)})`);
       }
       const shown = await phases(w.page);
       assert.deepEqual([shown.slotStart, shown.slotEnd], ["shown", "shown"], JSON.stringify(shown));
@@ -734,6 +832,24 @@ try {
         }
         gaps.push(r);
       }
+      // A troca no meio em tempo real, para o vídeo: a ida trocada pela volta e a volta pela ida, depois a barra
+      // parada sem rastro.
+      const tab = (s: string) => v.page.locator(`.kn-tab[data-section="${s}"]`).click();
+      await tab("notes");
+      await v.page.waitForTimeout(SWITCH_REAL_MS);
+      await tab("settings");
+      await waitPhase(v.page, "hidden");
+      await tab("notes");
+      await waitPhase(v.page, "shown");
+      await v.page.waitForTimeout(300);
+      await tab("settings");
+      await v.page.waitForTimeout(SWITCH_REAL_MS);
+      await tab("notes");
+      await waitPhase(v.page, "shown");
+      await tab("settings");
+      await waitPhase(v.page, "hidden");
+      const afterSwitch = await analyze(lab, await dpr(v.page), await geometry(v.page), restV, await shot(v.page, join(out, theme, "depois-da-troca.png")), null);
+      if (afterSwitch.trail.count > 0) trails.push(`troca no meio: ${afterSwitch.trail.count} px em ${JSON.stringify(afterSwitch.trail.at)}`);
       const worst = Math.max(...gaps.flatMap((g) => [g.ida, g.volta]));
       metrics[`${theme}.tempoReal`] = { gaps, worst, retried };
       const why = worst >= SLOW_FRAME_MS
@@ -749,28 +865,50 @@ try {
     }
   }
 
-  // 3. A seção lenta: a gota segura o tempo do quadro preso, sem pular.
+  // 3. A seção lenta: a gota espera a seção pintar e larga do começo; depois, anda com o tempo real.
+  // 4. A troca no meio: sem teleporte.
   const sl = await openWindow(browser, ctx, { ...base, scale: 1, theme: "light", motion: true });
   try {
     await ready(sl.page);
-    const res: Record<string, { pairs: number; gap: number; worst: { stepMs: number; gapMs: number; capMs: number } | null }> = {};
+    const res: Record<string, ReturnType<typeof slowReport> & { waitingAtClick: boolean | null }> = {};
     for (const [dir, section] of [["ida", "notes"], ["volta", "settings"]] as const) {
-      const { pairs, gap } = slowPairs(await slowSection(sl.page, section));
-      const w = worstPair(pairs);
-      const round1 = (n: number) => Math.round(n * 10) / 10;
-      res[dir] = { pairs: pairs.length, gap: round1(gap), worst: w && { stepMs: round1(w.stepMs), gapMs: round1(w.gapMs), capMs: round1(stepCap(w)) } };
+      const got = await slowSection(sl.page, section);
+      res[dir] = { ...slowReport(got.draws), waitingAtClick: got.waitingAtClick };
       await sl.page.waitForTimeout(200);
     }
     metrics["secao-lenta"] = res;
     console.log(`seção lenta: ${JSON.stringify(res)}`);
     for (const [dir, r] of Object.entries(res)) {
+      assert.equal(r.waitingAtClick, true, `na ${dir}, o lado não esperava a seção no clique (data-waiting, sem relógio)`);
+      assert.ok(r.first !== null && r.first <= FRAME_MS + STEP_SLACK_MS,
+        `a ${dir} não largou do começo: o 1º desenho já estava em ${r.first?.toFixed(1)} ms do relógio (máximo ${(FRAME_MS + STEP_SLACK_MS).toFixed(0)}), a barriga perdeu quadros`);
+      assert.ok(r.launch !== null && r.launch <= FRAME_MS + STEP_SLACK_MS,
+        `a ${dir} largou antes de a seção pintar: o 2º desenho veio ${r.launch?.toFixed(1)} ms depois do 1º (máximo ${(FRAME_MS + STEP_SLACK_MS).toFixed(0)})`);
       assert.ok(r.gap >= SLOW_BLOCK_MS * 0.9, `a ${dir} não pegou o quadro preso de ${SLOW_BLOCK_MS} ms (maior intervalo ${r.gap.toFixed(0)} ms)`);
-      assert.ok(r.pairs > 0 && r.worst, `a ${dir} não teve desenho fora da corrida para medir`);
-      assert.ok(
-        r.worst.stepMs <= r.worst.capMs,
-        `a gota pulou na ${dir}: o relógio andou ${r.worst.stepMs} ms num desenho de ${r.worst.gapMs} ms de tempo real (máximo ${r.worst.capMs} ms: o tempo real até ${GOO_HOLD_MS} ms, mais ${STEP_SLACK_MS})`,
-      );
+      assert.ok(r.worst, `a ${dir} não teve dois desenhos com o relógio para medir`);
+      assert.ok(r.compositor.checked > 0 && r.compositor.off === null,
+        `a cabeça da ${dir} não anda no compositor (#231): com o relógio andando, a .kn-goo-run não tem a animação de transform rodando no tempo dele (${r.compositor.checked} desenhos; o primeiro fora: ${JSON.stringify(r.compositor.off)})`);
+      assert.ok(r.worst.off <= STEP_SLACK_MS,
+        `o relógio da ${dir} se afastou do tempo real: andou ${r.worst.stepMs.toFixed(1)} ms num desenho de ${r.worst.gapMs.toFixed(1)} ms (folga ${STEP_SLACK_MS})`);
     }
+
+    const sw: Record<string, Awaited<ReturnType<typeof midSwitch>>> = {};
+    sw["ida→volta"] = await midSwitch(sl.page, "notes", "settings");
+    await ready(sl.page);
+    await sl.page.locator('.kn-tab[data-section="notes"]').click();
+    await waitPhase(sl.page, "shown");
+    await ready(sl.page);
+    sw["volta→ida"] = await midSwitch(sl.page, "settings", "notes");
+    metrics["troca-no-meio"] = sw;
+    console.log(`troca no meio: ${JSON.stringify(Object.fromEntries(Object.entries(sw).map(([k, v]) => [k, Object.fromEntries(SIDES.map((s) => [s, { step: v[s]!.step, jump: v[s]!.jump }]))])))}`);
+    for (const [dir, r] of Object.entries(sw)) {
+      for (const side of SIDES) {
+        const { step, jump } = r[side]!;
+        assert.ok(Number.isFinite(jump) && jump <= step + SWITCH_SLACK_PX,
+          `a troca no meio (${dir}, lado ${side}) teleportou: a cabeça andou ${jump} px entre o último quadro do caminho velho e o 0 do novo (um quadro normal ali: ${step} px, folga ${SWITCH_SLACK_PX})`);
+      }
+    }
+    assert.deepEqual(sl.report.problems, [], "erros na página");
   } finally {
     await sl.close();
   }
@@ -798,7 +936,8 @@ try {
     const t = metrics[`${theme}.tempoReal`] as { worst: number };
     console.log(`ok ${theme}: ida e volta quadro a quadro, com pescoço, gota solta e sem rastro; pior quadro em tempo real ${t.worst.toFixed(1)} ms (meta ${SLOW_FRAME_MS})`);
   }
-  console.log(`ok seção lenta: a gota segura o 1º quadro depois do clique e o quadro preso de ${SLOW_BLOCK_MS} ms, sem pular`);
+  console.log(`ok seção lenta: a gota espera a seção pintar, larga do começo e anda com o tempo real no quadro preso de ${SLOW_BLOCK_MS} ms, com a cabeça no compositor`);
+  console.log("ok troca no meio: na ida e na volta, a cabeça não anda mais que um quadro normal");
   console.log("ok reduzir movimento (Mac e Kiwi): sem gota; os botões entram com o fade, que o base.css corta para 0,01 ms");
   console.log(`quadros, vídeos e metrics.json em ${out}`);
 } finally {

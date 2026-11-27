@@ -1,8 +1,7 @@
 /* A gota da barra do Hub (spec #17725): a forma desenhada atrás das abas e dos botões, na cor e na borda da pílula.
    As fases de cada lado chegam em `.kn-goo[data-start|data-end]`, `.kn-goo-drop[data-phase]` e
    `.kn-hub-slot[data-goo]`; os retângulos medidos, em `--goo-tabs-*`, `--goo-start-*` e `--goo-end-*` (px, na barra).
-   A forma de cada quadro é do `goo-shape.ts` (T18948); o tempo, das animações `kn-goo-in-*`/`kn-goo-out-*` daqui, e os
-   botões entram no fim da ida. Quadro a quadro, no headless: `bun scripts/hub-goo-check.ts` (T18648). */
+   A forma e o tempo de cada quadro são da mola do `goo-spring.ts` (spec #32446), e os botões entram no fim da ida. Quadro a quadro, no headless: `bun scripts/hub-goo-check.ts` (T18648). */
 
 .kn-goo {
   position: absolute;
@@ -14,14 +13,6 @@
   --goo-tabs-y: 10px;
   --goo-tabs-w: 0px;
   --goo-tabs-h: 32px;
-}
-
-/* O tempo vale para a gota e para os botões (irmãos dela na barra). A ida tem 500 ms (o spec pede 350–500; eram 460
-   até a chegada ganhar quadros, #231), a volta 400 ms; o relógio é linear porque as curvas de cada quadro estão no
-   `goo-shape.ts`. */
-.kn-hub-top {
-  --goo-ms: 500ms;
-  --goo-ms-out: 400ms;
 }
 
 /* Os botões das seções ficam por cima da camada. */
@@ -75,59 +66,20 @@
   height: 1px;
   overflow: visible;
 }
-/* O relógio de cada lado: invisível; a animação dele dá o progresso do quadro, e o fim dela anda a fase. */
+/* O relógio de cada lado (`.kn-goo-clock`): invisível. O `Goo.tsx` põe nele uma animação WAAPI com a duração do
+   caminho da mola; o quadro desenha o estado do `currentTime` dela, e o fim dela anda a fase. */
 .kn-goo-drop {
   position: absolute;
   width: 0;
   height: 0;
   opacity: 0;
 }
-.kn-goo-drop[data-phase="entering"] {
-  animation: kn-goo-in-start var(--goo-ms) linear both;
-}
-.kn-goo-drop[data-side="end"][data-phase="entering"] {
-  animation-name: kn-goo-in-end;
-}
-.kn-goo-drop[data-phase="leaving"] {
-  animation: kn-goo-out-start var(--goo-ms-out, 400ms) linear both;
-}
-.kn-goo-drop[data-side="end"][data-phase="leaving"] {
-  animation-name: kn-goo-out-end;
-}
-/* Os quadros da forma (barriga, pescoço, soltar, correr) vêm do `goo-shape.ts`; aqui só passa o tempo. */
-@keyframes kn-goo-in-start {
-  from { transform: translateX(0); }
-  to { transform: translateX(1px); }
-}
-@keyframes kn-goo-in-end {
-  from { transform: translateX(0); }
-  to { transform: translateX(1px); }
-}
-@keyframes kn-goo-out-start {
-  from { transform: translateX(0); }
-  to { transform: translateX(1px); }
-}
-@keyframes kn-goo-out-end {
-  from { transform: translateX(0); }
-  to { transform: translateX(1px); }
-}
 
-/* Os botões nascem de dentro da gota (T18949): aparecem enquanto ela vira o retângulo deles e assenta (78–100%), não
-   no meio do caminho. Já respondem ao clique desde o começo (nada de `pointer-events: none`). */
+/* Os botões nascem de dentro da gota: a opacidade de cada quadro é uma animação WAAPI do `Goo.tsx`, no tempo do
+   relógio. Até a largada (o 1º quadro pintado depois da troca), eles ficam escondidos. Já respondem ao clique desde o
+   começo (nada de `pointer-events: none`). */
 .kn-hub-slot[data-goo="entering"] > * {
-  animation: kn-goo-buttons-in var(--goo-ms) linear both;
-}
-
-@keyframes kn-goo-buttons-in {
-  0%,
-  78% {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  100% {
-    opacity: 1;
-    transform: none;
-  }
+  opacity: 0;
 }
 
 /* Na volta, a cópia dos botões que saíram (`Goo.tsx`) anda com a cabeça da gota, por cima dela: o `Goo.tsx` escreve o
@@ -152,12 +104,14 @@
   overflow: visible;
 }
 
-/* "Reduzir movimento": sem gota; os botões só aparecem com um fade curto. */
+/* "Reduzir movimento": sem gota; os botões só aparecem com um fade curto. O `opacity: 1` desfaz o 0 da espera acima:
+   o `@keyframes fade` só tem o `from`, e terminaria no 0 (T32466). */
 @media (prefers-reduced-motion: reduce) {
   :root .kn-goo {
     display: none;
   }
   :root .kn-hub-slot[data-goo="entering"] > * {
+    opacity: 1;
     animation: fade var(--fast) var(--ease) both;
   }
 }
@@ -167,5 +121,6 @@
 }
 
 :root[data-motion="reduced"] .kn-hub-slot[data-goo="entering"] > * {
+  opacity: 1;
   animation: fade var(--fast) var(--ease) both;
 }
