@@ -79,7 +79,8 @@ async function view(p: Page, v: (typeof VIEWS)[number]) {
 
 /** O hover num item: o cartão aparece com um só ⤢, no canto de cima à direita do cartão. */
 async function hoverCard(p: Page, title: string) {
-  await p.locator(item(title)).first().hover();
+  // No canto de cima: com a cascata, a caixa de cima cobre o meio da de baixo (#32311).
+  await p.locator(item(title)).first().hover({ position: { x: 8, y: 8 } });
   await p.waitForSelector(`${pane} .kn-cal-card`);
   assert.equal(await p.locator(`${pane} .kn-cal-card .kn-cal-expand`).count(), 1, "o cartão tem um só ⤢");
   const [card, xp] = await Promise.all([
@@ -117,9 +118,12 @@ try {
       await p.waitForSelector(`${pane} .kn-cal-side`, { state: "attached" });
       for (const t of ["Revisar o orçamento", "Revisão do Projeto X"]) await p.waitForSelector(item(t));
       // O fundo da aba ativa (a pílula) fica embaixo do Calendário, não de outra aba (lead #32229).
-      const [pill, calTab] = await Promise.all([p.locator(".kn-tabs-pill").boundingBox(), tab(p, "calendar").boundingBox()]);
-      assert.ok(pill && calTab);
-      assert.ok(Math.abs(pill.x + pill.width / 2 - (calTab.x + calTab.width / 2)) <= 2, `a pílula fora do Calendário: ${pill.x} × ${calTab.x}`);
+      // Espera o fim do deslize (o print do #32229 saiu no meio dele), até 2 s.
+      await p.waitForFunction(() => {
+        const a = document.querySelector(".kn-tabs-pill")?.getBoundingClientRect();
+        const b = document.querySelector('[role="tab"][data-section="calendar"]')?.getBoundingClientRect();
+        return !!a && !!b && Math.abs(a.x + a.width / 2 - (b.x + b.width / 2)) <= 2;
+      }, undefined, { timeout: 2000 });
       checks.push(`${lang}: a aba Calendário depois de Ditado, com a pílula nela, na Semana, com os itens e o painel do Kiwi`);
 
       // 2. Cada vista, com o print.
