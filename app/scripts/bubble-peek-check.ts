@@ -22,6 +22,16 @@ import { openWindow, peekKiwi, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 import { openPlacement, overlayPlacement, SHELL_W } from "../ui/catoverlay/placement";
 import { PEEK_LEAVE_MS } from "../ui/hub/bubble-peek";
+import { CAT_BODY } from "../ui/kiwicat-v2/bubbleTail";
+
+/** A marca encosta no Kiwi (T33053, #33052): o centro dela na quina de cima à direita do corpo, o `CAT_BODY` (x1, y0). */
+async function markOnKiwi(p: Page, mark: string, cat: string, where: string) {
+  const [m, c] = await Promise.all([p.locator(mark).boundingBox(), p.locator(cat).boundingBox()]);
+  assert.ok(m && c, `${where}: a marca e o gato na página`);
+  const dx = m.x + m.width / 2 - (c.x + c.width * CAT_BODY.x1);
+  const dy = m.y + m.height / 2 - (c.y + c.height * CAT_BODY.y0);
+  assert.ok(Math.abs(dx) <= 1.5 && Math.abs(dy) <= 1.5, `${where}: a marca fora da quina do corpo (dx ${dx.toFixed(1)}, dy ${dy.toFixed(1)})`);
+}
 
 const app = resolve(import.meta.dir, "..");
 const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T32766-balao-mouse"));
@@ -94,6 +104,7 @@ async function overlay(theme: "light" | "dark") {
     assert.equal(await lastRect(p), null, "overlay: escondido, o lugar do balão não vai ao helper");
     assert.equal((await stats(p)).unseen, true);
     assert.equal(await opacity(p, "#cat-mark"), 1, "overlay: a marca do balão não visto");
+    await markOnKiwi(p, "#cat-mark", "#cat", "overlay");
     // O leitor de tela não depende do mouse: a resposta inteira está na região viva.
     assert.ok((await p.locator("#bubble-sr").textContent())?.includes(CURTA), "overlay: o leitor de tela com o balão escondido");
     await shot(`overlay-longe-${theme}.png`, `Overlay (${tema}): a resposta chegou com o mouse longe, e a marca`);
@@ -227,6 +238,7 @@ async function hub(theme: "light" | "dark") {
     assert.equal(await peekOf(p), "false", "hub: o mouse no lugar do balão escondido não o mostra");
     await p.waitForFunction(() => document.querySelector<HTMLElement>(".kn-hub")!.dataset.bubbleUnseen === "true");
     assert.equal(await opacity(p, ".kn-kiwicat-mark"), 1, "hub: a marca do balão não visto");
+    await markOnKiwi(p, ".kn-kiwicat-mark", ".kn-kiwicat", "hub");
     // O leitor de tela: a resposta é anunciada uma vez, com o balão escondido.
     await p.waitForFunction((t) => [...document.querySelectorAll(".kn-visually-hidden[aria-live]")].some((e) => e.textContent?.includes(t)), CURTA, { timeout: 15_000 });
     await shot(`hub-longe-${theme}.png`, `Hub (${tema}): a resposta chegou com o mouse longe, e a marca no Kiwi`);

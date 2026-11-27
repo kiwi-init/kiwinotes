@@ -480,8 +480,11 @@
 .kn-hub[data-bubble-peek="false"] .kn-bubble-shell:not(.kn-cat-ask):not(:focus-within) { opacity: 0; pointer-events: none; }
 /* A marca: um ponto na cor de destaque do Kiwi, no alto da cabeça, enquanto há balão que a pessoa não viu. */
 .kn-kiwicat-mark {
-  position: absolute; right: 34px; bottom: 100px; z-index: 7; width: 10px; height: 10px; border-radius: 50%;
-  background: var(--kn-cat-accent, var(--accent)); box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--text);
+  /* Encostada no Kiwi (T33053, #33052): o centro na quina de cima à direita do corpo, o `CAT_BODY` (x1 0,74, y0 0,44)
+     do quadro de 96 × 120 a 12 px do canto (12 + 96 × 0,26 = 37; 12 + 120 × 0,56 = 79,2), menos o raio de 5. Metade
+     dentro e metade fora da silhueta, com um anel da cor do fundo. */
+  position: absolute; right: 32px; bottom: 74.2px; z-index: 7; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--kn-cat-accent, var(--accent)); box-shadow: 0 0 0 2px var(--surface);
   opacity: 0; transform: scale(0.6); pointer-events: none;
   transition: opacity var(--fast, 140ms) var(--ease, ease), transform var(--fast, 140ms) var(--ease, ease);
 }
