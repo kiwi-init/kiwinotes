@@ -47,7 +47,7 @@ export async function homePending(src: Pick<HomeSources, "notes" | "meetings">):
 }
 
 /** Uma ata: a nota cujo `reuniao:` aponta para uma reunião (`[[…]]`). */
-function isMinutes(content: string): boolean {
+export function isMinutes(content: string): boolean {
   const link = frontmatterOf(content)?.reuniao;
   return typeof link === "string" && /^\s*\[\[[^\]]+\]\]/.test(link);
 }
@@ -57,9 +57,32 @@ function isMinutes(content: string): boolean {
  * os tópicos sem caixa das seções "Próximos passos" e "Ações". Fora: o frontmatter, os blocos de código e o `[x]`.
  */
 export function openItems(content: string, minutes: boolean): PendingItem[] {
+  const out: PendingItem[] = [];
+  for (const it of listItems(content, minutes)) {
+    if (it.box === "x" || (it.box === null && !it.inNextSteps)) continue;
+    const text = plain(it.rest);
+    if (text) out.push({ text, line: it.line });
+  }
+  return out;
+}
+
+/** Um item de lista de uma nota: a linha (0-based), a caixa (`" "`, `"x"` ou `null` sem caixa) e o texto depois dela. */
+export interface ListItem {
+  line: number;
+  box: " " | "x" | null;
+  rest: string;
+  /** Um tópico das seções "Próximos passos" ou "Ações" de uma ata. */
+  inNextSteps: boolean;
+}
+
+/**
+ * Os itens de lista de uma nota, na ordem do arquivo, fora do frontmatter e dos blocos de código: o mesmo leitor das
+ * Pendências da Início e do Calendário (spec #32129), para os dois verem as mesmas linhas.
+ */
+export function listItems(content: string, minutes: boolean): ListItem[] {
   // Os comentários `%%…%%` (o id do ditado, notas escondidas) somem, mas as quebras ficam: a linha de cada item não muda.
   const lines = withoutComments(content).split(/\r?\n/);
-  const out: PendingItem[] = [];
+  const out: ListItem[] = [];
   let i = 0;
   if (/^---\s*$/.test(lines[0] ?? "")) {
     const end = lines.findIndex((l, n) => n > 0 && /^---\s*$/.test(l));
@@ -91,15 +114,12 @@ export function openItems(content: string, minutes: boolean): PendingItem[] {
     // A caixa também vale dentro de uma citação ou de um callout (`> - [ ] …`).
     const box = /^\s*(?:>\s?)*\s*(?:[-*+]|\d+[.)])\s+\[( |x|X)\]\s+(.*)$/.exec(line);
     if (box) {
-      const text = plain(box[2]!);
-      if (box[1] === " " && text) out.push({ text, line: i });
+      out.push({ line: i, box: box[1] === " " ? " " : "x", rest: box[2]!, inNextSteps });
       continue;
     }
-    if (inNextSteps) {
-      const bullet = /^\s{0,3}(?:[-*+]|\d+[.)])\s+(.*)$/.exec(line);
-      const text = bullet ? plain(bullet[1]!) : "";
-      if (text) out.push({ text, line: i });
-    }
+    const bullet = /^\s*(?:>\s?)*\s*(?:[-*+]|\d+[.)])\s+(.*)$/.exec(line);
+    // Sem caixa, fora dos Próximos passos, só os tópicos da margem (até 3 espaços) contavam: o mesmo vale aqui.
+    if (bullet && (inNextSteps ? /^\s{0,3}(?:[-*+]|\d+[.)])\s/.test(line) : true)) out.push({ line: i, box: null, rest: bullet[1]!, inNextSteps });
   }
   return out;
 }
@@ -108,7 +128,7 @@ export function openItems(content: string, minutes: boolean): PendingItem[] {
 export const withoutComments = (s: string) => s.replace(/%%[\s\S]*?%%/g, (m) => m.replace(/[^\n]/g, " "));
 
 /** O texto do item sem a marcação: links viram o nome, ênfase e código saem. */
-function plain(s: string): string {
+export function plain(s: string): string {
   return s
     .replace(/\[\[([^\]|]*)\|([^\]]*)\]\]/g, "$2")
     .replace(/\[\[([^\]]*)\]\]/g, "$1")

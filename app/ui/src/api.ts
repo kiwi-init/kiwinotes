@@ -269,6 +269,14 @@ export const api = {
     week: () => invoke("home.week", {}),
     onChanged: (fn: () => void) => on("home.changed", fn),
   },
+  /** O Calendário (1.107.0, T32154): os itens de um período, criar, mudar e a nota de onde veio; `onChanged` quando muda. */
+  calendar: {
+    items: (from: string, to: string) => invoke("calendar.items", { from, to }),
+    create: (args: UiCapabilities["calendar.create"]["args"]) => invoke("calendar.create", args),
+    update: (args: UiCapabilities["calendar.update"]["args"]) => invoke("calendar.update", args),
+    source: (id: string) => invoke("calendar.source", { id }),
+    onChanged: (fn: () => void) => on("calendar.changed", fn),
+  },
   /** A aba Reuniões do hub (1.21.0, T4947): as notas de reunião e a gravação ao vivo. */
   meetings: {
     list: () => invoke("meetings.list", {}),

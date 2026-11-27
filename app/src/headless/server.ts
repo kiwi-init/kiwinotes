@@ -336,7 +336,10 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   }
   stores.recoveries.start();
   // A tela de Início (T15847): o mesmo aviso do app, uma vez depois da rajada.
-  const home = new HomeChanges(() => event("home.changed", {}));
+  const home = new HomeChanges(() => {
+    event("home.changed", {});
+    event("calendar.changed", {}); // o Calendário lê as mesmas notas e reuniões (T32154)
+  });
   const homeChanged = () => home.poke();
   const offs = [
     stores.folders.onNotesChanged(homeChanged),

@@ -24,6 +24,7 @@ import type { OpenTarget } from "./file-view.ts";
 import type { AliasWarning } from "../store/aliasCheck.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, HistoryPage } from "../store/history.ts";
+import type { CalendarCreate, CalendarItem, CalendarItems, CalendarSource, CalendarUpdate } from "./calendar.ts";
 import type { HomePending, HomeToday, HomeWeek } from "./home.ts";
 import type { AgentMeetingSettings, AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
@@ -336,7 +337,11 @@ export type { NoteModel };
 //   Na mesma versão (T31628), os Ajustes da voz: `elevenLabs.status` (`hasKey` e a última queda para a voz local),
 //   `elevenLabs.setKey` e `elevenLabs.deleteKey` (a chave vai ao Keychain e nunca volta) e `elevenLabs.test` (fala a
 //   frase curta com a voz e o modelo das settings).
-export const UI_CONTRACT_VERSION = "1.106.0";
+// 1.107.0 (T32154, spec #32129): o Calendário. O `calendar.items` lê os itens de um período das notas (linhas com
+// `@ data`, notas com `agenda:`) e das reuniões gravadas, com as pendências sem data e os projetos; o `calendar.create`
+// escreve um item numa nota; o `calendar.update` muda a linha dele (arrastar, esticar, Feito, aviso); o
+// `calendar.source` dá o texto da nota de onde ele veio. O evento `calendar.changed` sai junto com o `home.changed`.
+export const UI_CONTRACT_VERSION = "1.107.0";
 
 /** A voz do Kiwi pelo ElevenLabs nos Ajustes (T31628): só se há chave, nunca ela. */
 export interface ElevenLabsStatus {
@@ -752,6 +757,25 @@ export interface UiCapabilities {
   "home.pending": { args: Record<string, never>; result: HomePending };
   /** A Semana da aba Início (T15875): os 7 dias até hoje, com as notas editadas, as reuniões e os ditados. Tudo local. */
   "home.week": { args: Record<string, never>; result: HomeWeek };
+  // ---------------------------------------------------------------- o Calendário (1.107.0, T32154, spec #32129)
+  /**
+   * Os itens de `from` (inclusive) a `to` (exclusive), `AAAA-MM-DD`, até 62 dias: as linhas com `@ data` das notas, as
+   * notas com `agenda:` e as reuniões gravadas (só leitura), com cada vez de uma repetição. Mais as pendências abertas
+   * sem data e as pastas de primeiro nível (os projetos). Tudo local.
+   */
+  "calendar.items": { args: { from: string; to: string }; result: CalendarItems };
+  /**
+   * Cria um item: uma linha em `<projeto>/Pendências.md` (ou `Calendário.md` na raiz), ou uma nota com `agenda:` no
+   * tipo `note`. E_NOT_FOUND num projeto que não existe.
+   */
+  "calendar.create": { args: CalendarCreate; result: CalendarItem };
+  /**
+   * Muda um item: só a linha dele na nota, pela versão. A linha que mudou de lugar é achada pelo texto; a que sumiu ou
+   * mudou dá E_CONFLICT (leia de novo). E_READONLY numa reunião gravada.
+   */
+  "calendar.update": { args: CalendarUpdate; result: CalendarItem };
+  /** O texto da nota de onde o item veio e a linha dele (0-based), também da pasta interna das reuniões. */
+  "calendar.source": { args: { id: string }; result: CalendarSource };
   // ---------------------------------------------------------------- reuniões (1.21.0, T4947)
   /**
    * As notas de reunião (`type: meeting` no frontmatter, do R4), em qualquer pasta, a mais nova primeiro. Uma nota sem
@@ -1426,6 +1450,10 @@ export const UI_CAPABILITIES = [
   "home.today",
   "home.pending",
   "home.week",
+  "calendar.items",
+  "calendar.create",
+  "calendar.update",
+  "calendar.source",
   "meetings.list",
   "meetings.live",
   "meetings.stop",
@@ -1529,6 +1557,8 @@ export interface UiEvents {
    * rajada (debounce); a tela pede o `home.today` (ou o `home.pending`, o `home.week`) de novo.
    */
   "home.changed": Record<string, never>;
+  /** Os itens do Calendário podem ter mudado (1.107.0, T32154): sai junto com o `home.changed`; a tela lê o período de novo. */
+  "calendar.changed": Record<string, never>;
   /** O estado do agente mudou (1.41.0): o download andou, o programa abriu ou fechou, um pedido começou ou acabou. */
   "agent.status": AgentStatus;
   /** A resposta ao vivo de um pedido (1.41.0): o status, o texto que vai chegando e o fim. */

@@ -415,7 +415,11 @@ stores.folders.onNotesChanged((folder, paths, listing) => {
 });
 // A tela de Início (T15847): uma nota, um ditado ou uma reunião que mudou vira um `home.changed` só, depois da rajada.
 const homeChanges = new HomeChanges(() => {
-  for (const rpc of rpcs.values()) rpc.send.event({ name: "home.changed", payload: {} });
+  for (const rpc of rpcs.values()) {
+    rpc.send.event({ name: "home.changed", payload: {} });
+    // O Calendário lê as mesmas notas e reuniões (T32154).
+    rpc.send.event({ name: "calendar.changed", payload: {} });
+  }
 });
 /** Algo que a tela de Início mostra mudou (a reunião que começou ou parou vem do `index.ts`). */
 export const homeChanged = (): void => homeChanges.poke();
