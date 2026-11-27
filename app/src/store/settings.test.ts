@@ -180,10 +180,10 @@ test("o aviso quando o agente espera (spec #9839): ligado por padrão, e só um 
   expect(sanitizeSettings({}).agent.controlShortcut).toBe(false);
   expect(sanitizeSettings({ agent: { controlShortcut: true } }).agent.controlShortcut).toBe(true);
   expect(sanitizeSettings({ agent: { controlShortcut: "sim" } }).agent.controlShortcut).toBe(false);
-  // "Mostrar o que eu falei" (spec #26055): desligado por padrão; só o `true` liga.
-  expect(sanitizeSettings({}).agent.showSpokenText).toBe(false);
-  expect(sanitizeSettings({ agent: { showSpokenText: true } }).agent.showSpokenText).toBe(true);
-  expect(sanitizeSettings({ agent: { showSpokenText: "sim" } }).agent.showSpokenText).toBe(false);
+  // "Mostrar o que eu falei" (spec #26055; ligado por padrão desde o #32534, T33177): a escolha salva vale; sem ela, ligado.
+  expect(sanitizeSettings({}).agent.showSpokenText).toBe(true);
+  expect(sanitizeSettings({ agent: { showSpokenText: true, showSpokenTextChosen: true } }).agent.showSpokenText).toBe(true);
+  expect(sanitizeSettings({ agent: { showSpokenText: "sim", showSpokenTextChosen: true } }).agent.showSpokenText).toBe(false);
   // "O gato fala" (spec #26687, T26709): desligado por padrão; só o `true` liga.
   expect(sanitizeSettings({}).agent.catSpeaks).toBe(false);
   expect(sanitizeSettings({ agent: { catSpeaks: true } }).agent.catSpeaks).toBe(true);

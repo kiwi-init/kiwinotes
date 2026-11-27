@@ -73,8 +73,9 @@ try {
   report.checks.push("the Control switch is off by default and turns on in Settings › Agente");
 
   // 2. A fala vira o pedido: o gato ouve, as ondas somem ao soltar, e o texto entendido vai ao agente. Com "Mostrar o que
-  // eu falei" desligado (o padrão, spec #26055), não vai ao balão: o 1º balão é a resposta.
-  assert.equal((await invoke("agent.status")).showSpokenText, false);
+  // eu falei" desligado, não vai ao balão: o 1º balão é a resposta. Ligado é o padrão desde o spec #32534 (T33177).
+  assert.equal((await invoke("agent.status")).showSpokenText, true);
+  assert.equal((await invoke("agent.configure", { showSpokenText: false })).showSpokenText, false);
   /** Os textos do balão do gato, na ordem, sem repetir o seguido. */
   // O balão que sai (`data-phase="exit"`) ainda fica no DOM por 180 ms: não conta.
   const bubbleNow = () => p.evaluate(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble')?.textContent?.trim() ?? "");
@@ -97,9 +98,10 @@ try {
   const voice = events.slice(before).filter((e) => e.type === "agent.voice").map((e) => e.payload.payload);
   const asked = voice.find((v) => v.phase === "asked");
   assert.equal(asked.text, undefined, "a fala não vai ao balão com o ajuste desligado");
-  // O agente pensa 1,5 s (KIWI_FAKE_AGENT_THINK_MS): o gato em "pensando", sem balão nenhum.
+  // O agente pensa 1,5 s (KIWI_FAKE_AGENT_THINK_MS): o gato em "pensando", e o balão só com o andamento (T33177), sem a fala.
   await Bun.sleep(500);
-  assert.equal(await bubbleNow(), "", "nenhum balão enquanto o agente pensa");
+  const thinking = await bubbleNow();
+  assert.ok(thinking.startsWith("Pensando"), `o andamento enquanto o agente pensa: ${JSON.stringify(thinking)}`);
   await p.screenshot({ path: join(out, "1-sem-a-fala-pensando.png"), clip: { x: 520, y: 430, width: 480, height: 310 } });
   const phases = voice.map((v) => v.phase).filter((v, i, a) => a[i - 1] !== v);
   assert.deepEqual(phases.slice(0, 3), ["listening", "processing", "asked"], JSON.stringify(phases));
@@ -114,7 +116,7 @@ try {
   clearInterval(watchOff);
   // O texto ouvido entra no balão entre aspas curvas (`BubbleFeed.heard`): desligado, nenhum balão é ele.
   assert.ok(heardOff.length > 0 && !heardOff.some((t) => t.startsWith("“")), JSON.stringify(heardOff));
-  report.checks.push(`"Mostrar o que eu falei" off (the default): the first bubble is the answer, never the speech (${JSON.stringify(heardOff[0])})`);
+  report.checks.push(`"Mostrar o que eu falei" off: the bubble shows the progress, then the answer, never the speech (${JSON.stringify(heardOff[0])})`);
   report.checks.push("the text reaches the fake agent through agent.ask (the guardrail filter's path)");
   await shooting;
   clearInterval(watch);
@@ -152,7 +154,7 @@ try {
   await waitFor("the answer after the speech", () => heardOn.some((t) => !t.startsWith("“")), 20_000);
   clearInterval(watchOn);
   assert.ok(heardOn[0]!.startsWith("“"), JSON.stringify(heardOn));
-  report.checks.push(`"Mostrar o que eu falei" on, without a restart: the speech shows first (${JSON.stringify(heardOn[0])}), then the answer`);
+  report.checks.push(`"Mostrar o que eu falei" on, without a restart: the speech shows on top of the progress (${JSON.stringify(heardOn[0])}), then the answer`);
   await invoke("agent.configure", { showSpokenText: false });
 
   // 4. Fala curta demais: nada vai ao agente.
