@@ -8,6 +8,7 @@ import { enCommon } from "./common.en.ts";
 import { enDiagnostics } from "./diagnostics.en.ts";
 import { enHistory } from "./history.en.ts";
 import { enHub } from "./hub.en.ts";
+import { enCalendar } from "./calendar.en.ts";
 import { enEditor } from "./editor.en.ts";
 import type { Catalog, Entry } from "./index.ts";
 import { enMeetingsSettings } from "./meetings-settings.en.ts";
@@ -161,6 +162,7 @@ export const en: Catalog = {
   ...enMeetings,
   ...enHistory,
   ...enHub,
+  ...enCalendar,
   ...enActivity,
   // O editor das Notas (T29842): `editor.en.ts`.
   ...enEditor,

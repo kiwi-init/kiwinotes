@@ -8,6 +8,7 @@ import { ptDiagnostics } from "./diagnostics.pt.ts";
 import { ptActivity } from "./activity.pt.ts";
 import { ptHistory } from "./history.pt.ts";
 import { ptHub } from "./hub.pt.ts";
+import { ptCalendar } from "./calendar.pt.ts";
 import { ptEditor } from "./editor.pt.ts";
 import { ptMeetingsSettings } from "./meetings-settings.pt.ts";
 import { ptMeetings } from "./meetings.pt.ts";
@@ -166,6 +167,7 @@ export const pt = {
   ...ptMeetings,
   ...ptHistory,
   ...ptHub,
+  ...ptCalendar,
   ...ptActivity,
   // O editor das Notas (T29842): `editor.pt.ts`.
   ...ptEditor,

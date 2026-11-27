@@ -1630,7 +1630,7 @@ export type AgentVoiceUi =
   | { phase: "idle"; cancelled: boolean; error?: string };
 
 /** As seções do hub (#2100), na ordem da barra. A Início (spec #15728, T15839) é a primeira, e o hub abre nela. */
-export const HUB_SECTIONS = ["home", "notes", "meetings", "dictation", "settings", "about",
+export const HUB_SECTIONS = ["home", "notes", "meetings", "dictation", "calendar", "settings", "about",
 ] as const;
 export type HubSection = (typeof HUB_SECTIONS)[number];
 export const isHubSection = (v: unknown): v is HubSection => (HUB_SECTIONS as readonly unknown[]).includes(v);

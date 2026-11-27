@@ -103,7 +103,7 @@ try {
     await shown(p, "appearance");
     // A aba Sobre saiu do topo: cinco abas, com a Início na frente (spec #15728). Pela seção, porque o rótulo da Início
     // muda com a vista dela (o menu da seta).
-    assert.deepEqual(await p.locator(".kn-tab").evaluateAll((els) => els.map((e) => e.getAttribute("data-section"))), ["home", "notes", "meetings", "dictation", "settings"]);
+    assert.deepEqual(await p.locator(".kn-tab").evaluateAll((els) => els.map((e) => e.getAttribute("data-section"))), ["home", "notes", "meetings", "dictation", "calendar", "settings"]);
     assert.deepEqual((await p.locator(".kn-tab").allTextContents()).slice(1), ["Notas", "Reuniões", "Ditado", "Configurações"]);
     assert.deepEqual(await p.locator(".kn-prefs-item").allTextContents(), SHOWN_TOPICS.map((t) => TOPIC_LABELS[t]));
     const seen = new Map<string, SettingsTopic[]>();
