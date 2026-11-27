@@ -16,6 +16,8 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Marcadores de uso privado: as regras não os veem como letra e não mexem no que está dentro. */
 const OPEN = "";
 const CLOSE = "";
+/** Um marcador inteiro, para o `split` deixar de fora o que já foi trocado (o grupo o mantém nas posições ímpares). */
+const MARKED = new RegExp(`(${OPEN}\\d+${CLOSE})`, "u");
 export const PLACEHOLDER_RE = /(\d+)/g;
 
 interface Compiled {
@@ -77,10 +79,20 @@ export function protect(text: string, dictionary: Compiled[]): Protected {
   const found: { term: string; typed: string }[] = [];
   let out = text;
   for (const { term, re, same } of dictionary) {
-    out = out.replace(re, (match) => {
-      found.push({ term, typed: same.test(match) ? match : term });
-      return `${OPEN}${found.length - 1}${CLOSE}`;
-    });
+    // Só o texto fora dos marcadores (#452): um termo só de número (`0`, um alias `1`) casava com o índice dentro do
+    // marcador de outro termo, e a palavra dele voltava como o número. O marcador não é letra, então a borda de um
+    // pedaço vale o mesmo que o marcador ao lado para o TERM_START e o TERM_END.
+    out = out
+      .split(MARKED)
+      .map((part, i) =>
+        i % 2 === 1
+          ? part
+          : part.replace(re, (match) => {
+              found.push({ term, typed: same.test(match) ? match : term });
+              return `${OPEN}${found.length - 1}${CLOSE}`;
+            }),
+      )
+      .join("");
   }
   const back = (s: string, pick: (f: { term: string; typed: string }) => string) =>
     s.replace(PLACEHOLDER_RE, (_, i: string) => {

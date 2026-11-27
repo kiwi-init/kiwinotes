@@ -339,3 +339,22 @@ describe("latência", () => {
     expect(p99).toBeLessThan(5);
   });
 });
+
+// #452 (spec #33093, T33232): o termo só de número casava com o índice do marcador de outro termo.
+describe("dicionário: termo só de número", () => {
+  test("um termo `0` não troca o Kiwi do ditado por 0", () => {
+    expect(cleanupWithRules({ raw: "fala do kiwi", dictionary: ["Kiwi", "0"] }).text).toBe("Fala do Kiwi.");
+  });
+  test("um alias `1` não troca a 2ª ocorrência de outro termo", () => {
+    expect(cleanupWithRules({ raw: "o kiwi e o kiwi", dictionary: ["Kiwi", { term: "um", aliases: ["1"] }] }).text).toBe("O Kiwi e o Kiwi.");
+  });
+  test("o termo `0` ainda vale onde a pessoa disse 0", () => {
+    expect(cleanupWithRules({ raw: "o kiwi tem 0 bugs", dictionary: ["Kiwi", "0"] }).text).toBe("O Kiwi tem 0 bugs.");
+  });
+  test("com muitos termos (índices de dois dígitos) e números no dicionário, cada palavra volta a si mesma", () => {
+    const terms = Array.from({ length: 12 }, (_, i) => `Termo${String.fromCharCode(65 + i)}`);
+    const raw = terms.map((t) => t.toLowerCase()).join(" e ");
+    const out = cleanupWithRules({ raw, dictionary: [...terms, "1", "0", "11", { term: "dois", aliases: ["2"] }] }).text;
+    expect(out).toBe(`${terms.join(" e ")}.`.replace(/^./, (c) => c.toUpperCase()));
+  });
+});
