@@ -189,10 +189,10 @@ try {
       await settled(p);
       if (!before) {
         const keyed = await snapshot(p);
-        assert.equal(keyed.selected, "dictation");
+        assert.equal(keyed.selected, "calendar");
         matchesSelection(keyed);
-        assert.equal(await p.locator('.kn-tab[data-section=dictation]').evaluate((el) => document.activeElement === el), true);
-        assert.equal(await p.locator('.kn-tab[data-section=dictation]').evaluate((el) => el.matches(":focus-visible")), true);
+        assert.equal(await p.locator('.kn-tab[data-section=calendar]').evaluate((el) => document.activeElement === el), true);
+        assert.equal(await p.locator('.kn-tab[data-section=calendar]').evaluate((el) => el.matches(":focus-visible")), true);
       }
       // Preferência do sistema e depois dos Ajustes: ambos desligam a animação.
       for (const mode of ["system", "settings"] as const) {
