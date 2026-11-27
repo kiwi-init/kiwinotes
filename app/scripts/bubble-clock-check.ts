@@ -78,8 +78,11 @@ async function overlay(theme: "light" | "dark") {
     // 1. O clique no balão (com o mouse nele, como o helper deixa) manda o `touch`, nunca o `closed`, e o balão fica.
     await set(p, { estado: "pronto", visible: true, sala: 200, bubble: { text: CURTA, error: false }, catHover: true, bubbleHover: true });
     await frames(p);
+    // A página manda no máximo dois `touch` por segundo (o clique e a rolagem): passa a janela antes do clique.
+    await Bun.sleep(600);
     let n = await count();
     await p.locator("#bubble-text").click();
+    await p.waitForFunction((i) => (window as any).__posts.slice(i).some((m: { touch?: true }) => m.touch === true), n, { timeout: 5_000 }).catch(() => {});
     let after = await postsSince(n);
     assert.ok(after.some((m) => m.touch === true), "overlay: o clique no balão manda o touch (recomeça a espera)");
     assert.ok(!after.some((m) => m.closed === true), "overlay: o clique no balão não fecha");
@@ -236,8 +239,13 @@ async function hub(theme: "light" | "dark") {
     await away(p);
     await invoke("agent.ask", { text: `/diga ${OUTRA}` });
     await p.waitForFunction((t) => [...document.querySelectorAll(".kn-visually-hidden[aria-live]")].some((e) => e.textContent?.includes(t)), OUTRA, { timeout: 15_000 });
-    await p.locator(`${BUBBLE} .kn-bubble-close`).click({ force: true });
+    await peekKiwi(p);
+    await p.waitForFunction(([s, t]) => document.querySelector(`${s} .kn-bubble-typed`)?.textContent === t, [BUBBLE, OUTRA] as const, { timeout: 5_000 });
+    await Bun.sleep(400);
+    await p.locator(`${BUBBLE} .kn-bubble-close`).click();
     await p.waitForFunction((s) => !document.querySelector(s), BUBBLE, { timeout: 5_000 });
+    await away(p);
+    await Bun.sleep(PEEK_LEAVE_MS + 150);
     await peekKiwi(p);
     await p.waitForFunction((s) => document.querySelector(s), BUBBLE, { timeout: 5_000 });
     assert.equal(await bubbleText(p), OUTRA, "hub: volta a resposta do último pedido");
