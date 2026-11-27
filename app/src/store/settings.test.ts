@@ -112,7 +112,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ kind: "claude", enabled: false, consented: false, model: "default", modelByKind: {}, effort: "default", effortByModel: {}, notifyWaiting: true, economy: false, controlShortcut: false, showSpokenText: false, catSpeaks: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: true, webSearchChosen: false, onboarding: { state: "pending", step: 1 }, routines: DEFAULT_AGENT_ROUTINES });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ kind: "claude", enabled: false, consented: false, model: "default", modelByKind: {}, effort: "default", effortByModel: {}, notifyWaiting: true, economy: false, controlShortcut: false, showSpokenText: true, showSpokenTextChosen: false, catSpeaks: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: true, webSearchChosen: false, onboarding: { state: "pending", step: 1 }, routines: DEFAULT_AGENT_ROUTINES });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     kind: "claude",
     enabled: true,
@@ -124,7 +124,8 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
     notifyWaiting: true,
     economy: false,
     controlShortcut: false,
-    showSpokenText: false,
+    showSpokenText: true,
+    showSpokenTextChosen: false,
     catSpeaks: false,
     meetings: DEFAULT_AGENT_MEETING_SETTINGS,
     summary: DEFAULT_SUMMARY_SETTINGS,
@@ -337,6 +338,16 @@ test("Pesquisar na web (spec #11908, #19273): ligado por padrão; quem escolheu 
   expect(sanitizeSettings({ agent: { webSearch: false, webSearchChosen: true } }).agent.webSearch).toBe(false);
   expect(sanitizeSettings({ agent: { webSearch: true, webSearchChosen: true } }).agent.webSearch).toBe(true);
   expect(sanitizeSettings({ agent: { webSearch: "sim", webSearchChosen: true } }).agent.webSearch).toBe(false);
+});
+
+test("Mostrar o que eu falei (spec #32534, T33177): ligado para quem nunca mexeu; uma escolha guardada não muda", () => {
+  expect(DEFAULT_AGENT_SETTINGS.showSpokenText).toBe(true);
+  // Um arquivo de antes: o `false` era o padrão velho, gravado junto com o resto. Vale o padrão novo.
+  expect(sanitizeSettings({ agent: { showSpokenText: false } }).agent.showSpokenText).toBe(true);
+  // Quem escolheu no interruptor fica com a escolha.
+  expect(sanitizeSettings({ agent: { showSpokenText: false, showSpokenTextChosen: true } }).agent.showSpokenText).toBe(false);
+  expect(sanitizeSettings({ agent: { showSpokenText: true, showSpokenTextChosen: true } }).agent.showSpokenText).toBe(true);
+  expect(sanitizeSettings({ agent: { showSpokenText: "sim", showSpokenTextChosen: true } }).agent.showSpokenText).toBe(false);
 });
 
 test("a primeira abertura (T20796): pending só sem settings.json, e segue pending até o fim do passo", async () => {

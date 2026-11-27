@@ -6,6 +6,8 @@
 // - [Ver mais] abre o balão grande, com a resposta inteira e rolagem; fecha com um clique fora ou com Esc. O Esc só é
 //   ouvido enquanto o balão grande está aberto.
 // - Leitor de tela: a resposta é anunciada uma vez, no fim, inteira.
+// - Enquanto o agente trabalha (spec #32534, Cena 2, T33177): o passo atual, com o [Parar], que cancela o pedido, e em
+//   cima, pequeno e apagado, o que a pessoa falou.
 // - O markdown (spec #17679, T17986): o pequeno mostra o texto corrido, sem símbolos, que o `BubbleFeed` já corta
 //   limpo (`bubblePlain`, T17984); o grande, formatado
 //   (títulos, listas, código, tabela que rola de lado), pelo mesmo montador do overlay. Um link só abre no clique.
@@ -191,6 +193,12 @@ export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = fa
               tick.current();
             }}
           >
+            {/* O que a pessoa falou (T33177): a linha pequena em cima do andamento, até a resposta. */}
+            {view.heard ? (
+              <div className="kn-bubble-heard" aria-hidden="true" title={t("hub.bubble.heard")}>
+                {view.heard}
+              </div>
+            ) : null}
             {/* O resumo entra inteiro, sem digitar (spec #27881): o fantasma e o texto são o mesmo, e o fantasma segura o tamanho. */}
             <div className="kn-bubble-text" aria-hidden="true">
               <div className="kn-bubble-ghost">{view.full}</div>
@@ -208,6 +216,21 @@ export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = fa
                 }}
               >
                 {t("hub.bubble.more")}
+              </button>
+            ) : null}
+            {/* O [Parar] (T33177): cancela o pedido em andamento (o `agent.cancel`), sem passar pelo clique do balão. */}
+            {view.stop ? (
+              <button
+                type="button"
+                className="kn-bubble-more kn-bubble-stop"
+                tabIndex={-1}
+                onMouseDown={keepFocus}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void api.agent.cancel().catch(() => {});
+                }}
+              >
+                {t("hub.bubble.stop")}
               </button>
             ) : null}
             <BubbleTail />

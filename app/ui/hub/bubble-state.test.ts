@@ -76,10 +76,13 @@ describe("o balão único", () => {
   test("uma resposta longa mostra um balão só, com o resumo, que não muda com o relógio andando", () => {
     const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);
-    // O texto chegando não vai ao balão: o gato pensa.
+    // O texto chegando não vai ao balão: o andamento diz que ele escreve (T33177), num balão só.
+    let step: number | undefined;
     for (const [i, w] of LONGA.split(/(?<= )/).entries()) {
       f.event(ev({ type: "text", text: w }), i * 10);
-      expect(f.view(i * 10)).toBeNull();
+      expect(f.view(i * 10)).toMatchObject({ text: "Escrevendo a resposta", stop: true, more: false });
+      step ??= f.view(i * 10)!.key;
+      expect(f.view(i * 10)!.key).toBe(step);
     }
     f.event(ev({ type: "done", stopReason: "end_turn", text: LONGA }), 5000);
     const v = f.view(5000)!;
@@ -120,12 +123,14 @@ describe("o balão único", () => {
     const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);
     f.event(ev({ type: "text", text: antes }), 0);
-    expect(f.view(0)).toBeNull();
+    // Só o passo (T33177), nunca o texto do agente.
+    expect(f.view(0)!.full).toBe("Escrevendo a resposta");
     f.event(ev({ type: "status", status: "running", tool: "kiwi" }), 10);
-    expect(f.view(10)).toBeNull();
+    f.event(ev({ type: "status", status: "running", tool: "notes_search" }), 15);
+    expect(f.view(15)!.full).toBe("Procurando nas suas notas");
     f.event(ev({ type: "status", status: "thinking" }), 20);
     f.event(ev({ type: "text", text: `\n\n${depois}` }), 30);
-    expect(f.view(30)).toBeNull();
+    expect(f.view(30)!.full).toBe("Escrevendo a resposta");
     f.event(ev({ type: "done", stopReason: "end_turn", text: `${antes}\n\n${depois}` }), 40);
     // O resumo é a resposta final, a de depois da última ferramenta; o [Ver mais] tem as duas.
     expect(f.view(40)).toMatchObject({ text: depois, more: true });
@@ -166,7 +171,8 @@ describe("o balão junto com a voz (T33053, Cena 1)", () => {
     const f = new BubbleFeed(fits(80));
     f.event(ev({ type: "started" }), 0);
     f.event(ev({ type: "status", status: "running", tool: "cat_speak" }), 10);
-    expect(f.view(10)).toBeNull();
+    // Antes da fala, o andamento (T33177).
+    expect(f.view(10)).toMatchObject({ text: "Escrevendo a resposta", stop: true });
     f.event(ev({ type: "speech", text: "Achei **três** notas. A mais nova é de ontem." }), 20);
     const cedo = f.view(20)!;
     expect(cedo).toMatchObject({ text: "Achei três notas. A mais nova é de ontem.", more: false });
@@ -193,9 +199,11 @@ describe("o balão junto com a voz (T33053, Cena 1)", () => {
     const f = new BubbleFeed(fits(90));
     f.event(ev({ type: "started" }), 0);
     f.event(ev({ type: "text", text: LONGA }), 10);
-    expect(f.view(10)).toBeNull();
+    // Até lá, só o andamento (T33177).
+    expect(f.view(10)).toMatchObject({ text: "Escrevendo a resposta", stop: true });
     f.event(ev({ type: "done", stopReason: "end_turn", text: LONGA }), 20);
     expect(f.view(20)).toMatchObject({ text: "Achei três notas sobre o Projeto X. A mais nova é de ontem, com o prazo de sexta.", more: true });
+    expect(f.view(20)!.stop).toBeUndefined();
   });
 
   test("cancelado depois da fala: o balão sai; fechado pelo clique: o `done` não o traz de volta", () => {
@@ -334,26 +342,30 @@ describe("o que fica como antes", () => {
     const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);
     f.event(ev({ type: "status", status: "running", tool: "web" }), 10);
-    expect(f.view(10)).toMatchObject({ text: webLine(), more: false });
-    // O texto que o agente diz entre a web e a resposta não tira a linha nem entra no balão.
+    expect(f.view(10)).toMatchObject({ text: webLine(), more: false, stop: true });
+    // O texto que o agente diz depois da web não entra no balão: o passo vira o de escrever (T33177).
     f.event(ev({ type: "text", text: "Achei duas páginas." }), 20);
-    expect(f.view(20)!.text).toBe(webLine());
+    expect(f.view(20)!.text).toBe("Escrevendo a resposta");
+    // A ferramenta única, sem a ação de dentro, não troca o passo; a ação que chega em seguida troca.
     f.event(ev({ type: "status", status: "running", tool: "kiwi" }), 30);
-    expect(f.view(30)).toBeNull();
-    // Outra ferramenta não diz isso.
+    expect(f.view(30)!.text).toBe("Escrevendo a resposta");
+    // Outra ferramenta não diz a web.
     const g = new BubbleFeed(fits(60));
     g.event(ev({ type: "started" }), 0);
     g.event(ev({ type: "status", status: "running", tool: "notes_read" }), 10);
-    expect(g.view(1000)).toBeNull();
+    expect(g.view(1000)!.text).toBe("Lendo uma nota");
   });
 
-  test("a fala entendida (spec #9876) fica até o agente começar a responder", () => {
+  test("a fala entendida (spec #9876, #32534) fica em cima do andamento até a resposta", () => {
     const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);
     f.heard("p1", "resume a nota", 0);
-    expect(f.view(0)).toMatchObject({ text: "“resume a nota”", more: false });
+    expect(f.view(0)).toMatchObject({ text: "Pensando", heard: "“resume a nota”", stop: true, more: false });
     f.event(ev({ type: "text", text: "Lendo." }), 10);
-    expect(f.view(10)).toBeNull();
+    expect(f.view(10)).toMatchObject({ text: "Escrevendo a resposta", heard: "“resume a nota”" });
+    f.event(ev({ type: "done", stopReason: "end_turn", text: "Resumi a nota." }), 20);
+    expect(f.view(20)!.full).toBe("Resumi a nota.");
+    expect(f.view(20)!.heard).toBeUndefined();
   });
 
   test("a chave muda a cada balão novo (spec #11652): a web, depois a resposta", () => {
@@ -380,13 +392,13 @@ describe("a resposta de antes espera a nova entrar (T15377)", () => {
     const { f, old } = twoRequests();
     expect(f.view(100)).toEqual({ ...old, more: false });
     expect(f.view(900)!.key).toBe(old.key);
-    // O texto do pedido novo não é um balão: a resposta velha espera a linha de estado ou a resposta nova.
-    f.event({ id: "p2", type: "text", text: "Nova" }, 900);
-    expect(f.view(900)!.key).toBe(old.key);
-    f.event({ id: "p2", type: "status", status: "running", tool: "web" }, 950);
-    const v = f.view(950)!;
-    expect(v.full).toBe(webLine());
+    // O primeiro passo do pedido novo (T33177) toma o lugar, com outra chave; os passos seguintes ficam nela.
+    f.event({ id: "p2", type: "status", status: "thinking" }, 900);
+    const v = f.view(900)!;
+    expect(v.full).toBe("Pensando");
     expect(v.key).not.toBe(old.key);
+    f.event({ id: "p2", type: "status", status: "running", tool: "web" }, 950);
+    expect(f.view(950)).toMatchObject({ full: webLine(), key: v.key });
   });
 
   test("no máximo ANSWER_HOLD_MS, e o relógio do balão acorda nessa hora", () => {
@@ -441,7 +453,7 @@ describe("a resposta de antes espera a nova entrar (T15377)", () => {
   test("a fala entendida do pedido novo também toma o lugar", () => {
     const { f } = twoRequests();
     f.heard("p2", "abre a nota", 200);
-    expect(f.view(200)!.full).toBe("“abre a nota”");
+    expect(f.view(200)).toMatchObject({ full: "Pensando", heard: "“abre a nota”" });
   });
 });
 
@@ -545,5 +557,91 @@ describe("o tempo de leitura antes de dar lugar a um balão com ação (T28350)"
     expect(readingMs("x".repeat(500))).toBe(8000);
     // Caractere, não unidade do UTF-16.
     expect(readingMs("🐱".repeat(50))).toBe(4500);
+  });
+});
+
+describe("o andamento enquanto o agente trabalha (spec #32534, Cena 2, T33177)", () => {
+  const NOTA = "Clientes/Ana Souza - contrato.md";
+  const TRECHO = "o contrato da Ana vence em março";
+
+  test("o passo troca a cada ferramenta, num balão só, com o [Parar], e nunca o nome nem o texto de uma nota", () => {
+    const f = new BubbleFeed(fits(60));
+    f.event(ev({ type: "started" }), 0);
+    const passos: string[] = [];
+    const ver = (at: number) => {
+      const v = f.view(at)!;
+      expect(v.stop).toBe(true);
+      expect(JSON.stringify(v)).not.toMatch(/Ana|contrato|Clientes|\.md/);
+      if (passos.at(-1) !== v.text) passos.push(v.text);
+      return v.key;
+    };
+    f.event(ev({ type: "status", status: "thinking" }), 0);
+    const key = ver(0);
+    // A ferramenta do Kiwi sai duas vezes: no começo, sem o alvo, e no fim, com ele. A nota conta uma vez.
+    for (const [i, e] of [
+      { type: "status", status: "running", tool: "notes_search" },
+      { type: "status", status: "running", tool: "notes_search", target: "Ana" },
+      { type: "status", status: "thinking" },
+      { type: "status", status: "running", tool: "notes_read" },
+      { type: "status", status: "running", tool: "notes_read", target: NOTA },
+      { type: "status", status: "running", tool: "notes_read" },
+      { type: "status", status: "running", tool: "notes_read", target: "Clientes/Ana Souza - proposta.md" },
+      { type: "status", status: "running", tool: "notes_read", target: NOTA },
+      { type: "status", status: "running", tool: "notes_outline", target: "Clientes/Bruno.md" },
+      { type: "status", status: "thinking" },
+      { type: "text", text: `Li ${TRECHO}.` },
+      { type: "status", status: "running", tool: "web" },
+      { type: "text", text: "Confirmei." },
+    ].entries()) {
+      f.event(ev(e), 10 + i);
+      expect(ver(10 + i)).toBe(key);
+    }
+    expect(passos).toEqual(["Pensando", "Procurando nas suas notas", "Lendo uma nota", "Lendo 2 notas", "Lendo 3 notas", "Escrevendo a resposta", "Pesquisando na web", "Escrevendo a resposta"]);
+  });
+
+  test("as reuniões e as mudanças nas notas têm o próprio passo; uma ferramenta desconhecida não troca o passo", () => {
+    const f = run(new BubbleFeed(fits(60)), [{ type: "status", status: "running", tool: "meetings_get", target: "Reunião com a Ana" }]);
+    expect(f.view(0)!.text).toBe("Vendo as suas reuniões");
+    f.event(ev({ type: "status", status: "running", tool: "notes_edit", target: NOTA }), 1);
+    expect(f.view(1)!.text).toBe("Mexendo nas suas notas");
+    f.event(ev({ type: "status", status: "running", tool: "Bash" }), 2);
+    expect(f.view(2)!.text).toBe("Mexendo nas suas notas");
+  });
+
+  test("em inglês, o passo e a conta das notas", () => {
+    const f = new BubbleFeed(fits(60), false, Date.now, () => "en");
+    f.event(ev({ type: "started" }), 0);
+    f.heard("p1", "summarize my notes", 0);
+    expect(f.view(0)).toMatchObject({ text: "Thinking", heard: "“summarize my notes”", stop: true });
+    for (const target of ["a.md", "b.md"]) f.event(ev({ type: "status", status: "running", tool: "notes_read", target }), 1);
+    expect(f.view(1)!.text).toBe("Reading 2 notes");
+  });
+
+  test("cancelado (o [Parar]), o andamento sai e nada volta; o clique fecha e o andamento não volta", () => {
+    const f = run(new BubbleFeed(fits(60)), [{ type: "status", status: "running", tool: "notes_search" }]);
+    expect(f.view(0)!.stop).toBe(true);
+    f.event(ev({ type: "done", stopReason: "cancelled", text: "" }), 10);
+    expect(f.view(10)).toBeNull();
+    f.event(ev({ type: "status", status: "running", tool: "web" }), 20);
+    expect(f.view(20)).toBeNull();
+    const g = run(new BubbleFeed(fits(60)), [{ type: "status", status: "thinking" }]);
+    g.close();
+    g.event(ev({ type: "status", status: "running", tool: "web" }), 10);
+    expect(g.view(10)).toBeNull();
+  });
+
+  test("o aviso do limite fica o tempo de leitura, com a fala em cima, e o passo de agora entra depois dele", () => {
+    const f = new BubbleFeed(fits(80));
+    f.event(ev({ type: "started" }), 0);
+    f.heard("p1", "resume a nota", 0);
+    f.event(ev({ type: "limit", status: "warning", percent: 90 }), 0);
+    const aviso = f.view(0)!;
+    expect(aviso.heard).toBe("“resume a nota”");
+    expect(aviso.stop).toBeUndefined();
+    f.event(ev({ type: "status", status: "running", tool: "web" }), 10);
+    f.event(ev({ type: "status", status: "running", tool: "notes_read" }), 20);
+    expect(f.view(20)!.full).toBe(aviso.full);
+    const fim = f.nextWake(20);
+    expect(f.view(fim)).toMatchObject({ text: "Lendo uma nota", stop: true, heard: "“resume a nota”" });
   });
 });

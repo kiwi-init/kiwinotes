@@ -2,9 +2,11 @@
 // (`agent.turn`), sem depender do desenho. TypeScript puro, testado no `bun test`; o tempo entra sempre como argumento
 // (`now`), então o teste anda o relógio sem esperar.
 //
-// - Enquanto o agente trabalha, o balão mostra só a linha de estado ("Pesquisando na web…", o aviso do limite) ou o que
-//   a pessoa falou (spec #9876). O texto que o agente diz entre as ferramentas não vai ao balão: fica no [Ver mais].
-//   O aviso do limite fica pelo menos o tempo de leitura (`readingMs`), mesmo que a resposta chegue antes (T28584).
+// - Enquanto o agente trabalha (spec #32534, Cena 2, T33177), o balão mostra o passo atual ("Pensando", "Lendo 3 notas",
+//   o `AgentProgress`), com o [Parar], e em cima, pequeno e apagado, o que a pessoa falou (spec #9876), até a resposta.
+//   O balão do andamento é um só no pedido: o passo troca o texto, não o balão. O texto que o agente diz entre as
+//   ferramentas não vai ao balão: fica no [Ver mais]. O aviso do limite fica pelo menos o tempo de leitura
+//   (`readingMs`), mesmo que a resposta chegue antes (T28584).
 // - Quando a resposta chega (`done`), entra um balão só, com o resumo, de uma vez: ele não troca de trecho, não digita
 //   e não muda com o relógio. O resumo é a fala do `cat_speak` (o evento `speech`), quando o agente mandou; senão, o
 //   começo da resposta final, cortado no fim de uma frase que caiba (`summaryOf`). O [Ver mais] aparece quando a
@@ -20,9 +22,10 @@ import { plainMarkdown } from "../src/bubbleMarkdown";
 import type { Locale } from "../../src/shared/i18n";
 import { limitBubble } from "../settings/usageText";
 import { t } from "../src/i18n";
+import { AgentProgress } from "../../src/shared/agent-progress";
 
-/** O que o balão diz enquanto o agente está na web (spec #11908). */
-export const webLine = (): string => t("hub.bubble.web");
+/** O que o balão diz enquanto o agente está na web (spec #11908): o passo da web do andamento (T33177). */
+export const webLine = (): string => t("hub.step.web");
 
 /**
  * Quanto a resposta fica na tela antes de dar lugar a um balão com ação (a memória, a rotina, a proposta; T28350): o
@@ -137,6 +140,10 @@ export interface BubbleView {
   key: number;
   /** As notas e os arquivos do resumo (spec #17683), nas posições do `full`: só no balão da resposta. */
   links?: ChunkLink[];
+  /** O balão do andamento (spec #32534, T33177): o `text` é o passo, e o [Parar] cancela o pedido. */
+  stop?: boolean;
+  /** O que a pessoa falou, entre aspas: a linha pequena em cima, do pedido até a resposta. */
+  heard?: string;
 }
 
 /** Uma nota ou um arquivo dentro do balão pequeno: o rótulo em `full.slice(from, to)`. */
@@ -168,11 +175,11 @@ export function plainLinks(raw: string, links: readonly BubbleLink[], base = 0):
   return out;
 }
 
-/** O que está no balão: `line` é uma linha de estado (a web, o limite), `heard` o que a pessoa falou. */
+/** O que está no balão: `line` é o aviso do limite, `step` o passo do pedido (o andamento, T33177). */
 interface Head {
   key: number;
   text: string;
-  kind: "line" | "heard" | "answer" | "error";
+  kind: "line" | "step" | "answer" | "error";
   links?: ChunkLink[];
 }
 
@@ -200,6 +207,11 @@ export class BubbleFeed {
    * só lhe dá o [Ver mais] (o mesmo `key`, o mesmo texto). A ferramenta que corre depois da fala não o troca.
    */
   private spoken: Head | null = null;
+  /** O passo do pedido (T33177) e o `key` do balão do andamento: um só no pedido, o passo só troca o texto. */
+  private progress = new AgentProgress();
+  private stepKey = 0;
+  /** O que a pessoa falou neste pedido, entre aspas (spec #9876); vai em cima do andamento até a resposta. */
+  private heardText = "";
   private ended = false;
   private dismissed = false;
   private announced: string | null = null;
@@ -266,10 +278,11 @@ export class BubbleFeed {
       if (this.request !== null) this.finished.add(this.request);
       this.reset(e.id);
     }
+    const stepped = this.progress.event(e);
     if (e.type === "text") {
-      // O texto vai ao [Ver mais], não ao balão. O que a pessoa falou sai quando o agente começa a responder.
+      // O texto vai ao [Ver mais], não ao balão: o andamento passa a "Escrevendo a resposta".
       this.said += e.text;
-      if (this.head?.kind === "heard") this.head = null;
+      if (stepped) this.showStep(now);
     } else if (e.type === "speech") {
       this.speech = plainOf(e.text).trim();
       if (this.dismissed || this.spoken) return;
@@ -279,8 +292,10 @@ export class BubbleFeed {
       // A ferramenta começou: o que foi dito antes não é a resposta final.
       this.closedLen = this.said.length;
       if (this.dismissed || this.spoken) return;
-      // A web (spec #11908): o balão diz que o agente saiu do cofre, até a próxima ferramenta ou a resposta.
-      this.put("tool" in e && e.tool === "web" ? this.line(webLine()) : null, now);
+      // O passo da ferramenta (T33177; a web, spec #11908): o mesmo balão, até a próxima ferramenta ou a resposta.
+      if (stepped) this.showStep(now);
+    } else if (e.type === "status" && (e.status === "opening" || e.status === "thinking")) {
+      if (stepped) this.showStep(now);
     } else if (e.type === "done") {
       this.finish(e.id);
       let base = this.closedLen;
@@ -317,14 +332,16 @@ export class BubbleFeed {
    * O texto entendido da fala pelo Control (spec #9876): aparece no balão, entre aspas, enquanto o pedido começa. Sai
    * quando o agente começa a responder.
    */
-  heard(id: string, text: string, _now: number): void {
+  heard(id: string, text: string, now: number): void {
     if (this.finished.has(id) || !text.trim()) return;
     if (this.request !== id) {
       if (this.request) this.finished.add(this.request);
       this.reset(id);
     }
-    if (this.said || this.dismissed || this.head) return;
-    this.head = { key: ++this.keys, text: `“${text.trim()}”`, kind: "heard" };
+    // A linha de cima (spec #32534, T33177): fica até a resposta, em cima do andamento, que já começa em "Pensando".
+    this.heardText = `“${text.trim()}”`;
+    this.progress.begin();
+    this.showStep(now);
   }
 
   /** O clique no balão: fecha (o resto deste pedido não aparece mais no balão; o [Ver mais] não abre mais). */
@@ -348,6 +365,11 @@ export class BubbleFeed {
     }
     const h = this.head;
     if (!h || this.dismissed) return null;
+    // O andamento (T33177): o passo com o [Parar] e, em cima, o que a pessoa falou. O aviso do limite também leva a fala.
+    if (h.kind === "step" || h.kind === "line") {
+      const heard = this.heardText && !this.ended ? { heard: this.heardText } : {};
+      return { text: h.text, full: h.text, error: false, more: false, key: h.key, ...(h.kind === "step" ? { stop: true } : {}), ...heard };
+    }
     // Só a resposta pede o [Ver mais]: a linha de estado e a fala da pessoa não são o que o agente disse.
     // A fala chega antes do fim (T33053): o [Ver mais] só com o `done`, quando o `said` já é a resposta inteira.
     const more = h.kind === "answer" && this.ended && !sameWords(plainOf(this.said), h.text);
@@ -369,6 +391,19 @@ export class BubbleFeed {
 
   private line(text: string): Head {
     return { key: ++this.keys, text, kind: "line" };
+  }
+
+  /**
+   * O balão do andamento com o passo de agora (T33177). Fica com o `key` do pedido: o passo troca o texto, e o balão não
+   * sai e entra de novo. Depois da fala (T33053) ou do fim, o andamento não volta; fechado no clique, também não.
+   */
+  private showStep(now: number): void {
+    if (this.dismissed || this.spoken || this.ended) return;
+    if (this.head && this.head.kind !== "step" && this.head.kind !== "line") return;
+    const text = this.progress.text(this.locale());
+    if (!text) return;
+    this.stepKey ||= ++this.keys;
+    this.put({ key: this.stepKey, text, kind: "step" }, now);
   }
 
   /**
@@ -403,6 +438,9 @@ export class BubbleFeed {
     this.closedLen = 0;
     this.speech = "";
     this.spoken = null;
+    this.progress = new AgentProgress();
+    this.stepKey = 0;
+    this.heardText = "";
     this.ended = false;
     this.dismissed = false;
     this.announced = null;
