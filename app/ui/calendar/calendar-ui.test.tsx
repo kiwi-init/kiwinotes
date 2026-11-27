@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { CalendarItem } from "../../src/shared/calendar.ts";
+import { type CalendarItem, parseWhen } from "../../src/shared/calendar.ts";
 import { setAppLocale } from "../src/i18n.ts";
 import { type DetailActions, HoverCard } from "./Detail.tsx";
 import { memorySource } from "./source.ts";
@@ -110,4 +110,12 @@ describe("a fonte na memória", () => {
     expect(await src.resolve("Pendências")).toBe("Projeto X/Pendências.md");
     off();
   });
+});
+
+test("o cartão de uma repetição com vezes feitas não mostra o ⏭ (#450)", () => {
+  const w = parseWhen("Regar as plantas @ 2026-11-25 10:00 🔁 dia ⏭ 2026-11-26 ⏭️ 2026-11-27")!;
+  const rep = item({ id: "n:a#3:z~2026-11-25", title: w.title, repeat: "daily", skip: w.skip });
+  const agenda = renderToStaticMarkup(<AgendaList days={viewRange("agenda", "2026-11-25").days} items={[rep]} today="2026-11-25" h={h} s={s} />);
+  expect(agenda).toContain("Regar as plantas");
+  expect(agenda).not.toContain("⏭");
 });

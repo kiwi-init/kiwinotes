@@ -130,3 +130,9 @@ test("T16434: um sub-título dentro de Próximos passos não fecha a seção; o 
   const ata = "## Próximos passos\n\n- Ana revisa\n\n### Detalhes\n\n- Bruno manda o orçamento\n\n## Notas\n\n- não é passo";
   expect(openItems(ata, true).map((i) => i.text)).toEqual(["Ana revisa", "Bruno manda o orçamento"]);
 });
+
+test("a Início não mostra o ⏭ das vezes feitas de uma repetição (#450)", () => {
+  const texts = openItems("- [ ] Regar as plantas 🔁 dia ⏭ 2026-12-09 ⏭️ 2026-12-10\n- [ ] Ligar ⏭ para a Ana", false).map((i) => i.text);
+  expect(texts).toEqual(["Regar as plantas 🔁 dia", "Ligar ⏭ para a Ana"]);
+  expect(texts[0]).not.toContain("⏭");
+});
