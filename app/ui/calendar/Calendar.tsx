@@ -4,7 +4,7 @@
 
 import "./calendar.css";
 
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { addDays, type CalendarItem, type CalendarItems, type CalendarNotify, type CalendarUpdate } from "../../src/shared/calendar.ts";
 import { kiwiFace } from "../notes/editor/kiwi-face.ts";
@@ -12,6 +12,8 @@ import { useT } from "../src/i18n.ts";
 import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WIDE_PX, WidePanel, type WideState } from "./Detail.tsx";
 import { periodTitle } from "./format.ts";
 import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, noteLine, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { KiwiAskBox } from "./KiwiAsk.tsx";
+import { KiwiPanel } from "./KiwiPanel.tsx";
 import { NewItem } from "./NewItem.tsx";
 import { apiStore, type CalendarStore, todayOf } from "./source.ts";
 import { AgendaList, type DragMode, HOUR_PX, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
@@ -51,7 +53,7 @@ const dayAt = (x: number, y: number): string | null =>
 
 const errCode = (e: unknown) => (e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "");
 
-export function Calendar({ active, source: given, onOpenNote, catColor, ask }: { active: boolean; source?: CalendarStore; /** A busca do Kiwi (⌘K) na barra, da T32156. */ ask?: ReactNode; onOpenNote(path: string, internal: boolean, line?: number): void; catColor?: unknown }) {
+export function Calendar({ active, source: given, onOpenNote, catColor }: { active: boolean; source?: CalendarStore; onOpenNote(path: string, internal: boolean, line?: number): void; catColor?: unknown }) {
   const { t, locale } = useT();
   const [fallback] = useState(() => (given ? null : apiStore()));
   const source = given ?? fallback!;
@@ -192,7 +194,14 @@ export function Calendar({ active, source: given, onOpenNote, catColor, ask }: {
   const save = async (u: CalendarUpdate) => {
     try {
       const fresh = await source.update(u);
-      setLoad((l) => (l.state === "ready" ? { state: "ready", data: { ...l.data, items: l.data.items.map((i) => (i.id === u.id ? fresh : i)) } } : l));
+      // A pendência sem data que ganhou dia (o arrasto do painel do Kiwi, T32156) ainda não está na grade: entra agora.
+      setLoad((l) =>
+        l.state !== "ready"
+          ? l
+          : l.data.items.some((i) => i.id === u.id)
+            ? { state: "ready", data: { ...l.data, items: l.data.items.map((i) => (i.id === u.id ? fresh : i)) } }
+            : { state: "ready", data: { ...l.data, items: [...l.data.items, fresh], undated: l.data.undated.filter((i) => i.id !== u.id) } },
+      );
       setOpen((o) => (o && o.item.id === u.id ? { ...o, item: fresh } : o));
       setHover((h) => (h && h.item.id === u.id ? { ...h, item: fresh } : h));
     } catch (e) {
@@ -303,8 +312,10 @@ export function Calendar({ active, source: given, onOpenNote, catColor, ask }: {
           ›
         </button>
         <span className="kn-cal-sp" />
-        {/* O lugar da busca do Kiwi (⌘K), entre o período e as vistas, como no protótipo; quem a põe é a T32156. */}
-        <div className="kn-cal-ask-slot">{ask}</div>
+        {/* A busca do Kiwi (⌘K), entre o período e as vistas, como no protótipo (T32156). */}
+        <div className="kn-cal-ask-slot">
+          <KiwiAskBox active={active} face={face} />
+        </div>
         <span className="kn-cal-sp" />
         <div className="kn-cal-views" role="radiogroup" aria-label={t("calendar.views")}>
           {CALENDAR_VIEWS.map((v) => (
@@ -358,7 +369,9 @@ export function Calendar({ active, source: given, onOpenNote, catColor, ask }: {
           )}
         </div>
         {/* O lugar do painel do Kiwi (T32156): ele estica embaixo do painel largo e contrai junto na volta. */}
-        <aside className="kn-cal-side" ref={side} />
+        <aside className="kn-cal-side" ref={side}>
+          <KiwiPanel source={source} today={today} now={now} face={face} save={save} />
+        </aside>
       </div>
       {hover && !open ? (
         <HoverCard item={hover.item} at={hover.at} face={face} a={actions} onExpand={(card) => expand(hover.item, card)} onEnter={keepCard} onLeave={hideCard} />

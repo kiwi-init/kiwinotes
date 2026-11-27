@@ -2,6 +2,7 @@
 // área (`<área>.pt.ts` e `<área>.en.ts`), que entra com uma linha só em `PT_PARTS`. Duas partes com a mesma chave
 // quebram o `i18n.test.ts`: no espalhar, a última ganharia calada.
 import { ptCatOverlay } from "./catoverlay.pt.ts";
+import { ptCalendarKiwi } from "./calendar-kiwi.pt.ts";
 import { ptAgent } from "./agent.pt.ts";
 import { ptCommon } from "./common.pt.ts";
 import { ptDiagnostics } from "./diagnostics.pt.ts";
@@ -155,6 +156,7 @@ export const PT_PARTS = {
   calendar: ptCalendar,
   activity: ptActivity,
   diagnostics: ptDiagnostics,
+  calendarKiwi: ptCalendarKiwi,
 } as const;
 
 export const pt = {
@@ -176,4 +178,6 @@ export const pt = {
   ...ptViewers,
   // O arquivo do Salvar diagnóstico (T30631): `diagnostics.pt.ts`.
   ...ptDiagnostics,
+  // O Kiwi no Calendário (T32156): `calendar-kiwi.pt.ts`.
+  ...ptCalendarKiwi,
 } as const;

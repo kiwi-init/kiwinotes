@@ -1,0 +1,114 @@
+/* O painel do Kiwi à direita do Calendário (T32156, spec #32129), como o `kiwiPanel` do protótipo do harry
+   (`lab/calendario-propostas/proto.html`): a sugestão em destaque, o Hoje e as pendências sem data. */
+
+.kn-cal:has(.kn-cal-kiwi) { --cal-side: 288px; }
+
+.kn-cal-kiwi {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-width: 0;
+  overflow-y: auto;
+}
+.kn-cal-kiwi-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 12px 14px;
+}
+.kn-cal-kiwi-card h4 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.kn-cal-kiwi-sug {
+  border-color: color-mix(in srgb, var(--cal-meeting) 32%, transparent);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--cal-meeting) 14%, var(--surface)), var(--surface) 70%);
+}
+.kn-cal-kiwi-q { display: flex; gap: 10px; align-items: flex-start; }
+.kn-cal-kiwi-q img { width: 34px; height: 34px; flex: none; }
+.kn-cal-kiwi-q p { margin: 0; line-height: 1.4; }
+.kn-cal-kiwi-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+.kn-cal-kiwi ul { list-style: none; margin: 0; padding: 0; }
+.kn-cal-kiwi li {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 6px 0;
+  border-top: 1px solid var(--cal-line);
+}
+.kn-cal-kiwi li:first-child { border-top: 0; }
+.kn-cal-kiwi li[data-done] .kn-cal-kiwi-name { text-decoration: line-through; opacity: 0.6; }
+.kn-cal-kiwi-tm { min-width: 44px; flex: none; white-space: nowrap; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.kn-cal-kiwi-dot { width: 8px; height: 8px; flex: none; margin-top: 5px; border-radius: 50%; background: var(--c); }
+.kn-cal-kiwi-name { min-width: 0; overflow-wrap: anywhere; }
+.kn-cal-kiwi-name small { display: block; margin-top: 1px; font-size: 11px; color: var(--text-3); }
+.kn-cal-kiwi-empty, .kn-cal-kiwi-hint { margin: 0; font-size: 11.5px; color: var(--text-3); }
+.kn-cal-kiwi-hint { margin-top: 6px; }
+
+/* As pendências sem data se pegam e se soltam na grade. */
+.kn-cal-kiwi-undated li { cursor: grab; user-select: none; touch-action: none; }
+.kn-cal-kiwi-undated li[data-carried] { opacity: 0.4; }
+.kn-cal-kiwi[data-dragging], .kn-cal-kiwi[data-dragging] * { cursor: grabbing; }
+.kn-cal-kiwi-chk {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  margin-top: 2px;
+  border: 1.5px solid var(--text-3);
+  border-radius: 4px;
+}
+.kn-cal-kiwi-ghost {
+  position: fixed;
+  z-index: 40;
+  max-width: 220px;
+  padding: 5px 9px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--c, var(--cal-task)) 30%, var(--surface));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kn-cal-main [data-day][data-drop-target] {
+  background: color-mix(in srgb, var(--cal-task) 14%, transparent);
+  outline: 1px dashed color-mix(in srgb, var(--cal-task) 60%, transparent);
+  outline-offset: -1px;
+}
+
+/* A busca do Kiwi (⌘K) na barra de cima, entre a navegação e as vistas. */
+.kn-cal-ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 420px;
+  flex: 0 1 420px;
+  margin-right: 8px;
+  padding: 5px 8px 5px 6px;
+  border: 1px solid color-mix(in srgb, var(--cal-meeting) 32%, var(--border));
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text-3);
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+.kn-cal-ask:hover { border-color: color-mix(in srgb, var(--cal-meeting) 55%, var(--border)); }
+.kn-cal-ask:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kn-cal-ask img { width: 22px; height: 22px; flex: none; }
+.kn-cal-ask span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kn-cal-ask kbd {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: 11px var(--sans);
+  color: var(--text-3);
+}

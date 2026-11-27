@@ -9,6 +9,7 @@ import { CatActivity } from "./cat-state";
 import { CatAsk } from "./CatAsk";
 import { BubblePresence } from "./BubblePresence";
 import { CatBubble } from "./CatBubble";
+import { provideKiwiAsk } from "./kiwi-ask.ts";
 import { useT } from "../src/i18n.ts";
 import { MemoryBubble } from "./MemoryBubble";
 import { RoutineBubble } from "./RoutineBubble";
@@ -196,6 +197,14 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
     if (activity.state !== before) applyRef.current();
     if (giveBack) giveBackFocus();
   };
+  // A busca do Kiwi (⌘K) do Calendário (T32156) abre este mesmo campo, com o texto que ela já tinha; o foco volta
+  // para ela quando o campo fecha.
+  const openAskRef = useRef(openAsk);
+  openAskRef.current = openAsk;
+  useEffect(() => provideKiwiAsk((text) => {
+    if (text !== undefined) setDraft(text);
+    openAskRef.current(false);
+  }), []);
   const send = (text: string) => {
     activity.sent();
     setSending(true);

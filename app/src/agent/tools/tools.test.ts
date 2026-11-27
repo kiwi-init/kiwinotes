@@ -169,7 +169,7 @@ describe("o servidor MCP do Kiwi", () => {
     expect((await fetch(config.url.replace("/mcp", "/outra"), { method: "POST", headers: h })).status).toBe(404);
   });
 
-  test("o initialize combina a versão do MCP, e o tools/list traz as doze (com o find, T14133, o sheets_read, T21114, e o docx_read, T21231), só de leitura", async () => {
+  test("o initialize combina a versão do MCP, e o tools/list traz as treze (com o find, T14133, o sheets_read, T21114, o docx_read, T21231, e o calendar_list, T32156), só de leitura", async () => {
     const { config } = await setup();
     const init = (await (await rpc(config, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } })).json()) as any;
     expect(init.result.protocolVersion).toBe("2025-06-18");
@@ -189,10 +189,10 @@ describe("o servidor MCP do Kiwi", () => {
     expect(t.inputSchema.type).toBe("object");
     // Sem o escritor, as ações de leitura (com o files_read, #11549) rodam; as de escrita, as propostas e a memória
     // existem, mas voltam com erro.
-    expect(kiwiTools(false)).toHaveLength(12);
-    // As 22 de antes, as 4 da escrita pela diferença (T14650), as 2 da planilha (T21114), as 2 do docx (T21231) e a
-    // fala do gato (T26709).
-    expect(KIWI_TOOLS).toHaveLength(31);
+    expect(kiwiTools(false)).toHaveLength(13);
+    // As 22 de antes, as 4 da escrita pela diferença (T14650), as 2 da planilha (T21114), as 2 do docx (T21231), a
+    // fala do gato (T26709) e as 3 do Calendário (T32156; o calendar_list é de leitura).
+    expect(KIWI_TOOLS).toHaveLength(34);
   });
 
   test("uma ferramenta que não existe é recusada, e um método desconhecido também", async () => {

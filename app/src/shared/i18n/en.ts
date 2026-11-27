@@ -2,6 +2,7 @@
 // A missing or extra key breaks `tsc`; the i18n test also checks that both ask for the same `{params}`.
 
 import { enCatOverlay } from "./catoverlay.en.ts";
+import { enCalendarKiwi } from "./calendar-kiwi.en.ts";
 import { enAgent } from "./agent.en.ts";
 import { enActivity } from "./activity.en.ts";
 import { enCommon } from "./common.en.ts";
@@ -150,6 +151,7 @@ export const EN_PARTS = {
   calendar: enCalendar,
   activity: enActivity,
   diagnostics: enDiagnostics,
+  calendarKiwi: enCalendarKiwi,
 } as const;
 
 export const en: Catalog = {
@@ -171,4 +173,6 @@ export const en: Catalog = {
   ...enViewers,
   // O arquivo do Salvar diagnóstico (T30631): `diagnostics.en.ts`.
   ...enDiagnostics,
+  // O Kiwi no Calendário (T32156): `calendar-kiwi.en.ts`.
+  ...enCalendarKiwi,
 };

@@ -5,7 +5,8 @@ import { existsSync } from "node:fs";
 
 import Electrobun, { AgentControl, ApplicationMenu, PATHS, Tray, Updater, Utils } from "electrobun/bun";
 
-import { type AppChannel, type HubSection, releaseNotesUrl, UI_WINDOWS } from "../shared/ui-contract.ts";
+import { type AppChannel, type HubSection, isHubSection, releaseNotesUrl, UI_WINDOWS } from "../shared/ui-contract.ts";
+import { CALENDAR_NOTICE_PREFIX, micRecording } from "./calendar-alerts.ts";
 import { Hub } from "./hub.ts";
 import { makeIntro } from "./intro.ts";
 import { repairInstallRegistry, runningBundle } from "./install-registry.ts";
@@ -23,7 +24,7 @@ import { stores } from "./stores.ts";
 import { installFileLog } from "./file-log.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
 import { watchBusy } from "./slow-log.ts";
-import { appSlowLog, closeWindow, setupChanged, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, prepareHub, provideAbout, revealHub, startCatOverlay, startAgentVoice, startCatVoiceOutput, provideHubSection, provideOpenInHub, sendToWindow, homeChanged, showWindow, type WindowName } from "./windows.ts";
+import { appSlowLog, closeWindow, setupChanged, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, prepareHub, provideAbout, revealHub, startCatOverlay, startAgentVoice, startCatVoiceOutput, startCalendarAlerts, provideHubSection, provideOpenInHub, sendToWindow, homeChanged, showWindow, type WindowName } from "./windows.ts";
 import { loadNotices, NOTIFY_LIBRARY } from "./notices.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
@@ -59,10 +60,16 @@ const openHub = (section?: HubSection) => void hub.open(section);
 
 // A notificação quando o agente espera uma resposta (spec #9839): o próprio app notifica, pela dylib ao lado do helper.
 // Nada aqui pede a permissão; só o botão "Ligar as notificações" de Ajustes › Agente. O clique volta pela engine.
-void loadNotices(path.join(PATHS.VIEWS_FOLDER, "..", "bin", NOTIFY_LIBRARY), (m) => console.log(m)).then((notices) =>
-  stores.agent.attachNotice({ notices, inView: hubInView, show: () => openHub(), locale: () => mainLocale.get() }),
-);
-Electrobun.events.on("notification-response", (e) => stores.agent.noticeResponse(e.data));
+// A aba do Calendário (T32155): enquanto ela não está no hub, o clique só abre o hub.
+const CALENDAR_SECTION: string = "calendar";
+// Os avisos do Calendário (spec #32129, T32156) saem pelas mesmas notificações, depois que o helper (o ditado) existe.
+const noticesLoaded = loadNotices(path.join(PATHS.VIEWS_FOLDER, "..", "bin", NOTIFY_LIBRARY), (m) => console.log(m));
+void noticesLoaded.then((notices) => stores.agent.attachNotice({ notices, inView: hubInView, show: () => openHub(), locale: () => mainLocale.get() }));
+Electrobun.events.on("notification-response", (e) => {
+  // O clique num aviso do Calendário abre a aba dele.
+  if (e.data.id.startsWith(CALENDAR_NOTICE_PREFIX) && e.data.action === "default") return openHub(isHubSection(CALENDAR_SECTION) ? CALENDAR_SECTION : undefined);
+  stores.agent.noticeResponse(e.data);
+});
 
 // O menu do app (menus.ts), na língua do app: refeito quando ela muda (T28192).
 const setAppMenu = () => ApplicationMenu.setApplicationMenu(appMenu(mainLocale.get()));
@@ -167,6 +174,10 @@ dictation.onStatus(setMenu);
 dictation.onStatus(() => void setupChanged().catch(() => {}));
 // O atalho global da janela Notas (T1499): quem vê a tecla é o helper, que já tem o Monitoramento de Entrada.
 dictation.sidecar.on("hotkey.notes", () => openHub("notes"));
+{
+  const mic = micRecording((t, fn) => dictation.sidecar.on(t, fn));
+  void noticesLoaded.then((notices) => startCalendarAlerts(notices, mic.recording));
+}
 dictation.start();
 startCatOverlay(dictation.sidecar);
 startAgentVoice(dictation.sidecar);

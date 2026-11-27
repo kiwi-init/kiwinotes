@@ -26,6 +26,7 @@ import { assertNotRealData } from "./guard.ts";
 import { readerFromCapabilities } from "../agent/tools/reader.ts";
 import { readNoteModel } from "../agent/note-model.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
+import { calendarFromCapabilities } from "../agent/tools/calendar-tools.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { HomeChanges } from "../bun/home.ts";
 import { remoteImageUrl } from "../notes/remote-image.ts";
@@ -311,6 +312,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   });
   stores.agent.useGlossary(async () => (await stores.dictionary.load()).map((t) => t.term));
   stores.agent.useWriter(writerFromCapabilities(capabilities));
+  stores.agent.useCalendar(calendarFromCapabilities(capabilities));
   // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
   stores.agent.useUndo(undoNotesFromCapabilities(capabilities));
   // As rotinas (spec #12150): como no app. A conferência pode ser mais curta na prova (`KIWI_ROUTINE_TICK_MS`).

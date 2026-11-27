@@ -40,6 +40,7 @@ import {
   type ProposalProject,
 } from "../proposals.ts";
 import { removedSecrets, type DoubtDecider, type SecretGuard } from "../../guardrail/filter.ts";
+import { CALENDAR_TOOL_DEFS, CalendarToolError, type CalendarSink, type CalendarToolName, calendarTool, KIWI_CALENDAR_TOOL_NAMES } from "./calendar-tools.ts";
 import type { SummaryFields, SummarySignal } from "../summary.ts";
 import { noteWithReferences, REFERENCES_MAX, type ReferenceItem } from "../references.ts";
 import { customRoutineInput, DEFAULT_ROUTINES_FOLDER, ROUTINE_NAME_MAX, ROUTINE_PROMPT_MAX, type CustomRoutineInput, type RoutineDays } from "../../shared/agent-routines.ts";
@@ -123,7 +124,14 @@ export const KIWI_SPEECH_TOOL_NAMES = ["cat_speak"] as const;
 export const SPEAK_MAX_CHARS = 300;
 /** Quantas frases o `cat_speak` aceita, depois do texto para a fala. */
 export const SPEAK_MAX_FRASES = 2;
-export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES, ...KIWI_PROPOSE_TOOL_NAMES, ...KIWI_MEMORY_TOOL_NAMES, ...KIWI_SPEECH_TOOL_NAMES] as const;
+export const KIWI_TOOL_NAMES = [
+  ...KIWI_READ_TOOL_NAMES,
+  ...KIWI_WRITE_TOOL_NAMES,
+  ...KIWI_PROPOSE_TOOL_NAMES,
+  ...KIWI_MEMORY_TOOL_NAMES,
+  ...KIWI_SPEECH_TOOL_NAMES,
+  ...KIWI_CALENDAR_TOOL_NAMES,
+] as const;
 export type KiwiToolName = (typeof KIWI_TOOL_NAMES)[number];
 
 export interface KiwiToolDef {
@@ -805,6 +813,8 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     },
     speech: true,
   },
+  // O Calendário (spec #32129, T32156): em `calendar-tools.ts`.
+  ...CALENDAR_TOOL_DEFS,
 ];
 
 /** As ferramentas que o servidor oferece: as de escrita só com um `writer`, e a proposta só com quem a guarda. */
@@ -884,6 +894,8 @@ export interface KiwiToolContext {
   now?: () => Date;
   /** O registro de entrega da janela (ADR 0013 peça 4, T14682): a nota que o agente já tem não vai de novo. */
   registro?: RegistroEntrega;
+  /** O Calendário (spec #32129, T32156): o mesmo da tela. Sem ele, as ferramentas do calendário não existem. */
+  calendar?: CalendarSink;
 }
 
 /** A memória do agente: anotar e esquecer, com o total de fatos depois. */
@@ -1232,6 +1244,18 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
       if (name === "notes_add_references") return await proposeReferences(ctx.reader, ctx.proposals, raw, ctx.guard);
       if (name === "routine_propose") return await proposeRoutine(ctx.proposals, raw, ctx.guard);
       return await propose(ctx.reader, ctx.proposals, raw, ctx.guard);
+    }
+    if ((KIWI_CALENDAR_TOOL_NAMES as readonly string[]).includes(name)) {
+      if (!ctx.calendar) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta \`${name}\``);
+      const r = await calendarTool(
+        { calendar: ctx.calendar, ...(ctx.writer ? { writer: ctx.writer } : {}), ...(ctx.journal ? { journal: ctx.journal } : {}), ...(ctx.guard ? { guard: ctx.guard } : {}), ...(ctx.decider ? { decider: ctx.decider } : {}), now: ctx.now?.() ?? new Date() },
+        name as CalendarToolName,
+        raw,
+      ).catch((e) => {
+        throw e instanceof CalendarToolError ? new ToolError(e.code, e.message) : e;
+      });
+      if (ctx.registro && r.change) await afterWrite(ctx, r.change);
+      return r;
     }
     if ((KIWI_WRITE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.writer || !ctx.journal) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta \`${name}\``);

@@ -68,6 +68,8 @@ export function ligarVozDoGato<P extends PreviaDaVoz>(o: VozDoGatoOpts<P>): VozD
     evento: falaNaTela((e) => o.naTela(e)),
     ...(o.log ? { log: o.log } : {}),
   });
+  // O aviso falado (o Calendário, o "Testar") também cala quando o mic abre: senão cai na transcrição do pedido.
+  const offUmaVez = [o.helper?.on("agent.record.started", pararUmaVez), o.helper?.on("meeting.started", pararUmaVez)];
   const off = ligarFalaPlayer(player, {
     agent: o.agent,
     ...(o.helper ? { helper: o.helper } : {}),
@@ -98,6 +100,7 @@ export function ligarVozDoGato<P extends PreviaDaVoz>(o: VozDoGatoOpts<P>): VozD
       pararUmaVez();
       previa?.parar();
       off();
+      for (const f of offUmaVez) f?.();
     },
   };
 }
