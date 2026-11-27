@@ -8,8 +8,10 @@ import {
   type AlertItem,
   alertTexts,
   CALENDAR_NOTICE_PREFIX,
+  alertsVia,
   CalendarAlerts,
   type CalendarAlertsDeps,
+  dictationRecording,
   type DueAlert,
   FIRED_KEEP_MS,
   firedFile,
@@ -239,5 +241,36 @@ describe("o arquivo dos avisos dados", () => {
     expect(await store.load()).toEqual({});
     writeFileSync(file, JSON.stringify({ k: "x", j: 2 }));
     expect(await store.load()).toEqual({ j: 2 });
+  });
+});
+
+describe("as pontas do agendador", () => {
+  test("o alertsVia lê do dia do começo até o fim do dia seguinte ao do fim (o `to` do Calendário não entra)", async () => {
+    const asked: { from: string; to: string }[] = [];
+    const seen: [number, number][] = [];
+    const via = alertsVia(
+      async (range) => (asked.push(range), { items: [delivery] }),
+      (items, from, to) => (seen.push([from, to]), items.map((item) => ({ item, at: at(item.start) - 86_400_000, key: "k" }))),
+    );
+    const out = await via(at("2026-11-27T23:50"), at("2026-11-28T00:20"));
+    // O aviso de véspera de um item do dia 29 cai no dia 28: o 29 tem de vir na leitura.
+    expect(asked).toEqual([{ from: "2026-11-27", to: "2026-11-30" }]);
+    expect(seen).toEqual([[at("2026-11-27T23:50"), at("2026-11-28T00:20")]]);
+    expect(out).toHaveLength(1);
+  });
+
+  test("o ditado gravando: do started ao stopped, cancelado, erro ou helper novo; o stop solta os ouvintes", () => {
+    const fns = new Map<string, () => void>();
+    let offs = 0;
+    const rec = dictationRecording((t, fn) => (fns.set(t, fn), () => void offs++));
+    expect(rec.recording()).toBe(false);
+    for (const end of ["record.stopped", "record.cancelled", "record.error", "ready"]) {
+      fns.get("record.started")!();
+      expect(rec.recording()).toBe(true);
+      fns.get(end)!();
+      expect(rec.recording()).toBe(false);
+    }
+    rec.stop();
+    expect(offs).toBe(5);
   });
 });

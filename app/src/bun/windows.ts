@@ -39,6 +39,10 @@ import { MeetingHostError } from "./meetings.ts";
 import { readerFromCapabilities } from "../agent/tools/reader.ts";
 import { readNoteModel } from "../agent/note-model.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
+import { calendarFromCapabilities } from "../agent/tools/calendar-tools.ts";
+import { alertsBetween } from "./calendar.ts";
+import { alertsVia, CalendarAlerts, firedFile } from "./calendar-alerts.ts";
+import type { Notices } from "./notices.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { HomeChanges } from "./home.ts";
 import { ligarVozDoGatoNoApp } from "./cat-voice-output.ts";
@@ -398,6 +402,29 @@ stores.agent.useLinkResolver(async () => {
 });
 stores.agent.useGlossary(async () => (await stores.dictionary.load()).map((t) => t.term));
 stores.agent.useWriter(writerFromCapabilities(capabilities));
+// O Calendário para o agente (spec #32129, T32156): o mesmo da tela, pelas capacidades.
+stores.agent.useCalendar(calendarFromCapabilities(capabilities));
+
+/**
+ * Os avisos do Calendário (spec #32129, T32156): a notificação e a fala do Kiwi na hora do aviso de cada item, com a
+ * janela fechada também. Liga quando as notificações carregam (`index.ts`); a fala, quando o helper sobe. A fala espera
+ * calada com uma reunião ou um ditado gravando. Nada liga o microfone.
+ */
+export function startCalendarAlerts(notices: Pick<Notices, "post">, dictating: () => boolean): CalendarAlerts {
+  const calendar = calendarFromCapabilities(capabilities);
+  const alerts = new CalendarAlerts({
+    now: Date.now,
+    alertsBetween: alertsVia(calendar.items, alertsBetween),
+    notices,
+    speak: (text) => (catVoiceOutput ? catVoiceOutput.falarUmaVez(kiwiVoice.sintese, text) : Promise.reject(new Error("helper_unavailable"))),
+    recording: () => dictating() || (session.get()?.meetings.live() ?? NOT_RECORDING).recording,
+    fired: firedFile(path.join(stores.dir, "calendar-alerts.json")),
+    locale: () => mainLocale.get(),
+    log: (m) => console.log(`[calendar] ${m}`),
+  });
+  alerts.start();
+  return alerts;
+}
 // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
 stores.agent.useUndo(undoNotesFromCapabilities(capabilities));
 // As rotinas (spec #12150): o agendador confere a hora com o app aberto, e pega a que passou com o app fechado.

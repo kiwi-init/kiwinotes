@@ -9,10 +9,11 @@
 // 3. **Reunião amanhã cedo:** uma reunião de amanhã antes das 10h com aviso menor que 30 min. Oferece 30 min antes.
 // O "Agora não" guarda a chave da sugestão (a tela guarda), e a mesma não volta.
 
+import type { CalendarKind, CalendarNotify } from "./calendar.ts";
 import { type Locale, translate } from "./i18n/index.ts";
 
-export type CalendarKiwiKind = "meeting" | "reminder" | "task" | "note" | "focus";
-export type CalendarKiwiNotify = "none" | "atTime" | "10m" | "30m" | "dayBefore";
+export type CalendarKiwiKind = CalendarKind;
+export type CalendarKiwiNotify = CalendarNotify;
 
 /** O que a sugestão usa do `CalendarItem` (src/shared/calendar.ts, T32154). */
 export interface SuggestItem {

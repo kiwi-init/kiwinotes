@@ -18,6 +18,7 @@
 // - **O desfazer** (spec #9353): com as notas do desfazer (`useUndo`), o `agent.undo` volta o que um pedido mudou, pela
 //   cópia do registro (`undo.ts`). É da pessoa: não precisa do agente ligado e não vira ferramenta dele. Um por vez.
 
+import type { CalendarSink } from "./tools/calendar-tools.ts";
 import { lastSummaryDate, mainNoteWithSummary, SUMMARY_TITLE, summarySection, summarySince } from "./summary.ts";
 import { noteWithReferences, REFERENCES_TITLE } from "./references.ts";
 import type { SummarySettings } from "../shared/summary-settings.ts";
@@ -717,6 +718,12 @@ export class AgentService {
   useWriter(writer: VaultWriter): void {
     this.writer = this.live(writer);
   }
+
+  /** O Calendário (spec #32129, T32156): o `kiwi achar/agenda` e as escritas nele. Vale a partir da próxima abertura. */
+  useCalendar(calendar: CalendarSink): void {
+    this.calendar = calendar;
+  }
+  private calendar: CalendarSink | null = null;
 
   /**
    * O Kiwi escrevendo ao vivo (spec #20843): as escritas do agente que a janela das Notas anima. Quem manda o
@@ -2514,6 +2521,7 @@ export class AgentService {
             speech: () => this.speechSink(),
             version: this.d.version,
             registro: this.registro,
+            ...(this.calendar ? { calendar: this.calendar } : {}),
             onCall: (e) => this.onToolCall(e),
           })
         : null;

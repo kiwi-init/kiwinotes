@@ -175,3 +175,39 @@ export class CalendarAlerts {
     void this.d.speak(speech).catch((e) => this.d.log?.(`calendar-alerts: couldn't speak: ${e instanceof Error ? e.message : String(e)}`));
   }
 }
+
+const isoDay = (ms: number) => {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/**
+ * Os avisos de um período pelos itens do Calendário: lê do dia de `fromMs` até o fim do dia seguinte ao de `toMs` (o
+ * `🔔 1d` de um item de amanhã avisa hoje; o `to` do `calendar.items` não entra) e deixa o `alertsBetween` (T32154)
+ * escolher os da janela.
+ */
+export function alertsVia<I extends AlertItem>(
+  items: (range: { from: string; to: string }) => Promise<{ items: readonly I[] }>,
+  between: (items: readonly I[], fromMs: number, toMs: number) => DueAlert<I>[],
+): (fromMs: number, toMs: number) => Promise<DueAlert<I>[]> {
+  return async (fromMs, toMs) => {
+    const r = await items({ from: isoDay(fromMs), to: isoDay(dayOf(toMs) + 60 * 3_600_000) });
+    return between(r.items, fromMs, toMs);
+  };
+}
+
+/**
+ * O ditado gravando agora, pelos eventos do helper: do `record.started` ao `record.stopped` (ou o cancelado, o erro, ou
+ * um helper novo). A fala do aviso espera calada enquanto isso.
+ */
+export function dictationRecording(on: (type: "record.started" | "record.stopped" | "record.cancelled" | "record.error" | "ready", fn: () => void) => () => void): {
+  recording(): boolean;
+  stop(): void;
+} {
+  let live = false;
+  const offs = [
+    on("record.started", () => (live = true)),
+    ...(["record.stopped", "record.cancelled", "record.error", "ready"] as const).map((t) => on(t, () => (live = false))),
+  ];
+  return { recording: () => live, stop: () => offs.forEach((off) => off()) };
+}

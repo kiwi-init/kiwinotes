@@ -13,6 +13,7 @@
 // O protocolo, no mínimo que o cliente MCP do Claude Code usa: `initialize`, `notifications/*`, `ping`, `tools/list` e
 // `tools/call`. O GET (o stream de avisos do servidor) e o DELETE (fechar a sessão) dão 405, como o transporte permite.
 
+import type { CalendarSink } from "./calendar-tools.ts";
 import type { RegistroEntrega } from "../entrega.ts";
 import { timingSafeEqual } from "node:crypto";
 
@@ -84,6 +85,8 @@ export interface KiwiToolServerOptions {
   version?: string;
   /** O registro de entrega da janela (ADR 0013 peça 4, T14682). */
   registro?: RegistroEntrega;
+  /** O Calendário (spec #32129, T32156): com ele, o `kiwi achar/agenda`, `escrever/agendar` e `escrever/remarcar`. */
+  calendar?: CalendarSink;
   onCall?: (e: ToolCallEvent) => void;
   /** Cada método MCP que chegou com a senha certa (a prova do #7496 confere o `tools/list` do Claude Code). */
   onRequest?: (method: string) => void;
@@ -224,11 +227,12 @@ export class KiwiToolServer {
           const proposals = this.o.proposals ? { proposals: this.o.proposals } : {};
           const memory = this.o.memory ? { memory: this.o.memory } : {};
           const registro = this.o.registro ? { registro: this.o.registro } : {};
+          const calendar = this.o.calendar ? { calendar: this.o.calendar } : {};
           const sink = this.o.speech?.();
           const speech = sink ? { speech: sink } : {};
           const ctx = this.writes
-            ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal, ...guard, ...economy, ...proposals, ...memory, ...registro, ...speech }
-            : { reader: this.o.reader, ...guard, ...economy, ...proposals, ...memory, ...registro, ...speech };
+            ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal, ...guard, ...economy, ...proposals, ...memory, ...registro, ...speech, ...calendar }
+            : { reader: this.o.reader, ...guard, ...economy, ...proposals, ...memory, ...registro, ...speech, ...calendar };
           const r = await runKiwiCall(ctx, m.params?.arguments, { writes: this.writes, proposes: !!this.o.proposals, memory: !!this.o.memory, speech: !!sink });
           const text = JSON.stringify(r.value);
           const read = r.tool === "notes_read" ? (r.value as { path?: unknown } | null)?.path : undefined;
