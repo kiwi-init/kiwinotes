@@ -78,9 +78,10 @@ export class PreciseDictation {
     if (!enabled) {
       if (was || this.current.phase !== "off") this.failedAt = -Infinity;
       this.set({ phase: "off" });
-      await this.o.send({ type: "config.set", precise: null }).catch(() => undefined);
-      // Um download pela metade para aqui: o `.part` sai junto, e nada fica no lugar do modelo.
+      // Um download pela metade para aqui: o `.part` sai junto, e nada fica no lugar do modelo. O abort vem antes do
+      // `send` (#455): um ligar logo depois já o vê abortado, e não herda o download que vai cair.
       this.abort?.abort();
+      await this.o.send({ type: "config.set", precise: null }).catch(() => undefined);
       await this.downloading?.catch(() => null);
       // Só quando a pessoa desliga: o `ready` de um helper com o modo desligado não apaga nada (KIWI_MODELS_DIR é
       // compartilhado entre as pastas de teste dos agentes, como na busca pelo sentido).
@@ -90,6 +91,10 @@ export class PreciseDictation {
     }
     if (!was) this.failedAt = -Infinity;
     if (this.current.phase === "error" && this.now() - this.failedAt < RETRY_MS) return;
+    // Um download que o desligar abortou ainda está saindo (#455): o ligar de novo espera ele sair e começa outro. Sem
+    // isto, o `ensure()` devolvia o abortado, e o `aborted` virava "falhou o download" por 10 min.
+    while (this.abort?.signal.aborted && this.downloading) await this.downloading.catch(() => null);
+    if (generation !== this.generation) return;
     let file: string;
     try {
       file = await this.ensure();
@@ -123,11 +128,15 @@ export class PreciseDictation {
   }
 
   private ensure(): Promise<string> {
-    this.downloading ??= (async () => {
+    if (this.downloading) return this.downloading;
+    // O controle nasce junto do download, antes do 1º await (#455): um desligar logo no começo também o aborta.
+    const abort = (this.abort = new AbortController());
+    this.downloading = (async () => {
       const present = await modelPresent(this.o.modelsDir, this.manifest);
+      // Desligado enquanto olhava a pasta: sai daqui, sem pôr "downloading" num modo que já está off.
+      if (abort.signal.aborted) throw new Error("aborted");
       if (!present && this.o.download === false) throw new Error("no download here, and the model isn't in the folder");
       if (!present) this.set({ phase: "downloading", done: 0, total: modelBytes(this.manifest) });
-      const abort = (this.abort = new AbortController());
       const get: Fetcher = this.o.fetch ?? ((url, init) => fetch(url, { redirect: "follow", signal: init?.signal ?? abort.signal }));
       // O `signal` do ensureModel segue o daqui e também o prazo sem bytes (T7941): parado, vira erro.
       await ensureModel(this.o.modelsDir, this.manifest, {
@@ -141,7 +150,7 @@ export class PreciseDictation {
       return this.modelPath();
     })().finally(() => {
       this.downloading = null;
-      this.abort = null;
+      if (this.abort === abort) this.abort = null;
     });
     return this.downloading;
   }
