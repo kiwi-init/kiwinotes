@@ -1152,8 +1152,13 @@ final class Helper {
             let ask = message.fields["ask"] as? Bool ?? false
             let links = message.fields["links"]
             let summary = message.string("summary")
+            // O andamento do pedido (spec #32534, T33177): com o [Parar] e o que a pessoa falou.
+            let progress = message.fields["progress"] as? Bool ?? false
+            let heard = message.string("heard")
             let cat = catOverlay
-            MainActor.assumeIsolated { cat.bubble(text: text, error: error, ask: ask, links: links, summary: summary) }
+            MainActor.assumeIsolated {
+                cat.bubble(text: text, error: error, ask: ask, links: links, summary: summary, progress: progress, heard: heard)
+            }
             reply(id, ok: true)
         case "speech.play":
             // Um pedaço da voz do gato (T27825), em fila. A resposta leva o volume da saída; o `speech.played` com o

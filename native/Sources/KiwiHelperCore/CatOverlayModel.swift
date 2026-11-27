@@ -291,10 +291,14 @@ public enum CatOverlayBubble {
 
     /// `ask`: com a pergunta "Precisa de mais alguma coisa?" embaixo da resposta (spec #13380). `summary`: de onde sai
     /// o resumo do balão fechado (a fala do `cat_speak` ou a resposta final, spec #27881); `text` é o que o aberto mostra.
-    public static func script(text: String?, error: Bool, ask: Bool = false, links: [[String: Any]] = [], summary: String? = nil) -> String {
+    /// `progress` (spec #32534, T33177): o andamento do pedido, com o [Parar]; `heard`, o que a pessoa falou, em cima.
+    public static func script(text: String?, error: Bool, ask: Bool = false, links: [[String: Any]] = [], summary: String? = nil,
+                              progress: Bool = false, heard: String? = nil) -> String {
         guard let text, !text.isEmpty else { return "null" }
         var object: [String: Any] = ["text": text, "error": error]
         if ask { object["ask"] = true }
+        if progress { object["progress"] = true }
+        if let heard, !heard.isEmpty { object["heard"] = heard }
         if let summary, !summary.isEmpty, summary != text { object["summary"] = summary }
         if !links.isEmpty { object["links"] = links }
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
