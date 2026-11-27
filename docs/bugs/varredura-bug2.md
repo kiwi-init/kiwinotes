@@ -58,7 +58,7 @@ Tudo rodou na `main` em `e613641a`, pela CLI headless e pelo WebKit headless, co
 - `swift test` em `native/`: 445 pass.
 - `first-run-check` (as permissões pelo helper falso), `history-ui-check` e `history-english-check`: ok.
 - `mem:scenarios` roteiro 2 (50 ditados do `say`, todos ok): o principal foi de 69,7 a 81,9 MB no pico e ficou em 73. O helper foi de 40,9 a 48,7 MB no pico e ficou em 26,9.
-- A CPU em repouso (`cpu:scenarios --only repouso,repouso-foco`): o repouso ficou em 0,59% somado (a tela em 0,33% e o helper em 0,13%) e o repouso com a janela na frente em 0,75% (a tela em 0,53% e o helper em 0,10%). Tudo abaixo dos tetos, que são 1% para a tela, 1% para o helper e 2% somado. Os roteiros de índice ficaram com o bug1, nas Notas.
+- A CPU em repouso (`cpu:scenarios --only repouso,repouso-foco`): o repouso ficou em 0,59% somado (a tela em 0,33% e o helper em 0,13%) e o repouso com a janela na frente em 0,75% (a tela em 0,53% e o helper em 0,10%). Tudo abaixo dos tetos, que são 1% para a tela, 1% para o helper e 2% somado. Os roteiros de índice não rodaram nesta varredura: nem o bug1 nem o bug2 os rodou, e quem os cobre é o CI da `main`.
 - As atualizações: o `compareVersions` com `ANO.MÊS.N`, rc e `v`. A trava do canal de UI (`ui-channel-fetch`) recusa `..`, `%2e%2e`, query, usuário e outro host no redirect.
 - O log: o `kiwi.log` de uma sessão inteira de ditado. Só a nota rápida vazava texto (#456).
 
