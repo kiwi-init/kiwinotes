@@ -187,6 +187,16 @@ describe("a ida e a volta quadro a quadro (60 Hz)", () => {
     });
   }
 
+  test("no fim da volta a pílula suga: a gota entra nela com embalo, sem se arrastar até sumir", () => {
+    for (const { g } of BARS) {
+      const back = gooPlan(g, gooRest(true, g), false);
+      const last = back.at(-2)!;
+      expect(last.attached).toBe(true);
+      // Sem a sucção ela chegava a 0,07 px/ms (pouco mais de 1 px por quadro de 60 Hz).
+      expect(Math.abs(last.v)).toBeGreaterThan(0.1);
+    }
+  });
+
   test("o tempo acompanha a distância: na janela de 1600 px o pico de velocidade não dobra", () => {
     for (const side of ["end", "start"] as const) {
       const peak = (W: number) => Math.max(...deltas(ida(bar(W, side)).map((s) => reach(bar(W, side), whole(bar(W, side), s)))));
@@ -246,6 +256,14 @@ describe("o plano é sempre finito", () => {
     expect(gooAt(plan, 1e9)).toBe(plan.at(-1)!);
     expect(gooAt(plan, Number.NaN)).toBe(plan[0]!);
     expect(gooAt(plan, gooPlanMs(plan) / 2)).toBe(plan[Math.round((plan.length - 1) / 2)]!);
+  });
+
+  test("uma mola que não assenta (um número ruim no estado) acaba no teto, no repouso do alvo", () => {
+    for (const has of [true, false]) {
+      const plan = gooPlan(g1000, { U: Number.NaN, v: 0, attached: false, tip: 0, since: 0 }, has);
+      expect(plan.length).toBeLessThanOrEqual(cap);
+      expect(gooAtRest(g1000, plan.at(-1)!, has)).toBe(true);
+    }
   });
 
   test("um `g` extremo, um `dt` enorme e o alvo trocando a cada quadro terminam", () => {
