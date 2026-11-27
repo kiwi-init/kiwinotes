@@ -263,7 +263,16 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
         // Mover uma vez de uma repetição move a série inteira pelo mesmo tanto.
         const shift = at.occurrence && cur && u.start !== undefined ? toMs(u.start) - toMs(at.occurrence === cur.start.slice(0, 10) ? cur.start : `${at.occurrence}${cur.start.slice(10)}`) : 0;
         const start = u.start !== undefined ? (at.occurrence && cur ? shiftBy(cur.start, shift) : u.start) : undefined;
-        const end = u.end !== undefined ? (u.end && at.occurrence && cur?.end ? shiftBy(cur.end, toMs(u.end) - toMs(occurrenceOf(cur.end, cur.start, at.occurrence))) : u.end) : undefined;
+        const asked = u.end !== undefined ? (u.end && at.occurrence && cur?.end ? shiftBy(cur.end, toMs(u.end) - toMs(occurrenceOf(cur.end, cur.start, at.occurrence))) : u.end) : undefined;
+        // Só o start: o fim anda junto, e a duração fica, como no arrastar da tela (#449).
+        const timed = u.allDay !== true && !!cur && !isDay(cur.start);
+        const end = asked === undefined && start !== undefined && timed && cur?.end && !isDay(start) ? shiftBy(cur.end, toMs(start) - toMs(cur.start)) : asked;
+        // Só um dos dois: o outro vem da linha, e o par passa pela mesma régua do checkTimes.
+        const from = start ?? cur?.start;
+        if (timed && typeof end === "string" && from && !isDay(from)) {
+          if (toMs(end) <= toMs(from)) throw new CalendarError("E_BAD_ARGS", "calendar.update: end must be after start");
+          if (toMs(end) - toMs(from) > 24 * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
+        }
         patch = { ...patch, ...(start !== undefined ? { start } : {}), ...(end !== undefined ? { end } : {}), ...(u.allDay !== undefined ? { allDay: u.allDay } : {}) };
         if (!cur && start === undefined) throw new CalendarError("E_BAD_ARGS", "an undated item needs start");
       }
