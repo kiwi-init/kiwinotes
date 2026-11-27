@@ -183,7 +183,8 @@ try {
         await p.locator(`${pane} .kn-cal-card [data-note-link]`).first().click();
         await p.waitForSelector('.kn-hub-pane[data-section="notes"]:not([hidden])');
         // A pendência é a 3ª linha da nota; a marca some depois da piscada, então espera logo depois do clique.
-        await p.waitForSelector('.kn-hub-pane[data-section="notes"] [data-flash-line="3"]');
+        const flashed = await p.waitForSelector('.kn-hub-pane[data-section="notes"] [data-flash-line="3"]');
+        assert.match(await flashed.innerText(), /Revisar o orçamento/, "a linha marcada é a da pendência");
         checks.push(`${lang}: o link do cartão abre "Projeto X/Pendências" nas Notas, com a linha 3 marcada`);
 
         // 5. A Semana da Início tem o "Abrir o calendário".
