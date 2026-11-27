@@ -75,6 +75,13 @@ try {
   // O hub está na frente: o gato que ouve é o do canto.
   assert.equal((await ctx.send({ cmd: "hubView", view: true })).ok, true);
 
+  // O que a região viva do balão anuncia ao leitor de tela, cada troca de texto (o mouse não conta).
+  await p.evaluate(() => {
+    const said: string[] = ((window as any).__announced = []);
+    const region = () => document.querySelector(".kn-visually-hidden[aria-live]");
+    new MutationObserver(() => { const t = region()?.textContent?.trim(); if (t) said.push(t); }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  const announced = () => p.evaluate(() => (window as any).__announced as string[]);
   const bubbleNow = () => p.evaluate(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble')?.textContent?.trim() ?? "");
   const catState = () => p.locator(".kn-kiwicat").getAttribute("data-state");
   /** O balão à vista (T32766: só com o mouse no Kiwi) e a marca do não visto, do `.kn-hub`. */
@@ -84,6 +91,7 @@ try {
   async function nothing(name: string, wav: string, shortcut: string, key: string) {
     const count = (await invoke("agent.activity", {})).requests.length;
     const start = events.length;
+    const heardBefore = (await announced()).length;
     // O mouse longe do Kiwi: o balão só aparece com ele em cima (T32766).
     await p.mouse.move(40, 40);
     assert.equal((await ctx.send({ cmd: "agentTalk", wav })).ok, true);
@@ -96,6 +104,8 @@ try {
     await waitFor(`${name}: the text in the bubble`, async () => (await bubbleNow()).includes(LINE(key)), 1000);
     await waitFor(`${name}: the unseen mark`, async () => (await hub()).unseen === "true", 1000);
     assert.notEqual((await hub()).peek, "true", `${name}: o balão sem o mouse`);
+    // O leitor de tela ouve com o balão escondido, e de novo num segundo "Não ouvi" igual.
+    await waitFor(`${name}: the screen reader`, async () => (await announced()).slice(heardBefore).includes(LINE(key)), 1000);
     await peekKiwi(p);
     await waitFor(`${name}: the bubble on the mouse`, async () => (await hub()).peek === "true", 1000);
     // O print depois da entrada do balão (o fade), ainda bem dentro dos 2,2 s.
@@ -107,13 +117,15 @@ try {
     assert.ok(gone >= NOT_HEARD_MS - 400, `${name}: o balão saiu cedo (${gone} ms)`);
     await waitFor(`${name}: the Kiwi at rest`, async () => (await catState()) !== "erro", 1500);
     assert.equal((await invoke("agent.activity", {})).requests.length, count, `${name}: nada vai ao agente`);
-    report.checks.push(`${name}: no request; confused Kiwi; "${LINE(key)}" hidden with the unseen mark, shown with the mouse on the Kiwi; gone after ${gone} ms (shortcut ${shortcut})`);
+    report.checks.push(`${name}: no request; confused Kiwi; "${LINE(key)}" hidden with the unseen mark and read by the live region, shown with the mouse on the Kiwi; gone after ${gone} ms (shortcut ${shortcut})`);
   }
 
   await nothing("curta", say("curta", "é"), "control", "Control");
   // Outro atalho nos Ajustes: o texto acompanha.
   await invoke("settings.set", { shortcuts: { agent: "option+space" } });
   await nothing("silencio", say("silencio", "[[slnc 1500]]"), "option+space", lang === "en" ? "⌥ Space" : "⌥ Espaço");
+  // O mesmo aviso de novo: a região viva o lê outra vez.
+  await nothing("de-novo", say("de-novo", "é"), "option+space", lang === "en" ? "⌥ Space" : "⌥ Espaço");
   console.log(JSON.stringify({ ok: true, ...report }));
 } finally {
   offEvents?.();

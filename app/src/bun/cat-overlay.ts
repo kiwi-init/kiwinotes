@@ -90,11 +90,11 @@ export function shiftLinks(links: readonly BubbleLink[] | undefined, start: numb
 /** A pergunta antes de sair (spec #13380). A página a mostra na língua do app (T29351); esta é a do catálogo em pt. */
 export const ASK_LINE = ptCatOverlay["catOverlay.ask"];
 
-/** O balão do erro: o que a pessoa lê quando a fala não virou resposta, na língua do app (T29351). */
 /** O "Não ouvi" (spec #32534, Cena 4), com o atalho dos Ajustes como a tela o mostra ("Control", "⌥ Espaço"). */
 export const notHeardLine = (shortcut: string, locale: Locale = mainLocale.get()) =>
   translate(locale, "catOverlay.notHeard", { key: shortcutLabel(shortcut, locale) });
 
+/** O balão do erro: o que a pessoa lê quando a fala não virou resposta, na língua do app (T29351). */
 export const voiceErrorLine = (message: string, locale: Locale = mainLocale.get()) =>
   translate(locale, "catOverlay.voiceError", { message: message.trim() || translate(locale, "catOverlay.unknownError") });
 
@@ -460,11 +460,6 @@ export class CatOverlay {
     return { text, ...(shown.length ? { links: shown } : {}), ...(summary !== text ? { summary } : {}) };
   }
 
-  /**
-   * O balão (spec #12938, #13378, #13380): a resposta inteira, de uma vez, sem troca de frase por tempo. O gato fica: a
-   * espera (`idleAsk`, a pergunta e `askLeave`) começa agora, e a pessoa com o balão (`hold`) a segura. Um pedido novo, o
-   * hub à vista, o × ou o overlay desligado tiram o balão.
-   */
   /** Um aviso curto no balão: fica `stay` (o mouse em cima segura) e o gato sai, sem a espera da resposta. */
   private shortNotice(text: string, stay: number, exit: number): void {
     this.bubbleShown = true;
@@ -479,6 +474,11 @@ export class CatOverlay {
     } else this.linger(stay, exit);
   }
 
+  /**
+   * O balão (spec #12938, #13378, #13380): a resposta inteira, de uma vez, sem troca de frase por tempo. O gato fica: a
+   * espera (`idleAsk`, a pergunta e `askLeave`) começa agora, e a pessoa com o balão (`hold`) a segura. Um pedido novo, o
+   * hub à vista, o × ou o overlay desligado tiram o balão.
+   */
   private speak(text: string, error: boolean, stay: number, exit: number, links?: BubbleLink[], summary?: string): void {
     this.notice = null;
     if (!text) return this.linger(stay, exit);
