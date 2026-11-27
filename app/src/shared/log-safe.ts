@@ -11,9 +11,11 @@ export function errorKind(e: unknown): string {
 /**
  * Um caminho absoluto entre aspas (o `open '/…'` e o `path: '/…'` dos erros do fs) vira `'<caminho>'`. O nome pode ter
  * aspas (`Ana's plano.md`), então o caminho vai até a aspa que fecha seguida do que o erro põe depois dele: `,` `]`
- * `}` `)` `;`, o ` -> ` do rename ou o fim da linha (T32572, rodada 1).
+ * `}` `)` `;`, o ` -> ` do rename ou o fim da linha (T32572, rodada 1). Vai até a **última** aspa assim da linha, e não
+ * até a primeira: um nome com aspa e vírgula (`x', y.md`) sairia pela metade (#464). Esconde um pouco a mais, nunca a
+ * menos. Só não passa do ` -> '/…` do rename, que é outro caminho.
  */
-const QUOTED_PATH = /(['"])(?:\/|~\/).*?\1(?=[,\]});]|[ \t]+->|[ \t]*$)/gm;
+const QUOTED_PATH = /(['"])(?:\/|~\/)(?:(?![ \t]+->[ \t]+['"](?:\/|~\/)).)*\1(?=[,\]});]|[ \t]+->|[ \t]*$)/gm;
 
 export function redactQuotedPaths(text: string): string {
   return text.replace(QUOTED_PATH, "$1<caminho>$1");
