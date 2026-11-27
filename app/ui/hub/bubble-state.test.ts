@@ -206,6 +206,22 @@ describe("o balão junto com a voz (T33053, Cena 1)", () => {
     expect(f.view(20)!.stop).toBeUndefined();
   });
 
+  test("dois pedidos falados seguidos: o 2º balão nasce com a 2ª fala, não com a do 1º (o `reset()` solta a fala)", () => {
+    const f = new BubbleFeed(fits(60));
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "speech", text: "Anotei na nota." }), 10);
+    f.event(ev({ type: "done", stopReason: "end_turn", text: "Anotei na nota." }), 20);
+    const primeiro = f.view(20)!;
+    expect(primeiro.text).toBe("Anotei na nota.");
+    f.event(ev({ id: "p2", type: "started" }), 30);
+    f.event(ev({ id: "p2", type: "speech", text: "Marquei para sexta." }), 40);
+    const segundo = f.view(40)!;
+    expect(segundo).toMatchObject({ text: "Marquei para sexta.", more: false });
+    expect(segundo.key).not.toBe(primeiro.key);
+    f.event(ev({ id: "p2", type: "done", stopReason: "end_turn", text: "Marquei para sexta." }), 50);
+    expect(f.view(50)).toEqual(segundo);
+  });
+
   test("cancelado depois da fala: o balão sai; fechado pelo clique: o `done` não o traz de volta", () => {
     const cancelado = run(new BubbleFeed(fits(60)), [{ type: "speech", text: "Anotei na nota." }, { type: "done", stopReason: "cancelled" }]);
     expect(cancelado.view(0)).toBeNull();
