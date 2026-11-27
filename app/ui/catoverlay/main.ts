@@ -39,7 +39,7 @@ interface OverlayStats {
   /** O balão na tela agora (spec #12938), ou null. */
   /** `links` (spec #17683): as notas e os arquivos que o main achou na resposta, que viram link no balão aberto. */
   /** `summary` (spec #27881, T28010): de onde sai o resumo do fechado (a fala do `cat_speak` ou a resposta final). */
-  bubble: { text: string; error: boolean; links: BubbleLink[]; summary?: string } | null;
+  bubble: { text: string; error: boolean; links: BubbleLink[]; summary?: string; progress?: true; heard?: string } | null;
   /** O texto não cabe nas três linhas: o "Ver mais" aparece (spec #13378). */
   bubbleMore: boolean;
   /** O balão aberto no "Ver mais". */
@@ -85,6 +85,8 @@ const bubbleSr = document.getElementById("bubble-sr")!;
 const catClose = document.getElementById("cat-close") as HTMLButtonElement;
 const bubbleAskEl = document.getElementById("bubble-ask")!;
 const bubbleClose = document.getElementById("bubble-close")!;
+const bubbleHeard = document.getElementById("bubble-heard")!;
+const stopButton = document.getElementById("bubble-stop") as HTMLButtonElement;
 
 /** Os textos fixos na língua de agora: o "Ver mais"/"Ver menos", a pergunta, os dois × e o `lang` do documento. */
 function paintTexts() {
@@ -93,6 +95,8 @@ function paintTexts() {
   bubbleAskEl.textContent = t("catOverlay.ask");
   bubbleClose.setAttribute("aria-label", t("catOverlay.closeBubble"));
   catClose.setAttribute("aria-label", t("catOverlay.closeCat"));
+  stopButton.textContent = t("catOverlay.stop");
+  bubbleHeard.title = t("catOverlay.heard");
 }
 paintTexts();
 type KiwiCatMessage = { bubble?: unknown; open?: boolean; close?: unknown; touch?: true; closed?: true; link?: string; openPath?: string };
@@ -137,8 +141,11 @@ bubbleText.addEventListener("click", (e) => {
   e.preventDefault();
   post({ link: a.dataset.href });
 });
-/** O × do balão e o da cabeça: o gato sai na hora. */
-for (const x of [bubbleClose, catClose]) {
+/**
+ * O × do balão e o da cabeça: o gato sai na hora. Com o pedido em andamento, eles e o [Parar] (T33177) cancelam: quem
+ * decide é o main (o `catOverlay.close`).
+ */
+for (const x of [bubbleClose, catClose, stopButton]) {
   x.addEventListener("click", (e) => {
     e.stopPropagation();
     post({ closed: true });
@@ -213,7 +220,8 @@ function setOpen(open: boolean) {
 
 /** O texto passa das três linhas: só aí o "Ver mais" aparece. */
 function measureMore() {
-  stats.bubbleMore = stats.bubble !== null && fitSummary(stats.bubble);
+  // O andamento (T33177) é uma linha: sem "Ver mais".
+  stats.bubbleMore = stats.bubble !== null && fitSummary(stats.bubble) && !stats.bubble.progress;
   bubbleEl.dataset.more = String(stats.bubbleMore);
   if (stats.bubbleOpen && stats.bubble) showFull(stats.bubble.text, stats.bubble.links);
 }
@@ -234,8 +242,14 @@ function setAsk(on: boolean) {
  * O balão (spec #12938): só texto (`textContent`) ou o markdown montado em elementos (spec #17679), nunca HTML. Uma resposta nova chega fechada; a mesma resposta com ou
  * sem a pergunta (spec #13380) só muda a pergunta, e o balão fica como a pessoa deixou.
  */
-function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown; summary?: unknown } | null) {
+function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown; summary?: unknown; progress?: unknown; heard?: unknown } | null) {
   const text = b && typeof b.text === "string" ? b.text : "";
+  // O andamento (spec #32534, T33177): o passo, com o [Parar], e o que a pessoa falou em cima.
+  const progress = b?.progress === true;
+  const heard = progress && typeof b?.heard === "string" && b.heard.trim() ? b.heard : undefined;
+  bubbleEl.dataset.progress = String(!!text && progress);
+  bubbleEl.dataset.heard = String(!!text && !!heard);
+  bubbleHeard.textContent = text ? heard ?? "" : "";
   const summary = b && typeof b.summary === "string" && b.summary.trim() ? b.summary : undefined;
   const links = linksOf(b?.links);
   const ask = b?.ask === true;
@@ -264,8 +278,10 @@ function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: 
   }
   // A mesma resposta que cresceu (T33053, Cena 1): o balão nasceu com a fala e o `done` trouxe o texto inteiro, com a
   // fala de resumo. O de cima não muda, e a marca fica como estava: não é um balão novo.
-  const grew = !!stats.bubble && !stats.bubble.error && b?.error !== true && (stats.bubble.summary ?? stats.bubble.text) === (summary ?? text);
-  stats.bubble = { text, error: b?.error === true, links, ...(summary ? { summary } : {}) };
+  // O passo seguinte do andamento (T33177) também não é um balão novo: o mesmo pedido, outra linha.
+  const grew = !!stats.bubble && !stats.bubble.error && b?.error !== true &&
+    ((stats.bubble.summary ?? stats.bubble.text) === (summary ?? text) || (!!stats.bubble.progress && progress));
+  stats.bubble = { text, error: b?.error === true, links, ...(summary ? { summary } : {}), ...(progress ? { progress: true as const } : {}), ...(heard ? { heard } : {}) };
   setAsk(ask);
   bubbleEl.dataset.error = String(stats.bubble.error);
   bubbleEl.dataset.on = "true";

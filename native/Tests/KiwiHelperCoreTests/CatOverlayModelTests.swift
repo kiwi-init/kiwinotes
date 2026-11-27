@@ -265,6 +265,17 @@ final class CatOverlayModelTests: XCTestCase {
         XCTAssertFalse(CatOverlayBubble.script(text: "Pronto.", error: false, summary: "").contains("summary"))
     }
 
+    func testBubbleScriptCarriesTheProgressAndWhatWasHeard() throws {
+        // O andamento (spec #32534, T33177): o [Parar] e o que a pessoa falou vão só quando vêm; o texto, como dado.
+        let js = CatOverlayBubble.script(text: "Lendo 2 notas", error: false, progress: true, heard: "“resume \"isso\"</script>”")
+        let back = try JSONSerialization.jsonObject(with: Data(js.utf8)) as? [String: Any]
+        XCTAssertEqual(back?["progress"] as? Bool, true)
+        XCTAssertEqual(back?["heard"] as? String, "“resume \"isso\"</script>”")
+        let plain = CatOverlayBubble.script(text: "Pronto.", error: false, heard: "")
+        XCTAssertFalse(plain.contains("progress"))
+        XCTAssertFalse(plain.contains("heard"))
+    }
+
     func testDefaultIsTodayAndOutOfRangeIsClamped() {
         let visible = CGRect(x: 0, y: 80, width: 1512, height: 870)
         // O gato no mesmo lugar de antes; a janela agora é mais larga do lado do balão (T16754).

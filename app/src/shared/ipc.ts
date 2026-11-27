@@ -174,8 +174,10 @@ export type Command =
   /**
    * O balão do gato no overlay (spec #12938): a resposta a uma fala pelo Control, um trecho por vez, ou o erro em
    * palavras (`error`). `text: null` tira o balão. O helper o guarda para quando o gato aparecer e o tira quando ele sai.
+   *
+   * `progress` (spec #32534, T33177): o andamento do pedido, com o [Parar]; `heard`, o que a pessoa falou, em cima.
    */
-  | { type: "catOverlay.bubble"; text: string | null; error?: boolean; ask?: boolean; links?: BubbleLink[]; summary?: string }
+  | { type: "catOverlay.bubble"; text: string | null; error?: boolean; ask?: boolean; links?: BubbleLink[]; summary?: string; progress?: boolean; heard?: string }
   /** A voz do gato (T26829): o nível do que ela tocou, de 0 a 1, para a boca do `falando`; `null` volta ao estado. */
   | { type: "catOverlay.fala"; nivel: number | null }
   /**

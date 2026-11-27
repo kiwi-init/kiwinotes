@@ -147,8 +147,16 @@ export interface AgentSettings {
   economy: boolean;
   /** "Falar com o agente pelo Control" (spec #9876): segurar o Control ouve e soltar manda. Desligado por padrão. */
   controlShortcut: boolean;
-  /** "Mostrar o que eu falei" (spec #26055): o balão do gato mostra a transcrição da fala antes da resposta. Desligado. */
+  /**
+   * "Mostrar o que eu falei" (spec #26055): o balão do Kiwi mostra a transcrição da fala até a resposta. Ligado por
+   * padrão desde o spec #32534 (T33177).
+   */
   showSpokenText: boolean;
+  /**
+   * A pessoa já mexeu no "Mostrar o que eu falei" (T33177), como o `webSearchChosen`: os arquivos de antes têm o `false`
+   * do padrão velho, gravado junto com o resto. Sem esta marca vale o padrão novo (ligado); com ela, a escolha.
+   */
+  showSpokenTextChosen: boolean;
   /**
    * "O gato fala" (spec #26687): num pedido feito por voz, o gato fala 1 ou 2 frases da resposta (o `kiwi falar`, T26709).
    * Desligado por padrão; o interruptor em Ajustes é outra parte do spec.
@@ -228,7 +236,8 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   notifyWaiting: true,
   economy: false,
   controlShortcut: false,
-  showSpokenText: false,
+  showSpokenText: true,
+  showSpokenTextChosen: false,
   catSpeaks: false,
   meetings: DEFAULT_AGENT_MEETING_SETTINGS,
   summary: DEFAULT_SUMMARY_SETTINGS,
@@ -284,7 +293,8 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     notifyWaiting: o.notifyWaiting !== false,
     economy: o.economy === true,
     controlShortcut: o.controlShortcut === true,
-    showSpokenText: o.showSpokenText === true,
+    showSpokenText: o.showSpokenTextChosen === true ? o.showSpokenText === true : DEFAULT_AGENT_SETTINGS.showSpokenText,
+    showSpokenTextChosen: o.showSpokenTextChosen === true,
     catSpeaks: o.catSpeaks === true,
     meetings: sanitizeAgentMeetingSettings(o.meetings),
     instructions: typeof o.instructions === "string" ? o.instructions.replace(/\r\n?/g, "\n").slice(0, 2000) : "",

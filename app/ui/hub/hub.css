@@ -391,6 +391,17 @@
   cursor: pointer;
 }
 
+/* O andamento (spec #32534, T33177): o que a pessoa falou, pequeno e apagado, em cima do passo; o [Parar] embaixo. */
+.kn-bubble-heard {
+  margin-bottom: 2px;
+  color: var(--text-3);
+  font-size: 0.85em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kn-bubble-stop { display: block; }
+
 /* O balão grande do [Ver mais]: a resposta inteira, com rolagem, ancorado no mesmo canto. */
 .kn-bubble-big {
   position: absolute;

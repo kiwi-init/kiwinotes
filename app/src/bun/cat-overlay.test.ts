@@ -36,9 +36,13 @@ function rig() {
     }
     now = end;
   };
-  const cat = new CatOverlay({ send: (c) => sent.push(c), where: (w) => where.push(w) }, clock);
-  const take = () => sent.splice(0);
-  return { cat, sent, where, advance, take };
+  const cancels: number[] = [];
+  const cat = new CatOverlay({ send: (c) => sent.push(c), where: (w) => where.push(w), cancel: () => cancels.push(now) }, clock);
+  /** Os testes da resposta não olham o andamento (T33177), que tem os testes dele. */
+  const opts = { progress: true };
+  const isProgress = (c: CatOverlayCommand) => c.type === "catOverlay.bubble" && c.progress === true;
+  const take = () => sent.splice(0).filter((c) => opts.progress || !isProgress(c));
+  return { cat, sent, where, advance, take, cancels, opts };
 }
 
 const started = (id = "r1"): AgentTurnEvent => ({ type: "started", id }) as AgentTurnEvent;
@@ -352,6 +356,7 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     r.cat.voice({ phase: "processing" });
     r.cat.turn(started(id));
     r.cat.voice({ phase: "asked", text: "como você está, tudo bem?", id });
+    r.opts.progress = false;
     r.take();
   }
   const bubbles = (sent: CatOverlayCommand[]) => sent.filter((c) => c.type === "catOverlay.bubble");
@@ -881,6 +886,8 @@ describe("o aviso de limite de uso no overlay (T29063)", () => {
     r.cat.turn(limit("warning", { percent: 85 }));
     r.take();
     r.advance(readingMs(WARN) + 10);
+    // Lido o aviso, o andamento volta (T33177), com o que a pessoa falou em cima.
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Pensando", error: false, progress: true, heard: "“resume a nota de ontem”" }]);
     r.cat.turn(doneWith("Resumi a nota."));
     expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Resumi a nota.", error: false }]);
   });
@@ -1103,5 +1110,133 @@ describe("a voz do gato no overlay (T26829)", () => {
     r.cat.speech({ turnId: "r1", nivel: 0.5 });
     r.cat.speech({ turnId: "r1", nivel: null });
     expect(falas(r.take())).toEqual([]);
+  });
+});
+
+describe("o andamento e o [Parar] no overlay (spec #32534, Cena 2, T33177)", () => {
+  const NOTA = "Clientes/Ana Souza - contrato.md";
+  const run = (tool: string, target?: string, id = "r1"): AgentTurnEvent =>
+    ({ type: "status", id, status: "running", tool, ...(target ? { target } : {}) }) as AgentTurnEvent;
+  const say = (text: string, id = "r1"): AgentTurnEvent => ({ type: "text", id, text }) as AgentTurnEvent;
+  const bubbles = (sent: CatOverlayCommand[]) => sent.filter((c) => c.type === "catOverlay.bubble");
+  function talk(r: ReturnType<typeof rig>, heard: string | null = "resume as notas da Ana", id = "r1") {
+    r.cat.configure(true);
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.voice({ phase: "processing" });
+    r.cat.turn(started(id));
+    r.cat.voice({ phase: "asked", ...(heard ? { text: heard } : {}), id });
+  }
+
+  test("o passo troca a cada ferramenta, com o que a pessoa falou em cima, e nunca o nome nem o texto de uma nota", () => {
+    const r = rig();
+    talk(r);
+    for (const e of [
+      status("thinking"),
+      run("notes_search"),
+      run("notes_search", "Ana"),
+      run("notes_read"),
+      run("notes_read", NOTA),
+      run("notes_read", "Clientes/Ana Souza - proposta.md"),
+      run("notes_read", NOTA),
+      say("O contrato da Ana vence em março."),
+      run("web"),
+      run("kiwi"),
+    ]) r.cat.turn(e);
+    const sent = bubbles(r.take());
+    expect(sent.map((b) => (b as { text: string }).text)).toEqual([
+      "Pensando", "Procurando nas suas notas", "Lendo uma nota", "Lendo 2 notas", "Escrevendo a resposta", "Pesquisando na web",
+    ]);
+    for (const b of sent) expect(b).toMatchObject({ error: false, progress: true, heard: "“resume as notas da Ana”" });
+    // A fala da pessoa vai em cima; nada da nota nem do que o agente escreveu.
+    expect(JSON.stringify(sent.map(({ heard: _, ...b }) => b))).not.toMatch(/Ana|contrato|Clientes|março|\.md/);
+  });
+
+  test("sem o \"Mostrar o que eu falei\", só o andamento; com o app em English, em inglês", () => {
+    const r = rig();
+    talk(r, null);
+    r.cat.turn(run("notes_read", "a.md"));
+    expect(bubbles(r.take())).toEqual([
+      { type: "catOverlay.bubble", text: "Pensando", error: false, progress: true },
+      { type: "catOverlay.bubble", text: "Lendo uma nota", error: false, progress: true },
+    ]);
+    mainLocale.set("en");
+    try {
+      const e = rig();
+      talk(e, "summarize my notes");
+      for (const t of ["a.md", "b.md"]) e.cat.turn(run("notes_read", t));
+      expect(bubbles(e.take()).at(-1)).toEqual({ type: "catOverlay.bubble", text: "Reading 2 notes", error: false, progress: true, heard: "“summarize my notes”" });
+    } finally {
+      mainLocale.set("pt");
+    }
+  });
+
+  test("a fala (Cena 1) e a resposta tomam o lugar do andamento, e ele não volta", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(run("cat_speak"));
+    r.take();
+    r.cat.turn({ type: "speech", id: "r1", text: "Achei duas notas." } as AgentTurnEvent);
+    r.cat.turn(run("notes_read", NOTA));
+    r.cat.turn(say("Achei duas notas."));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Achei duas notas.", error: false }]);
+    r.cat.turn({ type: "done", id: "r1", stopReason: "end_turn", text: "Achei duas notas." } as AgentTurnEvent);
+    expect(bubbles(r.take()).every((b) => !(b as { progress?: boolean }).progress)).toBe(true);
+  });
+
+  test("um pedido que não veio da fala não mostra o andamento por cima dos apps", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.turn(started());
+    r.cat.turn(status("thinking"));
+    r.cat.turn(run("notes_read", NOTA));
+    expect(bubbles(r.take())).toEqual([]);
+  });
+
+  test("o × (o [Parar]) durante o pedido cancela, e o done cancelado tira o gato pela saída de cancelamento", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(run("notes_search"));
+    r.take();
+    r.cat.close();
+    expect(r.cancels).toHaveLength(1);
+    // Nada sai antes do `done`: o gato fica até o agente parar.
+    expect(r.take()).toEqual([]);
+    expect(r.cat.visible).toBe(true);
+    r.cat.turn(done("cancelled"));
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.cancelExit }]);
+    r.cat.turn(run("web"));
+    expect(r.take()).toEqual([]);
+  });
+
+  test("depois da resposta, o × volta a só fechar, sem cancelar nada", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn({ type: "done", id: "r1", stopReason: "end_turn", text: "Pronto, resumi." } as AgentTurnEvent);
+    r.take();
+    r.cat.close();
+    expect(r.cancels).toEqual([]);
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit }]);
+  });
+
+  test("o attach liga o cancelamento ao agent.cancel", async () => {
+    let cancelled = 0;
+    let turn: (e: AgentTurnEvent) => void = () => {};
+    const a = attachCatOverlay({
+      agent: {
+        status: async () => ({ enabled: true }) as AgentStatus,
+        onStatus: () => () => {},
+        onTurn: (fn) => ((turn = fn), () => {}),
+        cancel: async () => void cancelled++,
+      },
+      settings: { load: async () => ({ ...DEFAULT_SETTINGS, kiwicat: { ...DEFAULT_SETTINGS.kiwicat, overlay: true } }) as AppSettings },
+      helper: { send: async () => ({ ok: true }), onReady: () => () => {} },
+      pageDir: "/exemplo",
+      where: () => {},
+    });
+    await Bun.sleep(0);
+    turn(started());
+    a.overlay.close();
+    expect(cancelled).toBe(1);
+    a.stop();
   });
 });

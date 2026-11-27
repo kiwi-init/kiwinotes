@@ -1277,7 +1277,7 @@ export interface AgentStatus {
   busy: boolean;
   /** "Falar com o agente pelo Control" (1.55.0, spec #9876), desligado por padrão. */
   controlShortcut: boolean;
-  /** "Mostrar o que eu falei" (1.98.0, spec #26055): o balão mostra a transcrição da fala. Desligado por padrão. */
+  /** "Mostrar o que eu falei" (1.98.0, spec #26055): o balão mostra a transcrição da fala. Ligado por padrão desde o spec #32534. */
   showSpokenText: boolean;
   /** "O gato fala" (1.101.0, spec #26687): o pedido por voz pode ter a resposta falada. Desligado por padrão. */
   catSpeaks: boolean;

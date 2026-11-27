@@ -89,7 +89,8 @@ try {
     setInterval(() => w.amostras.push({
       t: Math.round(performance.now()), fala: w.kiwiOverlayStats.fala, estado: root.dataset.estado, falando: root.dataset.falando,
       // O balão (T33053, Cena 1): se está na tela, o texto de cima e se tem o "Ver mais".
-      balao: bubble.dataset.on === "true" ? text.textContent : null, mais: bubble.dataset.more,
+      // O andamento (T33177, Cena 2) vem antes da fala, com o [Parar]: não é o balão da fala.
+      balao: bubble.dataset.on === "true" && bubble.dataset.progress !== "true" ? text.textContent : null, mais: bubble.dataset.more,
     }), 40);
   });
 
@@ -154,7 +155,7 @@ try {
   report.checks.push(`when the voice stops (null), the cat goes back to the state underneath: ${estadoDepois}`);
   // O balão junto com a voz (T33053, Cena 1): o comando dele sai antes do 1º pedaço de áudio, e a página já o mostra,
   // com o texto da fala, na 1ª amostra falando. O `done` só põe o "Ver mais": o texto de cima é o mesmo até o fim.
-  const iBalao = log.findIndex((l) => l.cmd?.type === "catOverlay.bubble" && !!l.cmd.text);
+  const iBalao = log.findIndex((l) => l.cmd?.type === "catOverlay.bubble" && !!l.cmd.text && !(l.cmd as { progress?: boolean }).progress);
   const iAudio = log.findIndex((l) => typeof l.speech === "number");
   const iDone = log.findIndex((l) => l.turn === "done");
   assert.ok(iBalao >= 0 && iAudio >= 0 && iBalao < iAudio && iBalao < iDone, `o balão antes do 1º áudio e do done: ${iBalao}, ${iAudio}, ${iDone}`);

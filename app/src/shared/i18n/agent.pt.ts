@@ -133,7 +133,7 @@ export const ptAgent = {
   "agent.web.off": "Desligado: o Kiwi Notes recusa a busca e a leitura de páginas do agente.",
   "agent.control.label": "Falar com o Kiwi",
   "agent.spoken.label": "Mostrar o que eu falei",
-  "agent.spoken.hint": "Quando você fala com o Kiwi, o balão mostra o que ele entendeu antes da resposta. Desligado, ele só abre com a resposta.",
+  "agent.spoken.hint": "Quando você fala com o Kiwi, o balão mostra em cima o que ele entendeu, até a resposta. Desligado, mostra só o andamento.",
   "agent.control.blocked": "O ditado já usa {hold} (Ajustes › Atalhos). Escolha outro atalho embaixo, ou troque o do ditado.",
   "agent.control.hold": "Segure {hold} para falar com o Kiwi e solte para mandar. O microfone só abre enquanto você segura; o Esc cancela.",
   "agent.control.apple": "O ditado da Apple pode usar \"pressionar Control duas vezes\": troque em Ajustes do Sistema › Teclado › Ditado › Atalho.",

@@ -2655,7 +2655,11 @@ export class AgentService {
     // Spec #9876: "Falar com o agente pelo Control".
     if (o.controlShortcut !== undefined) patch.controlShortcut = o.controlShortcut;
     // Spec #26055: "Mostrar o que eu falei".
-    if (o.showSpokenText !== undefined) patch.showSpokenText = o.showSpokenText;
+    // Ligado por padrão desde o spec #32534 (T33177): a marca guarda que a pessoa escolheu.
+    if (o.showSpokenText !== undefined) {
+      patch.showSpokenText = o.showSpokenText;
+      patch.showSpokenTextChosen = true;
+    }
     // "O gato fala" (spec #26687, T26736): vale no próximo pedido por voz. Ligar não baixa nada; o download é o clique.
     if (o.catSpeaks !== undefined) patch.catSpeaks = o.catSpeaks;
     // Trocar de agente (spec #24666): o aberto fecha antes de gravar, e o próximo pedido abre o escolhido, na sessão dele.

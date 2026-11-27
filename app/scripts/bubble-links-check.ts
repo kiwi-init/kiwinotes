@@ -98,6 +98,8 @@ async function ask(p: Page, text: string) {
   await peekKiwi(p);
   await invoke("agent.ask", { text: `/diga ${text}` });
   await p.waitForSelector(BUBBLE);
+  // O andamento (T33177) vem antes, com o [Parar]: a resposta é o balão sem ele.
+  await p.waitForFunction((sel) => !!document.querySelector(sel) && !document.querySelector(`${sel} .kn-bubble-stop`), BUBBLE, { timeout: 30_000 });
   await p.waitForFunction(() => document.querySelector<HTMLElement>(".kn-kiwicat")?.dataset.state !== "agindo");
   for (let last = "", n = 0; ; n++) {
     const now = await p.locator(`${BUBBLE} .kn-bubble-typed`).innerText();

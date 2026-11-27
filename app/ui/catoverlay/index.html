@@ -89,6 +89,15 @@
         text-decoration: underline; cursor: pointer;
       }
       #bubble-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+      /* O andamento (spec #32534, T33177): o que a pessoa falou, pequeno e apagado, em cima do passo, e o [Parar]. */
+      #bubble-heard { display: none; flex: 0 0 auto; margin-bottom: 2px; color: var(--text-3); font-size: 0.85em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      #bubble[data-heard="true"] #bubble-heard { display: block; }
+      #bubble-stop {
+        display: none; padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; line-height: 1.2;
+        font-weight: 600; text-decoration: underline; cursor: pointer;
+      }
+      #bubble[data-progress="true"] #bubble-stop { display: inline; }
+      #bubble-stop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
       @media (prefers-reduced-motion: reduce) { #cat-mark { transition: none; } #bubble, body[data-balao="abaixo"] #bubble { transition: none; transform: none; } }
       html, body { background: transparent; }
       /* O overlay fica por cima de qualquer app, e o tema do Mac não diz o que está atrás: os símbolos levam um contorno
@@ -99,11 +108,13 @@
   </head>
   <body>
     <div id="bubble" class="kn-bubble-shell" data-on="false" data-open="false" data-more="false" data-peek="false">
+      <div id="bubble-heard" aria-hidden="true"></div>
       <div id="bubble-text" aria-hidden="true"></div>
       <div id="bubble-ask" aria-hidden="true">Precisa de mais alguma coisa?</div>
       <div id="bubble-actions">
         <button id="bubble-close" class="kn-x" type="button" aria-label="Fechar">×</button>
         <button id="bubble-more" type="button" aria-expanded="false" aria-controls="bubble-text">Ver mais</button>
+        <button id="bubble-stop" type="button">Parar</button>
       </div>
       <!-- O que o VoiceOver lê: a resposta inteira e a pergunta, não o resumo cortado (revisão do #526). -->
       <div id="bubble-sr" class="kn-sr" role="status" aria-live="polite"></div>

@@ -148,7 +148,8 @@ describe("o agente pela CLI headless (T8678)", () => {
   }, 30_000);
 
   test("\"Mostrar o que eu falei\" pela capacidade: o botão dos Ajustes grava e o status traz (T26063)", async () => {
-    expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(false);
+    // Ligado por padrão desde o spec #32534 (T33177).
+    expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(true);
     expect((await invoke("agent.configure", { showSpokenText: true })).json).toMatchObject({ ok: true, value: { showSpokenText: true } });
     expect((await invoke("agent.status")).json!.value.showSpokenText).toBe(true);
     expect((await invoke("agent.configure", { showSpokenText: false })).json).toMatchObject({ ok: true, value: { showSpokenText: false } });

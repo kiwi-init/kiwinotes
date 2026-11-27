@@ -117,7 +117,7 @@ export const enAgent: { readonly [K in keyof typeof ptAgent]: Entry } = {
   "agent.web.off": "Off: Kiwi Notes refuses the agent's searches and page reads.",
   "agent.control.label": "Talk to Kiwi",
   "agent.spoken.label": "Show what I said",
-  "agent.spoken.hint": "When you talk to Kiwi, the bubble shows what it understood before the answer. Off, it only opens with the answer.",
+  "agent.spoken.hint": "When you talk to Kiwi, the bubble shows what it understood on top, until the answer. Off, it shows only the progress.",
   "agent.control.blocked": "Dictation already uses {hold} (Settings › Shortcuts). Pick another shortcut below, or change the dictation one.",
   "agent.control.hold": "Hold {hold} to talk to Kiwi and release to send. The microphone only opens while you hold it; Esc cancels.",
   "agent.control.apple": "Apple's dictation may use \"press Control twice\": change it in System Settings › Keyboard › Dictation › Shortcut.",
