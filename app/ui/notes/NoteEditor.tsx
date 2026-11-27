@@ -193,13 +193,18 @@ export function NoteEditor({ docKey, headingJump, lineJump, doc, links, onChange
     v.focus();
   }, [headingJump, docKey]);
 
+  // Cada pedido de linha marca uma vez só: abrir outra nota ou recarregar esta (o docKey muda) não marca de novo.
+  const lineDone = useRef<number | null>(null);
+  const lineTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     const v = view.current;
-    if (!v || !lineJump || lineJump.line > v.state.doc.lines) return;
-    const timer = jumpToLine(v, lineJump.line, lineJump.fileLine);
+    if (!v || !lineJump || lineJump.sequence === lineDone.current || lineJump.line > v.state.doc.lines) return;
+    lineDone.current = lineJump.sequence;
+    clearTimeout(lineTimer.current);
+    lineTimer.current = jumpToLine(v, lineJump.line, lineJump.fileLine);
     v.focus();
-    return () => clearTimeout(timer);
   }, [lineJump, docKey]);
+  useEffect(() => () => clearTimeout(lineTimer.current), []);
 
   useEffect(() => {
     const cancelPending = () => { spellingRequest.current++; };

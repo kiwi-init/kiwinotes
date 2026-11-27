@@ -2118,7 +2118,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
               readOnly={note.readOnly === true}
               title={note.title}
               headingJump={headingJump?.path === note.path ? headingJump : null}
-              lineJump={lineJump}
+              lineJump={lineAsk?.path === note.path ? lineJump : null}
               doc={body}
               links={links}
               onChange={onChange}
