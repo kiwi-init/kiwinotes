@@ -75,11 +75,19 @@ try {
   // O hub está na frente: o gato que ouve é o do canto.
   assert.equal((await ctx.send({ cmd: "hubView", view: true })).ok, true);
 
-  // O que a região viva do balão anuncia ao leitor de tela, cada troca de texto (o mouse não conta).
+  // O que a região viva do balão anuncia ao leitor de tela: só quando o texto dela muda de verdade. Um texto igual que
+  // fica parado não é anunciado de novo, então o 2º aviso igual só conta se a região passou por outro texto (o "").
+  await p.waitForSelector(".kn-visually-hidden[aria-live]", { state: "attached" });
   await p.evaluate(() => {
     const said: string[] = ((window as any).__announced = []);
-    const region = () => document.querySelector(".kn-visually-hidden[aria-live]");
-    new MutationObserver(() => { const t = region()?.textContent?.trim(); if (t) said.push(t); }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    const region = document.querySelector(".kn-visually-hidden[aria-live]")!;
+    let last = region.textContent?.trim() ?? "";
+    new MutationObserver(() => {
+      const t = region.textContent?.trim() ?? "";
+      if (t === last) return;
+      last = t;
+      if (t) said.push(t);
+    }).observe(region, { subtree: true, childList: true, characterData: true });
   });
   const announced = () => p.evaluate(() => (window as any).__announced as string[]);
   const bubbleNow = () => p.evaluate(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble')?.textContent?.trim() ?? "");
