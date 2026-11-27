@@ -315,14 +315,6 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     frontmatter.current = text;
     setFrontmatterText(text);
   };
-  // A linha pedida, no corpo (sem o frontmatter): calculada uma vez por pedido, para o editor não pular de novo a cada
-  // tecla.
-  const lineJump = useMemo(() => {
-    if (!lineAsk || lineAsk.path !== current.current) return null;
-    const line = bodyLine(lineAsk.fileLine, frontmatter.current, body);
-    return line ? { line, fileLine: lineAsk.fileLine, sequence: lineAsk.sequence } : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lineAsk]);
   const [newProperty, setNewProperty] = useState<string | null>(null);
   const clearNewProperty = useCallback(() => setNewProperty(null), []);
   const version = useRef("");
@@ -334,6 +326,15 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   /** O arquivo que não é nota que o Kiwi acabou de mudar: o aviso no cartão, por alguns segundos. */
   const [kiwiTouched, setKiwiTouched] = useState<string | null>(null);
   const current = useRef<string | null>(null);
+  // A linha pedida, no corpo (sem o frontmatter): calculada uma vez por pedido (depois do `current`, que ela lê no
+  // render: antes dele, o pedido dava ReferenceError, #32252), para o editor não pular de novo a cada
+  // tecla.
+  const lineJump = useMemo(() => {
+    if (!lineAsk || lineAsk.path !== current.current) return null;
+    const line = bodyLine(lineAsk.fileLine, frontmatter.current, body);
+    return line ? { line, fileLine: lineAsk.fileLine, sequence: lineAsk.sequence } : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineAsk]);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Um `[[relatorio.pdf]]` acha o arquivo do vault (T7616): o link não fica de quebrado, e seguir abre o arquivo.
   // Pela lista dos arquivos, não pela listagem (spec #13384): um save de nota traz a mesma lista, e o resolvedor fica.
@@ -731,7 +732,13 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
           l.notes.find((n) => n.path === asked) ??
           l.notes.find((n) => n.path === "Caixa de entrada.md") ??
           [...l.notes].sort((a, b) => b.mtime.localeCompare(a.mtime))[0];
-        if (first) void open(first.path, true);
+        if (!first) return;
+        // A linha que o Calendário pediu (T32155) vale também aqui: as Notas que montam com o pedido (a 1ª visita, ou
+        // a pasta que trocou e as remontou) abrem por este caminho, e não pelo efeito do `openRequest` (#32252).
+        const line = openRequestRef.current?.path === first.path ? openRequestRef.current.line : undefined;
+        void open(first.path, true).then(() => {
+          if (line && current.current === first.path) setLineAsk((prev) => ({ path: first.path, fileLine: line, sequence: (prev?.sequence ?? 0) + 1 }));
+        });
       },
       () => setFailed(true),
     );
