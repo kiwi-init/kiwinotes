@@ -46,6 +46,7 @@ describe("test:dictation: o motivo do headless antes de apagar a pasta", () => {
 
   test("a bateria de verdade, com o helper que falta: a dica sai antes de a pasta sumir", () => {
     const fake = path.join(tmp(), "kiwi-helper-exemplo");
+    const t0 = Date.now();
     const r = Bun.spawnSync([process.execPath, path.join(import.meta.dir, "test-dictation.ts"), "--only", "text"], {
       cwd: path.join(import.meta.dir, ".."),
       env: { ...process.env, KIWI_HELPER: fake },
@@ -57,5 +58,21 @@ describe("test:dictation: o motivo do headless antes de apagar a pasta", () => {
     expect(err).toContain("a bateria não rodou");
     expect(err).toContain("no kiwi-helper");
     expect(err).toContain("--keep a guarda");
+    // O cli start não espera os 30 s por um headless que já morreu.
+    expect(Date.now() - t0).toBeLessThan(15_000);
+  }, 60_000);
+
+  test("o cli start desiste logo quando o headless morre ao subir", () => {
+    const data = tmp();
+    const t0 = Date.now();
+    const r = Bun.spawnSync([process.execPath, path.join(import.meta.dir, "cli.ts"), "start", "--data", data], {
+      cwd: path.join(import.meta.dir, ".."),
+      env: { ...process.env, KIWI_HELPER: path.join(data, "kiwi-helper-exemplo") },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stdout.toString()).toContain("E_START");
+    expect(Date.now() - t0).toBeLessThan(15_000);
   }, 60_000);
 });
