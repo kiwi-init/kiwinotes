@@ -47,9 +47,9 @@
   font-weight: 650;
   letter-spacing: -0.01em;
   margin: 0 10px 0 0;
-  text-transform: capitalize;
   white-space: nowrap;
 }
+.kn-cal-title::first-letter { text-transform: uppercase; }
 .kn-cal-btn,
 .kn-cal-ic,
 .kn-cal-views button,
@@ -173,6 +173,10 @@
   100% { box-shadow: 0 0 0 10px transparent; }
 }
 .kn-cal-kiwi-mark { position: absolute; right: 4px; top: 4px; width: 14px; height: 14px; }
+/* O título e a hora não passam por baixo da carinha do Kiwi, e a hora não quebra linha. */
+.kn-cal-item:has(> .kn-cal-kiwi-mark) { padding-right: 22px; }
+.kn-cal-block span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kn-cal-cell .kn-cal-chip small { flex: none; }
 
 /* ---------------------------------------------------------------- Dia e Semana */
 .kn-cal-time { display: flex; flex-direction: column; min-height: 0; flex: 1; }
