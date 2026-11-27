@@ -1,5 +1,5 @@
 // Lightweight persistent host; renderer loads only while enabled and visible.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { catPalette } from "../../src/shared/kiwicat-colors";
 import { DEFAULT_SHORTCUTS, shortcutLabel } from "../../src/shared/shortcuts";
 import type { AgentStatus, AppSettings } from "../../src/shared/ui-contract";
@@ -9,6 +9,7 @@ import { CatActivity } from "./cat-state";
 import { CatAsk } from "./CatAsk";
 import { BubblePresence } from "./BubblePresence";
 import { CatBubble } from "./CatBubble";
+import { BubblePeek } from "./bubble-peek";
 import { provideKiwiAsk } from "./kiwi-ask.ts";
 import { useT } from "../src/i18n.ts";
 import { MemoryBubble } from "./MemoryBubble";
@@ -23,6 +24,9 @@ type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
  */
 const symbolBackground = (): "light" | "dark" => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
 // Com o gato no overlay (spec #9810), o do canto some e pausa o desenho: nunca dois gatos.
+/** Onde o mouse mostra os balões (spec #32534): o Kiwi e os balões à vista (os escondidos não pegam o mouse). */
+const PEEK_TARGETS = ".kn-kiwicat-hit, .kn-bubble-shell:not(.kn-cat-ask), .kn-bubble-big";
+
 function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; reduced: boolean; away: boolean; cor: string; voiceHint?: string }) {
   const { t } = useT();
   const handle = useRef<Cat | undefined>(undefined);
@@ -227,12 +231,56 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
     document.addEventListener("mousedown", away, true);
     return () => document.removeEventListener("mousedown", away, true);
   });
+  // O balão no mouse (spec #32534): os balões só aparecem com o mouse em cima do Kiwi ou de um balão, e saem 250 ms
+  // depois. Quem esconde é o CSS (`data-bubble-peek` no hub), pela opacidade: a vida de cada balão, a ordem entre eles e
+  // os anúncios do leitor de tela não mudam. O campo de falar por texto e o balão grande, que a pessoa abriu, ficam.
+  const [peekShown, setPeekShown] = useState(false);
+  const peekRef = useRef(peekShown);
+  peekRef.current = peekShown;
+  const [unseen, setUnseen] = useState(false);
+  useEffect(() => {
+    const peek = new BubblePeek((shown) => {
+      setPeekShown(shown);
+      if (shown) setUnseen(false);
+    });
+    const over = (e: PointerEvent) => {
+      const t = e.target;
+      peek.hover("mouse", t instanceof Element && !!t.closest(PEEK_TARGETS));
+    };
+    // Saiu da janela: o `relatedTarget` é nenhum.
+    const out = (e: PointerEvent) => { if (!e.relatedTarget) peek.hover("mouse", false); };
+    document.addEventListener("pointerover", over, true);
+    document.addEventListener("pointerout", out, true);
+    return () => {
+      document.removeEventListener("pointerover", over, true);
+      document.removeEventListener("pointerout", out, true);
+      peek.dispose();
+    };
+  }, []);
+  // A marca no Kiwi (spec #32534): um balão chegou com o mouse longe; some quando ele aparece.
+  const anyBubble = talking || noting || routining || proposing;
+  useEffect(() => {
+    if (!anyBubble) setUnseen(false);
+    else if (!peekRef.current) setUnseen(true);
+  }, [anyBubble]);
+  useLayoutEffect(() => {
+    const hub = root.current?.parentElement;
+    if (!hub) return;
+    hub.dataset.bubblePeek = String(peekShown);
+    hub.dataset.bubbleUnseen = String(unseen && !away);
+  }, [peekShown, unseen, away]);
+  useLayoutEffect(() => () => {
+    const hub = root.current?.parentElement;
+    if (hub) { delete hub.dataset.bubblePeek; delete hub.dataset.bubbleUnseen; }
+  }, []);
   // A quina do balão (T16754): de que lado do gato os balões abrem, com o rabo encostado nele.
   const corner = useCatCorner(root);
   return (
     <BubbleCornerContext.Provider value={corner}>
       {/* A barra de rolagem termina antes do gato e da névoa dele (spec #13381). */}
       <div className="kn-kiwicat" aria-hidden="true" data-scrollbar-avoid="" ref={root} />
+      {/* A marca de balão não visto (spec #32534): o CSS a mostra pelo `data-bubble-unseen` do hub. */}
+      <span className="kn-kiwicat-mark" aria-hidden="true" />
       {/* Só o corpo do gato recebe o clique (spec #9878); a névoa e o resto do canto deixam passar. */}
       <button
         ref={hit}
