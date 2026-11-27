@@ -4,14 +4,14 @@
 
 import "./calendar.css";
 
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { addDays, type CalendarItem, type CalendarItems, type CalendarNotify, type CalendarUpdate } from "../../src/shared/calendar.ts";
 import { kiwiFace } from "../notes/editor/kiwi-face.ts";
 import { useT } from "../src/i18n.ts";
 import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WIDE_PX, WidePanel, type WideState } from "./Detail.tsx";
 import { periodTitle } from "./format.ts";
-import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, noteLine, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, noteLine, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
 import { NewItem } from "./NewItem.tsx";
 import { apiStore, type CalendarStore, todayOf } from "./source.ts";
 import { AgendaList, type DragMode, HOUR_PX, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
@@ -51,7 +51,7 @@ const dayAt = (x: number, y: number): string | null =>
 
 const errCode = (e: unknown) => (e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "");
 
-export function Calendar({ active, source: given, onOpenNote, catColor }: { active: boolean; source?: CalendarStore; onOpenNote(path: string, internal: boolean, line?: number): void; catColor?: unknown }) {
+export function Calendar({ active, source: given, onOpenNote, catColor, ask }: { active: boolean; source?: CalendarStore; /** A busca do Kiwi (⌘K) na barra, da T32156. */ ask?: ReactNode; onOpenNote(path: string, internal: boolean, line?: number): void; catColor?: unknown }) {
   const { t, locale } = useT();
   const [fallback] = useState(() => (given ? null : apiStore()));
   const source = given ?? fallback!;
@@ -143,6 +143,25 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     return { left: r.width - 20 - width, top, width, height: r.height - top - 18 };
   };
   const itemEl = (id: string) => root.current?.querySelector<HTMLElement>(`.kn-cal-item[data-id="${CSS.escape(id)}"]`) ?? null;
+
+  /**
+   * O retângulo do item quando a grade terminar de crescer: na volta, a grade e o painel do Kiwi mudam junto com o
+   * painel largo, então a medida é a do fim. Corta a transição só para medir e a recomeça de onde estava.
+   */
+  const finalRect = (id: string): Rect | null => {
+    const r = root.current;
+    const main = r?.querySelector<HTMLElement>(".kn-cal-main");
+    if (!r || !main) return null;
+    const was = getComputedStyle(main).marginRight;
+    main.style.transition = "none";
+    const el = itemEl(id);
+    const rect = el ? rectIn(el, r) : null;
+    main.style.marginRight = was;
+    void main.offsetWidth;
+    main.style.transition = "";
+    main.style.marginRight = "";
+    return rect;
+  };
 
   const expand = (item: CalendarItem, from: HTMLElement) => {
     if (open || !root.current) return;
@@ -261,10 +280,17 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     setView("day");
   };
 
+  // Com o painel largo aberto na Semana, o fim de semana vazio sai da grade, para os dias úteis caberem (lead #32229).
+  const wide = !!open && open.state !== "closing";
+  const gridDays = useMemo(
+    () => (wide && view === "week" ? range.days.filter((d, i) => i < 5 || shown.some((it) => onDay(it, d))) : range.days),
+    [wide, view, range.days, shown],
+  );
+
   const counts = useMemo(() => Object.fromEntries(KINDS.map((k) => [k, items.filter((i) => i.kind === k).length])), [items]);
 
   return (
-    <div className="kn-cal" ref={root} data-view={view} data-wide={open && open.state !== "closing" ? "" : undefined} aria-label={t("calendar.aria")}>
+    <div className="kn-cal" ref={root} data-view={view} data-wide={wide ? "" : undefined} aria-label={t("calendar.aria")}>
       <div className="kn-cal-tool">
         <h1 className="kn-cal-title">{periodTitle(view, range.days, anchor, locale)}</h1>
         <button type="button" className="kn-cal-ic" aria-label={t("calendar.prev")} onClick={() => setAnchor((a) => stepAnchor(view, a, -1))}>
@@ -276,6 +302,9 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
         <button type="button" className="kn-cal-ic" aria-label={t("calendar.next")} onClick={() => setAnchor((a) => stepAnchor(view, a, 1))}>
           ›
         </button>
+        <span className="kn-cal-sp" />
+        {/* O lugar da busca do Kiwi (⌘K), entre o período e as vistas, como no protótipo; quem a põe é a T32156. */}
+        <div className="kn-cal-ask-slot">{ask}</div>
         <span className="kn-cal-sp" />
         <div className="kn-cal-views" role="radiogroup" aria-label={t("calendar.views")}>
           {CALENDAR_VIEWS.map((v) => (
@@ -325,7 +354,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
           ) : view === "agenda" ? (
             <AgendaList days={range.days} items={shown} today={today} h={handlers} s={st} />
           ) : (
-            <TimeGrid days={range.days} items={shown} today={today} now={now} h={handlers} s={st} />
+            <TimeGrid days={gridDays} items={shown} today={today} now={now} h={handlers} s={st} />
           )}
         </div>
         {/* O lugar do painel do Kiwi (T32156): ele estica embaixo do painel largo e contrai junto na volta. */}
@@ -341,10 +370,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
           from={open.from}
           to={open.to}
           state={open.state}
-          back={() => {
-            const el = itemEl(open.item.id);
-            return el && root.current ? rectIn(el, root.current) : null;
-          }}
+          back={() => finalRect(open.item.id)}
           face={face}
           a={actions}
           items={items}

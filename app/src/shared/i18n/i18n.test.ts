@@ -87,6 +87,9 @@ describe("catálogo", () => {
     "editor.callout.info": "o nome do tipo do Obsidian",
     "editor.callout.bug": "o nome do tipo do Obsidian",
     "agent.voice.provider.option.elevenLabs": "o nome do serviço",
+    "calendar.view.agenda": "palavra igual nas duas",
+    "calendar.tab.item": "palavra igual nas duas",
+    "calendar.more": "só o parâmetro",
   };
 
   test("o inglês igual ao português só passa na lista de propósito (T30218)", () => {

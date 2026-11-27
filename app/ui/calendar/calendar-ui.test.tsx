@@ -9,7 +9,7 @@ import type { CalendarItem } from "../../src/shared/calendar.ts";
 import { setAppLocale } from "../src/i18n.ts";
 import { type DetailActions, HoverCard } from "./Detail.tsx";
 import { memorySource } from "./source.ts";
-import { AgendaList, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
+import { AgendaList, cascadeStyle, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
 import { viewRange } from "./model.ts";
 
 const english = () => setAppLocale({ setting: "en", locale: "en", system: "en" });
@@ -51,8 +51,10 @@ describe("as vistas do Calendário", () => {
     expect(html).toMatch(/kn-cal-allday-cell" data-day="2026-11-26">.*Feira/);
     // O item leva o tipo, a nota e a linha 1-based dela (a mesma que as Notas marcam com `data-flash-line`).
     expect(html).toContain('data-kind="meeting" data-path="Projeto X/Pendências.md" data-line="5"');
-    // As duas coisas das 10h se dividem a coluna; a gravada é só leitura e não estica.
+    // As duas coisas das 10h ficam em cascata: a segunda por cima, deslocada, sem partir a coluna (lead #32229).
     expect(html).toMatch(/Plano do jardim[\s\S]*kn-cal-resize/);
+    expect(html.match(/data-depth="1"/g)?.length).toBe(1);
+    expect(html).toMatch(/data-depth="1"[^>]*style="[^"]*width:calc\(100% - min\(16px, 45%\) \* 1 - 6px\)/);
     expect(html).toMatch(/data-id="m:r"[^>]*data-readonly=""/);
     expect(html.match(/kn-cal-resize/g)?.length).toBe(2);
     // O Kiwi marca só o que ele avisa.
@@ -86,6 +88,12 @@ describe("as vistas do Calendário", () => {
     for (const text of ["all day", "Meeting", "Open the note", "10 min before"]) expect(html).toContain(text);
     for (const text of ["Dia todo", "Reunião", "Abrir a nota"]) expect(html).not.toContain(text);
   });
+});
+
+test("a cascata: o nível 0 tem a coluna inteira, e cada nível desce para a direita sem passar de 45%", () => {
+  expect(cascadeStyle(0, 1)).toEqual({ left: "calc(0px * 0 + 3px)", width: "calc(100% - 0px * 0 - 6px)", zIndex: 1 });
+  expect(cascadeStyle(2, 3).left).toBe("calc(min(16px, 22.5%) * 2 + 3px)");
+  expect(cascadeStyle(2, 3).zIndex).toBe(3);
 });
 
 describe("a fonte na memória", () => {

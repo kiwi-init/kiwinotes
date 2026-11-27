@@ -147,6 +147,7 @@ export const EN_PARTS = {
   meetings: enMeetings,
   history: enHistory,
   hub: enHub,
+  calendar: enCalendar,
   activity: enActivity,
   diagnostics: enDiagnostics,
 } as const;

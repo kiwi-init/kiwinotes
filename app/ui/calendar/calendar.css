@@ -32,6 +32,9 @@
 .kn-cal [data-kind="focus"] { --c: var(--cal-focus); }
 
 .kn-cal-sp { flex: 1; }
+/* O lugar da busca do Kiwi (⌘K, T32156): entre o período e as vistas; vazio, não ocupa nada. */
+.kn-cal-ask-slot { display: flex; min-width: 0; flex: 0 1 460px; }
+.kn-cal-ask-slot:empty { display: none; }
 .kn-cal-muted { color: var(--text-2); margin: 6px 0; }
 .kn-cal-empty { color: var(--text-2); padding: 40px 0; text-align: center; }
 
@@ -221,6 +224,9 @@
 .kn-cal-col { position: relative; border-left: 1px solid var(--cal-line); }
 .kn-cal-col[data-today] { background: color-mix(in srgb, var(--accent) 4%, transparent); }
 .kn-cal-block { position: absolute; font-size: 12px; }
+/* A cascata: a caixa de cima ganha um contorno da cor do fundo, para a borda dela se ver sobre a de baixo. */
+.kn-cal-block[data-depth] { box-shadow: 0 0 0 1.5px var(--surface), var(--shadow-1, 0 1px 3px rgb(0 0 0 / 0.25)); }
+.kn-cal-block[data-depth]:hover { box-shadow: 0 0 0 1.5px var(--c); }
 .kn-cal-short { padding-block: 1px; }
 .kn-cal-resize {
   position: absolute;

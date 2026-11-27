@@ -152,6 +152,7 @@ export const PT_PARTS = {
   meetings: ptMeetings,
   history: ptHistory,
   hub: ptHub,
+  calendar: ptCalendar,
   activity: ptActivity,
   diagnostics: ptDiagnostics,
 } as const;

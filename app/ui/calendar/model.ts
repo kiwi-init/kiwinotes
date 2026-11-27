@@ -79,8 +79,9 @@ export interface Placed {
 }
 
 /**
- * Os itens com hora de um dia, na grade: os que se cruzam ficam lado a lado. Cada grupo de itens ligados por
- * sobreposição divide a largura pelo número de colunas que ele precisa (como no Calendário do Mac).
+ * Os itens com hora de um dia, na grade. Os que se cruzam ganham uma profundidade (`col`): a tela os desenha em
+ * cascata, o mais fundo por cima e um pouco deslocado, para os dois continuarem legíveis (lead #32229). `cols` é a
+ * profundidade do grupo.
  */
 export function layoutDay(items: CalendarItem[], day: string): Placed[] {
   const d0 = toMs(day);

@@ -2,7 +2,7 @@
 // arredondada só com o fundo na cor do tipo, sem barra de cor do lado (harry #32145). O hover, o arrastar e o painel
 // largo são da tela (Calendar.tsx); aqui só se desenha.
 
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
 
 import type { CalendarItem } from "../../src/shared/calendar.ts";
 import { useT } from "../src/i18n.ts";
@@ -11,6 +11,16 @@ import { itemsOfDay, layoutDay, nowMinutes } from "./model.ts";
 
 /** A altura de uma hora na grade, em px. */
 export const HOUR_PX = 48;
+/** O deslocamento de cada nível da cascata, em px, e quanto da coluna ela pode comer no máximo. */
+export const CASCADE_PX = 16;
+const CASCADE_MAX = 0.45;
+
+/** Onde uma caixa da cascata fica na coluna: o nível 0 ocupa a coluna inteira; cada nível desce para a direita. */
+export function cascadeStyle(col: number, cols: number) {
+  const step = cols > 1 ? `min(${CASCADE_PX}px, ${(CASCADE_MAX * 100) / (cols - 1)}%)` : "0px";
+  return { left: `calc(${step} * ${col} + 3px)`, width: `calc(100% - ${step} * ${col} - 6px)`, zIndex: col + 1 };
+}
+
 /** Quantos itens cabem num dia do Mês antes do "+n". */
 const MONTH_MAX = 3;
 
@@ -31,7 +41,7 @@ export interface ItemState {
   kiwiFace: string | null;
 }
 
-function ItemBox({ item, h, s, style, children, className = "" }: { item: CalendarItem; h: ItemHandlers; s: ItemState; style?: React.CSSProperties; children: ReactNode; className?: string }) {
+function ItemBox({ item, h, s, style, children, className = "", depth }: { item: CalendarItem; h: ItemHandlers; s: ItemState; style?: CSSProperties; children: ReactNode; className?: string; depth?: number }) {
   const { t } = useT();
   const line = item.source?.line;
   return (
@@ -48,6 +58,7 @@ function ItemBox({ item, h, s, style, children, className = "" }: { item: Calend
       data-pulse={s.pulseId === item.id ? "" : undefined}
       data-done={item.done ? "" : undefined}
       data-readonly={item.readOnly ? "" : undefined}
+      data-depth={depth || undefined}
       aria-label={`${t(`calendar.kind.${item.kind}`)}: ${item.title}`}
       style={style}
       onMouseEnter={(e) => h.onEnter(item, e.currentTarget)}
@@ -133,7 +144,8 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
                     h={h}
                     s={s}
                     className={short ? "kn-cal-block kn-cal-short" : "kn-cal-block"}
-                    style={{ top, height, left: `calc(${(p.col / p.cols) * 100}% + 3px)`, width: `calc(${100 / p.cols}% - 6px)` }}
+                    depth={p.col}
+                    style={{ top, height, ...cascadeStyle(p.col, p.cols) }}
                   >
                     <b>{p.item.title}</b>
                     {short ? null : <span>{timeRange(p.item, t("calendar.allDay"))}{p.item.project ? ` · ${p.item.project}` : ""}</span>}
