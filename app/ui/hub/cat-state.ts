@@ -10,6 +10,8 @@
 // - O que já acabou fica guardado só para ignorar os atrasados, até um limite: a memória não cresce.
 // - **O gato novo (spec #14813):** o desenho tem 5 estados e os emotes; `catLook` traduz os 8 estados de hoje pela
 //   tabela 1.1 de `docs/design/kiwicat-v2/analise.md`. O erro de limite de uso (`E_AGENT_LIMIT`) vira o emote `limite`.
+// - **O "Não ouvi" (spec #32534, Cena 4):** a fala pelo atalho curta ou vazia deixa o gato no `erro` (o `confuso`) até
+//   o `notHeardEnd`, que quem chama manda depois de `NOT_HEARD_MS`. Um pedido que começa no meio passa por cima.
 
 import type { AgentTurnEvent } from "../../src/shared/ui-contract";
 
@@ -92,6 +94,7 @@ export class CatActivity {
    */
   attend(on: boolean): CatState {
     this.attentive = on;
+    this.confused = false;
     this.sending = false;
     if (this.current !== null || this.adoptable) return this.state;
     this.state = on ? "ouvindo" : "repouso";
@@ -120,6 +123,27 @@ export class CatActivity {
     return this.state;
   }
 
+  /** O gato está confuso pelo "Não ouvi", e não por um erro do pedido. */
+  private confused = false;
+
+  /** A fala curta ou vazia: sem pedido em andamento, o gato fica confuso (o `erro` sem o limite). */
+  notHeard(): CatState {
+    this.sending = false;
+    if (this.current !== null || this.adoptable) return this.state;
+    this.confused = true;
+    this.limited = false;
+    this.state = "erro";
+    return this.state;
+  }
+
+  /** O fim do "Não ouvi": volta ao repouso (ou à atenção do campo), se nada mudou o gato no meio. */
+  notHeardEnd(): CatState {
+    if (!this.confused) return this.state;
+    this.confused = false;
+    if (this.current === null && !this.adoptable && this.state === "erro") this.state = this.attentive ? "ouvindo" : "repouso";
+    return this.state;
+  }
+
   /** O pedido em andamento, que o campo usa para não mandar outro por cima. */
   get busy(): boolean {
     return this.current !== null || this.adoptable;
@@ -127,6 +151,7 @@ export class CatActivity {
 
   event(e: AgentTurnEvent): CatState {
     if (this.finished.has(e.id)) return this.state;
+    this.confused = false;
     if (e.type === "started") {
       if (this.current && this.current !== e.id) this.finish(this.current);
       this.current = e.id;

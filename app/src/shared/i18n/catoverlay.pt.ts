@@ -13,6 +13,7 @@ export const ptCatOverlay = {
   "catOverlay.stop": "Parar",
   "catOverlay.heard": "O que o Kiwi ouviu",
   "catOverlay.voiceError": "Não consegui falar com o agente: {message}",
+  "catOverlay.notHeard": "Não ouvi. Segure o {key} e fale.",
   "catOverlay.unknownError": "erro desconhecido",
   // A resposta sem texto (só o que ele fez): depois de uma ferramenta, ou sem nenhuma.
   "catOverlay.didIt": "Feito.",

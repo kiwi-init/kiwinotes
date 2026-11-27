@@ -20,6 +20,7 @@ export const enHub: { readonly [K in keyof typeof ptHub]: Entry } = {
   "hub.tab.settings": "Settings",
   "hub.tab.about": "About",
   "hub.tab.soon": "soon",
+  "hub.bubble.notHeard": "I didn't catch that. Hold {key} and speak.",
   "hub.bubble.more": "See more",
   "hub.bubble.answer": "The agent's answer",
   "hub.bubble.ask": "Need anything else?",

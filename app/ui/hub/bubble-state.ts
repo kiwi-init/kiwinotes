@@ -176,11 +176,14 @@ export function plainLinks(raw: string, links: readonly BubbleLink[], base = 0):
   return out;
 }
 
-/** O que está no balão: `line` é o aviso do limite, `step` o passo do pedido (o andamento, T33177). */
+/**
+ * O que está no balão: `line` é o aviso do limite, `step` o passo do pedido (o andamento, T33177), `notice` um aviso
+ * curto que sai sozinho (o "Não ouvi", spec #32534, Cena 4).
+ */
 interface Head {
   key: number;
   text: string;
-  kind: "line" | "step" | "answer" | "error";
+  kind: "line" | "step" | "answer" | "error" | "notice";
   links?: ChunkLink[];
 }
 
@@ -190,8 +193,15 @@ interface Head {
  */
 export const ANSWER_HOLD_MS = 1500;
 
+/** Quanto o "Não ouvi" fica (spec #32534, Cena 4): o mesmo do erro do gato do overlay (`OVERLAY_TIMES.erro`). */
+export const NOT_HEARD_MS = 2200;
+
 export class BubbleFeed {
   private request: string | null = null;
+  /** Até quando o aviso curto (`notice`) fica no balão. */
+  private noticeUntil = 0;
+  /** O que o aviso cobriu (a resposta de antes): volta quando ele sai, se nada novo chegou no meio. */
+  private underNotice: { head: Head | null; dismissed: boolean } | null = null;
   private readonly finished = new Set<string>();
   private head: Head | null = null;
   private keys = 0;
@@ -277,7 +287,8 @@ export class BubbleFeed {
     if (e.type === "started") {
       if (this.request && this.request !== e.id) this.finished.add(this.request);
       // O que está no canto agora fica até o primeiro balão do pedido novo. Dois `started` seguidos não esticam o prazo.
-      const before = this.view(now);
+      // O "Não ouvi" não fica segurando o canto do pedido novo: ele já disse o que tinha a dizer.
+      const before = this.head?.kind === "notice" ? null : this.view(now);
       const until = this.held?.until ?? now + ANSWER_HOLD_MS;
       this.reset(e.id);
       this.held = before ? { view: { ...before, more: false }, until } : null;
@@ -356,6 +367,19 @@ export class BubbleFeed {
   }
 
   /**
+   * A fala pelo Control curta demais ou vazia (spec #32534, Cena 4): o "Não ouvi" fica `NOT_HEARD_MS` e sai. Ele toma o
+   * lugar do que estava no balão (a resposta de antes), como no overlay.
+   */
+  notHeard(text: string, now: number): void {
+    if (this.head?.kind !== "notice") this.underNotice = { head: this.afterWarning?.head ?? this.head, dismissed: this.dismissed };
+    this.held = null;
+    this.afterWarning = null;
+    this.dismissed = false;
+    this.head = { key: ++this.keys, text, kind: "notice" };
+    this.noticeUntil = now + NOT_HEARD_MS;
+  }
+
+  /**
    * O balão sai (o ×, o Esc, o relógio, a vez de um balão com ação): o resto deste pedido não aparece mais. A resposta
    * pronta fica guardada para voltar com o mouse no Kiwi (`recall`, spec #32534), até o próximo pedido; `keep: false`
    * (o pedido novo mandado pelo campo) a esquece.
@@ -392,6 +416,11 @@ export class BubbleFeed {
 
   /** O que o balão mostra agora; null sem balão. */
   view(now: number): BubbleView | null {
+    if (this.head?.kind === "notice" && now >= this.noticeUntil) {
+      this.head = this.underNotice?.head ?? null;
+      this.dismissed = this.underNotice?.dismissed ?? false;
+      this.underNotice = null;
+    }
     if (this.afterWarning && now >= this.warnUntil) {
       this.head = this.afterWarning.head;
       this.afterWarning = null;
@@ -415,6 +444,7 @@ export class BubbleFeed {
 
   /** Quando o balão muda sozinho de novo: a resposta de antes, parada no canto, ou o que espera o aviso de limite; Infinity se nada muda. */
   nextWake(now: number): number {
+    if (this.head?.kind === "notice" && now < this.noticeUntil) return this.noticeUntil;
     if (this.afterWarning && now < this.warnUntil) return this.warnUntil;
     if (this.held && !this.head && !this.ended && !this.dismissed && now < this.held.until) return this.held.until;
     return Infinity;
@@ -422,6 +452,8 @@ export class BubbleFeed {
 
   /** O próximo do balão; com o aviso de limite na tela, ele espera o tempo de leitura do aviso (T28584). */
   private put(head: Head | null, now: number): void {
+    // Algo novo do pedido toma o lugar do "Não ouvi", e o que ele cobria já não volta.
+    if (this.head?.kind === "notice") this.underNotice = null;
     if (this.head?.kind === "line" && now < this.warnUntil) this.afterWarning = { head };
     else this.head = head;
   }
@@ -436,7 +468,8 @@ export class BubbleFeed {
    */
   private showStep(now: number): void {
     if (this.dismissed || this.spoken || this.ended) return;
-    if (this.head && this.head.kind !== "step" && this.head.kind !== "line") return;
+    // O passo novo do pedido também toma o lugar do "Não ouvi" (o `put` solta o que ele cobria).
+    if (this.head && this.head.kind !== "step" && this.head.kind !== "line" && this.head.kind !== "notice") return;
     const text = this.progress.text(this.locale());
     if (!text) return;
     this.stepKey ||= ++this.keys;
@@ -471,6 +504,7 @@ export class BubbleFeed {
     this.request = id;
     this.head = null;
     this.last = null;
+    this.underNotice = null;
     this.said = "";
     this.saidLinks = [];
     this.closedLen = 0;

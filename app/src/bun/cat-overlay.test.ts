@@ -9,7 +9,7 @@ import type { AgentStatus, AppSettings } from "../shared/ui-contract.ts";
 import { limitBubble } from "../../ui/settings/usageText.ts";
 import { readingMs } from "../../ui/hub/bubble-state.ts";
 import { mainLocale } from "./locale.ts";
-import { ASK_LINE, attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_TIMES, plainBubbleText, shiftLinks, voiceErrorLine } from "./cat-overlay.ts";
+import { ASK_LINE, attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_TIMES, notHeardLine, plainBubbleText, shiftLinks, voiceErrorLine } from "./cat-overlay.ts";
 
 function rig() {
   const sent: CatOverlayCommand[] = [];
@@ -727,6 +727,63 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
       { type: "catOverlay.state", estado: "erro" },
       { type: "catOverlay.bubble", text: "Não consegui falar com o agente: o agente está desligado.", error: true },
     ]);
+    expect(r.cat.visible).toBe(true);
+  });
+
+  test("o \"Não ouvi\" (spec #32534, Cena 4): o gato confuso, o balão com o atalho, e sai em 2,2 s", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.voice({ phase: "processing" });
+    r.take();
+    r.cat.voice({ phase: "idle", cancelled: true, notHeard: { shortcut: "control" } });
+    expect(r.take()).toEqual([
+      { type: "catOverlay.state", estado: "erro" },
+      { type: "catOverlay.bubble", text: "Não ouvi. Segure o Control e fale.", error: false },
+    ]);
+    expect(OVERLAY_TIMES.erro).toBe(2200);
+    r.advance(OVERLAY_TIMES.erro - 1);
+    expect(r.cat.visible).toBe(true);
+    r.advance(1);
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.erroExit }]);
+    expect(r.cat.visible).toBe(false);
+  });
+
+  test("o \"Não ouvi\" em pt e en, com o atalho como os Ajustes o mostram", () => {
+    expect(notHeardLine("control", "pt")).toBe("Não ouvi. Segure o Control e fale.");
+    expect(notHeardLine("control", "en")).toBe("I didn't catch that. Hold Control and speak.");
+    expect(notHeardLine("option+space", "pt")).toBe("Não ouvi. Segure o ⌥ Espaço e fale.");
+    expect(notHeardLine("option+space", "en")).toBe("I didn't catch that. Hold ⌥ Space and speak.");
+  });
+
+  test("o mouse no balão do \"Não ouvi\" segura o gato; ao sair, ele volta a contar os 2,2 s", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.voice({ phase: "idle", cancelled: true, notHeard: { shortcut: "control" } });
+    r.advance(1000);
+    r.cat.hold(true);
+    r.advance(OVERLAY_TIMES.erro * 3);
+    expect(r.cat.visible).toBe(true);
+    r.take();
+    r.cat.hold(false);
+    // Sem a espera da resposta (a pergunta "Precisa de mais alguma coisa?"): só o tempo do aviso.
+    r.advance(OVERLAY_TIMES.erro - 1);
+    expect(r.cat.visible).toBe(true);
+    r.advance(1);
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.erroExit }]);
+  });
+
+  test("uma fala nova durante o \"Não ouvi\" tira o aviso e o gato volta a ouvir", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.voice({ phase: "idle", cancelled: true, notHeard: { shortcut: "control" } });
+    r.advance(500);
+    r.take();
+    r.cat.voice({ phase: "listening", voz: 0 });
+    expect(r.take()).toContainEqual({ type: "catOverlay.bubble", text: null });
+    r.advance(OVERLAY_TIMES.erro * 2);
     expect(r.cat.visible).toBe(true);
   });
 

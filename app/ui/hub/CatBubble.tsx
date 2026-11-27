@@ -19,7 +19,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { BubbleLink } from "../../src/shared/ui-contract";
 import { api } from "../src/api";
-import { appLocale } from "../src/i18n";
+import { appLocale, t } from "../src/i18n";
+import { shortcutLabel } from "../../src/shared/shortcuts";
 import { BUBBLE_LINES, BubbleFeed, type BubbleView, type ChunkLink, readingMs } from "./bubble-state";
 import { BubbleClock } from "./bubble-clock";
 import { BubblePresence } from "./BubblePresence";
@@ -72,6 +73,9 @@ function measurer(): { fits: (s: string) => boolean; dispose: () => void } {
     dispose: () => el.remove(),
   };
 }
+
+/** O texto do "Não ouvi" no idioma do app, com o atalho como a tela o mostra ("Control", "⌥ Espaço"). */
+export const notHeardText = (shortcut: string) => t("hub.bubble.notHeard", { key: shortcutLabel(shortcut, appLocale().locale) });
 
 /**
  * `drop`: o pedido mandado pelo campo tira do canto a resposta de antes, no mesmo render em que a pergunta fica (T15377).
@@ -139,6 +143,12 @@ export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = fa
     // A fala pelo Control (spec #9876): o texto entendido aparece no balão quando o pedido começa, se veio.
     const offVoice = api.agent.onVoice((v) => {
       // Sem o texto ("Mostrar o que eu falei" desligado, spec #26055), o balão espera a resposta.
+      if (v.phase === "idle" && v.notHeard) {
+        // A fala curta ou vazia (spec #32534, Cena 4): o "Não ouvi", com o atalho dos Ajustes, por `NOT_HEARD_MS`.
+        f.notHeard(notHeardText(v.notHeard.shortcut), performance.now());
+        refresh();
+        return;
+      }
       if (v.phase !== "asked" || !v.text) return;
       f.heard(v.id, v.text, performance.now());
       refresh();

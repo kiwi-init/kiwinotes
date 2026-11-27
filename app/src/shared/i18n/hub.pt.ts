@@ -18,6 +18,7 @@ export const ptHub = {
   "hub.tab.settings": "Configurações",
   "hub.tab.about": "Sobre",
   "hub.tab.soon": "breve",
+  "hub.bubble.notHeard": "Não ouvi. Segure o {key} e fale.",
   "hub.bubble.more": "Ver mais",
   "hub.bubble.answer": "A resposta do agente",
   "hub.bubble.ask": "Precisa de mais alguma coisa?",
