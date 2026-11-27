@@ -224,9 +224,12 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
       const note = await where.vault.get(path).catch(() => null);
       if (!note) continue;
       const raw = note.content.split("\n");
+      // Só as linhas que o leitor das Pendências conta como item: nunca uma cópia num bloco de código, num `%% … %%` ou
+      // no frontmatter (revisão #32219).
+      const itemLines = listItems(note.content, isMinutes(note.content)).map((it) => it.line);
       let line = Number(lineStr);
-      if (lineHash(raw[line] ?? "") !== hash) {
-        line = raw.findIndex((l) => LIST_LINE.test(l) && lineHash(l) === hash);
+      if (!itemLines.includes(line) || lineHash(raw[line] ?? "") !== hash) {
+        line = itemLines.find((n) => lineHash(raw[n] ?? "") === hash) ?? -1;
         if (line < 0) throw new CalendarError("E_CONFLICT", "the item changed in the note; read again");
       }
       return { note, where, raw, line, occurrence: occurrence ?? null };
@@ -275,11 +278,13 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
       const line = `${lead}${newBox ? `[${newBox}] ` : ""}${newRest}${cr}`;
       const lines = [...at.raw];
       lines[at.line] = line;
-      const res = await src.notes.save(at.note.path, lines.join("\n"), at.note.version);
-      if (!res.saved) continue;
-      const fresh = itemsOfNote({ ...at.note, ...res.meta, content: lines.join("\n") }, at.where);
+      const content = lines.join("\n");
+      // Confere antes de gravar: a linha nova ainda é um item (senão, nada muda na nota).
+      const fresh = itemsOfNote({ ...at.note, content }, at.where);
       const item = [...fresh.dated, ...fresh.undated].find((i) => i.source?.line === at.line);
       if (!item) throw new CalendarError("E_CONFLICT", "the item left the calendar");
+      const res = await src.notes.save(at.note.path, content, at.note.version);
+      if (!res.saved) continue;
       return item;
     }
     throw new CalendarError("E_CONFLICT", "the note changed while saving; read again");

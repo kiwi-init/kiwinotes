@@ -205,6 +205,31 @@ describe("calendar.update", () => {
     expect(read("Projeto X/Planejamento.md")).not.toContain("[x] Revisar");
   });
 
+  test("a rebusca só olha os itens: a cópia num bloco de código ou num %% %% não muda (#32219)", async () => {
+    const linha = "- [ ] Revisar o orçamento @ 2026-11-27 10:00";
+    for (const copia of [`\`\`\`md\n${linha}\n\`\`\``, `%%\n${linha}\n%%`, `~~~~\n${linha}\n~~~~`]) {
+      const nota = `# Projeto X\n\n${linha}\n\nExemplo:\n\n${copia}\n`;
+      const { cal, read, write } = await open({ "Projeto X/Planejamento.md": nota });
+      const its = (await cal.items({ from: "2026-11-27", to: "2026-11-28" })).items;
+      expect(its.length).toBe(1);
+      const sem = nota.replace(`${linha}\n\nExemplo`, "Exemplo");
+      await write("Projeto X/Planejamento.md", sem);
+      expect(await code(cal.update({ id: its[0]!.id, done: true }))).toBe("E_CONFLICT");
+      expect(read("Projeto X/Planejamento.md")).toBe(sem);
+    }
+  });
+
+  test("o id que aponta para uma linha que deixou de ser item dá conflito sem gravar", async () => {
+    const nota = "# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-11-27 10:00\n";
+    const { cal, read, write } = await open({ "Projeto X/Planejamento.md": nota });
+    const id = (await cal.items({ from: "2026-11-27", to: "2026-11-28" })).items[0]!.id;
+    // A mesma linha, agora dentro de um bloco de código: o índice e o hash batem, mas ela não é item.
+    const presa = "# Projeto X\n```\n- [ ] Revisar o orçamento @ 2026-11-27 10:00\n```\n";
+    await write("Projeto X/Planejamento.md", presa);
+    expect(await code(cal.update({ id, done: true }))).toBe("E_CONFLICT");
+    expect(read("Projeto X/Planejamento.md")).toBe(presa);
+  });
+
   test("numa repetição: mover uma vez move a série; Feito passa para a próxima vez", async () => {
     const { cal, read } = await open({ "Projeto X/Planejamento.md": PROJETO });
     const rep = (await cal.items({ from: "2026-12-01", to: "2026-12-02" })).items.find((i) => i.title === "Bloco de escrita")!;
