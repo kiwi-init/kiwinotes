@@ -72,8 +72,8 @@ export class CalendarError extends Error {
 }
 
 /** Onde vai um item criado: a nota de pendências do projeto, ou o `Calendário.md` na raiz (spec #32129). */
-export const PROJECT_NOTE = "Pendências";
-export const ROOT_NOTE = "Calendário";
+export const PROJECT_NOTE = "Pendências"; // i18n-ok: nome de arquivo na pasta da pessoa, o mesmo em qualquer língua (spec #32129)
+export const ROOT_NOTE = "Calendário"; // i18n-ok: nome de arquivo na pasta da pessoa, o mesmo em qualquer língua (spec #32129)
 
 const lineHash = (raw: string) => createHash("sha256").update(raw.trim()).digest("hex").slice(0, 8);
 /** A pasta de primeiro nível de um caminho; `null` na raiz. */
