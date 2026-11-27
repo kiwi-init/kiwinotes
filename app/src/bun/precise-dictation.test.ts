@@ -181,3 +181,39 @@ test("o helper que não abre o modelo é erro; o que caiu deixa esperando", asyn
   other.precise.helperGone();
   expect(other.precise.status().phase).toBe("waiting");
 });
+
+// #455 (spec #33093, T33242): o ligar de novo herdava o download abortado e ficava em "falhou o download" por 10 min.
+test("desligar e ligar de novo no meio do download baixa de novo, sem erro", async () => {
+  let calls = 0;
+  const precise = new PreciseDictation({
+    modelsDir: dir, manifest: TINY, send: async () => ({ ok: true }),
+    fetch: (_url, init) => {
+      calls++;
+      if (calls === 1) return new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(new Error("aborted"))));
+      return Promise.resolve(new Response(BYTES));
+    },
+  });
+  const first = precise.apply(true);
+  await Bun.sleep(20);
+  const off = precise.apply(false);
+  const on = precise.apply(true);
+  await Promise.all([first, off, on]);
+  expect(precise.status().phase).toBe("loading");
+  expect(calls).toBe(2);
+});
+
+test("desligar logo depois de ligar, antes de o download começar, não baixa nada", async () => {
+  let calls = 0;
+  const precise = new PreciseDictation({
+    modelsDir: dir, manifest: TINY, send: async () => ({ ok: true }),
+    fetch: () => {
+      calls++;
+      return Promise.resolve(new Response(BYTES));
+    },
+  });
+  const on = precise.apply(true);
+  const off = precise.apply(false);
+  await Promise.all([on, off]);
+  expect(precise.status().phase).toBe("off");
+  expect(calls).toBe(0);
+});
