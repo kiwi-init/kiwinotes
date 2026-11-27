@@ -28,4 +28,12 @@ export const enCalendarKiwi: { readonly [K in keyof typeof ptCalendarKiwi]: Entr
   "calendarKiwi.suggest.remind": "Yes, remind me",
   "calendarKiwi.suggest.notify30": "Remind me 30 min before",
   "calendarKiwi.suggest.dismiss": "Not now",
+  "calendarKiwi.panel.aria": "Kiwi in the calendar",
+  "calendarKiwi.panel.today": "Today",
+  "calendarKiwi.panel.todayEmpty": "Nothing scheduled for today.",
+  "calendarKiwi.panel.undated": "Undated tasks",
+  "calendarKiwi.panel.undatedEmpty": "No undated tasks.",
+  "calendarKiwi.panel.dragHint": "Drag onto the calendar to schedule.",
+  "calendarKiwi.panel.inProject": "{project}: {title}",
+  "calendarKiwi.panel.notify": "Kiwi reminds you {when}",
 };

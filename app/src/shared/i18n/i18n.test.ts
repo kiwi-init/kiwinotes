@@ -90,6 +90,7 @@ describe("catálogo", () => {
     "calendarKiwi.alert.title": "só o molde, as palavras vêm traduzidas",
     "calendarKiwi.alert.bodyProject": "só o molde, as palavras vêm traduzidas",
     "calendarKiwi.alert.speech": "só o molde, as palavras vêm traduzidas",
+    "calendarKiwi.panel.inProject": "só o molde: o projeto e o título",
   };
 
   test("o inglês igual ao português só passa na lista de propósito (T30218)", () => {

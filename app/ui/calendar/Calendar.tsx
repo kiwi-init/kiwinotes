@@ -12,6 +12,7 @@ import { useT } from "../src/i18n.ts";
 import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WIDE_PX, WidePanel, type WideState } from "./Detail.tsx";
 import { periodTitle } from "./format.ts";
 import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, noteLine, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { KiwiPanel } from "./KiwiPanel.tsx";
 import { NewItem } from "./NewItem.tsx";
 import { apiStore, type CalendarStore, todayOf } from "./source.ts";
 import { AgendaList, type DragMode, HOUR_PX, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
@@ -329,7 +330,9 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
           )}
         </div>
         {/* O lugar do painel do Kiwi (T32156): ele estica embaixo do painel largo e contrai junto na volta. */}
-        <aside className="kn-cal-side" ref={side} />
+        <aside className="kn-cal-side" ref={side}>
+          <KiwiPanel source={source} today={today} now={now} face={face} save={save} />
+        </aside>
       </div>
       {hover && !open ? (
         <HoverCard item={hover.item} at={hover.at} face={face} a={actions} onExpand={(card) => expand(hover.item, card)} onEnter={keepCard} onLeave={hideCard} />

@@ -32,4 +32,13 @@ export const ptCalendarKiwi = {
   "calendarKiwi.suggest.remind": "Sim, me lembra",
   "calendarKiwi.suggest.notify30": "Avisar 30 min antes",
   "calendarKiwi.suggest.dismiss": "Agora não",
+  // O painel do Kiwi à direita do Calendário.
+  "calendarKiwi.panel.aria": "O Kiwi no calendário",
+  "calendarKiwi.panel.today": "Hoje",
+  "calendarKiwi.panel.todayEmpty": "Nada marcado para hoje.",
+  "calendarKiwi.panel.undated": "Pendências sem data",
+  "calendarKiwi.panel.undatedEmpty": "Nenhuma pendência sem data.",
+  "calendarKiwi.panel.dragHint": "Arraste para o calendário para marcar.",
+  "calendarKiwi.panel.inProject": "{project}: {title}",
+  "calendarKiwi.panel.notify": "o Kiwi avisa {when}",
 } as const;
