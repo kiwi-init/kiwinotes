@@ -258,7 +258,7 @@ export function falaNaTela(enviar: (e: FalaNaTela) => void): (e: FalaEvento) => 
 export interface FalaPlayerWiring {
   agent: { onSpeech(fn: (e: { turnId: string; frases: string[] }) => void): () => void };
   /** Os eventos do helper; sem ele, só a fala do agente liga o player. */
-  helper?: { on(type: "agent.record.started" | "catOverlay.close" | "meeting.started" | "meeting.stopped", fn: () => void): () => void };
+  helper?: { on(type: "agent.record.started" | "catOverlay.close" | "meeting.started" | "meeting.stopped" | "record.started", fn: () => void): () => void };
   log?(m: string): void;
 }
 
