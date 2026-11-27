@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { GooRect } from "./goo.ts";
-import { type GooGeom, gooDropPath, gooSizes, roundRect } from "./goo-shape.ts";
+import { type GooGeom, gooDropParts, gooSizes, roundRect } from "./goo-shape.ts";
 import {
   GOO_PLAN_HZ,
   GOO_PLAN_MAX_MS,
@@ -23,13 +23,23 @@ import {
 } from "./goo-spring.ts";
 import { box, points } from "./goo-test-path.ts";
 
-/** Uma barra do Hub de exemplo, na janela de `W` px: a pílula no meio, 130 px de botões à esquerda e 90 à direita. */
-function bar(W: number, side: "start" | "end"): GooGeom {
+/**
+ * Uma barra do Hub de exemplo, na janela de `W` px, com a pílula no meio. A `larga` tem 130 px de botões à esquerda e 90 à
+ * direita; a `hub` tem as medidas do Hub headless (Ajustes › Notas, escala 1), as mesmas do roteiro da velocidade (T32466).
+ */
+function bar(W: number, side: "start" | "end", kind: "larga" | "hub" = "larga"): GooGeom {
+  if (kind === "hub") {
+    const tabs: GooRect = { x: W / 2 - 224, y: 10, w: 517.9, h: 32 };
+    const target: GooRect = side === "end" ? { x: W - 76, y: 10, w: 62, h: 32 } : { x: 84, y: 10, w: 98.5, h: 32 };
+    return { side, tabs, target, radius: 10 };
+  }
   const tabs: GooRect = { x: Math.round(W / 2 - 245), y: 10, w: 490, h: 32 };
   const target: GooRect = side === "end" ? { x: W - 16 - 90, y: 10, w: 90, h: 32 } : { x: 16, y: 10, w: 130, h: 32 };
   return { side, tabs, target, radius: 10 };
 }
-const BARS = [1000, 1600].flatMap((W) => (["end", "start"] as const).map((side) => ({ W, side, g: bar(W, side) })));
+const BARS = (["larga", "hub"] as const).flatMap((kind) =>
+  [1000, 1600].flatMap((W) => (["end", "start"] as const).map((side) => ({ W, side, kind, g: bar(W, side, kind) }))),
+);
 const g1000 = bar(1000, "end");
 
 const edgeX = (g: GooGeom) => (g.side === "end" ? g.tabs.x + g.tabs.w : g.tabs.x);
@@ -38,6 +48,12 @@ function reach(g: GooGeom, d: string): number {
   const xs = points(d).pts.map((p) => p[0]);
   if (!xs.length) return 0;
   return g.side === "end" ? Math.max(...xs) - edgeX(g) : edgeX(g) - Math.min(...xs);
+}
+/** A borda da forma do lado da pílula (px a partir da beira): a frente da volta. */
+function near(g: GooGeom, d: string): number | null {
+  const b = box(d);
+  if (!b) return null;
+  return g.side === "end" ? b.l - edgeX(g) : edgeX(g) - b.r;
 }
 const whole = (g: GooGeom, s: GooDrop) => {
   const p = gooParts(g, s);
@@ -51,11 +67,11 @@ const maxJump = (xs: number[]) => {
   return Math.max(...v.slice(1).map((x, i) => Math.abs(x - v[i]!)));
 };
 /** A ida e a volta a 60 Hz, quadro a quadro: a frente em cada um. */
-const ida = (g: GooGeom) => gooPlan(g, gooRest(false, g), true, 60);
-const volta = (g: GooGeom) => gooPlan(g, gooRest(true, g), false, 60);
-/** A main, com o mesmo número de quadros de 60 Hz dos 500 ms da ida e dos 400 ms da volta. */
-const mainIda = (g: GooGeom) => Array.from({ length: 31 }, (_, i) => reach(g, gooDropPath(i / 30, g)));
-const mainVolta = (g: GooGeom) => Array.from({ length: 25 }, (_, i) => reach(g, gooDropPath(1 - i / 24, { ...g, back: true })));
+const ida = (g: GooGeom) => gooPlan(g, gooRest(false, g), true, 60).states;
+const volta = (g: GooGeom) => gooPlan(g, gooRest(true, g), false, 60).states;
+/** A frente da cabeça da main, com o mesmo número de quadros de 60 Hz dos 500 ms da ida e dos 400 ms da volta. */
+const mainIda = (g: GooGeom) => Array.from({ length: 31 }, (_, i) => reach(g, gooDropParts(i / 30, g).head));
+const mainVolta = (g: GooGeom) => Array.from({ length: 25 }, (_, i) => reach(g, gooDropParts(1 - i / 24, { ...g, back: true }).head));
 
 describe("gooParts pelo estado", () => {
   test("o repouso: nos botões é o retângulo deles; na pílula, nada", () => {
@@ -77,7 +93,7 @@ describe("gooParts pelo estado", () => {
         const d = gooParts(g, { U, v: 0.05, attached: true, tip: 0, since: 50 }).head;
         expect(points(d).subpaths).toBe(1);
         expect(reach(g, d)).toBeCloseTo(U, 0);
-        const b = box(d);
+        const b = box(d)!;
         expect(b.b - b.t).toBeGreaterThan(g.tabs.h * 0.9);
       }
     }
@@ -93,7 +109,7 @@ describe("gooParts pelo estado", () => {
       const cy = g.tabs.y + g.tabs.h / 2;
       expect(d).toContain(`,${Math.round((cy - neck) * 100) / 100}`);
       expect(d).toContain(`,${Math.round((cy + neck) * 100) / 100}`);
-      const b = box(d);
+      const b = box(d)!;
       expect((b.b - b.t) / 2).toBeCloseTo(HB, 0);
     }
   });
@@ -134,11 +150,12 @@ describe("gooParts pelo estado", () => {
   test("no meio do caminho é lágrima, não lente: altura cheia, frente redonda, só a cauda afina", () => {
     for (const { g } of BARS) {
       const m = gooMarks(g);
-      for (const p of [0.25, 0.4]) {
+      // No meio do caminho. Perto da pílula, na volta, a cauda ainda está virando para trás e a gota é quase redonda.
+      for (const p of [0.4, 0.5]) {
         for (const v of [0.3, -0.3]) {
           const U = m.Up + p * (m.Ut - m.Up);
           const d = gooParts(g, { U, v, attached: false, tip: 0, since: 200 }).head;
-          const b = box(d);
+          const b = box(d)!;
           const h = b.b - b.t;
           const w = b.r - b.l;
           expect(h).toBeGreaterThan(g.target.h * 0.8);
@@ -162,12 +179,13 @@ describe("gooParts pelo estado", () => {
 });
 
 describe("a ida e a volta quadro a quadro (60 Hz)", () => {
-  for (const { W, side, g } of BARS) {
-    test(`${W} px, lado ${side}: sem parada entre a largada e a chegada, e o maior salto abaixo do da main`, () => {
+  for (const { W, side, kind, g } of BARS) {
+    test(`${W} px, barra ${kind}, lado ${side}: sem parada entre a largada e a chegada, e o maior salto abaixo do da main`, () => {
       const m = gooMarks(g);
+      // A frente é a da cabeça, como no roteiro da velocidade: o cone da beira fica preso à pílula.
       // Ida: da largada (o primeiro quadro em que a frente anda 1 px) à chegada (o primeiro estado nos botões).
       const go = ida(g);
-      const fi = go.map((s) => reach(g, whole(g, s)));
+      const fi = go.map((s) => reach(g, gooParts(g, s).head));
       const vi = deltas(fi);
       const start = vi.findIndex((d) => d >= 1);
       const arrive = go.findIndex((s) => s.U >= m.Ut);
@@ -179,17 +197,32 @@ describe("a ida e a volta quadro a quadro (60 Hz)", () => {
       expect(maxJump(fi)).toBeLessThan(maxJump(mainIda(g)));
       // Volta: anda para a pílula do primeiro quadro ao último antes de sumir (o último é a pílula engolindo o resto).
       const back = volta(g);
-      const fv = back.map((s) => reach(g, whole(g, s)));
+      const fv = back.map((s) => reach(g, gooParts(g, s).head));
       const vv = deltas(fv);
       for (let i = 1; i < vv.length - 1; i++) expect(vv[i]!).toBeLessThanOrEqual(-1);
       expect(maxJump(fv)).toBeLessThan(maxJump(mainVolta(g)));
       expect(gooAtRest(g, back.at(-1)!, false)).toBe(true);
+      // A frente da volta é a borda que vai para a pílula (a do roteiro da velocidade). Ao prender de novo, a forma presa
+      // nasce na pílula: a cauda já se esticou até ela, e essa borda chega sem pular e sem parar.
+      const nv: number[] = [];
+      let att = -1;
+      back.forEach((s, i) => {
+        const x = near(g, gooParts(g, s).head);
+        if (x !== null) nv.push(x);
+        if (att < 0 && s.attached) att = i;
+      });
+      const dn = deltas(nv);
+      const go0 = dn.findIndex((d) => d <= -1);
+      expect(att).toBeGreaterThan(go0);
+      for (let i = go0; i < att; i++) expect(dn[i]!).toBeLessThanOrEqual(-1);
+      const mainNear = Array.from({ length: 25 }, (_, i) => near(g, gooDropParts(1 - i / 24, { ...g, back: true }).head));
+      expect(maxJump(nv)).toBeLessThan(maxJump(mainNear.filter((x): x is number => x !== null)));
     });
   }
 
   test("no fim da volta a pílula suga: a gota entra nela com embalo, sem se arrastar até sumir", () => {
     for (const { g } of BARS) {
-      const back = gooPlan(g, gooRest(true, g), false);
+      const back = gooPlan(g, gooRest(true, g), false).states;
       const last = back.at(-2)!;
       expect(last.attached).toBe(true);
       // Sem a sucção ela chegava a 0,07 px/ms (pouco mais de 1 px por quadro de 60 Hz).
@@ -208,7 +241,7 @@ describe("a ida e a volta quadro a quadro (60 Hz)", () => {
 
   test("a cabeça no compositor (`gooAnchor`) anda sem salto, também na soltura", () => {
     for (const { g } of BARS) {
-      for (const plan of [gooPlan(g, gooRest(false, g), true), gooPlan(g, gooRest(true, g), false)]) {
+      for (const plan of [gooPlan(g, gooRest(false, g), true).states, gooPlan(g, gooRest(true, g), false).states]) {
         const xs = plan.map((s) => gooAnchor(g, s).x);
         const v = deltas(xs).map(Math.abs);
         const i = plan.findIndex((s, k) => k > 0 && s.attached !== plan[k - 1]!.attached);
@@ -224,14 +257,14 @@ describe("a ida e a volta quadro a quadro (60 Hz)", () => {
 });
 
 describe("trocar no meio só troca o alvo", () => {
-  for (const { W, side, g } of BARS) {
-    test(`${W} px, lado ${side}: no meio da ida e da volta, a gota segue de onde está, sem teleporte`, () => {
+  for (const { W, side, kind, g } of BARS) {
+    test(`${W} px, barra ${kind}, lado ${side}: no meio da ida e da volta, a gota segue de onde está, sem teleporte`, () => {
       for (const [from, to] of [[false, true], [true, false]] as const) {
-        const first = gooPlan(g, gooRest(from, g), to, 60);
+        const first = gooPlan(g, gooRest(from, g), to, 60).states;
         const normal = Math.max(...deltas(first.map((s) => reach(g, whole(g, s)))).map(Math.abs));
         for (const at of [0.2, 0.4, 0.6]) {
           const i = Math.round(first.length * at);
-          const second = gooPlan(g, first[i]!, from, 60);
+          const second = gooPlan(g, first[i]!, from, 60).states;
           // O 1º estado do plano novo é o do instante da troca (só a mola recomeça a entrar).
           expect({ ...second[0]!, since: 0 }).toEqual({ ...first[i]!, since: 0 });
           expect(second[0]!.since).toBe(0);
@@ -248,19 +281,29 @@ describe("o plano é sempre finito", () => {
   const cap = Math.ceil(GOO_PLAN_MAX_MS / (1000 / GOO_PLAN_HZ)) + 1;
 
   test("acaba no repouso; a duração e o estado por tempo, presos nas pontas", () => {
-    const plan = gooPlan(g1000, gooRest(false, g1000), true);
+    const P = gooPlan(g1000, gooRest(false, g1000), true);
+    const plan = P.states;
     expect(plan.length).toBeLessThanOrEqual(cap);
     expect(gooAtRest(g1000, plan.at(-1)!, true)).toBe(true);
-    expect(gooPlanMs(plan)).toBeCloseTo(((plan.length - 1) * 1000) / GOO_PLAN_HZ);
-    expect(gooAt(plan, -50)).toBe(plan[0]!);
-    expect(gooAt(plan, 1e9)).toBe(plan.at(-1)!);
-    expect(gooAt(plan, Number.NaN)).toBe(plan[0]!);
-    expect(gooAt(plan, gooPlanMs(plan) / 2)).toBe(plan[Math.round((plan.length - 1) / 2)]!);
+    expect(gooPlanMs(P)).toBeCloseTo(((plan.length - 1) * 1000) / GOO_PLAN_HZ);
+    expect(gooAt(P, -50)).toBe(plan[0]!);
+    expect(gooAt(P, 1e9)).toBe(plan.at(-1)!);
+    expect(gooAt(P, Number.NaN)).toBe(plan[0]!);
+    expect(gooAt(P, gooPlanMs(P) / 2)).toBe(plan[Math.round((plan.length - 1) / 2)]!);
+  });
+
+  test("o plano leva o próprio hz: um plano de 60 Hz se lê no tempo certo, sem passar o hz de novo", () => {
+    const P = gooPlan(g1000, gooRest(false, g1000), true, 60);
+    expect(P.hz).toBe(60);
+    expect(gooAt(P, 100)).toBe(P.states[6]!);
+    expect(gooPlanMs(P)).toBeCloseTo(((P.states.length - 1) * 1000) / 60);
+    // O mesmo instante, no plano de 120 Hz, é quase o mesmo estado (o passo interno é de 1 ms; só a sobra do quadro muda).
+    expect(gooAt(gooPlan(g1000, gooRest(false, g1000), true), 100).U).toBeCloseTo(gooAt(P, 100).U, 1);
   });
 
   test("uma mola que não assenta (um número ruim no estado) acaba no teto, no repouso do alvo", () => {
     for (const has of [true, false]) {
-      const plan = gooPlan(g1000, { U: Number.NaN, v: 0, attached: false, tip: 0, since: 0 }, has);
+      const plan = gooPlan(g1000, { U: Number.NaN, v: 0, attached: false, tip: 0, since: 0 }, has).states;
       expect(plan.length).toBeLessThanOrEqual(cap);
       expect(gooAtRest(g1000, plan.at(-1)!, has)).toBe(true);
     }
@@ -277,7 +320,7 @@ describe("o plano é sempre finito", () => {
     ];
     for (const g of weird) {
       for (const has of [true, false]) {
-        const plan = gooPlan(g, gooRest(!has, g), has);
+        const plan = gooPlan(g, gooRest(!has, g), has).states;
         expect(plan.length).toBeLessThanOrEqual(cap);
         expect(gooAtRest(g, plan.at(-1)!, has)).toBe(true);
         for (const s of plan) for (const v of [s.U, s.v, s.tip]) expect(Number.isFinite(v)).toBe(true);
@@ -290,7 +333,7 @@ describe("o plano é sempre finito", () => {
       // O alvo trocando a cada quadro: cada plano novo sai do 2º estado do anterior, e cada um termina.
       let s = gooRest(false, g);
       for (let k = 0; k < 60; k++) {
-        const plan = gooPlan(g, s, k % 2 === 0);
+        const plan = gooPlan(g, s, k % 2 === 0).states;
         expect(plan.length).toBeLessThanOrEqual(cap);
         s = plan[Math.min(1, plan.length - 1)]!;
       }
