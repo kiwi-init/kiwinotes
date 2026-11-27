@@ -24,7 +24,7 @@ const data = mkdtempSync(join(tmpdir(), "kn-goo-speed-"));
 const FRAME_MS = 1000 / 60;
 const WIDTHS = [1000, 1600] as const;
 /**
- * A régua da main antes da mola (0cee5e48, medida por este roteiro no T32466): o maior salto de velocidade entre dois
+ * A régua da main antes da mola (e613641a, medida por este roteiro no T32466): o maior salto de velocidade entre dois
  * quadros, o pior dos dois lados, em px por quadro. A caixa 2 do spec #32446 pede ficar abaixo disto.
  */
 export const MAIN_MAX_JUMP = { 1000: { ida: 6.65, volta: 21.75 }, 1600: { ida: 19.03, volta: 28.32 } } as const;
