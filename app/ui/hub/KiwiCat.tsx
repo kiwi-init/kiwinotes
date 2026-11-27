@@ -32,6 +32,8 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
   const handle = useRef<Cat | undefined>(undefined);
   /** Tira a resposta de antes do canto quando a pergunta sai (o `drop` do CatBubble). */
   const dropAnswer = useRef<(() => void) | null>(null);
+  /** Traz a última resposta de volta (o `recall` do CatBubble, spec #32534): o mouse chegou no Kiwi depois que ela saiu. */
+  const recallAnswer = useRef<(() => boolean) | null>(null);
   const reducedRef = useRef(reduced); reducedRef.current = reduced;
   const awayRef = useRef(away); awayRef.current = away;
   const refresh = useRef<() => void>(() => {});
@@ -239,18 +241,33 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
   peekRef.current = peekShown;
   const [unseen, setUnseen] = useState(false);
   const peekApi = useRef<BubblePeek | null>(null);
+  /** O mouse em cima do Kiwi ou de um balão, agora: segura o relógio do balão e arma o Esc (spec #32534, Cena 3). */
+  const [hovering, setHovering] = useState(false);
+  /** Quem pode trazer a última resposta de volta: só com o canto livre (sem outro balão, sem o campo, à vista). */
+  const recallOk = useRef(false);
   useEffect(() => {
     const peek = new BubblePeek((shown) => {
       setPeekShown(shown);
       if (shown) setUnseen(false);
     });
     peekApi.current = peek;
+    let onKiwi = false;
     const over = (e: PointerEvent) => {
       const t = e.target;
+      const kiwi = t instanceof Element && !!t.closest(".kn-kiwicat-hit");
+      // O mouse chegou no Kiwi: a última resposta volta, se já saiu (o `recall` não faz nada com ela na tela).
+      if (kiwi && !onKiwi && recallOk.current) recallAnswer.current?.();
+      onKiwi = kiwi;
       peek.hover("mouse", t instanceof Element && !!t.closest(PEEK_TARGETS));
+      setHovering(peek.hovering);
     };
     // Saiu da janela: o `relatedTarget` é nenhum.
-    const out = (e: PointerEvent) => { if (!e.relatedTarget) peek.hover("mouse", false); };
+    const out = (e: PointerEvent) => {
+      if (e.relatedTarget) return;
+      onKiwi = false;
+      peek.hover("mouse", false);
+      setHovering(false);
+    };
     document.addEventListener("pointerover", over, true);
     document.addEventListener("pointerout", out, true);
     return () => {
@@ -263,6 +280,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
   // A marca no Kiwi (spec #32534): cada balão novo que chega com o mouse longe a acende, também com outro balão ainda
   // na tela (T33053); ela some quando o mouse mostra os balões, ou quando nenhum sobra.
   const anyBubble = talking || noting || routining || proposing;
+  recallOk.current = !anyBubble && !askShown && !away;
   useEffect(() => { if (!anyBubble) setUnseen(false); }, [anyBubble]);
   useEffect(() => {
     const hub = root.current?.parentElement;
@@ -338,7 +356,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
       {/* O balão (spec #9495): ao lado do gato, fora da caixa dele. Com o campo aberto ele espera escondido, sem perder
           o que chega, e aparece depois que o pedido sai (#10868). */}
       {/* Um balão com ação esperando (T28350): com o agente parado, a resposta dá lugar a ele depois do tempo de leitura. */}
-      <CatBubble reduced={reduced} hidden={asking || away} onShown={onShown} drop={dropAnswer} yieldTo={(noting || routining || proposing) && !(busy || activity.busy) && !sending} />
+      <CatBubble reduced={reduced} hidden={asking || away} onShown={onShown} drop={dropAnswer} recall={recallAnswer} hovering={hovering} onAsk={() => { if (!peekRef.current) setUnseen(true); }} yieldTo={(noting || routining || proposing) && !(busy || activity.busy) && !sending} />
       {/* A proposta da reunião (spec #8360): no mesmo canto, depois que a resposta sai da tela. */}
       {/* "Anotei: …" (spec #11469): depois da resposta; a proposta da reunião espera ele sair, e também o pedido em
           andamento (sem isso ela voltava por um instante entre a pergunta e a resposta, spec #11652). */}

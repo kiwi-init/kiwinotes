@@ -233,6 +233,8 @@ moreButton.addEventListener("click", (e) => {
 
 /** A pergunta antes de sair (spec #13380): entra e sai sem mexer na resposta, aberta ou não. */
 function setAsk(on: boolean) {
+  // A pergunta é texto novo (spec #32534, Cena 3): com o mouse longe, a marca acende.
+  if (on && !stats.bubbleAsk && stats.bubble && !stats.peek) setUnseen(true);
   stats.bubbleAsk = on;
   bubbleEl.dataset.ask = String(on);
   bubbleSr.textContent = stats.bubble ? `${plainMarkdown(stats.bubble.text)}${on ? ` ${t("catOverlay.ask")}` : ""}` : "";

@@ -228,6 +228,15 @@ final class CatOverlayModelTests: XCTestCase {
         XCTAssertFalse(CatOverlayBubble.escapeArmed(bubbleShown: false, catHover: true, overBubble: false), "nada para fechar")
     }
 
+    /// Spec #32534 (Cena 3): o mouse no Kiwi com o balão à vista segura o relógio, como o mouse no balão.
+    func testTheMouseOnTheKiwiWithABubbleHoldsTheClock() {
+        XCTAssertTrue(CatOverlayBubble.holds(open: false, overBubble: false, catHover: true, bubbleShown: true))
+        XCTAssertTrue(CatOverlayBubble.holds(open: false, overBubble: true, catHover: false, bubbleShown: true))
+        XCTAssertTrue(CatOverlayBubble.holds(open: true, overBubble: false, catHover: false, bubbleShown: true), "o Ver mais aberto")
+        XCTAssertFalse(CatOverlayBubble.holds(open: false, overBubble: false, catHover: false, bubbleShown: true), "o mouse longe")
+        XCTAssertFalse(CatOverlayBubble.holds(open: false, overBubble: false, catHover: true, bubbleShown: false), "sem balão, nada a segurar")
+    }
+
     /// Spec #32534: com o "Ver mais" aberto, o clique fora é o botão que desce agora, longe do balão.
     func testAClickOutsideIsTheButtonGoingDownAwayFromTheBubble() {
         XCTAssertTrue(CatOverlayBubble.clickedOutside(open: true, pressed: true, wasPressed: false, overBubble: false))

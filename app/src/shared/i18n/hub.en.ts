@@ -22,6 +22,8 @@ export const enHub: { readonly [K in keyof typeof ptHub]: Entry } = {
   "hub.tab.soon": "soon",
   "hub.bubble.more": "See more",
   "hub.bubble.answer": "The agent's answer",
+  "hub.bubble.ask": "Need anything else?",
+  "hub.bubble.close": "Close",
   "hub.ask.voiceHint": "Or hold {keys} to talk.",
   "hub.memory.aria": "The agent's memory",
   "hub.memory.open": "Open the memory",
