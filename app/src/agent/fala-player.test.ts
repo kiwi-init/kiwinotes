@@ -223,7 +223,8 @@ describe("ligarFalaPlayer (T26734)", () => {
     return { ...m, sintese, fala: (e: { turnId: string; frases: string[] }) => fala?.(e), ouvintes, desligar };
   }
 
-  for (const evento of ["agent.record.started", "catOverlay.close"]) {
+  // O ditado também (#459): a voz do gato cairia no texto ditado.
+  for (const evento of ["agent.record.started", "catOverlay.close", "record.started"]) {
     test(`${evento} cala o gato`, async () => {
       const { player, sintese, saida, fala, ouvintes } = ligar();
       fala({ turnId: "t1", frases: ["Oi."] });

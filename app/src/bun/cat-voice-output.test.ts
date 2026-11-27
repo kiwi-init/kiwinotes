@@ -268,7 +268,7 @@ test("falarUmaVez: o gato voltando a falar corta o teste", async () => {
   voz.stop();
 });
 
-for (const evento of ["agent.record.started", "meeting.started"] as const) {
+for (const evento of ["agent.record.started", "meeting.started", "record.started"] as const) {
   test(`falarUmaVez: o ${evento} corta a fala (o aviso do Calendário não cai na transcrição, T32156)`, async () => {
     const helper = new Map<string, Set<() => void>>();
     let limpou = 0;

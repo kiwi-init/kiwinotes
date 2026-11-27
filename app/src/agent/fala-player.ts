@@ -258,7 +258,7 @@ export function falaNaTela(enviar: (e: FalaNaTela) => void): (e: FalaEvento) => 
 export interface FalaPlayerWiring {
   agent: { onSpeech(fn: (e: { turnId: string; frases: string[] }) => void): () => void };
   /** Os eventos do helper; sem ele, só a fala do agente liga o player. */
-  helper?: { on(type: "agent.record.started" | "catOverlay.close" | "meeting.started" | "meeting.stopped", fn: () => void): () => void };
+  helper?: { on(type: "agent.record.started" | "catOverlay.close" | "meeting.started" | "meeting.stopped" | "record.started", fn: () => void): () => void };
   log?(m: string): void;
 }
 
@@ -272,6 +272,8 @@ export function ligarFalaPlayer(player: FalaPlayer, w: FalaPlayerWiring): () => 
     // O atalho da pessoa: ela vai falar de novo, o gato se cala.
     w.helper?.on("agent.record.started", () => player.cancelar()),
     w.helper?.on("catOverlay.close", () => player.cancelar()),
+    // O ditado começou a gravar (#459): a voz do gato cairia no texto ditado.
+    w.helper?.on("record.started", () => player.cancelar()),
     w.helper?.on("meeting.started", () => player.reuniao(true)),
     w.helper?.on("meeting.stopped", () => player.reuniao(false)),
   ];
