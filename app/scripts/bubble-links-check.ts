@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, peekKiwi, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 import { overlayPlacement } from "../ui/catoverlay/placement";
 import type { BubbleLink } from "../src/shared/ui-contract";
@@ -94,6 +94,8 @@ async function invoke(cap: string, args: unknown = {}) {
 const BUBBLE = ".kn-bubble-slot:not([data-phase='exit']) .kn-bubble";
 /** Pede ao agente falso e espera o balão pequeno parar de digitar. */
 async function ask(p: Page, text: string) {
+  // O balão só aparece com o mouse no Kiwi (spec #32534): o clique de antes o tirou de lá.
+  await peekKiwi(p);
   await invoke("agent.ask", { text: `/diga ${text}` });
   await p.waitForSelector(BUBBLE);
   await p.waitForFunction(() => document.querySelector<HTMLElement>(".kn-kiwicat")?.dataset.state !== "agindo");
