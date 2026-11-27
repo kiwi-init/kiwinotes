@@ -64,13 +64,15 @@ function frontmatterEnd(state: EditorState): number {
 
 export function headingAtCursor(state: EditorState): NoteHeading | undefined {
   const head = state.selection.main.head;
-  // O frontmatter não tem título (o `tags: […]` antes do `---` não é um título setext).
-  if (head <= frontmatterEnd(state)) return undefined;
+  // O frontmatter não tem título (o `tags: […]` antes do `---` não é um título setext). Sem frontmatter, o fim dele é 0,
+  // e o 0 é o começo do título da 1ª linha, onde o clique no título desenhado põe o cursor (#465).
+  const fm = frontmatterEnd(state);
+  if (fm > 0 && head <= fm) return undefined;
   const tree = ensureSyntaxTree(state, Math.min(state.doc.length, head + 1), 50) ?? syntaxTree(state);
   for (const side of [1, -1] as const) {
     for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = tree.resolveInner(head, side); n; n = n.parent) {
       if (!/^(ATX|Setext)Heading\d$/.test(n.name)) continue;
-      if (n.from < frontmatterEnd(state)) return undefined;
+      if (n.from < fm) return undefined;
       const h = markdownStructure(state.sliceDoc(n.from, n.to)).headings[0];
       if (!h) return undefined;
       const at = (x: number) => x + n!.from;
