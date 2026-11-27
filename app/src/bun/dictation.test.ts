@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import type { Command, Event, EventMessage, ResultMessage } from "../shared/ipc.ts";
 import type { NewHistoryEntry } from "../store/history.ts";
+import { CATALOGS, LOCALES, type TextKey } from "../shared/i18n/index.ts";
 import {
   Dictation,
   type DictationSidecar,
@@ -678,4 +680,33 @@ test("a nota rápida que falha não põe a mensagem do erro, com o caminho, no l
   await d.dictateText("Comprar pão para a Ana.", { note: true });
   expect(lines.some((l) => l.includes("quick note failed: Error"))).toBe(true);
   expect(lines.join("\n")).not.toContain("Comprar pão");
+});
+
+// #458: a pílula tem uma linha só, e o helper corta com "…" o que passa dela (ADR 0005). O helper tem o teste dos erros
+// dele (HelperLocaleTests); este mede as mensagens que o app manda pelo `overlay.state`: toda chave `pill.*` do catálogo,
+// nas duas línguas. As que levam um nome (o título da nota, o nome de um mic) contam com o do Mac e o padrão (T3344).
+describe("as mensagens da pílula cabem na linha (#458)", () => {
+  const swift = readFileSync(new URL("../../../native/Sources/KiwiHelperCore/OverlayModel.swift", import.meta.url), "utf8");
+  const limit = Number(swift.match(/maxMessageLength = (\d+)/)?.[1]);
+  const letters = (s: string) => [...new Intl.Segmenter().segment(s)].length;
+
+  test("o limite vem do helper", () => {
+    expect(limit).toBe(38);
+  });
+
+  test("cada mensagem fixa cabe em 38 letras, em pt e en", () => {
+    const keys = Object.keys(CATALOGS.pt).filter((k) => k.startsWith("pill.")) as TextKey[];
+    expect(keys).toEqual(expect.arrayContaining([...Object.values(NOT_PASTED), ...Object.values(TRANSCRIPT_ERROR), NOTE_FAILED, NOTHING_TO_PASTE, SECURE_INPUT_NOTICE, MIC_LOST_NOTICE, MIC_LOST_EMPTY]));
+    const long = LOCALES.flatMap((l) => {
+      const texts = keys.flatMap((k): string[] =>
+        k === "pill.micFellBack"
+          ? [micFellBackNotice(micShortName({ name: "", transport: "builtin", systemDefault: false }, l)), micFellBackNotice(micShortName({ name: "", transport: null, systemDefault: true }, l))].map((m) => pillText(l, m))
+          : k === "pill.noteCreated"
+            ? [pillText(l, noteCreated(""))]
+            : [pillText(l, k)],
+      );
+      return texts.filter((t) => letters(t) > limit).map((t) => `${l} ${letters(t)}: ${t}`);
+    });
+    expect(long).toEqual([]);
+  });
 });

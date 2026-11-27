@@ -107,9 +107,9 @@ const ptBase = {
   "notice.agent.bodyRequest": "Dúvida no texto do seu pedido. Clique para responder.",
 
   // A pílula do ditado: uma linha de 38 letras (`OverlayModel.maxMessageLength`).
-  "pill.notPasted.noFocus": "Nenhum campo em foco: está no clipboard",
-  "pill.notPasted.noTextField": "Não é um campo de texto: está no clipboard",
-  "pill.notPasted.noAccessibility": "Falta a Acessibilidade: está no clipboard",
+  "pill.notPasted.noFocus": "Sem campo em foco: está no clipboard",
+  "pill.notPasted.noTextField": "Sem campo de texto: está no clipboard",
+  "pill.notPasted.noAccessibility": "Sem Acessibilidade: está no clipboard",
   "pill.nothingToPaste": "Ainda não há ditado para colar",
   "pill.secureInput": "O texto também ficou no clipboard",
   "pill.micLost": "O microfone caiu: transcrevi até aqui",
@@ -118,7 +118,7 @@ const ptBase = {
   "pill.mic.default": "padrão",
   "pill.micLostEmpty": "Sem áudio do microfone",
   "pill.noteCreated": "Virou nota: {title}",
-  "pill.noteFailed": "Não deu para criar a nota: o texto está no Histórico",
+  "pill.noteFailed": "Nota não criada: está no Histórico",
   "pill.pasteFailed": "Não deu para colar o texto",
   "pill.modelUnavailable": "O modelo de voz não está pronto",
   "pill.sttFailed": "Não deu para transcrever",
