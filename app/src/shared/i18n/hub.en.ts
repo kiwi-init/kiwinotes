@@ -16,6 +16,7 @@ export const enHub: { readonly [K in keyof typeof ptHub]: Entry } = {
   "hub.tab.notes": "Notes",
   "hub.tab.meetings": "Meetings",
   "hub.tab.dictation": "Dictation",
+  "hub.tab.calendar": "Calendar",
   "hub.tab.settings": "Settings",
   "hub.tab.about": "About",
   "hub.tab.soon": "soon",

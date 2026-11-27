@@ -20,6 +20,7 @@ import type { AttachmentSource } from "./editor/attachments.ts";
 import type { NoteEmbed } from "../../src/shared/ui-contract.ts";
 import { focusCompartment, focusExtension, typewriterCompartment, typewriterExtension } from "./editor/focus.ts";
 import { titleCompartment, titleHeading } from "./editor/titleHeading.ts";
+import { flashLine, jumpToLine } from "./editor/flash-line.ts";
 import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
 } from "./editor/index.ts";
 import { type KiwiEdit, type KiwiWriteHandle, playKiwiWrite, runningKiwiWrite } from "./editor/kiwi-writing.ts";
@@ -37,6 +38,8 @@ export interface NoteEditorProps {
   /** Muda quando outra nota abre, ou quando a mesma nota é recarregada do disco. */
   docKey: string;
   headingJump: { heading: string; sequence: number } | null;
+  /** A linha que um link de fora abriu (o Calendário, T32155): `line` no corpo, `fileLine` no arquivo. */
+  lineJump?: { line: number; fileLine: number; sequence: number } | null;
   doc: string;
   links: LinkCache;
   onChange(doc: string): void;
@@ -68,7 +71,7 @@ export interface NoteEditorProps {
   title?: string | null;
 }
 
-export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, embed, onError, createSplit, onSplitDone, onRenameHeading,
+export function NoteEditor({ docKey, headingJump, lineJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, embed, onError, createSplit, onSplitDone, onRenameHeading,
   focus = false, typewriter = false, viewModes, onAddProperty, readOnly = false, title = null,
 }: NoteEditorProps) {
   const { t: tr } = useT();
@@ -98,7 +101,8 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   const modeMenu = useRef({ focus, typewriter, viewModes, onAddProperty });
   modeMenu.current = { focus, typewriter, viewModes, onAddProperty };
 
-  const extensions = useRef(
+  const extensions = useRef([
+    flashLine,
     editorExtensions(
       {
         onChange: (d, kiwi) => {
@@ -125,7 +129,7 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
       },
       links,
     ),
-  );
+  ]);
 
   useEffect(() => {
     const v = new EditorView({ parent: host.current!, state: stateFor(doc, withModes(extensions.current)),
@@ -188,6 +192,14 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
     v.dispatch({ selection: { anchor: heading.from }, effects: EditorView.scrollIntoView(heading.from, { y: "center" }) });
     v.focus();
   }, [headingJump, docKey]);
+
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !lineJump || lineJump.line > v.state.doc.lines) return;
+    const timer = jumpToLine(v, lineJump.line, lineJump.fileLine);
+    v.focus();
+    return () => clearTimeout(timer);
+  }, [lineJump, docKey]);
 
   useEffect(() => {
     const cancelPending = () => { spellingRequest.current++; };

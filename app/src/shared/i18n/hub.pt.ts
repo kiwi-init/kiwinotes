@@ -14,6 +14,7 @@ export const ptHub = {
   "hub.tab.notes": "Notas",
   "hub.tab.meetings": "Reuniões",
   "hub.tab.dictation": "Ditado",
+  "hub.tab.calendar": "Calendário",
   "hub.tab.settings": "Configurações",
   "hub.tab.about": "Sobre",
   "hub.tab.soon": "breve",
