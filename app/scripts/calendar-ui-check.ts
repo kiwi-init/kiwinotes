@@ -68,6 +68,10 @@ const wide = (p: Page, state: "open" | "gone") =>
     ? p.waitForSelector(`${pane} .kn-cal-wide[data-state="open"]`)
     : p.waitForSelector(`${pane} .kn-cal-wide`, { state: "detached" });
 
+/** A grade abre rolada perto do agora: rola até o item, no meio, antes do print ou do arrastar. */
+const show = (p: Page, title: string) =>
+  p.locator(item(title)).first().evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
+
 async function view(p: Page, v: (typeof VIEWS)[number]) {
   await p.locator(`${pane} .kn-cal-views [data-view="${v}"]`).click();
   await p.waitForSelector(`${pane} .kn-cal[data-view="${v}"]`);
@@ -109,14 +113,20 @@ try {
       assert.equal(order[order.indexOf("dictation") + 1], "calendar", `a ordem das abas: ${order}`);
       await tab(p, "calendar").click();
       await p.waitForSelector(`${pane}:not([hidden]) .kn-cal[data-view="week"]`);
-      await p.waitForSelector(`${pane} .kn-cal-kiwi`);
+      // O painel do Kiwi é do T32156: aqui só o lugar dele, que fica vazio (e sem tamanho) até a parte 3 entrar.
+      await p.waitForSelector(`${pane} .kn-cal-side`, { state: "attached" });
       for (const t of ["Revisar o orçamento", "Revisão do Projeto X"]) await p.waitForSelector(item(t));
-      checks.push(`${lang}: a aba Calendário depois de Ditado, na Semana, com os itens e o painel do Kiwi`);
+      // O fundo da aba ativa (a pílula) fica embaixo do Calendário, não de outra aba (lead #32229).
+      const [pill, calTab] = await Promise.all([p.locator(".kn-tabs-pill").boundingBox(), tab(p, "calendar").boundingBox()]);
+      assert.ok(pill && calTab);
+      assert.ok(Math.abs(pill.x + pill.width / 2 - (calTab.x + calTab.width / 2)) <= 2, `a pílula fora do Calendário: ${pill.x} × ${calTab.x}`);
+      checks.push(`${lang}: a aba Calendário depois de Ditado, com a pílula nela, na Semana, com os itens e o painel do Kiwi`);
 
       // 2. Cada vista, com o print.
       for (const v of VIEWS) {
         await view(p, v);
         if (v !== "month") await p.waitForSelector(item("Revisar o orçamento"));
+        if (v === "day" || v === "week") await show(p, "Revisar o orçamento");
         await p.screenshot({ path: join(shots, `${v}.png`) });
       }
       await view(p, "week");
@@ -128,15 +138,47 @@ try {
       await p.locator(`${pane} .kn-cal-card .kn-cal-expand`).click();
       await wide(p, "open");
       assert.equal(await p.locator(`${pane} .kn-cal-item[data-open]`).count(), 1, "o item aberto fica marcado");
-      for (const t of ["item", "note", "links"]) assert.equal(await p.locator(`${pane} .kn-cal-wide [data-tab="${t}"]`).count(), 1, `a aba ${t}`);
+      for (const t of ["item", "note", "links"]) assert.equal(await p.locator(`${pane} .kn-cal-wide [role="tab"][data-tab="${t}"]`).count(), 1, `a aba ${t}`);
       await p.screenshot({ path: join(shots, "largo.png") });
       await p.locator(`${pane} .kn-cal-collapse`).click();
       await wide(p, "gone");
       assert.equal(await p.locator(`${pane} .kn-cal-item[data-open]`).count(), 0, "nenhum item marcado depois do ⤡");
       checks.push(`${lang}: o hover com um só ⤢ no canto, o painel largo com Item · Nota · Ligações, e o ⤡ de volta`);
 
-      // 4. O link da nota abre as Notas naquela nota, na linha do item.
       if (lang === "pt") {
+        // 4a. Arrastar uma hora para baixo muda a hora na linha da nota; esticar a borda põe o fim.
+        const line = async () => ((await invoke("notes.get", { path: "Projeto X/Pendências.md" })).content as string).split("\n")[2];
+        const until = async (re: RegExp, what: string) => {
+          for (let n = 0; !re.test(await line()); n++) { assert.ok(n < 50, `${what}: ${await line()}`); await Bun.sleep(100); }
+        };
+        const drag = async (sel: string, dy: number) => {
+          await show(p, "Revisar o orçamento");
+          const b = await p.locator(sel).first().boundingBox();
+          assert.ok(b);
+          const [x, y] = [b.x + b.width / 2, sel.includes("resize") ? b.y + b.height / 2 : b.y + 8];
+          await p.mouse.move(x, y);
+          await p.mouse.down();
+          await p.mouse.move(x, y + dy, { steps: 8 });
+          await p.mouse.up();
+        };
+        await drag(item("Revisar o orçamento"), 48);
+        await until(new RegExp(`@ ${day(0)} 11:00`), "arrastar 1 h");
+        await p.locator(item("Revisar o orçamento")).first().hover();
+        await drag(`${item("Revisar o orçamento")} .kn-cal-resize`, 48);
+        await until(new RegExp(`@ ${day(0)} 11:00-\\d\\d:\\d\\d`), "esticar a borda");
+        checks.push(`${lang}: arrastar muda a hora na nota (${(await line()).trim()}), e esticar põe o fim`);
+
+        // 4b. O + Novo, sem projeto, cria a linha no Calendário.md e o item na tela.
+        await p.locator(`${pane} .kn-cal-new`).click();
+        await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Ligar para o Bruno");
+        await p.fill(`${pane} .kn-cal-newform input[name="day"]`, day(0));
+        await p.fill(`${pane} .kn-cal-newform input[name="time"]`, "16:00");
+        await p.locator(`${pane} .kn-cal-newform button[type="submit"]`).click();
+        await p.waitForSelector(item("Ligar para o Bruno"));
+        assert.match((await invoke("notes.get", { path: "Calendário.md" })).content, new RegExp(`Ligar para o Bruno @ ${day(0)} 16:00`));
+        checks.push(`${lang}: o + Novo cria "Ligar para o Bruno" no Calendário.md e na tela`);
+
+        // 4c. O link da nota abre as Notas naquela nota, na linha do item.
         await hoverCard(p, "Revisar o orçamento");
         await p.locator(`${pane} .kn-cal-card [data-note-link]`).first().click();
         await p.waitForSelector('.kn-hub-pane[data-section="notes"]:not([hidden])');
