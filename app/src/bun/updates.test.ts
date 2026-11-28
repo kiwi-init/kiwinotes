@@ -204,7 +204,7 @@ describe("AppUpdates (T1969)", () => {
         appData,
         record: 2,
         found: { version: "0.1.1", hash: "bbbb", updateAvailable: true },
-        stage: (dir) => spawnSync("ditto", [app, dir]),
+        stage: (dir) => spawnSync("ditto", [app, path.join(dir, "Kiwi Notes.app")]),
       });
       const logs: string[] = [];
       const u = new AppUpdates({ updater, env: {}, log: (m) => logs.push(m) });
@@ -699,11 +699,14 @@ describe("verifyPrepared: a pasta preparada do Electrobun 2026.11.5 ou o tar (#2
     const r = spawnSync(cmd, swapped, { encoding: "utf8" });
     return { code: r.status ?? 1, out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim() };
   };
-  /** O app de `makeApp` copiado para `<app>.prepared-bbbb`, como o Electrobun deixa. */
+  /**
+   * O app de `makeApp` dentro de `<app>.prepared-bbbb/Kiwi Notes.app`, como o Electrobun 2026.11.5 deixa: a pasta
+   * preparada tem um único item, o `.app` (`prepare_update.zig`, `stageIdentityAt`, #521).
+   */
   const staged = (dir: string) => {
     makeApp(dir);
     const stage = path.join(dir, "Kiwi Notes.app.prepared-bbbb");
-    spawnSync("ditto", [path.join(dir, "stage", "Kiwi Notes.app"), stage]);
+    spawnSync("ditto", [path.join(dir, "stage", "Kiwi Notes.app"), path.join(stage, "Kiwi Notes.app")]);
     return stage;
   };
 
@@ -723,6 +726,20 @@ describe("verifyPrepared: a pasta preparada do Electrobun 2026.11.5 ou o tar (#2
       expect(verifyPrepared(tar, { hash: "bbbb" }, adHoc)).toBeNull();
       expect(verifyPrepared(path.join(dir, "nada.prepared-bbbb"), { hash: "bbbb" })).toContain("isn't at");
       mkdirSync(path.join(dir, "vazia.prepared-bbbb"));
-      expect(verifyPrepared(path.join(dir, "vazia.prepared-bbbb"), { hash: "bbbb" })).toBe("the update has no readable version.json");
+      expect(verifyPrepared(path.join(dir, "vazia.prepared-bbbb"), { hash: "bbbb" })).toBe("the prepared update has 0 items, not 1 app");
+    }));
+
+  test("o app fica um nível abaixo da pasta preparada, e só um (#521)", () =>
+    withDir(async (dir) => {
+      const stage = staged(dir);
+      // A pasta em si não é o app: sem o nível de dentro, não há version.json (o que a 2026.11.16 fazia).
+      expect(existsSync(path.join(stage, "Contents"))).toBe(false);
+      expect(verifyPrepared(stage, { hash: "bbbb" }, adHoc)).toBeNull();
+      // Um segundo item não passa, nem um que não é .app.
+      mkdirSync(path.join(stage, "Outro.app"));
+      expect(verifyPrepared(stage, { hash: "bbbb" }, adHoc)).toBe("the prepared update has 2 items, not 1 app");
+      const so = path.join(dir, "so.prepared-bbbb");
+      mkdirSync(path.join(so, "Contents"), { recursive: true });
+      expect(verifyPrepared(so, { hash: "bbbb" }, adHoc)).toBe("the prepared update has 1 items, not 1 app");
     }));
 });

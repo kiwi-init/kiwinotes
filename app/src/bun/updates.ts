@@ -133,8 +133,7 @@ export function requirement(identifier: string, teamId: string): string {
 
 /**
  * Confere o app que o Updater preparou, já aberto (o que ele vai pôr no lugar do app). Devolve null se pode aplicar,
- * ou o motivo de não poder. `app` é a raiz do bundle: um `.app` ou a pasta preparada do Electrobun
- * (`<app>.prepared-<hash>`), que tem o mesmo `Contents/`.
+ * ou o motivo de não poder. `app` é a raiz do bundle, o `.app` (o de dentro da pasta preparada do Electrobun, ou o do tar).
  */
 export function verifyUpdateApp(app: string, expected: Expected, run: Run = runTool): string | null {
   const identifier = expected.identifier ?? IDENTIFIER;
@@ -175,7 +174,14 @@ export function verifyUpdateTar(tar: string, expected: Expected, run: Run = runT
 /** Confere o que o `preparedUpdate` achou: a pasta preparada (o Electrobun 2026.11) ou o .tar (o de antes). */
 export function verifyPrepared(prepared: string, expected: Expected, run: Run = runTool): string | null {
   if (!existsSync(prepared)) return `the prepared update isn't at ${prepared}`;
-  return statSync(prepared).isDirectory() ? verifyUpdateApp(prepared, expected, run) : verifyUpdateTar(prepared, expected, run);
+  if (!statSync(prepared).isDirectory()) return verifyUpdateTar(prepared, expected, run);
+  // A pasta preparada não é o app: o Electrobun 2026.11.5 deixa nela um único item, o próprio `.app`
+  // (`prepare_update.zig`, `stageIdentityAt`). Conferir a pasta como se fosse o app fez a 2026.11.16 recusar a
+  // 2026.11.17 com "the update has no readable version.json" (#521).
+  const items = readdirSync(prepared);
+  const app = items.length === 1 && items[0]!.endsWith(".app") ? path.join(prepared, items[0]!) : null;
+  if (!app || !statSync(app).isDirectory()) return `the prepared update has ${items.length} items, not 1 app`;
+  return verifyUpdateApp(app, expected, run);
 }
 
 /**
