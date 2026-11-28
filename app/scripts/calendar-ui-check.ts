@@ -72,6 +72,16 @@ const wide = (p: Page, state: "open" | "gone") =>
 const show = (p: Page, title: string) =>
   p.locator(item(title)).first().evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
 
+/** O "Revisar o orçamento" de 24 h: o bloco e o cartão do hover mostram a hora com o fim no dia seguinte (T34131). */
+async function plusOneDay(p: Page, text: string) {
+  await show(p, "Revisar o orçamento");
+  const tile = p.locator(item("Revisar o orçamento")).first();
+  assert.ok((await tile.textContent())?.includes(text), `o bloco: ${await tile.textContent()}`);
+  await tile.hover();
+  await p.waitForFunction(([s, t]) => [...document.querySelectorAll(s)].some((e) => e.textContent?.includes(t)), [`${pane} .kn-cal-when`, text] as const, { timeout: 5_000 })
+    .catch(async () => assert.fail(`o cartão: ${await p.locator(`${pane} .kn-cal-when`).allTextContents()}`));
+}
+
 async function view(p: Page, v: (typeof VIEWS)[number]) {
   await p.locator(`${pane} .kn-cal-views [data-view="${v}"]`).click();
   await p.waitForSelector(`${pane} .kn-cal[data-view="${v}"]`);
@@ -188,6 +198,13 @@ try {
       await p.waitForSelector(item("Revisão do Projeto X"));
       checks.push(`${lang}: o filtro esconde o Projeto X (na grade e no sem data) e as reuniões, e fica ao recarregar`);
 
+      if (lang === "en") {
+        // O item que o pt esticou até 24 h (4c), em inglês: o bloco e o cartão com o (+1 day) (T34131).
+        await plusOneDay(p, "11:00–11:00 (+1 day)");
+        await p.screenshot({ path: join(shots, "mais-um-dia.png") });
+        checks.push(`${lang}: o item de 24 h mostra 11:00–11:00 (+1 day) no bloco e no cartão`);
+      }
+
       if (lang === "pt") {
         // 4a. Arrastar uma hora para baixo muda a hora na linha da nota; esticar a borda põe o fim.
         const line = async () => ((await invoke("notes.get", { path: "Projeto X/Pendências.md" })).content as string).split("\n")[2];
@@ -230,8 +247,10 @@ try {
         await until(new RegExp(`@ ${day(0)} 11:00-11:00`), "esticar além de 24 h para em 24 h");
         await Bun.sleep(300);
         assert.equal(await p.locator(`${pane} .kn-cal-notice`).count(), 0, `sem o aviso de erro: ${await p.locator(`${pane} .kn-cal-notice`).first().textContent().catch(() => "")}`);
+        // O bloco e o cartão dizem que o fim é no dia seguinte (T34131): sem isso, 11:00–11:00 parecia duração zero.
+        await plusOneDay(p, "11:00–11:00 (+1 dia)");
         await p.screenshot({ path: join(shots, "esticar-24h.png") });
-        checks.push(`${lang}: esticar além de 24 h para em 24 h (${(await line()).trim()}), sem aviso de erro`);
+        checks.push(`${lang}: esticar além de 24 h para em 24 h (${(await line()).trim()}), sem aviso de erro, e o bloco e o cartão dizem 11:00–11:00 (+1 dia)`);
 
         // 4b. O + Novo, sem projeto, cria a linha no Calendário.md e o item na tela.
         await p.locator(`${pane} .kn-cal-new`).click();

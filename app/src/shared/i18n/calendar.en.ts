@@ -15,6 +15,7 @@ export const enCalendar: { readonly [K in keyof typeof ptCalendar]: Entry } = {
   "calendar.view.agenda": "Agenda",
   "calendar.new": "+ New",
   "calendar.allDay": "all day",
+  "calendar.nextDay": "(+1 day)",
   "calendar.more": "+{n}",
   "calendar.loading": "Reading the calendar…",
   "calendar.loadFailed": "Couldn't read the calendar.",

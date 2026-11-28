@@ -12,6 +12,7 @@ export const ptCalendar = {
   "calendar.view.agenda": "Agenda",
   "calendar.new": "+ Novo",
   "calendar.allDay": "dia todo",
+  "calendar.nextDay": "(+1 dia)",
   "calendar.more": "+{n}",
   "calendar.loading": "Lendo o calendário…",
   "calendar.loadFailed": "Não consegui ler o calendário.",

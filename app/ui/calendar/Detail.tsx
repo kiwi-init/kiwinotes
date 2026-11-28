@@ -93,7 +93,7 @@ function CardBody({ item, a, face, onExpand }: { item: CalendarItem; a: DetailAc
         <KindTags item={item} />
       </div>
       <h3>{item.title}</h3>
-      <div className="kn-cal-when">{whenLine(item, locale, t("calendar.allDay"))}</div>
+      <div className="kn-cal-when">{whenLine(item, locale, t("calendar.allDay"), t("calendar.nextDay"))}</div>
       {item.detail ? (
         <div className="kn-cal-row-kv">
           <i>{t(item.kind === "meeting" ? "calendar.row.agenda" : "calendar.row.detail")}</i>
@@ -361,7 +361,7 @@ export function WidePanel(props: {
         <div>
           <h2 className="kn-cal-wide-title">{item.title}</h2>
           <div className="kn-cal-when">
-            {whenLine(item, locale, t("calendar.allDay"))}
+            {whenLine(item, locale, t("calendar.allDay"), t("calendar.nextDay"))}
             {item.people?.length ? ` · ${item.people.join(", ")}` : ""}
           </div>
         </div>
@@ -385,7 +385,7 @@ export function WidePanel(props: {
               </div>
               <div className="kn-cal-row-kv">
                 <i>{t("calendar.row.when")}</i>
-                <span>{whenLine(item, locale, t("calendar.allDay"))}</span>
+                <span>{whenLine(item, locale, t("calendar.allDay"), t("calendar.nextDay"))}</span>
               </div>
               {item.repeat ? (
                 <div className="kn-cal-row-kv">

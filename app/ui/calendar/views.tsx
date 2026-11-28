@@ -149,7 +149,7 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
                     style={{ top, height, ...cascadeStyle(p.col, p.cols) }}
                   >
                     <b>{p.item.title}</b>
-                    {short ? null : <span>{timeRange(p.item, t("calendar.allDay"))}{p.item.project ? ` · ${p.item.project}` : ""}</span>}
+                    {short ? null : <span>{timeRange(p.item, t("calendar.allDay"), t("calendar.nextDay"))}{p.item.project ? ` · ${p.item.project}` : ""}</span>}
                     {p.item.readOnly ? null : (
                       <i
                         className="kn-cal-resize"
@@ -224,7 +224,7 @@ export function AgendaList({ days, items, today, h, s }: { days: string[]; items
           <h3>{agendaHead(d, locale)}</h3>
           {list.map((i) => (
             <ItemBox key={i.id} item={i} h={h} s={s} className="kn-cal-row">
-              <span className="kn-cal-row-time">{timeRange(i, t("calendar.allDay"))}</span>
+              <span className="kn-cal-row-time">{timeRange(i, t("calendar.allDay"), t("calendar.nextDay"))}</span>
               <b>{i.title}</b>
               {i.project ? <small>{i.project}</small> : null}
             </ItemBox>
