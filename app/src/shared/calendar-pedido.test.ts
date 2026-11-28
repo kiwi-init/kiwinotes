@@ -68,6 +68,32 @@ describe("readCalendarAsk", () => {
     for (const [text, start, notify] of cases) expect([text, ask(text)]).toEqual([text, { start, notify }]);
   });
 
+  test("o intervalo se lê como um todo (#35013): o começo é a 1ª ponta, e o período vale para a ponta em que está", () => {
+    // NOW é quinta, 26/11, 15:00: o que já passou hoje vai para amanhã, 27/11.
+    const cases: [string, string | null, CalendarNotify | null][] = [
+      ["reunião das 10 às 11 e me avisa 5 min antes", "2026-11-27T10:00", "5m"],
+      ["das 9 às 10 amanhã", "2026-11-27T09:00", null],
+      ["das 7 às 8", "2026-11-27T07:00", null],
+      ["das 10 às 2 da tarde", "2026-11-27T10:00", null],
+      ["das 9h às 3 da tarde", "2026-11-27T09:00", null],
+      ["de 9h às 3 da tarde", "2026-11-27T09:00", null],
+      ["das 8 da manhã às 2 da tarde", "2026-11-27T08:00", null],
+      ["from 9 to 10am", "2026-11-27T09:00", null],
+      ["between 2 and 3pm", "2026-11-27T14:00", null],
+      ["das 2 às 4 da tarde", "2026-11-27T14:00", null],
+      ["das 9:30 às 11", "2026-11-27T09:30", null],
+      ["from 9am to 3pm", "2026-11-27T09:00", null],
+      ["de 14 horas às 16 horas", "2026-11-27T14:00", null],
+      ["foco das 16h às 18h", "2026-11-26T16:00", null],
+      ["plantão das 22 às 2", "2026-11-26T22:00", null],
+      ["entre 2 e 3 da tarde", "2026-11-27T14:00", null],
+      // Quantidade e datas não são hora.
+      ["férias de 10 a 15 dias", null, null],
+      ["viagem de 10 a 15 de dezembro", null, null],
+    ];
+    for (const [text, start, notify] of cases) expect([text, ask(text)]).toEqual([text, { start, notify }]);
+  });
+
   test("mais de 30 dias de aviso não vale; o pedido sem hora nem aviso não leva linha", () => {
     expect(ask("me avisa 40 dias antes").notify).toBeNull();
     expect(calendarHint("resume a nota Ideias", NOW)).toBe("");
