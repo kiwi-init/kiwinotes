@@ -158,3 +158,15 @@ describe("a fonte na memória: apagar e desfazer", () => {
     expect(await m.remove({ id: "m:r" }).catch((e: { code?: string }) => e.code)).toBe("E_READONLY");
   });
 });
+
+describe("a fonte na memória: o texto do item", () => {
+  test("numa linha, as de baixo com recuo; na nota com agenda:, o corpo; o item não ganha um campo text", async () => {
+    const texts = { "Projeto X/Pendências.md": "# Pendências\n\n- [ ] Plano do jardim @ 2026-11-25 10:00\n  - velho\n- [ ] Outro\n", "Projeto X/Pauta.md": "---\nagenda: 2026-11-25\n---\n\nvelho\n" };
+    const m = memorySource([item({ source: { path: "Projeto X/Pendências.md", line: 2, internal: false } }), item({ id: "f:Projeto X/Pauta.md", kind: "note", title: "Pauta", source: { path: "Projeto X/Pauta.md", line: 0, internal: false } })], texts);
+    const got = await m.update({ id: "n:Projeto X/Pendências.md#4:abc", text: "comprar sementes\n\nregar" });
+    expect(got).not.toHaveProperty("text");
+    expect(texts["Projeto X/Pendências.md"]).toBe("# Pendências\n\n- [ ] Plano do jardim @ 2026-11-25 10:00\n  comprar sementes\n  regar\n- [ ] Outro\n");
+    await m.update({ id: "f:Projeto X/Pauta.md", text: "novo" });
+    expect(texts["Projeto X/Pauta.md"]).toBe("---\nagenda: 2026-11-25\n---\n\nnovo\n");
+  });
+});

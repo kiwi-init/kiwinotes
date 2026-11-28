@@ -2,7 +2,7 @@
 // testes, uma lista na memória. A tela só conhece esta interface.
 
 import type { CalendarCreate, CalendarDelete, CalendarItem, CalendarItems, CalendarSource, CalendarUndo, CalendarUpdate } from "../../src/shared/calendar.ts";
-import { dayOf, toMs } from "../../src/shared/calendar.ts";
+import { blockEndOf, bodyStartOf, dayOf, toMs } from "../../src/shared/calendar.ts";
 import { api } from "../src/api.ts";
 
 export interface CalendarStore {
@@ -46,7 +46,24 @@ export function memorySource(seed: CalendarItem[], texts: Record<string, string>
         changed();
         return { ...i };
       }
-      const { id: _id, repeat, ...rest } = u;
+      if (u.text !== undefined) {
+        // O texto do item (T34745), como o main grava: numa linha, as de baixo com recuo; na nota com agenda:, o corpo.
+        const path = i.source?.path;
+        if (!path) throw Object.assign(new Error("sem nota"), { code: "E_BAD_ARGS" });
+        const lines = (texts[path] ?? "").split("\n");
+        const body = u.text.split("\n").filter((l) => l.trim());
+        if (i.id.startsWith("f:")) {
+          texts[path] = [...lines.slice(0, bodyStartOf(lines)), ...(bodyStartOf(lines) ? [""] : []), ...body, ""].join("\n");
+        } else {
+          const at = i.source!.line ?? 0;
+          const pad = `${/^[ \t]*/.exec(lines[at] ?? "")![0]}  `;
+          lines.splice(at + 1, blockEndOf(lines, at) - at - 1, ...body.map((l) => pad + l));
+          texts[path] = lines.join("\n");
+        }
+        changed();
+        return { ...i };
+      }
+      const { id: _id, repeat, text: _text, ...rest } = u;
       Object.assign(i, rest, repeat === null ? { repeat: undefined } : repeat ? { repeat } : {});
       changed();
       return { ...i };
