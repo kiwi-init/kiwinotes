@@ -166,6 +166,13 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
     return { dated, undated };
   }
 
+  /**
+   * Os itens já lidos de cada nota, pela versão do índice (#486). A conferência dos avisos roda a cada 30 s e lia do disco
+   * toda nota com uma caixa aberta; agora só lê a que mudou desde a última vez. O `save` e o vigia de arquivos trocam a
+   * versão no índice, então a nota mudada (no app ou fora dele) é relida na conferência seguinte.
+   */
+  const parsed = new Map<string, { version: string; got: { dated: CalendarItem[]; undated: CalendarItem[] } }>();
+
   /** Todas as notas que podem ter um item: uma data na linha, uma caixa aberta ou o `agenda:`. */
   async function readAll(src: CalendarSources): Promise<{ dated: CalendarItem[]; undated: CalendarItem[] }> {
     const dated: CalendarItem[] = [];
@@ -178,13 +185,24 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
         const key = `${where.internal}:${meta.path}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        const note = await where.vault.get(meta.path).catch(() => null);
-        if (!note) continue; // sumiu entre o índice e a leitura
-        const got = itemsOfNote(note, where);
-        dated.push(...got.dated);
-        undated.push(...got.undated);
+        let cached = parsed.get(key);
+        if (cached?.version !== meta.version) {
+          const note = await where.vault.get(meta.path).catch(() => null);
+          if (!note) {
+            parsed.delete(key);
+            continue; // sumiu entre o índice e a leitura
+          }
+          // A versão da leitura, não a do índice: se o arquivo mudou no meio, a próxima conferência relê.
+          cached = { version: note.version, got: itemsOfNote(note, where) };
+          parsed.set(key, cached);
+        }
+        // Cópias: quem recebe os itens pode mudá-los, e o guardado tem de ficar como a nota está.
+        dated.push(...cached.got.dated.map((it) => structuredClone(it)));
+        undated.push(...cached.got.undated.map((it) => structuredClone(it)));
       }
     }
+    // A nota que saiu das candidatas (apagada, ou sem caixa nem data) sai do guardado.
+    for (const key of parsed.keys()) if (!seen.has(key)) parsed.delete(key);
     for (const m of await listMeetings(src.meetings, src.liveSession)) {
       if (m.live) continue;
       const startMs = m.start ? Date.parse(m.start) : Number.NaN;
