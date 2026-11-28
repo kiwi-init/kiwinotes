@@ -121,7 +121,7 @@ Fontes das referências:
 | 10.5 | Vários calendários com cor, para mostrar e esconder | nas três | o filtro por tipo e por projeto, que fica salvo (T32408) | cumpre |
 | 10.6 | Atualiza sozinho quando a fonte muda | Google e Mac (e Google `r`, Mac ⌘R) | relê quando a nota muda (`onChanged`) | cumpre |
 | 10.7 | A vista do Ano | Mac ⌘4, e Google | não há | falta: T34785. O lead decidiu que entra (#34756) |
-| 10.8 | A faixa do dia todo tem um teto, com o "+N" | Google | a faixa cresce sem teto: com 4 itens, empurra a grade para baixo (snug-puma, #34801) | falta A (T34737, no PR à parte do #530 e do #532, lead #34834) |
+| 10.8 | A faixa do dia todo tem um teto, com o "+N" | Google | até 3 itens por dia; com mais, 2 e o "+N", que abre a faixa inteira, e o "Mostrar menos" fecha (`allDayFit`, T34737, PR #536) | cumpre: o `model.test` ("a faixa do dia todo") e o `calendar-ui.test`, e o passo 4f do `calendar-ui-check` |
 | 10.9 | Criar um item de um tipo ou projeto escondido pelo filtro avisa | Google mostra o item criado mesmo assim | o item é criado, mas não aparece, e nada avisa (snug-puma, #34801) | falta B (T34748, lead #34834) |
 
 ## 11. Editar e criar
