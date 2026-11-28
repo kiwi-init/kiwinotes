@@ -144,7 +144,7 @@ Fontes das referências:
 | 12.1 | "Me lembra às 10h e me avisa 50 min antes" vira um lembrete às 10:00 com o aviso 50 min antes (ponto 2) | n/a (só o Kiwi tem) | pode virar um item das 9:10 às 10:00, ou dois itens | falta C (T34753) |
 | 12.2 | O mesmo pedido repetido não duplica o item | n/a | duplica | falta C (T34753) |
 | 12.3 | O Kiwi apaga e muda os itens, e a pessoa desfaz pela Atividade (ponto 6) | n/a | só há o `calendar_create` e o `calendar_update`, sem apagar | falta C (T34753) |
-| 12.4 | A barra de cima aceita texto, tem a animação dela e mostra a resposta (ponto 7) | n/a | é só um botão que abre o Kiwi da tela | falta C (T34755) |
+| 12.4 | A barra de cima aceita texto, tem a animação dela e mostra a resposta (ponto 7) | n/a | um campo: o ⌘K foca, o Enter manda, e ela passa por ouvindo, pensando e respondendo, com a resposta debaixo dela (`ask-bar.test.ts`, `kiwi-panel.test.tsx` e o passo 7 do `calendar-ui-check`) | cumpre |
 
 ## 13. Animações e desempenho
 
