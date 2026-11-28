@@ -87,6 +87,8 @@ describe("readCalendarAsk", () => {
       ["foco das 16h às 18h", "2026-11-26T16:00", null],
       ["plantão das 22 às 2", "2026-11-26T22:00", null],
       ["entre 2 e 3 da tarde", "2026-11-27T14:00", null],
+      ["das 2 da tarde às 4", "2026-11-27T14:00", null],
+      ["from 12am to 2am", "2026-11-27T00:00", null],
       // Quantidade e datas não são hora.
       ["férias de 10 a 15 dias", null, null],
       ["viagem de 10 a 15 de dezembro", null, null],
