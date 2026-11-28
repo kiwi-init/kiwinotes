@@ -258,12 +258,14 @@ try {
         const dayMore = p.locator(`${col} .kn-cal-more-btn`);
         await dayMore.waitFor();
         const dayN = (await dayMore.textContent())?.trim();
+        await dayMore.evaluate((el) => el.scrollIntoView({ block: "start" }));
         await dayMore.click();
         const list = p.locator(`${col} .kn-cal-more-list`);
         await list.waitFor();
         const lb = (await list.boundingBox())!;
         const gb = (await p.locator(`${pane} .kn-cal-scroll`).boundingBox())!;
         assert.ok(lb.x >= gb.x - 0.5 && lb.x + lb.width <= gb.x + gb.width + 0.5, `${lang}/dia estreito: a lista dentro da grade (${lb.x}–${lb.x + lb.width} em ${gb.x}–${gb.x + gb.width})`);
+        assert.ok(lb.y >= gb.y - 0.5 && lb.y + lb.height <= gb.y + gb.height + 0.5, `${lang}/dia estreito: a lista inteira à vista na altura (${lb.y}–${lb.y + lb.height} em ${gb.y}–${gb.y + gb.height})`);
         assert.ok(await p.evaluate(([x, y, s]) => !!document.elementFromPoint(x, y)?.closest(s), [lb.x + lb.width / 2, lb.y + Math.min(lb.height / 2, 20), ".kn-cal-more-list"] as const), `${lang}/dia estreito: a lista à vista, não cortada`);
         await p.screenshot({ path: join(shots, "lado-a-lado-dia-estreito.png") });
         await p.keyboard.press("Escape");
