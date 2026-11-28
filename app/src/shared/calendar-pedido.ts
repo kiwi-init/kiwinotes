@@ -57,8 +57,8 @@ function timeOf(t: string): { h: number; m: number } | null {
 }
 
 /** A ponta de um intervalo: "9", "9h", "9h30", "9:30", "9 horas", com o período dela ("da tarde", "pm") ou sem. */
-const END = `(\\d{1,2})(?:(?::|h)(\\d{2})|\\s*(?:h|hs|hrs?|horas?|hours?)\\b)?\\s*(da manha|de manha|da tarde|de tarde|da noite|de noite|da madrugada|am|pm|a\\.m\\.|p\\.m\\.)?`;
-const RANGE = new RegExp(`\\b(?:das|de|from|between|entre)\\s+${END}\\s*(?:\\s(?:as|a|ate|to|until|and|e)\\s|-|–)\\s*${END}(?!\\d|\\s*(?:dias?|days?|semanas?|weeks?|mes|meses|months?|anos?|years?|min|minutos?|minutes?|%|de\\s+(?:jan|fev|feb|mar|abr|apr|mai|may|jun|jul|ago|aug|set|sep|out|oct|nov|dez|dec)))`);
+const END = `(\\d{1,2})(?:(?::|h)(\\d{2})|\\s*(h|hs|hrs?|horas?|hours?)\\b)?\\s*(?:(da manha|de manha|da tarde|de tarde|da noite|de noite|da madrugada|am|pm|a\\.m\\.|p\\.m\\.)(?![a-z]))?`;
+const RANGE = new RegExp(`\\b(das|de|from|between|entre)\\s+${END}\\s*(?:\\s(?:as|a|ate|to|until|and|e)\\s|-|–)\\s*${END}(?!\\d|\\s*(?:dias?|days?|semanas?|weeks?|mes|meses|months?|anos?|years?|min|minutos?|minutes?|%|de\\s+(?:jan|fev|feb|mar|abr|apr|mai|may|jun|jul|ago|aug|set|sep|out|oct|nov|dez|dec)))`);
 
 /** O período dá a hora de 24: "da tarde", "da noite" e "pm" passam 1–11 para depois do meio-dia; "am" e "da manhã", 12 para 0. */
 const withPeriod = (h: number, period: string): number => {
@@ -71,12 +71,18 @@ const withPeriod = (h: number, period: string): number => {
  * O intervalo lido como um todo (#35013): "das 10 às 11", "de 9h às 3 da tarde", "from 9 to 10am", "between 2 and 3pm".
  * O começo é a 1ª ponta. O período vale para a ponta em que está; a 1ª herda o da 2ª só quando não passa dela ("das 2
  * às 4 da tarde" é 14:00, "das 10 às 2 da tarde" é 10:00).
+ *
+ * Só é intervalo de hora quando parece hora (#35031): o "das" sempre; o "de", o "entre", o "from" e o "between" só com
+ * uma marca de hora numa das pontas ("h", ":", "horas", o período) ou sem outra hora na frase. "de 3 a 5 pessoas
+ * amanhã às 10h" é às 10:00.
  */
 function rangeStartOf(t: string): { h: number; m: number } | null {
   const r = RANGE.exec(t);
   if (!r) return null;
-  const [h1, m1, p1, h2, , p2] = [Number(r[1]), Number(r[2] ?? 0), r[3] ?? "", Number(r[4]), r[5], r[6] ?? ""];
+  const [kw, h1, m1, u1, p1, h2, m2, u2, p2] = [r[1]!, Number(r[2]), Number(r[3] ?? 0), r[4], r[5] ?? "", Number(r[6]), r[7], r[8], r[9] ?? ""];
   if (h1 > 23 || h2 > 23 || m1 > 59) return null;
+  const marked = r[3] !== undefined || u1 || p1 || m2 !== undefined || u2 || p2;
+  if (kw !== "das" && !marked && timeOf(cut(t, [r.index, r.index + r[0].length]))) return null;
   const h = p1 ? withPeriod(h1, p1) : p2 && h1 <= h2 ? withPeriod(h1, p2) : h1;
   return { h, m: m1 };
 }

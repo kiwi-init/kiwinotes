@@ -89,6 +89,18 @@ describe("readCalendarAsk", () => {
       ["entre 2 e 3 da tarde", "2026-11-27T14:00", null],
       ["das 2 da tarde às 4", "2026-11-27T14:00", null],
       ["from 12am to 2am", "2026-11-27T00:00", null],
+      ["between 11 and 1pm", "2026-11-27T11:00", null],
+      ["das 8 às 10 da noite", "2026-11-26T20:00", null],
+      ["das 12 às 2 da tarde", "2026-11-27T12:00", null],
+      ["de 10 a 12 de dezembro às 9h", "2026-11-27T09:00", null],
+      // Sem marca de hora, o "de N a M" é quantidade, e a hora da frase ganha (#35031).
+      ["marca uma reunião de 3 a 5 pessoas amanhã às 10h", "2026-11-27T10:00", null],
+      ["revisar os capítulos de 3 a 5 amanhã às 14h", "2026-11-27T14:00", null],
+      ["treino de 5 a 10 km às 7h", "2026-11-27T07:00", null],
+      ["separar de 2 e 3 caixas às 15h", "2026-11-27T15:00", null],
+      ["reunião às 15h para ver os itens de 1 a 4", "2026-11-27T15:00", null],
+      ["semana de 3 a 7 às 9h", "2026-11-27T09:00", null],
+      ["foco das 9 às 11 e almoço às 12h", "2026-11-27T09:00", null],
       // Quantidade e datas não são hora.
       ["férias de 10 a 15 dias", null, null],
       ["viagem de 10 a 15 de dezembro", null, null],
