@@ -103,7 +103,7 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
           return (
             <span key={d} className="kn-cal-dayhead" data-day={d} data-today={d === today ? "" : undefined}>
               <b>{head.n}</b>
-              {head.weekday}
+              <span className="kn-cal-dayname">{head.weekday}</span>
             </span>
           );
         })}

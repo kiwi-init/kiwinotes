@@ -252,13 +252,21 @@
 .kn-cal-allday,
 .kn-cal-hours { display: grid; }
 .kn-cal-head { border-bottom: 1px solid var(--cal-line); padding: 6px 0; }
+/*
+ * A cabeça do dia na Semana: o número e o nome lado a lado. Na coluna estreita (#495) o nome desce para baixo do número,
+ * em vez de encostar no dia seguinte, e, se nem sozinho couber, corta com reticências.
+ */
 .kn-cal-dayhead {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: center;
-  gap: 6px;
+  column-gap: 6px;
+  min-width: 0;
+  padding: 0 2px;
   color: var(--text-2);
 }
+.kn-cal-dayname { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kn-cal-dayhead b { font-size: 16px; color: var(--text); }
 .kn-cal-dayhead[data-today] b {
   color: var(--on-accent);
