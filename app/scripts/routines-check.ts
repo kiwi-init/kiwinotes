@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, peekKiwi, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const app = resolve(import.meta.dir, "..");
@@ -116,6 +116,7 @@ try {
   assert.ok(Date.now() - booted < 55_000, `a preparação levou ${Math.round((Date.now() - booted) / 1000)} s: o relógio de teste já passou das 18h`);
   await p.locator(daily).scrollIntoViewIfNeeded();
   await p.locator(`${daily} [role=switch]`).click();
+  await peekKiwi(p); // o clique na rotina tirou o mouse do Kiwi; o balão só aparece com ele lá (spec #32534)
   await p.waitForSelector(`${daily} [role=switch][aria-checked=true]`, { timeout: 15000 });
   assert.equal((await invoke("agent.status")).routines.daily.on, true);
   await p.waitForFunction(() => document.querySelector(".kn-routine-bubble")?.textContent?.includes("O resumo do dia está pronto: Resumo de 16-11-2026."), undefined, { timeout: 90000 });
@@ -142,6 +143,7 @@ try {
   // 3. "Rodar agora" nos pendentes da semana, desligados.
   const weekly = ".kn-routine-card[data-routine=weekly]";
   await p.locator(`${weekly} button:has-text('Rodar agora')`).click();
+  await peekKiwi(p); // o clique na rotina tirou o mouse do Kiwi; o balão só aparece com ele lá (spec #32534)
   await p.waitForFunction(() => document.querySelector(".kn-routine-bubble")?.textContent?.includes("Os pendentes da semana estão prontos"), undefined, { timeout: 60000 });
   await idle();
   await p.waitForSelector(".kn-routine-bubble button:has-text('Descartar')", { timeout: 30000 });

@@ -1,5 +1,5 @@
 // As referências (spec #11908, T11986–T11988): a permissão "Pesquisar na web" em Ajustes › Agente (ligada de fábrica desde o spec #19273; desligada nega a busca
-// do agente; ligada libera, e o balão diz "Pesquisando na web…"), e a seção "Referências" que o Kiwi monta com os links
+// do agente; ligada libera, e o balão diz "Pesquisando na web"), e a seção "Referências" que o Kiwi monta com os links
 // que o agente manda, com [Ver] [Aplicar] [Descartar] e [Desfazer]. No hub de verdade, com o AppEngine headless e o
 // agente falso, num WebKit headless. A nota é de teste, num tmp; o agente falso nunca vai à rede; nada na tela de ninguém.
 //
@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, peekKiwi, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const app = resolve(import.meta.dir, "..");
@@ -30,7 +30,7 @@ async function cli(args: string[]) {
     cwd: app,
     stdout: "pipe",
     stderr: "pipe",
-    // A busca do agente falso demora um pouco, para o balão "Pesquisando na web…" aparecer no print.
+    // A busca do agente falso demora um pouco, para o balão "Pesquisando na web" aparecer no print.
     env: { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_FAKE_AGENT_TOOL_DELAY_MS: "2500", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages },
   });
   const text = await new Response(p.stdout).text();
@@ -134,7 +134,7 @@ try {
   report.problems.push(...s.report.problems);
   await s.close();
 
-  // 2. O balão do gato: "Pesquisando na web…" enquanto o agente busca.
+  // 2. O balão do gato: "Pesquisando na web" enquanto o agente busca.
   const videoDir = join(out, "video");
   const h = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 980, height: 760, motion: false, browser: "webkit", query: { section: "about" }, video: videoDir });
   const q = h.page;
@@ -142,12 +142,12 @@ try {
   // O hub à vista (o WebKit headless não tem foco de janela): o gato fica no canto, com o balão, e não vai ao overlay.
   assert.equal((await ctx.send({ cmd: "hubView", view: true })).ok, true);
   const { id } = await invoke("agent.ask", { text: "/web documentação do ORBITweb" });
-  // A linha inteira, já digitada.
-  await q.waitForFunction(() => [...document.querySelectorAll(".kn-bubble-typed")].some((e) => e.textContent?.includes("Pesquisando na web…")), undefined, { timeout: 15000 });
+  // O passo do andamento (spec #32534, T33177), inteiro.
+  await q.waitForFunction(() => [...document.querySelectorAll(".kn-bubble-typed")].some((e) => e.textContent === "Pesquisando na web"), undefined, { timeout: 15000 });
   await cornerShot(q, ".kn-bubble", "3-na-web.png", "3. O balão diz que o agente está na web");
   assert.equal(await answerOf(id), "busquei na web: documentação do ORBITweb");
   await idle();
-  report.checks.push("with the permission on, the search is allowed and the cat's bubble says Pesquisando na web…");
+  report.checks.push("with the permission on, the search is allowed and the cat's bubble says Pesquisando na web");
 
   // 3. As referências: o balão com [Ver] [Aplicar] [Descartar]; nada escrito antes.
   const before = await note(NOTE);
@@ -166,6 +166,7 @@ try {
 
   // 4. [Aplicar] escreve; [Desfazer] volta a nota.
   await q.locator(".kn-proposal-big button:has-text('Aplicar')").click();
+  await peekKiwi(q); // o [Aplicar] fecha o balão grande com o mouse longe; o pequeno só aparece com ele no Kiwi (spec #32534)
   await q.waitForSelector(".kn-proposal-bubble button:has-text('Desfazer')", { timeout: 15000 });
   const after = await note(NOTE);
   assert.ok(after.startsWith(TEXT) && after.includes("](https://cloud.google.com/atlas-api/docs/concepts/orbit): Os orbitStores"), after);

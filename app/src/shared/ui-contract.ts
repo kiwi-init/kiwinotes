@@ -341,7 +341,10 @@ export type { NoteModel };
 // `@ data`, notas com `agenda:`) e das reuniões gravadas, com as pendências sem data e os projetos; o `calendar.create`
 // escreve um item numa nota; o `calendar.update` muda a linha dele (arrastar, esticar, Feito, aviso); o
 // `calendar.source` dá o texto da nota de onde ele veio. O evento `calendar.changed` sai junto com o `home.changed`.
-export const UI_CONTRACT_VERSION = "1.107.0";
+// 1.108.0 (T33054, spec #32534): o "Não ouvi". O `agent.voice` no `idle` ganha o `notHeard`, com o atalho de falar
+//   com o Kiwi, quando a fala foi curta demais ou a transcrição veio vazia: o Kiwi fica confuso e diz como tentar de
+//   novo, em vez de sumir calado. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.108.0";
 
 /** A voz do Kiwi pelo ElevenLabs nos Ajustes (T31628): só se há chave, nunca ela. */
 export interface ElevenLabsStatus {
@@ -1277,7 +1280,7 @@ export interface AgentStatus {
   busy: boolean;
   /** "Falar com o agente pelo Control" (1.55.0, spec #9876), desligado por padrão. */
   controlShortcut: boolean;
-  /** "Mostrar o que eu falei" (1.98.0, spec #26055): o balão mostra a transcrição da fala. Desligado por padrão. */
+  /** "Mostrar o que eu falei" (1.98.0, spec #26055): o balão mostra a transcrição da fala. Ligado por padrão desde o spec #32534. */
   showSpokenText: boolean;
   /** "O gato fala" (1.101.0, spec #26687): o pedido por voz pode ter a resposta falada. Desligado por padrão. */
   catSpeaks: boolean;
@@ -1626,8 +1629,12 @@ export type AgentVoiceUi =
   | { phase: "processing" }
   /** `text`: o que a pessoa falou, só com "Mostrar o que eu falei" ligado (1.98.0, spec #26055). */
   | { phase: "asked"; text?: string; id: string }
-  /** `error`: o pedido não saiu (spec #12938); o gato do overlay diz o motivo no balão. */
-  | { phase: "idle"; cancelled: boolean; error?: string };
+  /**
+   * `error`: o pedido não saiu (spec #12938); o gato do overlay diz o motivo no balão. `notHeard` (1.108.0, spec
+   * #32534): a fala foi curta demais ou a transcrição veio vazia; o Kiwi fica confuso e diz "Não ouvi", com o atalho
+   * (`shortcut`, o texto dos Ajustes, como `shortcuts.agent`).
+   */
+  | { phase: "idle"; cancelled: boolean; error?: string; notHeard?: { shortcut: string } };
 
 /** As seções do hub (#2100), na ordem da barra. A Início (spec #15728, T15839) é a primeira, e o hub abre nela. */
 export const HUB_SECTIONS = ["home", "notes", "meetings", "dictation", "calendar", "settings", "about",

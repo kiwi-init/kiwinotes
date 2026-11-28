@@ -19,6 +19,7 @@ import { tailSvg } from "../kiwicat-v2/bubbleTail";
 import type { BubbleLink } from "../../src/shared/ui-contract";
 import { plainMarkdown, renderMarkdown } from "../src/bubbleMarkdown";
 import { bubblePlain, summaryOf } from "../hub/bubble-state";
+import { BubblePeek } from "../hub/bubble-peek";
 import { EXIT_MS, exitStyle, HIDDEN_STYLE, shownStyle, type CatTransitionStyle } from "./transition";
 import type { FogState } from "../kiwicat/visual";
 import { ptCatOverlay } from "../../src/shared/i18n/catoverlay.pt";
@@ -38,7 +39,7 @@ interface OverlayStats {
   /** O balão na tela agora (spec #12938), ou null. */
   /** `links` (spec #17683): as notas e os arquivos que o main achou na resposta, que viram link no balão aberto. */
   /** `summary` (spec #27881, T28010): de onde sai o resumo do fechado (a fala do `cat_speak` ou a resposta final). */
-  bubble: { text: string; error: boolean; links: BubbleLink[]; summary?: string } | null;
+  bubble: { text: string; error: boolean; links: BubbleLink[]; summary?: string; progress?: true; heard?: string } | null;
   /** O texto não cabe nas três linhas: o "Ver mais" aparece (spec #13378). */
   bubbleMore: boolean;
   /** O balão aberto no "Ver mais". */
@@ -51,6 +52,12 @@ interface OverlayStats {
   bubbleAsk: boolean;
   /** O mouse sobre o gato: o × da cabeça aparece (o helper manda: `set({catHover})`). */
   catHover: boolean;
+  /** O mouse sobre o balão (o helper manda: `set({bubbleHover})`, spec #32534). */
+  bubbleHover: boolean;
+  /** O balão à vista (spec #32534): com o mouse no gato ou no balão, ou o "Ver mais" aberto, e 250 ms depois. */
+  peek: boolean;
+  /** Um balão que a pessoa ainda não viu: a marca no gato, na cor de destaque. */
+  unseen: boolean;
   /** A voz do gato (T26829): o nível que chegou por último, ou `null` sem voz. */
   fala: number | null;
   /** A língua dos textos da página (T29351): a do helper, na URL (`lang=`) e depois por `set({lang})`. */
@@ -68,7 +75,7 @@ const t = (key: keyof typeof ptCatOverlay) => TEXTS[stats.lang][key];
 
 const stats: OverlayStats = {
   ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "", bubble: null,
-  bubbleMore: false, bubbleOpen: false, sala: 112, largura: 280, bubbleAsk: false, catHover: false, fala: null,
+  bubbleMore: false, bubbleOpen: false, sala: 112, largura: 280, bubbleAsk: false, catHover: false, bubbleHover: false, peek: false, unseen: false, fala: null,
   lang: langOf(new URLSearchParams(location.search).get("lang")),
 };
 const bubbleEl = document.getElementById("bubble")!;
@@ -78,6 +85,8 @@ const bubbleSr = document.getElementById("bubble-sr")!;
 const catClose = document.getElementById("cat-close") as HTMLButtonElement;
 const bubbleAskEl = document.getElementById("bubble-ask")!;
 const bubbleClose = document.getElementById("bubble-close")!;
+const bubbleHeard = document.getElementById("bubble-heard")!;
+const stopButton = document.getElementById("bubble-stop") as HTMLButtonElement;
 
 /** Os textos fixos na língua de agora: o "Ver mais"/"Ver menos", a pergunta, os dois × e o `lang` do documento. */
 function paintTexts() {
@@ -86,6 +95,8 @@ function paintTexts() {
   bubbleAskEl.textContent = t("catOverlay.ask");
   bubbleClose.setAttribute("aria-label", t("catOverlay.closeBubble"));
   catClose.setAttribute("aria-label", t("catOverlay.closeCat"));
+  stopButton.textContent = t("catOverlay.stop");
+  bubbleHeard.title = t("catOverlay.heard");
 }
 paintTexts();
 type KiwiCatMessage = { bubble?: unknown; open?: boolean; close?: unknown; touch?: true; closed?: true; link?: string; openPath?: string };
@@ -101,7 +112,8 @@ const rectOf = (el: Element) => {
  * clique, e o gato espera enquanto a pessoa lê. Fora do helper (a prova no WebKit headless), não há para quem mandar.
  */
 function report() {
-  const on = stats.bubble !== null;
+  // Escondido (spec #32534), o balão não pega o clique: o lugar dele vai como nenhum, e o clique passa ao app de trás.
+  const on = stats.bubble !== null && stats.peek;
   // O × da cabeça (spec #13380) também pega o clique, quando aparece.
   post({ bubble: on ? rectOf(bubbleEl) : null, open: on && stats.bubbleOpen, close: stats.catHover ? rectOf(catClose) : null });
 }
@@ -129,8 +141,11 @@ bubbleText.addEventListener("click", (e) => {
   e.preventDefault();
   post({ link: a.dataset.href });
 });
-/** O × do balão e o da cabeça: o gato sai na hora. */
-for (const x of [bubbleClose, catClose]) {
+/**
+ * O × do balão e o da cabeça: o gato sai na hora. Com o pedido em andamento, eles e o [Parar] (T33177) cancelam: quem
+ * decide é o main (o `catOverlay.close`).
+ */
+for (const x of [bubbleClose, catClose, stopButton]) {
   x.addEventListener("click", (e) => {
     e.stopPropagation();
     post({ closed: true });
@@ -139,6 +154,20 @@ for (const x of [bubbleClose, catClose]) {
 new ResizeObserver(report).observe(bubbleEl);
 // A entrada desliza 4 px: no fim dela, o lugar de verdade (o clique conta só em cima do balão).
 bubbleEl.addEventListener("transitionend", report);
+
+/** A marca no gato (spec #32534): um balão que ainda não apareceu para a pessoa. */
+function setUnseen(on: boolean) {
+  stats.unseen = on;
+  document.body.dataset.unseen = String(on);
+}
+
+/** O balão no mouse (spec #32534): a regra é a do Hub (`BubblePeek`). Aparecer com um balão conta como visto. */
+const peek = new BubblePeek((shown) => {
+  stats.peek = shown;
+  bubbleEl.dataset.peek = String(shown);
+  if (shown && stats.bubble) setUnseen(false);
+  report();
+});
 
 const fits = () => bubbleText.scrollHeight <= bubbleText.clientHeight + 1;
 
@@ -175,6 +204,8 @@ bubbleText.addEventListener("scroll", fades, { passive: true });
 
 function setOpen(open: boolean) {
   stats.bubbleOpen = open;
+  // O "Ver mais" aberto fica até o ×, o Esc ou um clique fora (spec #32534).
+  peek.pin(open);
   bubbleEl.dataset.open = String(open);
   moreButton.textContent = t(open ? "catOverlay.less" : "catOverlay.more");
   moreButton.setAttribute("aria-expanded", String(open));
@@ -189,7 +220,8 @@ function setOpen(open: boolean) {
 
 /** O texto passa das três linhas: só aí o "Ver mais" aparece. */
 function measureMore() {
-  stats.bubbleMore = stats.bubble !== null && fitSummary(stats.bubble);
+  // O andamento (T33177) é uma linha: sem "Ver mais".
+  stats.bubbleMore = stats.bubble !== null && fitSummary(stats.bubble) && !stats.bubble.progress;
   bubbleEl.dataset.more = String(stats.bubbleMore);
   if (stats.bubbleOpen && stats.bubble) showFull(stats.bubble.text, stats.bubble.links);
 }
@@ -201,6 +233,8 @@ moreButton.addEventListener("click", (e) => {
 
 /** A pergunta antes de sair (spec #13380): entra e sai sem mexer na resposta, aberta ou não. */
 function setAsk(on: boolean) {
+  // A pergunta é texto novo (spec #32534, Cena 3): com o mouse longe, a marca acende.
+  if (on && !stats.bubbleAsk && stats.bubble && !stats.peek) setUnseen(true);
   stats.bubbleAsk = on;
   bubbleEl.dataset.ask = String(on);
   bubbleSr.textContent = stats.bubble ? `${plainMarkdown(stats.bubble.text)}${on ? ` ${t("catOverlay.ask")}` : ""}` : "";
@@ -210,14 +244,21 @@ function setAsk(on: boolean) {
  * O balão (spec #12938): só texto (`textContent`) ou o markdown montado em elementos (spec #17679), nunca HTML. Uma resposta nova chega fechada; a mesma resposta com ou
  * sem a pergunta (spec #13380) só muda a pergunta, e o balão fica como a pessoa deixou.
  */
-function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown; summary?: unknown } | null) {
+function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown; summary?: unknown; progress?: unknown; heard?: unknown } | null) {
   const text = b && typeof b.text === "string" ? b.text : "";
+  // O andamento (spec #32534, T33177): o passo, com o [Parar], e o que a pessoa falou em cima.
+  const progress = b?.progress === true;
+  const heard = progress && typeof b?.heard === "string" && b.heard.trim() ? b.heard : undefined;
+  bubbleEl.dataset.progress = String(!!text && progress);
+  bubbleEl.dataset.heard = String(!!text && !!heard);
+  bubbleHeard.textContent = text ? heard ?? "" : "";
   const summary = b && typeof b.summary === "string" && b.summary.trim() ? b.summary : undefined;
   const links = linksOf(b?.links);
   const ask = b?.ask === true;
   if (!text) {
     stats.bubble = null;
     bubbleEl.dataset.on = "false";
+    setUnseen(false);
     setOpen(false);
     measureMore();
     setAsk(false);
@@ -237,12 +278,22 @@ function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: 
     report();
     return;
   }
-  stats.bubble = { text, error: b?.error === true, links, ...(summary ? { summary } : {}) };
+  // A mesma resposta que cresceu (T33053, Cena 1): o balão nasceu com a fala e o `done` trouxe o texto inteiro, com a
+  // fala de resumo. O de cima não muda, e a marca fica como estava: não é um balão novo.
+  // O passo seguinte do andamento (T33177) também não é um balão novo: o mesmo pedido, outra linha.
+  const grew = !!stats.bubble && !stats.bubble.error && b?.error !== true &&
+    ((stats.bubble.summary ?? stats.bubble.text) === (summary ?? text) || (!!stats.bubble.progress && progress));
+  stats.bubble = { text, error: b?.error === true, links, ...(summary ? { summary } : {}), ...(progress ? { progress: true as const } : {}), ...(heard ? { heard } : {}) };
   setAsk(ask);
   bubbleEl.dataset.error = String(stats.bubble.error);
   bubbleEl.dataset.on = "true";
-  setOpen(false);
+  // Uma resposta nova com o mouse longe espera ser vista: a marca no gato (spec #32534).
+  if (!grew) {
+    setUnseen(!stats.peek);
+    setOpen(false);
+  }
   measureMore();
+  report();
 }
 /** Os links que vieram do helper, conferidos na forma: o que não for um `BubbleLink` some. */
 function linksOf(raw: unknown): BubbleLink[] {
@@ -314,7 +365,7 @@ function measureFirstFrame(start: number) {
 const api = {
   set(input: {
     estado?: string; visible?: boolean; voz?: number | null; fala?: number | null; cor?: string; sala?: number; largura?: number; catHover?: boolean;
-    lang?: string;
+    lang?: string; bubbleHover?: boolean;
     bubble?: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown; summary?: unknown } | null;
   }) {
     // A língua do app (T29351): o helper manda a de agora ao carregar e a cada troca. Muda os textos, não o balão.
@@ -327,7 +378,13 @@ const api = {
     if (typeof input.catHover === "boolean" && input.catHover !== stats.catHover) {
       stats.catHover = input.catHover;
       document.body.dataset.catHover = String(input.catHover);
+      peek.hover("kiwi", input.catHover);
       requestAnimationFrame(report);
+    }
+    // O mouse sobre o balão (spec #32534): ele fica à vista enquanto a pessoa lê.
+    if (typeof input.bubbleHover === "boolean" && input.bubbleHover !== stats.bubbleHover) {
+      stats.bubbleHover = input.bubbleHover;
+      peek.hover("balao", input.bubbleHover);
     }
     // O espaço do balão na janela (spec #13378), que o helper calcula para a tela de agora: a janela cresce para o lado
     // do balão, e o gato fica onde estava.
@@ -377,6 +434,11 @@ const api = {
       measureFirstFrame(start);
     } else if (input.visible === false && stats.visible) {
       stats.visible = false;
+      // O mouse não segue para a próxima entrada: o helper zera o dele ao esconder a janela.
+      stats.catHover = stats.bubbleHover = false;
+      document.body.dataset.catHover = "false";
+      peek.hover("kiwi", false);
+      peek.hover("balao", false);
       // A voz que ainda tocava não segue para a próxima entrada (T26829): o helper não passa o `null` à página escondida.
       stats.fala = null;
       cat.update({ fala: null });
@@ -387,6 +449,15 @@ const api = {
       if (reduced) cat.visibility(true);
       else exitTimer = window.setTimeout(() => { exitTimer = 0; if (!stats.visible) cat.visibility(true); }, EXIT_MS);
     }
+  },
+  /** O clique fora com o "Ver mais" aberto (spec #32534): o helper o vê pelo botão do mouse; o balão volta ao resumo. */
+  collapse() {
+    if (stats.bubbleOpen) setOpen(false);
+  },
+  /** O Esc com o mouse no gato ou no balão (spec #32534, #32777): fecha o "Ver mais"; fechado, o balão, como o × dele. */
+  escape() {
+    if (stats.bubbleOpen) setOpen(false);
+    else if (stats.bubble && stats.peek) post({ closed: true });
   },
   async dispose() {
     stats.visible = false;

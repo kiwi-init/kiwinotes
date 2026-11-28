@@ -1,14 +1,16 @@
 // Lightweight persistent host; renderer loads only while enabled and visible.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { catPalette } from "../../src/shared/kiwicat-colors";
 import { DEFAULT_SHORTCUTS, shortcutLabel } from "../../src/shared/shortcuts";
 import type { AgentStatus, AppSettings } from "../../src/shared/ui-contract";
 import type { createKiwiCat } from "../kiwicat/cat";
 import { api, has } from "../src/api";
 import { CatActivity } from "./cat-state";
+import { NOT_HEARD_MS } from "./bubble-state";
 import { CatAsk } from "./CatAsk";
 import { BubblePresence } from "./BubblePresence";
 import { CatBubble } from "./CatBubble";
+import { BubblePeek } from "./bubble-peek";
 import { provideKiwiAsk } from "./kiwi-ask.ts";
 import { useT } from "../src/i18n.ts";
 import { MemoryBubble } from "./MemoryBubble";
@@ -23,11 +25,16 @@ type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
  */
 const symbolBackground = (): "light" | "dark" => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
 // Com o gato no overlay (spec #9810), o do canto some e pausa o desenho: nunca dois gatos.
+/** Onde o mouse mostra os balões (spec #32534): o Kiwi e os balões à vista (os escondidos não pegam o mouse). */
+const PEEK_TARGETS = ".kn-kiwicat-hit, .kn-bubble-shell:not(.kn-cat-ask), .kn-bubble-big";
+
 function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; reduced: boolean; away: boolean; cor: string; voiceHint?: string }) {
   const { t } = useT();
   const handle = useRef<Cat | undefined>(undefined);
   /** Tira a resposta de antes do canto quando a pergunta sai (o `drop` do CatBubble). */
   const dropAnswer = useRef<(() => void) | null>(null);
+  /** Traz a última resposta de volta (o `recall` do CatBubble, spec #32534): o mouse chegou no Kiwi depois que ela saiu. */
+  const recallAnswer = useRef<(() => boolean) | null>(null);
   const reducedRef = useRef(reduced); reducedRef.current = reduced;
   const awayRef = useRef(away); awayRef.current = away;
   const refresh = useRef<() => void>(() => {});
@@ -126,6 +133,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
     // A fala pelo Control (spec #9876): `ouvindo` com as ondas seguindo a voz; ao soltar as ondas somem na hora, e o
     // gato segue atento até o pedido começar. Cancelada ou vazia, ele volta ao repouso.
     let talking = false;
+    let confusedTimer: ReturnType<typeof setTimeout> | undefined;
     const offVoice = api.agent.onVoice(v => {
       const before = activity.state;
       if (v.phase === "listening") {
@@ -145,6 +153,12 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
         talking = false;
         cat?.update({ voz: null });
         activity.attend(false);
+        // A fala curta ou vazia (spec #32534, Cena 4): o gato fica confuso por `NOT_HEARD_MS`, com o "Não ouvi" no balão.
+        if (v.notHeard) {
+          activity.notHeard();
+          clearTimeout(confusedTimer);
+          confusedTimer = setTimeout(() => { const at = activity.state; activity.notHeardEnd(); if (activity.state !== at) state(); }, NOT_HEARD_MS);
+        }
         if (activity.state !== before) state();
       }
     });
@@ -169,7 +183,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     void create();
     return () => {
-      gone = true; off(); offVoice(); offSpeech(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility); refresh.current = () => {};
+      gone = true; off(); offVoice(); clearTimeout(confusedTimer); offSpeech(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility); refresh.current = () => {};
       handle.current = undefined;
       if (cat) void cat.dispose();
     };
@@ -227,12 +241,91 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
     document.addEventListener("mousedown", away, true);
     return () => document.removeEventListener("mousedown", away, true);
   });
+  // O balão no mouse (spec #32534): os balões só aparecem com o mouse em cima do Kiwi ou de um balão, e saem 250 ms
+  // depois. Quem esconde é o CSS (`data-bubble-peek` no hub), pela opacidade: a vida de cada balão, a ordem entre eles e
+  // os anúncios do leitor de tela não mudam. O campo de falar por texto e o balão grande, que a pessoa abriu, ficam.
+  const [peekShown, setPeekShown] = useState(false);
+  const peekRef = useRef(peekShown);
+  peekRef.current = peekShown;
+  const [unseen, setUnseen] = useState(false);
+  const peekApi = useRef<BubblePeek | null>(null);
+  /** O mouse em cima do Kiwi ou de um balão, agora: segura o relógio do balão e arma o Esc (spec #32534, Cena 3). */
+  const [hovering, setHovering] = useState(false);
+  /** Quem pode trazer a última resposta de volta: só com o canto livre (sem outro balão, sem o campo, à vista). */
+  const recallOk = useRef(false);
+  useEffect(() => {
+    const peek = new BubblePeek((shown) => {
+      setPeekShown(shown);
+      if (shown) setUnseen(false);
+    });
+    peekApi.current = peek;
+    let onKiwi = false;
+    const over = (e: PointerEvent) => {
+      const t = e.target;
+      const kiwi = t instanceof Element && !!t.closest(".kn-kiwicat-hit");
+      // O mouse chegou no Kiwi: a última resposta volta, se já saiu (o `recall` não faz nada com ela na tela).
+      if (kiwi && !onKiwi && recallOk.current) recallAnswer.current?.();
+      onKiwi = kiwi;
+      peek.hover("mouse", t instanceof Element && !!t.closest(PEEK_TARGETS));
+      setHovering(peek.hovering);
+    };
+    // Saiu da janela: o `relatedTarget` é nenhum.
+    const out = (e: PointerEvent) => {
+      if (e.relatedTarget) return;
+      onKiwi = false;
+      peek.hover("mouse", false);
+      setHovering(false);
+    };
+    document.addEventListener("pointerover", over, true);
+    document.addEventListener("pointerout", out, true);
+    return () => {
+      document.removeEventListener("pointerover", over, true);
+      document.removeEventListener("pointerout", out, true);
+      peek.dispose();
+      peekApi.current = null;
+    };
+  }, []);
+  // A marca no Kiwi (spec #32534): cada balão novo que chega com o mouse longe a acende, também com outro balão ainda
+  // na tela (T33053); ela some quando o mouse mostra os balões, ou quando nenhum sobra.
+  const anyBubble = talking || noting || routining || proposing;
+  recallOk.current = !anyBubble && !askShown && !away;
+  useEffect(() => { if (!anyBubble) setUnseen(false); }, [anyBubble]);
+  useEffect(() => {
+    const hub = root.current?.parentElement;
+    if (!hub) return;
+    const arrived = () => {
+      // O mouse parado em cima do Kiwi desde antes do balão chegar: nenhum `pointerover` veio.
+      const hovered = [...document.querySelectorAll(":hover")].some((el) => el.matches(PEEK_TARGETS));
+      if (hovered) peekApi.current?.hover("mouse", true);
+      else if (!peekRef.current) setUnseen(true);
+    };
+    // Um balão novo é um slot novo do BubblePresence (um por balão, com a própria chave), com um balão de resposta dentro.
+    // O campo de texto (`.kn-cat-ask`) não é balão de resposta e não conta.
+    const isNew = (n: Node) => n instanceof HTMLElement && n.classList.contains("kn-bubble-slot") && !!n.querySelector(".kn-bubble-shell.kn-bubble");
+    const watch = new MutationObserver((records) => {
+      if (records.some((r) => [...r.addedNodes].some(isNew))) arrived();
+    });
+    watch.observe(hub, { childList: true, subtree: true });
+    return () => watch.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const hub = root.current?.parentElement;
+    if (!hub) return;
+    hub.dataset.bubblePeek = String(peekShown);
+    hub.dataset.bubbleUnseen = String(unseen && !away);
+  }, [peekShown, unseen, away]);
+  useLayoutEffect(() => () => {
+    const hub = root.current?.parentElement;
+    if (hub) { delete hub.dataset.bubblePeek; delete hub.dataset.bubbleUnseen; }
+  }, []);
   // A quina do balão (T16754): de que lado do gato os balões abrem, com o rabo encostado nele.
   const corner = useCatCorner(root);
   return (
     <BubbleCornerContext.Provider value={corner}>
       {/* A barra de rolagem termina antes do gato e da névoa dele (spec #13381). */}
       <div className="kn-kiwicat" aria-hidden="true" data-scrollbar-avoid="" ref={root} />
+      {/* A marca de balão não visto (spec #32534): o CSS a mostra pelo `data-bubble-unseen` do hub. */}
+      <span className="kn-kiwicat-mark" aria-hidden="true" />
       {/* Só o corpo do gato recebe o clique (spec #9878); a névoa e o resto do canto deixam passar. */}
       <button
         ref={hit}
@@ -271,7 +364,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
       {/* O balão (spec #9495): ao lado do gato, fora da caixa dele. Com o campo aberto ele espera escondido, sem perder
           o que chega, e aparece depois que o pedido sai (#10868). */}
       {/* Um balão com ação esperando (T28350): com o agente parado, a resposta dá lugar a ele depois do tempo de leitura. */}
-      <CatBubble reduced={reduced} hidden={asking || away} onShown={onShown} drop={dropAnswer} yieldTo={(noting || routining || proposing) && !(busy || activity.busy) && !sending} />
+      <CatBubble reduced={reduced} hidden={asking || away} onShown={onShown} drop={dropAnswer} recall={recallAnswer} hovering={hovering} onAsk={() => { if (!peekRef.current) setUnseen(true); }} yieldTo={(noting || routining || proposing) && !(busy || activity.busy) && !sending} />
       {/* A proposta da reunião (spec #8360): no mesmo canto, depois que a resposta sai da tela. */}
       {/* "Anotei: …" (spec #11469): depois da resposta; a proposta da reunião espera ele sair, e também o pedido em
           andamento (sem isso ela voltava por um instante entre a pergunta e a resposta, spec #11652). */}

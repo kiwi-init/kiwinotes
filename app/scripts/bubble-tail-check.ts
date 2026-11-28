@@ -198,8 +198,8 @@ try {
         what = `hub ${size.name} (${size.width}×${size.height}), ${lugar}, resposta`;
         checkTip(m, what);
         await clipShot(p, m, `hub-${size.width}-${where}-resposta.png`, `Hub ${size.width}×${size.height}, ${lugar}: a resposta`);
-        // A resposta fica até o clique (spec #27881).
-        await p.locator(".kn-bubble-slot:not([data-phase='exit']) .kn-bubble").click();
+        // O clique no balão não fecha mais; quem fecha é o × (spec #32534, Cena 3).
+        await p.locator(".kn-bubble-slot:not([data-phase='exit']) .kn-bubble-close").click();
         await p.waitForSelector(".kn-bubble-slot .kn-bubble", { state: "detached" });
       }
       assert.deepEqual(w.report.problems, [], "problemas na página");
@@ -240,7 +240,7 @@ try {
       await p.goto(`http://127.0.0.1:${server.port}/index.html?backend=none&${q}`);
       await p.waitForFunction(() => (window as any).kiwiCatReady === true, undefined, { timeout: 20_000 });
       for (const [kind, ask] of [["resposta", false], ["pergunta", true]] as const) {
-        await p.evaluate(([ask]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 112, bubble: { text: "Pronto: mudei o prazo para abril.", error: false, ask } }), [ask] as const);
+        await p.evaluate(([ask]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, bubbleHover: true, sala: 112, bubble: { text: "Pronto: mudei o prazo para abril.", error: false, ask } }), [ask] as const);
         await Bun.sleep(220); // a transição de 140 ms do balão
         const m = await measureIn(p, "#bubble", "#cat");
         const what = `overlay ${name} ${escala}×, ${kind}`;

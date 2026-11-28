@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, peekKiwi, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 import { CAT_BODY } from "../ui/kiwicat-v2/bubbleTail";
 
@@ -138,6 +138,7 @@ try {
         if (where === "home") await p.waitForFunction(() => document.querySelector<HTMLElement>(".kn-hub")?.dataset.catAt === "home");
         else await p.waitForFunction(() => !document.querySelector<HTMLElement>(".kn-hub")?.dataset.catAt);
         await p.keyboard.press("Escape"); // o clique na aba da Início abre o menu dela
+        await peekKiwi(p); // o clique na aba tirou o mouse do Kiwi, e o balão só aparece com ele (spec #32534)
         await invoke("agent.ask", { text: `/diga ${texto}` });
         await p.waitForSelector(`${BUBBLE} .kn-bubble-more`, { timeout: 30_000 });
         await p.waitForTimeout(600); // o resumo entra inteiro (spec #27881)

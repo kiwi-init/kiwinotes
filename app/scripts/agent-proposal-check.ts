@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, settingsTab, type UiContext } from "./ui-page";
+import { openWindow, peekKiwi, settingsTab, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const app = resolve(import.meta.dir, "..");
@@ -109,6 +109,7 @@ try {
 
   // 3. [Aplicar]: as duas notas escritas, e o [Desfazer] no balão.
   await q.locator(".kn-proposal-big button:has-text('Aplicar')").click();
+  await peekKiwi(q); // o [Aplicar] fecha o balão grande com o mouse longe; o pequeno só aparece com ele no Kiwi (spec #32534)
   await q.waitForSelector(".kn-proposal-bubble button:has-text('Desfazer')", { timeout: 15000 });
   const after = await note("Projetos/Mudança/Mudança.md");
   assert.ok(after.includes("- [ ] Pedir o acesso ao bucket\n- [ ] Confirmar a janela de manutenção"), after);
@@ -125,6 +126,7 @@ try {
   // 4. Dois projetos parecidos: a proposta pergunta com botões.
   await invoke("notes.create", { folder: "Projetos/Rede Norte", title: "Rede Norte", content: "# Rede Norte\n" });
   await invoke("projects.mark", { folder: "Projetos/Rede Norte" });
+  await peekKiwi(q); // o print da pergunta mostra o balão à vista
   await invoke("notes.create", { folder: "Reuniões", title: "2026-11-12 09h00 Zoom", content: meeting("2026-11-12", "09:00", "Bruno", "A Rede Norte precisa do mesmo servidor da mudança.") });
   await invoke("agent.ask", { text: "atualiza o projeto com a reunião que eu acabei de ter" });
   await idle();

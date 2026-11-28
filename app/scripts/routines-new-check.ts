@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, peekKiwi, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const app = resolve(import.meta.dir, "..");
@@ -193,6 +193,7 @@ try {
   report.checks.push("Settings › Agent › Rotinas says both ways (the button and asking Kiwi); Nova rotina creates a routine off, with the chosen days; edit and turn it on");
 
   // 3. Pedir ao agente: a proposta no balão, com [Criar] [Ajustar] [Descartar].
+  await peekKiwi(p); // os cliques nas Rotinas tiraram o mouse do Kiwi; o balão só aparece com ele lá (spec #32534)
   await invoke("agent.ask", { text: "todo dia às 7h, faz a lista do que vence hoje" });
   await p.waitForSelector(".kn-proposal-bubble button:has-text('Ajustar')", { timeout: 60000 });
   await idle();
@@ -215,6 +216,7 @@ try {
   const proposal = (await invoke("agent.proposals")).proposals.find((x: any) => x.kind === "routine")!;
   assert.equal(proposal.status, "applied");
   // [Criar] direto no balão.
+  await peekKiwi(p); // os cliques nas Rotinas tiraram o mouse do Kiwi; o balão só aparece com ele lá (spec #32534)
   await invoke("agent.ask", { text: "dias úteis às 9h, faz a lista das ações em aberto das reuniões" });
   await p.waitForSelector(".kn-proposal-bubble button:has-text('Criar')", { timeout: 60000 });
   await idle();

@@ -2,14 +2,17 @@
 // (`agent.turn`), sem depender do desenho. TypeScript puro, testado no `bun test`; o tempo entra sempre como argumento
 // (`now`), então o teste anda o relógio sem esperar.
 //
-// - Enquanto o agente trabalha, o balão mostra só a linha de estado ("Pesquisando na web…", o aviso do limite) ou o que
-//   a pessoa falou (spec #9876). O texto que o agente diz entre as ferramentas não vai ao balão: fica no [Ver mais].
-//   O aviso do limite fica pelo menos o tempo de leitura (`readingMs`), mesmo que a resposta chegue antes (T28584).
+// - Enquanto o agente trabalha (spec #32534, Cena 2, T33177), o balão mostra o passo atual ("Pensando", "Lendo 3 notas",
+//   o `AgentProgress`), com o [Parar], e em cima, pequeno e apagado, o que a pessoa falou (spec #9876), até a resposta.
+//   O balão do andamento é um só no pedido: o passo troca o texto, não o balão. O texto que o agente diz entre as
+//   ferramentas não vai ao balão: fica no [Ver mais]. O aviso do limite fica pelo menos o tempo de leitura
+//   (`readingMs`), mesmo que a resposta chegue antes (T28584).
 // - Quando a resposta chega (`done`), entra um balão só, com o resumo, de uma vez: ele não troca de trecho, não digita
 //   e não muda com o relógio. O resumo é a fala do `cat_speak` (o evento `speech`), quando o agente mandou; senão, o
 //   começo da resposta final, cortado no fim de uma frase que caiba (`summaryOf`). O [Ver mais] aparece quando a
 //   resposta inteira é maior que o resumo, e mostra tudo o que o agente disse no pedido.
-// - No erro, o balão mostra a mensagem. Um pedido novo fecha o balão do anterior; o clique fecha o balão.
+// - No erro, o balão mostra a mensagem. Um pedido novo fecha o balão do anterior. O clique no balão não fecha (spec
+//   #32534): quem fecha é o ×, o Esc e o relógio (`bubble-clock.ts`); a última resposta volta com o mouse no Kiwi.
 // - O texto nunca é reescrito: só cortado. Nada aqui interpreta HTML (a tela mostra como texto).
 // - O markdown (spec #17679): o balão pequeno mostra o texto corrido, sem `**`, `#`, `|` nem a crase. O corte é feito
 //   nesse texto, e não no cru.
@@ -20,14 +23,15 @@ import { plainMarkdown } from "../src/bubbleMarkdown";
 import type { Locale } from "../../src/shared/i18n";
 import { limitBubble } from "../settings/usageText";
 import { t } from "../src/i18n";
+import { AgentProgress } from "../../src/shared/agent-progress";
 
-/** O que o balão diz enquanto o agente está na web (spec #11908). */
-export const webLine = (): string => t("hub.bubble.web");
+/** O que o balão diz enquanto o agente está na web (spec #11908): o passo da web do andamento (T33177). */
+export const webLine = (): string => t("hub.step.web");
 
 /**
  * Quanto a resposta fica na tela antes de dar lugar a um balão com ação (a memória, a rotina, a proposta; T28350): o
  * tempo de leitura de antes do balão único, 1,5 s mais 60 ms por caractere, entre 2 e 8 s. Sem balão esperando, a
- * resposta fica até o clique (spec #27881).
+ * resposta fica até o × ou o Esc, ou até o relógio do balão a tirar (spec #32534, Cena 3).
  */
 export function readingMs(text: string): number {
   return Math.min(8000, Math.max(2000, 1500 + 60 * [...text].length));
@@ -137,6 +141,10 @@ export interface BubbleView {
   key: number;
   /** As notas e os arquivos do resumo (spec #17683), nas posições do `full`: só no balão da resposta. */
   links?: ChunkLink[];
+  /** O balão do andamento (spec #32534, T33177): o `text` é o passo, e o [Parar] cancela o pedido. */
+  stop?: boolean;
+  /** O que a pessoa falou, entre aspas: a linha pequena em cima, do pedido até a resposta. */
+  heard?: string;
 }
 
 /** Uma nota ou um arquivo dentro do balão pequeno: o rótulo em `full.slice(from, to)`. */
@@ -168,11 +176,14 @@ export function plainLinks(raw: string, links: readonly BubbleLink[], base = 0):
   return out;
 }
 
-/** O que está no balão: `line` é uma linha de estado (a web, o limite), `heard` o que a pessoa falou. */
+/**
+ * O que está no balão: `line` é o aviso do limite, `step` o passo do pedido (o andamento, T33177), `notice` um aviso
+ * curto que sai sozinho (o "Não ouvi", spec #32534, Cena 4).
+ */
 interface Head {
   key: number;
   text: string;
-  kind: "line" | "heard" | "answer" | "error";
+  kind: "line" | "step" | "answer" | "error" | "notice";
   links?: ChunkLink[];
 }
 
@@ -182,8 +193,15 @@ interface Head {
  */
 export const ANSWER_HOLD_MS = 1500;
 
+/** Quanto o "Não ouvi" fica (spec #32534, Cena 4): o mesmo do erro do gato do overlay (`OVERLAY_TIMES.erro`). */
+export const NOT_HEARD_MS = 2200;
+
 export class BubbleFeed {
   private request: string | null = null;
+  /** Até quando o aviso curto (`notice`) fica no balão. */
+  private noticeUntil = 0;
+  /** O que o aviso cobriu (a resposta de antes): volta quando ele sai, se nada novo chegou no meio. */
+  private underNotice: { head: Head | null; dismissed: boolean } | null = null;
   private readonly finished = new Set<string>();
   private head: Head | null = null;
   private keys = 0;
@@ -195,14 +213,26 @@ export class BubbleFeed {
   private closedLen = 0;
   /** A fala do `cat_speak` deste pedido (spec #27881): o resumo do balão. */
   private speech = "";
+  /**
+   * O balão da fala (T33053, Cena 1): nasce no evento `speech`, junto com o 1º pedaço da voz, e fica até o `done`, que
+   * só lhe dá o [Ver mais] (o mesmo `key`, o mesmo texto). A ferramenta que corre depois da fala não o troca.
+   */
+  private spoken: Head | null = null;
+  /** O passo do pedido (T33177) e o `key` do balão do andamento: um só no pedido, o passo só troca o texto. */
+  private progress = new AgentProgress();
+  private stepKey = 0;
+  /** O que a pessoa falou neste pedido, entre aspas (spec #9876); vai em cima do andamento até a resposta. */
+  private heardText = "";
   private ended = false;
   private dismissed = false;
+  /** A resposta que saiu da tela, para voltar com o mouse no Kiwi (`recall`). */
+  private last: Head | null = null;
   private announced: string | null = null;
   /** O limite acabado com a hora de volta (spec #11084): o erro de limite que vem depois mostra esta linha. */
   private outLine: string | null = null;
   /**
    * A resposta do pedido anterior, parada no canto depois do `started` do novo (T15377): ela sai no mesmo quadro em que
-   * o primeiro balão do novo entra, e não antes, com o canto vazio entre elas. Sai também no fim do pedido, no clique ou
+   * o primeiro balão do novo entra, e não antes, com o canto vazio entre elas. Sai também no fim do pedido, no × ou
    * no `ANSWER_HOLD_MS`.
    */
   private held: { view: BubbleView; until: number } | null = null;
@@ -227,6 +257,14 @@ export class BubbleFeed {
   /** O balão não anima mais o texto (spec #27881); a tela ainda avisa quando o movimento reduzido muda. */
   setReduced(_on: boolean): void {}
 
+  /**
+   * O pedido do balão ainda corre (spec #32534, decisão #33542): o × e o Esc fazem o mesmo que o [Parar], como no
+   * overlay. Fora do pedido (acabou, ou o balão já foi fechado), os dois só fecham.
+   */
+  working(): boolean {
+    return this.request !== null && !this.ended && !this.dismissed;
+  }
+
   /** O texto inteiro do pedido, para o [Ver mais]. */
   all(): string {
     return this.said;
@@ -249,7 +287,8 @@ export class BubbleFeed {
     if (e.type === "started") {
       if (this.request && this.request !== e.id) this.finished.add(this.request);
       // O que está no canto agora fica até o primeiro balão do pedido novo. Dois `started` seguidos não esticam o prazo.
-      const before = this.view(now);
+      // O "Não ouvi" não fica segurando o canto do pedido novo: ele já disse o que tinha a dizer.
+      const before = this.head?.kind === "notice" ? null : this.view(now);
       const until = this.held?.until ?? now + ANSWER_HOLD_MS;
       this.reset(e.id);
       this.held = before ? { view: { ...before, more: false }, until } : null;
@@ -261,18 +300,24 @@ export class BubbleFeed {
       if (this.request !== null) this.finished.add(this.request);
       this.reset(e.id);
     }
+    const stepped = this.progress.event(e);
     if (e.type === "text") {
-      // O texto vai ao [Ver mais], não ao balão. O que a pessoa falou sai quando o agente começa a responder.
+      // O texto vai ao [Ver mais], não ao balão: o andamento passa a "Escrevendo a resposta".
       this.said += e.text;
-      if (this.head?.kind === "heard") this.head = null;
+      if (stepped) this.showStep(now);
     } else if (e.type === "speech") {
       this.speech = plainOf(e.text).trim();
+      if (this.dismissed || this.spoken) return;
+      this.spoken = this.answer(0);
+      if (this.spoken) this.put(this.spoken, now);
     } else if (e.type === "status" && e.status === "running") {
       // A ferramenta começou: o que foi dito antes não é a resposta final.
       this.closedLen = this.said.length;
-      if (this.dismissed) return;
-      // A web (spec #11908): o balão diz que o agente saiu do cofre, até a próxima ferramenta ou a resposta.
-      this.put("tool" in e && e.tool === "web" ? this.line(webLine()) : null, now);
+      if (this.dismissed || this.spoken) return;
+      // O passo da ferramenta (T33177; a web, spec #11908): o mesmo balão, até a próxima ferramenta ou a resposta.
+      if (stepped) this.showStep(now);
+    } else if (e.type === "status" && (e.status === "opening" || e.status === "thinking")) {
+      if (stepped) this.showStep(now);
     } else if (e.type === "done") {
       this.finish(e.id);
       let base = this.closedLen;
@@ -284,7 +329,7 @@ export class BubbleFeed {
       }
       // Fechar o balão é fechar o desenho: o leitor de tela ainda ouve a resposta, uma vez, no fim (revisão #10936).
       if (e.stopReason === "end_turn" && this.said.trim()) this.announced = this.said;
-      this.put(e.stopReason !== "end_turn" || this.dismissed ? null : this.answer(base), now);
+      this.put(e.stopReason !== "end_turn" || this.dismissed ? null : (this.spoken ?? this.answer(base)), now);
     } else if (e.type === "limit") {
       // O limite (spec #11084): o aviso do agente entra como a linha de estado, até a resposta; o limite acabado troca a
       // mensagem do erro que vem em seguida pela hora de volta, se o agente disse. A hora de volta se lê no relógio de
@@ -309,18 +354,42 @@ export class BubbleFeed {
    * O texto entendido da fala pelo Control (spec #9876): aparece no balão, entre aspas, enquanto o pedido começa. Sai
    * quando o agente começa a responder.
    */
-  heard(id: string, text: string, _now: number): void {
+  heard(id: string, text: string, now: number): void {
     if (this.finished.has(id) || !text.trim()) return;
     if (this.request !== id) {
       if (this.request) this.finished.add(this.request);
       this.reset(id);
     }
-    if (this.said || this.dismissed || this.head) return;
-    this.head = { key: ++this.keys, text: `“${text.trim()}”`, kind: "heard" };
+    // A linha de cima (spec #32534, T33177): fica até a resposta, em cima do andamento, que já começa em "Pensando".
+    this.heardText = `“${text.trim()}”`;
+    this.progress.begin();
+    this.showStep(now);
   }
 
-  /** O clique no balão: fecha (o resto deste pedido não aparece mais no balão; o [Ver mais] não abre mais). */
-  close(): void {
+  /**
+   * A fala pelo Control curta demais ou vazia (spec #32534, Cena 4): o "Não ouvi" fica `NOT_HEARD_MS` e sai. Ele toma o
+   * lugar do que estava no balão (a resposta de antes), como no overlay.
+   */
+  notHeard(text: string, now: number): void {
+    if (this.head?.kind !== "notice") this.underNotice = { head: this.afterWarning?.head ?? this.head, dismissed: this.dismissed };
+    this.held = null;
+    this.afterWarning = null;
+    this.dismissed = false;
+    this.head = { key: ++this.keys, text, kind: "notice" };
+    this.noticeUntil = now + NOT_HEARD_MS;
+  }
+
+  /**
+   * O balão sai (o ×, o Esc, o relógio, a vez de um balão com ação): o resto deste pedido não aparece mais. A resposta
+   * pronta fica guardada para voltar com o mouse no Kiwi (`recall`, spec #32534), até o próximo pedido; `keep: false`
+   * (o pedido novo mandado pelo campo) a esquece. O "Não ouvi" fechado pelo × ou pelo Esc guarda a resposta que ele
+   * cobria (#33986): ela também volta com o mouse.
+   */
+  close(keep = true): void {
+    const under = this.head?.kind === "notice" ? this.underNotice : null;
+    const h = under ? (under.dismissed ? null : under.head) : this.dismissed ? null : this.head;
+    if (!keep) this.last = null;
+    else if (h && this.ended && (h.kind === "answer" || h.kind === "error")) this.last = h;
     this.held = null;
     this.afterWarning = null;
     this.warnUntil = 0;
@@ -328,8 +397,32 @@ export class BubbleFeed {
     this.head = null;
   }
 
+  /**
+   * A última resposta de volta (spec #32534, Cena 3): depois que o balão saiu, o mouse no Kiwi a mostra de novo, até o
+   * próximo pedido. Entra como um balão novo (outra `key`), sem anunciar de novo ao leitor de tela. Devolve se voltou.
+   */
+  recall(): boolean {
+    const last = this.last;
+    if (!last || !this.dismissed || !this.ended) return false;
+    this.head = { ...last, key: ++this.keys };
+    this.dismissed = false;
+    return true;
+  }
+
+  /** O balão na tela é o do fim do pedido (a resposta ou o erro): é a hora do relógio (`bubble-clock.ts`). */
+  settled(now: number): boolean {
+    const v = this.view(now);
+    const h = this.head;
+    return !!v && !!h && v.key === h.key && this.ended && (h.kind === "answer" || h.kind === "error");
+  }
+
   /** O que o balão mostra agora; null sem balão. */
   view(now: number): BubbleView | null {
+    if (this.head?.kind === "notice" && now >= this.noticeUntil) {
+      this.head = this.underNotice?.head ?? null;
+      this.dismissed = this.underNotice?.dismissed ?? false;
+      this.underNotice = null;
+    }
     if (this.afterWarning && now >= this.warnUntil) {
       this.head = this.afterWarning.head;
       this.afterWarning = null;
@@ -340,13 +433,20 @@ export class BubbleFeed {
     }
     const h = this.head;
     if (!h || this.dismissed) return null;
+    // O andamento (T33177): o passo com o [Parar] e, em cima, o que a pessoa falou. O aviso do limite também leva a fala.
+    if (h.kind === "step" || h.kind === "line") {
+      const heard = this.heardText && !this.ended ? { heard: this.heardText } : {};
+      return { text: h.text, full: h.text, error: false, more: false, key: h.key, ...(h.kind === "step" ? { stop: true } : {}), ...heard };
+    }
     // Só a resposta pede o [Ver mais]: a linha de estado e a fala da pessoa não são o que o agente disse.
-    const more = h.kind === "answer" && !sameWords(plainOf(this.said), h.text);
+    // A fala chega antes do fim (T33053): o [Ver mais] só com o `done`, quando o `said` já é a resposta inteira.
+    const more = h.kind === "answer" && this.ended && !sameWords(plainOf(this.said), h.text);
     return { text: h.text, full: h.text, error: h.kind === "error", more, key: h.key, ...(h.links ? { links: h.links } : {}) };
   }
 
   /** Quando o balão muda sozinho de novo: a resposta de antes, parada no canto, ou o que espera o aviso de limite; Infinity se nada muda. */
   nextWake(now: number): number {
+    if (this.head?.kind === "notice" && now < this.noticeUntil) return this.noticeUntil;
     if (this.afterWarning && now < this.warnUntil) return this.warnUntil;
     if (this.held && !this.head && !this.ended && !this.dismissed && now < this.held.until) return this.held.until;
     return Infinity;
@@ -354,12 +454,28 @@ export class BubbleFeed {
 
   /** O próximo do balão; com o aviso de limite na tela, ele espera o tempo de leitura do aviso (T28584). */
   private put(head: Head | null, now: number): void {
+    // Algo novo do pedido toma o lugar do "Não ouvi", e o que ele cobria já não volta.
+    if (this.head?.kind === "notice") this.underNotice = null;
     if (this.head?.kind === "line" && now < this.warnUntil) this.afterWarning = { head };
     else this.head = head;
   }
 
   private line(text: string): Head {
     return { key: ++this.keys, text, kind: "line" };
+  }
+
+  /**
+   * O balão do andamento com o passo de agora (T33177). Fica com o `key` do pedido: o passo troca o texto, e o balão não
+   * sai e entra de novo. Depois da fala (T33053) ou do fim, o andamento não volta; fechado no clique, também não.
+   */
+  private showStep(now: number): void {
+    if (this.dismissed || this.spoken || this.ended) return;
+    // O passo novo do pedido também toma o lugar do "Não ouvi" (o `put` solta o que ele cobria).
+    if (this.head && this.head.kind !== "step" && this.head.kind !== "line" && this.head.kind !== "notice") return;
+    const text = this.progress.text(this.locale());
+    if (!text) return;
+    this.stepKey ||= ++this.keys;
+    this.put({ key: this.stepKey, text, kind: "step" }, now);
   }
 
   /**
@@ -389,10 +505,16 @@ export class BubbleFeed {
   private reset(id: string): void {
     this.request = id;
     this.head = null;
+    this.last = null;
+    this.underNotice = null;
     this.said = "";
     this.saidLinks = [];
     this.closedLen = 0;
     this.speech = "";
+    this.spoken = null;
+    this.progress = new AgentProgress();
+    this.stepKey = 0;
+    this.heardText = "";
     this.ended = false;
     this.dismissed = false;
     this.announced = null;

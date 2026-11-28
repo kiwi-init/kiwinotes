@@ -56,6 +56,10 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     /// O × da cabeça na página (spec #13380), quando aparece, e o mouse sobre o gato.
     private var closeRect: CGRect?
     private var catHover = false
+    /// O mouse em cima do balão (spec #32534): a página o mostra enquanto o mouse está no gato ou nele.
+    private var bubbleHover = false
+    /// O botão do mouse no tique anterior: o clique fora com o "Ver mais" aberto é o que desce agora.
+    private var mouseWasDown = false
     private var held = false
     private var mouseTimer: Timer?
 
@@ -161,10 +165,10 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     }
 
     /// O balão da resposta (spec #12938): `nil` tira. Com o gato esperando a pílula, ele aparece junto com o gato.
-    func bubble(text: String?, error: Bool, ask: Bool = false, links: Any? = nil, summary: String? = nil) {
+    func bubble(text: String?, error: Bool, ask: Bool = false, links: Any? = nil, summary: String? = nil, progress: Bool = false, heard: String? = nil) {
         let shown = CatOverlayBubble.links(links, textLength: text?.utf16.count ?? 0)
         bubblePaths = text == nil ? [] : shown.compactMap { $0["path"] as? String }
-        bubble = CatOverlayBubble.script(text: text, error: error, ask: ask, links: shown, summary: summary)
+        bubble = CatOverlayBubble.script(text: text, error: error, ask: ask, links: shown, summary: summary, progress: progress, heard: heard)
         if gate.shows { script("window.kiwiOverlay?.set({bubble: \(bubble)})") }
     }
 
@@ -261,6 +265,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         bubbleOpen = false
         closeRect = nil
         held = false
+        bubbleHover = false
+        mouseWasDown = false
         if catHover {
             catHover = false
             script("window.kiwiOverlay?.set({catHover: false})")
@@ -296,9 +302,32 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
             script("window.kiwiOverlay?.set({catHover: \(hover)})")
         }
         let overBubble = CatOverlayBubble.takesClick(panel: panel.frame, rect: bubbleRect, mouse: mouse)
+        if overBubble != bubbleHover {
+            bubbleHover = overBubble
+            script("window.kiwiOverlay?.set({bubbleHover: \(overBubble)})")
+        }
+        // O "Ver mais" aberto fica até o ×, o Esc ou um clique fora (spec #32534). O clique fora passa ao app de trás,
+        // e o helper só o vê pelo estado do botão, sem permissão.
+        let down = NSEvent.pressedMouseButtons & 1 != 0
+        if CatOverlayBubble.clickedOutside(open: bubbleOpen, pressed: down, wasPressed: mouseWasDown, overBubble: overBubble) {
+            script("window.kiwiOverlay?.collapse()")
+        }
+        mouseWasDown = down
         let take = overBubble || (catHover && CatOverlayBubble.takesClick(panel: panel.frame, rect: closeRect, mouse: mouse))
         if panel.ignoresMouseEvents == take { panel.ignoresMouseEvents = !take }
-        setHeld(bubbleOpen || overBubble)
+        setHeld(CatOverlayBubble.holds(open: bubbleOpen, overBubble: overBubble, catHover: catHover, bubbleShown: bubbleRect != nil))
+    }
+
+    /// O Esc pode fechar o balão agora (spec #32534, #32777): o tap de atalhos só o engole nessa hora.
+    var escapeArmed: Bool {
+        gate.shows && mouseTimer != nil
+            && CatOverlayBubble.escapeArmed(bubbleShown: bubbleRect != nil, catHover: catHover, overBubble: bubbleHover)
+    }
+
+    /// O Esc com o mouse no gato ou no balão: fecha o "Ver mais", ou o balão, como o × dele.
+    func escape() {
+        guard escapeArmed else { return }
+        script("window.kiwiOverlay?.escape()")
     }
 
     private func setHeld(_ on: Bool) {

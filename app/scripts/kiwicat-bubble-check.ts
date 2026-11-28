@@ -105,7 +105,7 @@ try {
   for (const theme of ["light", "dark"] as const) {
     const tema = theme === "light" ? "claro" : "escuro";
     const { ctx, p, width, height } = await openPage("escala=1.00&lado=right&balao=acima", theme, 360);
-    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false } }), LONG);
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, bubbleHover: true, sala: 360, bubble: { text: t, error: false } }), LONG);
     await settle(p);
     let s = await stats(p);
     assert.equal(s.bubble.text, LONG, "a resposta inteira chega de uma vez");
@@ -174,7 +174,7 @@ try {
     last = (await posts(p)).at(-1)!;
     assert.deepEqual(last, { bubble: null, open: false, close: null });
     // Uma resposta curta: sem Ver mais.
-    await p.evaluate((t) => (window as any).kiwiOverlay.set({ visible: true, bubble: { text: t, error: false } }), SHORT);
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ visible: true, bubbleHover: true, bubble: { text: t, error: false } }), SHORT);
     await settle(p);
     s = await stats(p);
     assert.equal(s.bubbleMore, false);
@@ -185,7 +185,7 @@ try {
     // inteira, com o título e o que veio antes da ferramenta.
     const FALA = "Achei o plano da semana do Projeto X.";
     const INTEIRA = `Vou ler a nota.\n\n## Plano\n\n${LONG}`;
-    await p.evaluate(([t, f]) => (window as any).kiwiOverlay.set({ visible: true, bubble: { text: t, error: false, summary: f } }), [INTEIRA, FALA]);
+    await p.evaluate(([t, f]) => (window as any).kiwiOverlay.set({ visible: true, bubbleHover: true, bubble: { text: t, error: false, summary: f } }), [INTEIRA, FALA]);
     await settle(p);
     s = await stats(p);
     assert.equal(await p.textContent("#bubble-text"), FALA, "fechado, a fala do cat_speak");
@@ -198,7 +198,7 @@ try {
     await shot(p, `9-fala-aberto-${theme}.png`, `Ver mais (${tema}): a resposta inteira`, width, height);
     await p.click("#bubble-more");
     // Sem a fala, o resumo sai da resposta e pula o título do começo (#28009).
-    await p.evaluate((t) => (window as any).kiwiOverlay.set({ visible: true, bubble: { text: t, error: false } }), `## Plano\n\n${LONG}`);
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ visible: true, bubbleHover: true, bubble: { text: t, error: false } }), `## Plano\n\n${LONG}`);
     await settle(p);
     const semFala = (await p.textContent("#bubble-text"))!;
     assert.ok(!semFala.startsWith("Plano") && LONG.startsWith(semFala.replace(/…$/, "")), `sem fala, o começo do parágrafo: ${semFala}`);
@@ -210,7 +210,7 @@ try {
   for (const theme of ["light", "dark"] as const) {
     const tema = theme === "light" ? "claro" : "escuro";
     const { ctx, p, width, height } = await openPage("escala=1.00&lado=right&balao=acima", theme, 360);
-    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false } }), LONG);
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, bubbleHover: true, sala: 360, bubble: { text: t, error: false } }), LONG);
     await settle(p);
     // A pergunta com o balão fechado, e o × da cabeça com o mouse sobre o gato.
     await p.evaluate((t) => (window as any).kiwiOverlay.set({ bubble: { text: t, error: false, ask: true }, catHover: true }), LONG);
@@ -268,7 +268,7 @@ try {
       for (const sala of [BUBBLE_H, 360]) for (const largura of [SHELL_W, 380, OPEN_SHELL_W]) {
         const [lado, balao] = sides[i]!;
         const { ctx, p, width, height } = await openPage(`escala=${escala}&lado=${lado}&balao=${balao}`, "light", sala, largura);
-        await p.evaluate(([t, s, l]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: s, largura: l, bubble: { text: t, error: false } }), [LONG, sala, largura] as const);
+        await p.evaluate(([t, s, l]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, bubbleHover: true, sala: s, largura: l, bubble: { text: t, error: false } }), [LONG, sala, largura] as const);
         await settle(p);
         let closedW = 0;
         for (const open of [false, true]) {
@@ -308,7 +308,7 @@ try {
       const sala = aberto ? 360 : BUBBLE_H;
       const largura = aberto ? OPEN_SHELL_W : SHELL_W;
       const { ctx, p, width, height } = await openPage(`escala=${escala}&lado=${lado}&balao=${balao}`, "light", sala, largura);
-      await p.evaluate(([t, s, l]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: s, largura: l, bubble: { text: t, error: false } }), [aberto ? LONG : SHORT, sala, largura] as const);
+      await p.evaluate(([t, s, l]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, bubbleHover: true, sala: s, largura: l, bubble: { text: t, error: false } }), [aberto ? LONG : SHORT, sala, largura] as const);
       await settle(p);
       if (aberto) {
         await p.click("#bubble-more");
@@ -364,7 +364,7 @@ try {
       "<script>window.__xss = 1</script> <img src=x onerror=\"window.__xss = 2\">",
     ].join("\n");
     const { ctx, p, width, height } = await openPage("escala=1.00&lado=right&balao=acima", "light", 360);
-    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false } }), MD);
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, bubbleHover: true, sala: 360, bubble: { text: t, error: false } }), MD);
     await settle(p);
     const closed = (await p.textContent("#bubble-text"))!;
     for (const sym of ["**", "##", "|", "`", "[x]"]) assert.ok(!closed.includes(sym), `o resumo fechado sem "${sym}": ${closed}`);
@@ -417,7 +417,7 @@ try {
     assert.equal(await p.evaluate(() => document.documentElement.lang), "en");
     assert.equal(await p.getAttribute("#cat-close", "aria-label"), "Close Kiwi");
     assert.equal(await p.getAttribute("#bubble-close", "aria-label"), "Close");
-    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false, ask: true }, catHover: true }), EN);
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, bubbleHover: true, sala: 360, bubble: { text: t, error: false, ask: true }, catHover: true }), EN);
     await settle(p);
     assert.equal(await p.textContent("#bubble-more"), "See more");
     assert.equal(await p.textContent("#bubble-ask"), "Need anything else?");

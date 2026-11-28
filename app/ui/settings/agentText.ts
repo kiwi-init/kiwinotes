@@ -374,7 +374,7 @@ export function webHint(s: Pick<AgentStatus, "webSearch"> & { name?: string }, l
 /** Falar com o Kiwi Cat (spec #9876; o atalho escolhido, #12946), em Ajustes › Agente. */
 export const CONTROL_LABEL = translate("pt", "agent.control.label");
 
-/** "Mostrar o que eu falei" (spec #26055): desligado por padrão, o balão só abre com a resposta. */
+/** "Mostrar o que eu falei" (spec #26055): ligado por padrão desde o spec #32534; o balão mostra a fala até a resposta. */
 export const SPOKEN_TEXT_LABEL = translate("pt", "agent.spoken.label");
 export const SPOKEN_TEXT_HINT = translate("pt", "agent.spoken.hint");
 

@@ -146,7 +146,8 @@ final class Helper {
             guard let self else { return false }
             switch id {
             // Esc: while recording, and while the agent's text is being transcribed (it drops it).
-            case "cancel": return self.audio.isRecording || self.agentTranscribing
+            // And while a bubble of the cat overlay shows with the mouse on it (spec #32534, #32777).
+            case "cancel": return self.audio.isRecording || self.agentTranscribing || MainActor.assumeIsolated { self.catOverlay.escapeArmed }
             // The Control: not while the agent is busy (spec #9876).
             case "agent": return !self.agentBusy
             default: return true
@@ -599,6 +600,11 @@ final class Helper {
     /// nothing is pasted. A key still held for push-to-talk does nothing when it comes up.
     private func cancelFromShortcut() {
         guard audio.isRecording else {
+            // Spec #32534: nothing to cancel, and a bubble of the overlay under the mouse: Esc closes it.
+            if !agentTranscribing {
+                MainActor.assumeIsolated { catOverlay.escape() }
+                return
+            }
             // Spec #9876: Esc while the agent's speech is being transcribed: the text that comes is dropped.
             if agentTranscribing, !agentDropped {
                 agentDropped = true
@@ -1146,8 +1152,13 @@ final class Helper {
             let ask = message.fields["ask"] as? Bool ?? false
             let links = message.fields["links"]
             let summary = message.string("summary")
+            // O andamento do pedido (spec #32534, T33177): com o [Parar] e o que a pessoa falou.
+            let progress = message.fields["progress"] as? Bool ?? false
+            let heard = message.string("heard")
             let cat = catOverlay
-            MainActor.assumeIsolated { cat.bubble(text: text, error: error, ask: ask, links: links, summary: summary) }
+            MainActor.assumeIsolated {
+                cat.bubble(text: text, error: error, ask: ask, links: links, summary: summary, progress: progress, heard: heard)
+            }
             reply(id, ok: true)
         case "speech.play":
             // Um pedaço da voz do gato (T27825), em fila. A resposta leva o volume da saída; o `speech.played` com o

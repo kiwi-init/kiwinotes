@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, peekKiwi, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 
 const app = resolve(import.meta.dir, "..");
@@ -93,6 +93,7 @@ try {
 
   // 1. A pedido: o agente manda os campos, o Kiwi monta o resumo, e nada é escrito antes do [Aplicar].
   const before = await note(MAIN_PATH);
+  await peekKiwi(q); // o balão só aparece com o mouse no Kiwi (spec #32534)
   await invoke("agent.ask", { text: "faz o resumo executivo do projeto Mudança" });
   await idle();
   await q.waitForSelector(".kn-proposal-bubble", { timeout: 30000 });
@@ -116,6 +117,7 @@ try {
 
   // 3. [Aplicar]: a seção no topo da nota principal, e o [Desfazer] no balão, que volta a nota.
   await q.locator(".kn-proposal-big button:has-text('Aplicar')").click();
+  await peekKiwi(q); // o [Aplicar] fecha o balão grande com o mouse longe; o pequeno só aparece com ele no Kiwi (spec #32534)
   await q.waitForSelector(".kn-proposal-bubble button:has-text('Desfazer')", { timeout: 15000 });
   const after = await note(MAIN_PATH);
   assert.ok(/^# Mudança\n\n## Resumo executivo\n<!-- kiwi:resumo \d{4}-\d{2}-\d{2} -->\n\n\*\*Situação:\*\* 🟡 Atenção/.test(after), after);
@@ -132,6 +134,7 @@ try {
   // 4. Um resumo novo substitui o anterior (que fica nas Versões): o [Ver] diz de quando é o anterior.
   await invoke("notes.create", { folder: "Projetos/Kiwi", title: "Kiwi", content: KIWI_OLD });
   await invoke("projects.mark", { folder: "Projetos/Kiwi" });
+  await peekKiwi(q); // o balão só aparece com o mouse no Kiwi (spec #32534)
   await invoke("agent.ask", { text: "resumo executivo do Kiwi" });
   await idle();
   await q.waitForFunction(() => document.querySelector(".kn-proposal-bubble")?.textContent?.includes("de Kiwi está pronto"), undefined, { timeout: 30000 });
@@ -141,6 +144,7 @@ try {
   assert.ok(swap.includes("no lugar do de 01/11/2026 (que fica nas Versões)") && swap.includes("O que andou desde 01/11/2026"), swap);
   await cornerShot(q, ".kn-proposal-big", "4-troca.png", "4. Um resumo novo no lugar do anterior, que fica nas Versões");
   await q.locator(".kn-proposal-big button:has-text('Aplicar')").click();
+  await peekKiwi(q); // o [Aplicar] fecha o balão grande com o mouse longe; o pequeno só aparece com ele no Kiwi (spec #32534)
   await q.waitForSelector(".kn-proposal-bubble button:has-text('Desfazer')", { timeout: 15000 });
   const kiwi = await note(KIWI_PATH);
   assert.equal(kiwi.match(/## Resumo executivo/g)?.length, 1, kiwi);
@@ -152,6 +156,7 @@ try {
   // 5. O projeto ambíguo: o resumo pergunta com botões, sem o "Nenhum" (o resumo é sempre de um projeto).
   await invoke("notes.create", { folder: "Projetos/Kiwi Notes", title: "Kiwi Notes", content: "# Kiwi Notes\n" });
   await invoke("projects.mark", { folder: "Projetos/Kiwi Notes" });
+  await peekKiwi(q); // o balão só aparece com o mouse no Kiwi (spec #32534)
   await invoke("agent.ask", { text: "resumo executivo do Kiwi" });
   await idle();
   await q.waitForFunction(() => document.querySelector(".kn-proposal-bubble")?.textContent?.includes("É do"), undefined, { timeout: 30000 });

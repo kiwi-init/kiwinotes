@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { openWindow, peekKiwi, type UiContext } from "./ui-page";
 import { fakeRegistry } from "../src/agent/fake/registry";
 import { overlayPlacement } from "../ui/catoverlay/placement";
 import type { BubbleLink } from "../src/shared/ui-contract";
@@ -94,8 +94,12 @@ async function invoke(cap: string, args: unknown = {}) {
 const BUBBLE = ".kn-bubble-slot:not([data-phase='exit']) .kn-bubble";
 /** Pede ao agente falso e espera o balão pequeno parar de digitar. */
 async function ask(p: Page, text: string) {
+  // O balão só aparece com o mouse no Kiwi (spec #32534): o clique de antes o tirou de lá.
+  await peekKiwi(p);
   await invoke("agent.ask", { text: `/diga ${text}` });
   await p.waitForSelector(BUBBLE);
+  // O andamento (T33177) vem antes, com o [Parar]: a resposta é o balão sem ele.
+  await p.waitForFunction((sel) => !!document.querySelector(sel) && !document.querySelector(`${sel} .kn-bubble-stop`), BUBBLE, { timeout: 30_000 });
   await p.waitForFunction(() => document.querySelector<HTMLElement>(".kn-kiwicat")?.dataset.state !== "agindo");
   for (let last = "", n = 0; ; n++) {
     const now = await p.locator(`${BUBBLE} .kn-bubble-typed`).innerText();
@@ -185,7 +189,7 @@ try {
   const o = await c.newPage();
   await o.goto(`http://127.0.0.1:${server.port}/index.html?backend=none&${q}`);
   await o.waitForFunction(() => (window as any).kiwiCatReady === true, undefined, { timeout: 20_000 });
-  await o.evaluate(([text, links, sala]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala, bubble: { text, error: false, links } }), [texto, links, sala] as const);
+  await o.evaluate(([text, links, sala]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, bubbleHover: true, sala, bubble: { text, error: false, links } }), [texto, links, sala] as const);
   await Bun.sleep(220);
   await o.locator("#bubble-more").click();
   await o.waitForSelector("#bubble-text .kn-md-file");

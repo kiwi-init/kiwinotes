@@ -482,6 +482,13 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
           return { id, ok: false, code: typeof code === "string" ? code : "E_FAILED", message: e instanceof Error ? e.message : String(e) };
         }
       }
+      case "overlayClose": {
+        // O × ou o [Parar] da página do overlay (o `{closed: true}` que o helper vira `catOverlay.close`), sem o helper:
+        // para a prova do andamento (T33177). Com o pedido em andamento, o controlador cancela.
+        if (!catOverlay) return { id, ok: false, code: "E_NO_OVERLAY", message: "no cat overlay" };
+        catOverlay.overlay.close();
+        return { id, ok: true, value: {} };
+      }
       case "hubView": {
         // A janela principal à vista, ou não (o WebKit headless não tem foco de janela): com ela à vista, o gato é o do
         // canto, e o overlay não toma o lugar dele (spec #9810). Para as provas do hub.
@@ -495,7 +502,15 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
         if (process.env.KIWI_FAKE_SPEECH !== "1") return { id, ok: false, code: "E_NO_FAKE_SPEECH", message: "start with KIWI_FAKE_SPEECH=1" };
         if (typeof msg.text !== "string") return { id, ok: false, code: "E_BAD_ARGS", message: "text must be a string" };
         try {
-          return { id, ok: true, value: await stores.agent.ask(msg.text, { voz: true }) };
+          const asked = await stores.agent.ask(msg.text, { voz: true });
+          // Como a fala de verdade (o `agent-voice.ts`): o "asked" com o id marca o pedido como da voz, e o gato do
+          // overlay termina com o balão (T33053).
+          // O texto vai só com o "Mostrar o que eu falei" ligado, como lá (spec #26055; o andamento o mostra em cima, T33177).
+          const spoken = (await stores.agent.status()).showSpokenText;
+          const state = spoken ? { phase: "asked" as const, text: msg.text, id: asked.id } : { phase: "asked" as const, id: asked.id };
+          event("agent.voice", state);
+          catOverlay?.overlay.voice(state);
+          return { id, ok: true, value: asked };
         } catch (e) {
           return { id, ok: false, code: (e as { code?: string }).code ?? "E_AGENT", message: (e as Error).message };
         }

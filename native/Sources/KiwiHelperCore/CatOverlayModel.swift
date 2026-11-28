@@ -217,6 +217,31 @@ public enum CatOverlayBubble {
         cat.contains(mouse) || (showing && takesClick(panel: panel, rect: close, mouse: mouse))
     }
 
+    /**
+     O Esc fora do Hub (spec #32534, #32777): o painel nunca tem o teclado, então o Esc vem do tap de atalhos, que engole
+     a tecla. Só com um balão à vista (`bubbleShown`: a página só mede o balão quando ele aparece) e o mouse em cima do
+     gato ou do balão; fora disso, a tecla passa ao app da frente.
+     */
+    public static func escapeArmed(bubbleShown: Bool, catHover: Bool, overBubble: Bool) -> Bool {
+        bubbleShown && (catHover || overBubble)
+    }
+
+    /**
+     A pessoa está com o balão (spec #32534, Cena 3): o relógio de 45 s + 15 s não corre. O "Ver mais" aberto, o mouse
+     no balão, ou o mouse no Kiwi com o balão à vista (ele só aparece com o mouse lá, e não sai debaixo do mouse).
+     */
+    public static func holds(open: Bool, overBubble: Bool, catHover: Bool, bubbleShown: Bool) -> Bool {
+        open || overBubble || (bubbleShown && catHover)
+    }
+
+    /**
+     O clique fora com o "Ver mais" aberto (spec #32534): o botão do mouse desceu agora (`pressed` e não `wasPressed`),
+     longe do balão. A janela deixa esse clique passar ao app de trás; o helper só o vê pelo estado dos botões.
+     */
+    public static func clickedOutside(open: Bool, pressed: Bool, wasPressed: Bool, overBubble: Bool) -> Bool {
+        open && pressed && !wasPressed && !overBubble
+    }
+
     /// O retângulo que a página manda (`{x, y, w, h}`, em pontos); qualquer outra coisa é nenhum balão.
     public static func rect(_ body: Any?) -> CGRect? {
         guard let d = body as? [String: Any] else { return nil }
@@ -274,10 +299,14 @@ public enum CatOverlayBubble {
 
     /// `ask`: com a pergunta "Precisa de mais alguma coisa?" embaixo da resposta (spec #13380). `summary`: de onde sai
     /// o resumo do balão fechado (a fala do `cat_speak` ou a resposta final, spec #27881); `text` é o que o aberto mostra.
-    public static func script(text: String?, error: Bool, ask: Bool = false, links: [[String: Any]] = [], summary: String? = nil) -> String {
+    /// `progress` (spec #32534, T33177): o andamento do pedido, com o [Parar]; `heard`, o que a pessoa falou, em cima.
+    public static func script(text: String?, error: Bool, ask: Bool = false, links: [[String: Any]] = [], summary: String? = nil,
+                              progress: Bool = false, heard: String? = nil) -> String {
         guard let text, !text.isEmpty else { return "null" }
         var object: [String: Any] = ["text": text, "error": error]
         if ask { object["ask"] = true }
+        if progress { object["progress"] = true }
+        if let heard, !heard.isEmpty { object["heard"] = heard }
         if let summary, !summary.isEmpty, summary != text { object["summary"] = summary }
         if !links.isEmpty { object["links"] = links }
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),

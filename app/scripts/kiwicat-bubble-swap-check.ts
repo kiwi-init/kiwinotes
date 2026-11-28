@@ -184,10 +184,11 @@ async function settled(p: Page, leftover: boolean) {
 /** Proposta → pergunta → resposta → aviso. */
 async function sequence(p: Page) {
   await invoke("agent.ask", { text: "faz o resumo executivo do projeto Mudança" });
-  // A resposta fica no canto até o clique (spec #27881), e a proposta espera por ela: o clique troca uma pela outra.
+  // A resposta fica no canto, e a proposta espera por ela: o × troca uma pela outra (o clique no balão não fecha, spec
+  // #32534, Cena 3).
   await live(p, ".kn-bubble:not(.kn-proposal-bubble):not(.kn-memory-bubble)");
   await Bun.sleep(600);
-  await p.locator(".kn-bubble-slot:not([data-phase='exit']) .kn-bubble:not(.kn-proposal-bubble):not(.kn-memory-bubble)").click();
+  await p.locator(".kn-bubble-slot:not([data-phase='exit']) .kn-bubble:not(.kn-proposal-bubble):not(.kn-memory-bubble) .kn-bubble-close").click();
   await live(p, ".kn-proposal-bubble");
   await Bun.sleep(1500);
   await p.locator(".kn-kiwicat-hit").click();

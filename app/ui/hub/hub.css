@@ -391,6 +391,28 @@
   cursor: pointer;
 }
 
+/* O andamento (spec #32534, T33177): o que a pessoa falou, pequeno e apagado, em cima do passo; o [Parar] embaixo. */
+.kn-bubble-heard {
+  margin-bottom: 2px;
+  color: var(--text-3);
+  font-size: 0.85em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kn-bubble-stop { display: block; }
+/* O × do balão (spec #32534, Cena 3): o clique no balão não fecha, o × sim. Um selo no canto de cima, fora do texto,
+   como o × da cabeça do Kiwi no overlay; o texto e a medida do balão não mudam. */
+.kn-bubble-close {
+  position: absolute; top: -9px; right: -9px; z-index: 1;
+  display: grid; place-items: center; width: 22px; height: 22px; padding: 0;
+  border: 2px solid var(--text); border-radius: 50%; background: var(--surface); box-shadow: 2px 2px 0 var(--text);
+  color: var(--text); font: 600 14px / 1 var(--ui, inherit); cursor: pointer;
+}
+.kn-bubble-close:hover { background: var(--accent-soft, var(--surface)); }
+/* A pergunta antes de sair (o relógio, spec #32534): uma linha embaixo da resposta, que fica onde estava. */
+.kn-bubble-ask { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); font-weight: 600; }
+
 /* O balão grande do [Ver mais]: a resposta inteira, com rolagem, ancorado no mesmo canto. */
 .kn-bubble-big {
   position: absolute;
@@ -469,6 +491,24 @@
    (`.kn-home-cat`) e põe no hub o deslocamento a partir do canto; o gato, o clique e os balões andam juntos. A casca
    dentro do lugar do balão (`.kn-bubble-slot > .kn-bubble-shell`) já anda com ele. Com a página rolada, a tela tira o
    `data-cat-at`, e ele volta ao canto. */
-.kn-hub[data-cat-at="home"] > :is(.kn-kiwicat, .kn-kiwicat-hit, .kn-bubble-slot, .kn-bubble-shell, .kn-bubble-big) {
+.kn-hub[data-cat-at="home"] > :is(.kn-kiwicat, .kn-kiwicat-hit, .kn-kiwicat-mark, .kn-bubble-slot, .kn-bubble-shell, .kn-bubble-big) {
   translate: var(--kn-cat-dx, 0px) var(--kn-cat-dy, 0px);
 }
+
+/* O balão no mouse (spec #32534): fora do Kiwi e dos balões, os balões esperam invisíveis (`data-bubble-peek` do hub,
+   KiwiCat.tsx). Pela opacidade, e não pelo `visibility`: os `role="status"` seguem no leitor de tela. Ficam à vista o
+   campo de falar por texto, um balão com o foco do teclado e o balão grande, que só existe quando a pessoa o abre. */
+.kn-bubble-shell:not(.kn-cat-ask) { transition: opacity var(--fast, 140ms) var(--ease, ease); }
+.kn-hub[data-bubble-peek="false"] .kn-bubble-shell:not(.kn-cat-ask):not(:focus-within) { opacity: 0; pointer-events: none; }
+/* A marca: um ponto na cor de destaque do Kiwi, no alto da cabeça, enquanto há balão que a pessoa não viu. */
+.kn-kiwicat-mark {
+  /* Encostada no Kiwi (T33053, #33052): o centro na quina de cima à direita do corpo, o `CAT_BODY` (x1 0,74, y0 0,44)
+     do quadro de 96 × 120 a 12 px do canto (12 + 96 × 0,26 = 37; 12 + 120 × 0,56 = 79,2), menos o raio de 5. Metade
+     dentro e metade fora da silhueta, com um anel da cor do fundo. */
+  position: absolute; right: 32px; bottom: 74.2px; z-index: 7; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--kn-cat-accent, var(--accent)); box-shadow: 0 0 0 2px var(--surface);
+  opacity: 0; transform: scale(0.6); pointer-events: none;
+  transition: opacity var(--fast, 140ms) var(--ease, ease), transform var(--fast, 140ms) var(--ease, ease);
+}
+.kn-hub[data-bubble-unseen="true"] > .kn-kiwicat-mark { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .kn-bubble-shell:not(.kn-cat-ask), .kn-kiwicat-mark { transition: none; } }

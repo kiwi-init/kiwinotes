@@ -6,7 +6,8 @@
 //   (`config.set {shortcuts: {agent}}`). Com um pedido em andamento, `agentBusy`: o Control não começa a ouvir.
 // - **Do áudio ao pedido:** o texto do helper passa pela limpeza literal (as regras, sem LLM: nada vira lista nem muda de
 //   palavra) e vai ao `agent.ask`, que o passa pelo filtro do guardrail antes do agente.
-// - **Fala vazia ou curta demais** (menos de meio segundo) não manda nada. Uma transcrição que chega depois do
+// - **Fala vazia ou curta demais** (menos de meio segundo) não manda nada, mas não some calada (spec #32534, Cena 4): o
+//   `idle` leva o `notHeard`, com o atalho, e o Kiwi fica confuso com o "Não ouvi". Uma transcrição que chega depois do
 //   cancelamento é jogada fora (o helper já não a manda depois do Esc; aqui, nenhuma fora de hora passa).
 // - **O que o gato mostra** sai como `AgentVoiceUi`: `listening` com a voz (as ondas), `processing` sem ondas (a escuta
 //   encerrou, o texto ainda não ficou pronto), `asked` (o pedido saiu) e `idle` (cancelado ou vazio). O texto entendido
@@ -77,6 +78,8 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
   let settings: AppSettings | undefined;
   let status: AgentStatus | undefined;
   let phase: Phase = "idle";
+  /** O gato mostrou a escuta (o `agent.listening`) nesta gravação: só aí o "Não ouvi" faz sentido. */
+  let listened = false;
   /** Quanto durou a gravação que está sendo transcrita (do `agent.record.stopped`). */
   let durationMs = 0;
   /** O atalho que o helper escuta agora (null: nenhum). */
@@ -108,6 +111,13 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
     phase = "idle";
     if (show) w.ui({ phase: "idle", cancelled });
   };
+  /** O "Não ouvi" (spec #32534): com o atalho que o helper escuta agora, que é o que a pessoa acabou de segurar. */
+  const notHeard = () => {
+    if (!listened) return idle(true, true);
+    phase = "idle";
+    const shortcut = sentShortcut ?? (settings ? agentShortcut(settings) : DEFAULT_SHORTCUTS.agent!);
+    w.ui({ phase: "idle", cancelled: true, notHeard: { shortcut } });
+  };
 
   async function transcript(text: string) {
     // Fora de hora (depois do cancelamento, ou sem gravação nossa): jogada fora, sem mexer no gato.
@@ -115,7 +125,7 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
     const cleaned = cleanupWithRules({ raw: text, tone: "literal", dictionary: w.dictionary?.() ?? [] }).text.trim();
     if (!cleaned || durationMs < AGENT_VOICE_MIN_MS) {
       log(`nothing to send (${durationMs} ms${cleaned ? "" : ", empty"})`);
-      return idle(true, true);
+      return notHeard();
     }
     phase = "idle";
     try {
@@ -148,11 +158,13 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
       }),
       h.on("agent.record.started", () => {
         phase = "recording";
+        listened = false;
         durationMs = 0;
       }),
       h.on("agent.listening", () => {
         if (phase !== "recording" && phase !== "listening") return;
         phase = "listening";
+        listened = true;
         w.ui({ phase: "listening", voz: 0 });
       }),
       h.on("audio.level", (e) => {
@@ -168,7 +180,11 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
       h.on("agent.record.stopped", (e) => {
         if (phase === "recording" || phase === "listening") phase = "processing";
         durationMs = e.durationMs;
-        if (e.samples === 0) idle(true, true);
+        // Nenhuma amostra: nada foi ouvido, e a transcrição não vem.
+        if (e.samples === 0 && phase === "processing") {
+          log("nothing to send (no audio)");
+          notHeard();
+        }
       }),
       h.on("agent.transcript", (e) => void transcript(e.text)),
       h.on("agent.transcript.error", (e) => {
