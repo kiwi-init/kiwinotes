@@ -69,11 +69,9 @@ export function RepeatField({ value, onChange, day }: { value: CalendarRepeat | 
       </label>
       {mode === "custom" ? (
         <fieldset className="kn-cal-repeat-custom" aria-label={t("calendar.repeat.custom")}>
-          <div className="kn-cal-newrow">
-            <label>
-              {t("calendar.repeat.everyLabel")}
-              <input type="number" name="every" min={1} max={REPEAT_LIMITS.every} value={rule.every} onChange={(e) => push({ ...rule, every: Number(e.target.value) }, ends, until, count)} />
-            </label>
+          <div className="kn-cal-repeat-every">
+            <span aria-hidden>{t("calendar.repeat.everyLabel")}</span>
+            <input type="number" name="every" aria-label={t("calendar.repeat.everyLabel")} min={1} max={REPEAT_LIMITS.every} value={rule.every} onChange={(e) => push({ ...rule, every: Number(e.target.value) }, ends, until, count)} />
             <select name="unit" aria-label={t("calendar.repeat.everyLabel")} value={rule.unit} onChange={(e) => push({ ...rule, unit: e.target.value as RepeatRule["unit"] }, ends, until, count)}>
               {(["d", "w", "m", "y"] as const).map((u) => (
                 <option key={u} value={u}>
@@ -98,7 +96,7 @@ export function RepeatField({ value, onChange, day }: { value: CalendarRepeat | 
             </div>
           ) : null}
           <div className="kn-cal-repeat-ends" role="radiogroup" aria-label={t("calendar.repeat.ends")}>
-            <span>{t("calendar.repeat.ends")}</span>
+            <span className="kn-cal-repeat-head">{t("calendar.repeat.ends")}</span>
             {(["never", "until", "count"] as const).map((e) => (
               <label key={e}>
                 <input type="radio" name="ends" value={e} checked={ends === e} onChange={() => push(rule, e, e === "until" && !until ? day : until, count)} />

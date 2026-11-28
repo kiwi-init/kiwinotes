@@ -547,13 +547,31 @@
 }
 .kn-cal-title-problem { color: var(--danger); font-size: 12px; margin: -2px 0 6px; }
 
-/* A repetição no "+ Novo" (T34775): as prontas num seletor e o "Personalizar…" logo abaixo. */
+/* A repetição no "+ Novo" (T34775): as prontas num seletor e o "Personalizar…" logo abaixo, numa caixa: "A cada [2]
+   [semanas]" numa linha, os dias em pílulas como os tipos, e cada fim numa linha. */
 .kn-cal-repeat { display: flex; flex-direction: column; gap: 6px; }
-.kn-cal-repeat-custom { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 0; display: flex; flex-direction: column; gap: 8px; }
-.kn-cal-repeat-custom input[type="number"] { width: 4.5em; }
+.kn-cal-repeat-custom { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin: 0; display: flex; flex-direction: column; gap: 10px; font-size: 12px; color: var(--text-2); }
+.kn-cal-repeat-every { display: flex; align-items: center; gap: 6px; }
+.kn-cal-newform .kn-cal-repeat-every input { width: 4.5em; }
+.kn-cal-newform .kn-cal-repeat-every select { flex: 1; }
 .kn-cal-repeat-days { display: flex; flex-wrap: wrap; gap: 4px; }
-.kn-cal-repeat-days button { border-radius: 999px; padding: 3px 9px; font-size: 12px; }
+.kn-cal-repeat-days button {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.kn-cal-repeat-days button:hover { background: var(--surface-hover); }
 .kn-cal-repeat-days button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 25%, var(--surface)); border-color: var(--accent); }
-.kn-cal-repeat-ends { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13px; }
-.kn-cal-repeat-ends label { display: inline-flex; align-items: center; gap: 6px; }
+.kn-cal-repeat-ends { display: flex; flex-direction: column; gap: 6px; }
+.kn-cal-newform .kn-cal-repeat-ends label { flex-direction: row; align-items: center; gap: 6px; min-height: 28px; color: var(--text); }
+.kn-cal-newform .kn-cal-repeat-ends input[type="radio"] { margin: 0; padding: 0; }
+.kn-cal-newform .kn-cal-repeat-ends input[type="number"] { width: 4.5em; }
+.kn-cal-newform .kn-cal-repeat-ends input:disabled { opacity: 0.5; }
 .kn-cal-repeat-says { margin: 0; }
+/* Com o "Personalizar…" aberto, o + Novo fica mais alto que a janela baixa: rola por dentro. */
+.kn-cal-newform { max-height: calc(100% - 74px); overflow-y: auto; box-sizing: border-box; }
