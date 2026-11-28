@@ -63,6 +63,7 @@ describe("readCalendarAsk", () => {
       ["reunião de 1h às 14h", "2026-11-27T14:00", null],
       ["workshop de 3 horas às 3 da tarde", "2026-11-27T15:00", null],
       ["plantão de 8h às 17h na segunda", "2026-11-30T08:00", null],
+      ["plantão de 12 horas às 7h amanhã", "2026-11-27T07:00", null],
     ];
     for (const [text, start, notify] of cases) expect([text, ask(text)]).toEqual([text, { start, notify }]);
   });
