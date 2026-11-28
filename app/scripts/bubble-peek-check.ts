@@ -158,6 +158,52 @@ async function overlay(theme: "light" | "dark") {
     const after = (await p.evaluate((n) => (window as any).__posts.slice(n), before)) as Post[];
     assert.ok(after.some((m) => m.closed === true), "overlay: o segundo Esc fecha o balão, como o ×");
     checks.push(`overlay (${theme}): "See more" pins the bubble with the mouse away; the click outside (collapse) and Esc close it; Esc again closes the bubble like its ×`);
+
+    // 6. A mesma resposta que cresceu não é um balão novo (o `grew`, T33053, Cena 1): o balão nasce na fala, a pessoa o
+    // vê, e o `done` traz o texto inteiro com a fala de resumo. A marca continua apagada, e o "Ver mais" aberto fica.
+    // Um balão de fato novo (outro texto) acende a marca: o controle do passo.
+    const FALA = "Achei a lista da feira.";
+    await set(p, { bubble: null, catHover: false });
+    // O passo 5 deixou o mouse no Kiwi: o balão segue à vista por PEEK_LEAVE_MS depois que ele sai.
+    await Bun.sleep(PEEK_LEAVE_MS + 100);
+    assert.equal((await stats(p)).peek, false);
+    await set(p, { bubble: { text: FALA, error: false } });
+    await frames(p);
+    assert.equal((await stats(p)).unseen, true, "overlay: a fala com o mouse longe acende a marca");
+    await set(p, { catHover: true });
+    await frames(p);
+    assert.equal((await stats(p)).unseen, false, "overlay: vista, a marca apaga");
+    await set(p, { catHover: false });
+    await Bun.sleep(PEEK_LEAVE_MS + 100);
+    assert.equal((await stats(p)).peek, false);
+    await set(p, { bubble: { text: LONGA, summary: FALA, error: false } });
+    await frames(p);
+    assert.equal((await stats(p)).unseen, false, "overlay: a resposta que só cresceu (o done depois da fala) não acende a marca");
+    await set(p, { catHover: true });
+    await frames(p);
+    await p.locator("#bubble-more").click();
+    await set(p, { catHover: false });
+    await set(p, { bubble: { text: `${LONGA} E a nota tem a data da próxima ida.`, summary: FALA, error: false } });
+    await frames(p);
+    assert.equal((await stats(p)).bubbleOpen, true, "overlay: a mesma resposta, crescida de novo, não fecha o Ver mais");
+    await p.evaluate(() => (window as any).kiwiOverlay.collapse());
+    await Bun.sleep(PEEK_LEAVE_MS + 100);
+    // O andamento: o passo seguinte do mesmo pedido é outra linha, não um balão novo.
+    await set(p, { bubble: null });
+    await set(p, { bubble: { text: "Procurando nas notas…", error: false, progress: true } });
+    await frames(p);
+    await set(p, { catHover: true });
+    await frames(p);
+    assert.equal((await stats(p)).unseen, false);
+    await set(p, { catHover: false });
+    await Bun.sleep(PEEK_LEAVE_MS + 100);
+    await set(p, { bubble: { text: "Lendo Casa/Feira.md…", error: false, progress: true } });
+    await frames(p);
+    assert.equal((await stats(p)).unseen, false, "overlay: o passo seguinte do andamento não acende a marca");
+    await set(p, { bubble: { text: CURTA, error: false } });
+    await frames(p);
+    assert.equal((await stats(p)).unseen, true, "overlay: um balão novo de fato acende a marca");
+    checks.push(`overlay (${theme}): the same answer that only grew (the done after the speech) and the next progress step keep the mark off and "See more" open; a really new bubble lights it`);
     assert.deepEqual(problems, [], "overlay: erros na página");
   } finally {
     await ctx.close();
