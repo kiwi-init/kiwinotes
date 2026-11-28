@@ -227,6 +227,8 @@ try {
           for (let n = 0; !re.test(await cal()); n++) { assert.ok(n < 50, `${lang}: ${what}: ${await cal()}`); await Bun.sleep(100); }
         };
         const form = `${pane} .kn-cal-newform`;
+        // O que o passo 5 cria sai no fim dele, para a rodada da outra língua clicar no mesmo vazio.
+        const calAtStart = await cal();
         const before = (await p.locator(`${pane} .kn-cal`).getAttribute("data-view")) as (typeof VIEWS)[number];
         await view(p, "day");
         await p.locator(`${pane} .kn-cal-scroll`).evaluate((el) => { el.scrollTop = 6 * 48; });
@@ -349,6 +351,10 @@ try {
         assert.equal(await legendTask.getAttribute("aria-pressed"), "true", "o Mostrar tira o filtro da Pendência");
         assert.equal(await warn.count(), 0, "o aviso sai");
         checks.push(`${lang}: criar "${hidden}" com a Pendência escondida avisa "${said}", e o Mostrar põe o item e o tipo à vista (régua 10.9)`);
+        const calNow = await invoke("notes.get", { path: "Calendário.md" });
+        if (calAtStart) await invoke("notes.save", { path: "Calendário.md", content: calAtStart, baseVersion: calNow.version });
+        else await invoke("notes.delete", { path: "Calendário.md" });
+        await p.waitForSelector(item(title), { state: "detached" });
       }
 
       if (lang === "en") {
