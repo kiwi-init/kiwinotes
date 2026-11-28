@@ -263,8 +263,9 @@ try {
           matchesSelection(await snapshot(p));
         }
         await p.screenshot({ path: resolve(out, `abas-${width}-${theme}.png`), clip: { x: 0, y: 0, width, height: 60 } });
-        // A última aba, escondida no fim: o clique a traz para dentro.
-        await p.locator('.kn-tab[data-section=settings]').click();
+        // A última aba, escondida no fim, escolhida sem rolar a página até ela (como o "Abrir Ajustes" de outra seção):
+        // a faixa a traz para dentro. O `click()` do Playwright rolaria sozinho e esconderia a falta (mutação M2).
+        await p.locator('.kn-tab[data-section=settings]').evaluate((el: HTMLElement) => el.click());
         await p.mouse.move(width / 2, 300);
         await settled(p);
         const last = await narrowBar(p);
