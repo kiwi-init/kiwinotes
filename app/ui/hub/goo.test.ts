@@ -93,8 +93,13 @@ describe("o CSS", () => {
     expect(css).not.toMatch(/filter:/);
   });
 
-  test("cada fase que anda tem a sua animação, e reduzir movimento tira a gota", () => {
-    for (const k of ["kn-goo-in-start", "kn-goo-in-end", "kn-goo-out-start", "kn-goo-out-end"]) expect(css).toContain(`@keyframes ${k}`);
+  test("o relógio é da mola (WAAPI), não do CSS; os botões esperam a largada; reduzir movimento tira a gota", () => {
+    // O caminho e o tempo vêm do `gooPlan` (T32465): uma animação de CSS com duração fixa seria um 2º relógio.
+    expect(css).not.toMatch(/@keyframes kn-goo|--goo-ms/);
+    expect(css).toMatch(/\.kn-hub-slot\[data-goo="entering"\] > \* \{\s*opacity: 0;/);
+    // Sem gota, o fade dos botões termina em 1: o `@keyframes fade` só tem o `from`, e a espera acima deixaria em 0.
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^@]*?:root \.kn-hub-slot\[data-goo="entering"\] > \* \{\s*opacity: 1;\s*animation: fade/);
+    expect(css).toMatch(/:root\[data-motion="reduced"\] \.kn-hub-slot\[data-goo="entering"\] > \* \{\s*opacity: 1;\s*animation: fade/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.kn-goo \{\s*display: none;/);
     expect(css).toMatch(/:root\[data-motion="reduced"\] \.kn-goo \{\s*display: none;/);
   });

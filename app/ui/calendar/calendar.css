@@ -258,7 +258,6 @@
   justify-content: center;
   gap: 6px;
   color: var(--text-2);
-  text-transform: capitalize;
 }
 .kn-cal-dayhead b { font-size: 16px; color: var(--text); }
 .kn-cal-dayhead[data-today] b {
@@ -325,7 +324,7 @@
 .kn-cal-month { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .kn-cal-month-head,
 .kn-cal-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.kn-cal-month-head span { padding: 6px 8px; color: var(--text-2); font-size: 12px; text-transform: capitalize; }
+.kn-cal-month-head span { padding: 6px 8px; color: var(--text-2); font-size: 12px; }
 .kn-cal-month-grid { flex: 1; grid-auto-rows: minmax(0, 1fr); }
 .kn-cal-cell {
   display: flex;
@@ -356,7 +355,7 @@
 
 /* ---------------------------------------------------------------- a Agenda */
 .kn-cal-agenda { overflow: auto; padding: 8px 14px; }
-.kn-cal-agenda-day h3 { font-size: 13px; color: var(--text-2); margin: 12px 0 6px; text-transform: capitalize; }
+.kn-cal-agenda-day h3 { font-size: 13px; color: var(--text-2); margin: 12px 0 6px; }
 .kn-cal-agenda-day[data-today] h3 { color: var(--accent-text, var(--accent)); }
 .kn-cal-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; padding: 7px 12px; }
 .kn-cal-row-time { width: 92px; flex: none; font-variant-numeric: tabular-nums; }
