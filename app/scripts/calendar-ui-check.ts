@@ -9,6 +9,7 @@
 // - Os itens do mesmo horário ficam lado a lado (ponto 9, spec #34706): metade da coluna cada no par, o grupo de cinco
 //   inteiro no Dia e com um "+N" na Semana estreita; o "+N" abre os outros, com o cartão e o arrastar; no Dia estreito, a lista abre dentro da grade.
 // - O Sim da "atrasada" numa pendência repetida leva só a vez para amanhã, e a sugestão não volta na vez anterior (#485).
+// - O Adiar numa vez de repetição leva só aquela vez (#530), e as Ligações mostram a repetição uma vez só (#532).
 // Os prints de cada vista, em pt e en, e um vídeo da ida e da volta do painel largo.
 // Da raiz do app: `bun scripts/calendar-ui-check.ts [pasta]`. Pegue `kiwi lock bench`.
 import assert from "node:assert/strict";
@@ -115,6 +116,8 @@ try {
   await invoke("notes.create", { folder: "Projeto X", title: "Pendências", content: `# Pendências\n\n- [ ] Revisar o orçamento @ ${day(0)} 10:00\n- [ ] Mandar a proposta à Ana @ ${day(1)} 15:00\n- [ ] Escolher o fornecedor\n` });
   // Uma pendência repetida que começou há 3 dias, à meia-noite: sempre tem uma vez atrasada, a qualquer hora (#485).
   await invoke("notes.create", { folder: "Casa", title: "Rotina", content: `# Rotina\n\n- [ ] Regar as plantas @ ${day(-3)} 00:00 🔁 dia\n` });
+  // Uma repetição que começa amanhã (nunca atrasada) e uma reunião na mesma nota, para o Adiar e as Ligações (#530, #532).
+  await invoke("notes.create", { folder: "Casa", title: "Hábitos", content: `# Hábitos\n\n- [ ] Tomar água @ ${day(1)} 08:00 🔁 dia\n- Café com a Ana @ ${day(1)} 10:00-10:30 #reuniao\n` });
   await invoke("notes.create", { folder: "Casa", title: "Mudança", content: `# Mudança\n\n- [ ] Comprar fita e caixas @ ${day(2)} 09:00\n- [ ] Levar a geladeira\n` });
   // Amanhã, cinco coisas às 18h e um par às 20h, para o lado a lado (ponto 9): amanhã, para nada delas virar "atrasada".
   await invoke("notes.create", { folder: "Casa", title: "Agenda cheia", content: `# Agenda cheia\n\n${CROWD.map((t, i) => `- [ ] ${t} @ ${day(1)} 18:${i % 2 ? "15" : "00"}-19:00`).join("\n")}\n${PAIR.map((t) => `- [ ] ${t} @ ${day(1)} 20:00-21:00`).join("\n")}\n` });
@@ -420,6 +423,32 @@ try {
         }
         await p.screenshot({ path: join(shots, "sim-repeticao.png") });
         checks.push(`${lang}: o Sim da atrasada na pendência repetida põe o ⏭ ${vez} e a linha de amanhã, 9h, e a sugestão não volta na vez anterior (#485)`);
+
+        // 4e. Na Agenda (14 dias, a série inteira à vista): as Ligações do Café mostram o "Tomar água" uma vez só (#532), e o
+        // Adiar numa vez leva só ela para o dia seguinte; a série continua começando amanhã (#530).
+        await view(p, "agenda");
+        const habitos = async () => (await invoke("notes.get", { path: "Casa/Hábitos.md" })).content as string;
+        const water = `${pane} .kn-cal-item[data-path="Casa/Hábitos.md"][data-id$="~${day(2)}"]`;
+        await p.waitForSelector(water);
+        assert.ok((await p.locator(`${pane} .kn-cal-item:has-text("Tomar água")`).count()) >= 10, "a série na Agenda");
+        await hoverCard(p, "Café com a Ana");
+        await p.locator(`${pane} .kn-cal-card .kn-cal-expand`).click();
+        await wide(p, "open");
+        await p.locator(`${pane} .kn-cal-wide [role="tab"][data-tab="links"]`).click();
+        await p.waitForSelector(`${pane} .kn-cal-links`);
+        const links = await p.locator(`${pane} .kn-cal-links .kn-cal-link-row`).allTextContents();
+        assert.equal(links.filter((l) => l.includes("Tomar água")).length, 1, `as Ligações: ${links}`);
+        await p.screenshot({ path: join(shots, "ligacoes-repeticao.png") });
+        await p.locator(`${pane} .kn-cal-collapse`).click();
+        await wide(p, "gone");
+        await p.locator(water).hover({ position: { x: 8, y: 8 } });
+        await p.waitForSelector(`${pane} .kn-cal-card`);
+        await p.locator(`${pane} .kn-cal-card .kn-cal-btn`, { hasText: "Adiar" }).click();
+        for (let n = 0; !(await habitos()).includes(`- [ ] Tomar água @ ${day(3)} 08:00\n`); n++) { assert.ok(n < 50, await habitos()); await Bun.sleep(100); }
+        assert.ok((await habitos()).includes(`- [ ] Tomar água @ ${day(1)} 08:00 🔁 dia ⏭ ${day(2)}\n`), await habitos());
+        await p.waitForSelector(water, { state: "detached" });
+        await view(p, "week");
+        checks.push(`${lang}: as Ligações do Café mostram o "Tomar água" uma vez (#532), e o Adiar na vez de ${day(2)} põe o ⏭ e a linha avulsa de ${day(3)}, com a série em ${day(1)} (#530)`);
 
         // 4b. O + Novo, sem projeto, cria a linha no Calendário.md e o item na tela.
         await p.locator(`${pane} .kn-cal-new`).click();

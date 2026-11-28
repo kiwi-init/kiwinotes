@@ -212,6 +212,33 @@ export function moveItem(item: CalendarItem, deltaMin: number, deltaDays: number
 }
 
 /**
+ * O "Adiar" (o cartão e o painel largo): o item vai para o dia seguinte, na mesma hora. Numa vez de repetição, só aquela
+ * vez anda (`only`, #485); sem isso, o `calendar.update` mudava o começo da série inteira (#530).
+ */
+export function snoozePatch(item: CalendarItem): { start: string; end: string | null; only?: true } | null {
+  const m = moveItem(item, 0, 1);
+  if (!m) return null;
+  return item.repeat ? { ...m, only: true } : m;
+}
+
+/** A série de um item: o id sem o `~AAAA-MM-DD` da vez (as vezes de uma repetição dividem a série). */
+export const seriesOf = (id: string) => id.replace(/~\d{4}-\d{2}-\d{2}$/, "");
+
+/**
+ * As Ligações da mesma nota: os outros itens dela, uma linha por série. As vezes de uma repetição no período à vista
+ * não se repetem, e a série do próprio item não entra (#532).
+ */
+export function sameNote(item: CalendarItem, items: CalendarItem[]): CalendarItem[] {
+  if (!item.source) return [];
+  const seen = new Set([seriesOf(item.id)]);
+  return items.filter((i) => {
+    if (i.source?.path !== item.source!.path || seen.has(seriesOf(i.id))) return false;
+    seen.add(seriesOf(i.id));
+    return true;
+  });
+}
+
+/**
  * Esticar a borda de baixo: o fim vai `deltaMin` minutos (em passos de 15), com 15 min de duração no mínimo e 24 h no
  * máximo, o teto do `calendar.update` (#480): passou disso, o esticar para no teto, na prévia e ao soltar.
  */

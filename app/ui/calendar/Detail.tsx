@@ -8,7 +8,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CALENDAR_NOTIFY, type CalendarItem, type CalendarNotify } from "../../src/shared/calendar.ts";
 import { useT } from "../src/i18n.ts";
 import { whenLine } from "./format.ts";
-import { noteLine } from "./model.ts";
+import { noteLine, sameNote } from "./model.ts";
 import type { CalendarSource } from "../../src/shared/calendar.ts";
 import type { CalendarStore } from "./source.ts";
 
@@ -217,11 +217,7 @@ function useLinks(item: CalendarItem, text: CalendarSource | null | "loading", i
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [body, source]);
-  const same = item.source
-    ? items
-        .filter((i) => i.id !== item.id && i.source?.path === item.source!.path)
-        .map((i): LinkRow => ({ key: `i:${i.id}`, label: i.title, hint: t("calendar.linkSameNote"), kind: i.kind, open: () => openItem(i) }))
-    : [];
+  const same = sameNote(item, items).map((i): LinkRow => ({ key: `i:${i.id}`, label: i.title, hint: t("calendar.linkSameNote"), kind: i.kind, open: () => openItem(i) }));
   return [...same, ...wiki];
 }
 

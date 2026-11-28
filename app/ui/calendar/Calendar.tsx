@@ -12,7 +12,7 @@ import { useT } from "../src/i18n.ts";
 import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WIDE_PX, WidePanel, type WideState } from "./Detail.tsx";
 import { type CalendarFilter, filterStorage, passes, readFilter, shownProjects, toggleAllProjects, toggleKind, toggleProject, writeFilter } from "./filter.ts";
 import { periodTitle } from "./format.ts";
-import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, newItemDay, noteLine, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, newItemDay, noteLine, onDay, resizeItem, snoozePatch, stepAnchor, viewRange } from "./model.ts";
 import { KiwiAskBox } from "./KiwiAsk.tsx";
 import { KiwiPanel } from "./KiwiPanel.tsx";
 import { NewItem } from "./NewItem.tsx";
@@ -220,7 +220,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
   const actions: DetailActions = {
     openNote: (item) => item.source && onOpenNote(item.source.path, item.source.internal, noteLine(item)),
     snooze: (item) => {
-      const m = moveItem(item, 0, 1);
+      const m = snoozePatch(item);
       if (m) void save({ id: item.id, ...m });
     },
     toggleDone: (item) => void save({ id: item.id, done: !item.done }),

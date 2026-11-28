@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { CalendarItem } from "../../src/shared/calendar.ts";
-import { fitColumns, itemsOfDay, layoutDay, mondayOf, moveItem, newItemDay, noteLine, nowMinutes, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { fitColumns, itemsOfDay, layoutDay, mondayOf, moveItem, newItemDay, noteLine, nowMinutes, onDay, resizeItem, sameNote, snoozePatch, stepAnchor, viewRange } from "./model.ts";
 
 const item = (o: Partial<CalendarItem> & Pick<CalendarItem, "id" | "start">): CalendarItem => ({
   kind: "task",
@@ -206,5 +206,25 @@ describe("newItemDay: o dia que o + Novo sugere (#491)", () => {
   });
   test("no Dia, o dia à vista", () => {
     expect(newItemDay("day", "2026-12-24", today)).toBe("2026-12-24");
+  });
+});
+
+describe("as repetições no cartão e no painel largo", () => {
+  const vez = (day: string) => item({ id: `n:Casa/Rotina.md#2:abc~${day}`, start: `${day}T09:00`, repeat: "daily", source: { path: "Casa/Rotina.md", line: 2, internal: false } });
+
+  test("o Adiar numa vez leva só aquela vez para amanhã; no item avulso, o item (#530)", () => {
+    expect(snoozePatch(vez("2026-11-16"))).toEqual({ start: "2026-11-17T09:00", end: null, only: true });
+    expect(snoozePatch(item({ id: "n:a#1:x", start: "2026-11-16T09:00", end: "2026-11-16T10:00" }))).toEqual({ start: "2026-11-17T09:00", end: "2026-11-17T10:00" });
+    expect(snoozePatch(item({ id: "d", start: "2026-11-16", allDay: true }))).toEqual({ start: "2026-11-17", end: null });
+  });
+
+  test("as Ligações: uma linha por série, sem a série do próprio item, e só da mesma nota (#532)", () => {
+    const cafe = item({ id: "n:Casa/Rotina.md#4:def", start: "2026-11-18T10:00", source: { path: "Casa/Rotina.md", line: 4, internal: false } });
+    const outra = item({ id: "n:Casa/Mudança.md#2:ghi", start: "2026-11-18T11:00", source: { path: "Casa/Mudança.md", line: 2, internal: false } });
+    const vezes = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"].map(vez);
+    expect(sameNote(cafe, [...vezes, cafe, outra]).map((i) => i.id)).toEqual([vezes[0]!.id]);
+    // Aberta uma vez da série, as outras vezes não são "ligações" dela.
+    expect(sameNote(vezes[2]!, [...vezes, cafe, outra]).map((i) => i.id)).toEqual([cafe.id]);
+    expect(sameNote({ ...cafe, source: null }, vezes)).toEqual([]);
   });
 });
