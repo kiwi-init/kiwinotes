@@ -85,9 +85,9 @@ describe("a grade das horas", () => {
   test("a caixa empurrada nunca passa do próprio fim, e três no mesmo começo descem uma abaixo da outra", () => {
     const placed = layoutDay(
       [
-        item({ id: "a", start: "2026-11-26T09:00", end: "2026-11-26T11:00" }),
-        item({ id: "b", start: "2026-11-26T09:00", end: "2026-11-26T11:00" }),
-        item({ id: "c", start: "2026-11-26T09:00", end: "2026-11-26T11:00" }),
+        item({ id: "a", start: "2026-11-26T09:00", end: "2026-11-26T11:30" }),
+        item({ id: "b", start: "2026-11-26T09:00", end: "2026-11-26T11:30" }),
+        item({ id: "c", start: "2026-11-26T09:00", end: "2026-11-26T11:30" }),
         item({ id: "curta", start: "2026-11-26T15:00", end: "2026-11-26T16:00" }),
         item({ id: "rapida", start: "2026-11-26T15:00", end: "2026-11-26T15:30" }),
       ],

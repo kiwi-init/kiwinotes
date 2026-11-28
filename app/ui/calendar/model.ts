@@ -71,9 +71,10 @@ export function onDay(item: Pick<CalendarItem, "start" | "end" | "allDay">, day:
 
 /**
  * Quanto a caixa de cima da cascata fica abaixo do começo da de baixo, no mínimo, em minutos (#466): as duas linhas
- * dela, o título e a hora (uns 34 px, com a hora de 48 px). Começando antes disso, a de cima cobria a hora da de baixo.
+ * dela, o título e a hora (uns 35 px, com a hora de 48 px), e um respiro. Começando antes disso, a de cima cobria a hora
+ * da de baixo.
  */
-export const NEAR_MIN = 45;
+export const NEAR_MIN = 50;
 /** A altura mínima que sobra a uma caixa empurrada, em minutos: a caixa curta da grade (18 px). */
 export const MIN_SHOWN_MIN = 23;
 

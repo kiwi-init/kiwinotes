@@ -69,11 +69,13 @@ try {
           // A largura do texto, não a da linha (o span é um bloco): o Range mede só as letras.
           const range = document.createRange();
           range.selectNodeContents(span);
-          const need = Math.ceil(range.getBoundingClientRect().width);
-          // A caixa de cima só cobre a hora se desce até a linha dela.
-          const covers = upBox.y < s.bottom;
+          const letters = range.getBoundingClientRect();
+          const need = Math.ceil(letters.width);
+          // A caixa de cima só cobre a hora se começa antes do pé das letras dela; `gap` é o respiro até a caixa.
+          const gap = Math.floor(upBox.y - letters.bottom);
+          const covers = gap < 0;
           const col = low.parentElement!.getBoundingClientRect().width;
-          return { text: span.textContent, need, room: Math.floor(covers ? upBox.x - s.left : s.width), clipped: span.scrollWidth > span.clientWidth, col: Math.round(col) };
+          return { text: span.textContent, need, gap, room: Math.floor(covers ? upBox.x - s.left : s.width), clipped: span.scrollWidth > span.clientWidth, col: Math.round(col) };
         }, up);
       };
       const near = await time("Reunião com a Ana", "Sobreposta A");
