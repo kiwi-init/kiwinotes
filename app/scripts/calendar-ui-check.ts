@@ -292,9 +292,11 @@ try {
         // 5d. O vazio de um dia do Mês: o + Novo abre naquele dia, sem hora, com o dia marcado.
         await view(p, "month");
         const cell = p.locator(`${pane} .kn-cal-cell[data-day="${day(3)}"]`);
+        // O Mês rola: o locator traz o dia para a vista antes do clique, no canto de baixo, longe dos itens.
+        await cell.scrollIntoViewIfNeeded();
         const cb = await cell.boundingBox();
         assert.ok(cb);
-        await p.mouse.click(cb.x + cb.width - 6, cb.y + cb.height - 6);
+        await cell.click({ position: { x: cb.width - 6, y: cb.height - 6 } });
         await p.waitForSelector(form);
         assert.deepEqual([await p.inputValue(`${form} input[name="day"]`), await p.inputValue(`${form} input[name="time"]`)], [day(3), ""], `${lang}: o vazio do Mês abre o + Novo no dia`);
         assert.equal(await cell.getAttribute("data-drafting"), "", "o dia fica marcado");

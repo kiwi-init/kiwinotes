@@ -143,8 +143,9 @@ describe("o + Novo: dia todo à vista (#531)", () => {
     const html = form();
     expect(html).toMatch(/<input type="checkbox" name="allDay" checked=""/);
     expect(html).toContain("Dia todo");
-    expect(html).toMatch(/name="time"[^>]*data-empty=""/);
-    expect(html).toMatch(/name="end"[^>]*data-empty=""[^>]*disabled=""/);
+    // O React põe o name e o value no fim da tag.
+    expect(html).toMatch(/<input type="time"[^>]*data-empty=""[^>]*name="time"/);
+    expect(html).toMatch(/<input type="time"[^>]*data-empty="" disabled=""[^>]*name="end"/);
   });
   test("com a hora do vazio, o Dia todo vem desmarcado e os campos cheios", () => {
     const html = form("09:30", "10:00");
