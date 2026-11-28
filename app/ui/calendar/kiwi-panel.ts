@@ -1,8 +1,8 @@
 // O lado puro do painel do Kiwi no Calendário (T32156, spec #32129): o período que ele lê, o Hoje, o "Agora não"
 // guardado e a hora de onde a pendência sem data cai. O painel (KiwiPanel.tsx) só desenha o que sai daqui.
 
-import { addDays, type CalendarItem } from "../../src/shared/calendar.ts";
-import { DEADLINE_DAYS } from "../../src/shared/calendar-kiwi.ts";
+import { addDays, type CalendarItem, type CalendarUpdate } from "../../src/shared/calendar.ts";
+import { DEADLINE_DAYS, type Suggestion } from "../../src/shared/calendar-kiwi.ts";
 import { onDay, SNAP_MIN } from "./model.ts";
 
 /** Quantos dias para trás o painel procura a atrasada. */
@@ -30,6 +30,15 @@ export function dropStart(day: string, minutes: number | null): string {
 
 /** O que o arrasto grava: o `allDay` vai sempre, senão a pendência sem data vira "dia todo" mesmo com a hora. */
 export const dropUpdate = (id: string, start: string) => ({ id, start, allDay: start.length === 10 });
+
+/**
+ * O Sim da sugestão: grava e guarda a chave, como o "Agora não". Numa repetição, a chave é a da série, e as outras
+ * vezes atrasadas não trazem a mesma sugestão de volta (#485).
+ */
+export async function answerYes(sug: Pick<Suggestion, "itemId" | "key" | "accept">, save: (u: CalendarUpdate) => Promise<void>, store: { add(key: string): void }): Promise<void> {
+  await save({ id: sug.itemId, ...sug.accept.patch });
+  store.add(sug.key);
+}
 
 /** Quanto tempo o "Agora não" vale: depois, a sugestão pode voltar. */
 export const DISMISS_KEEP_MS = 7 * 86_400_000;

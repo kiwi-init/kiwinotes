@@ -110,6 +110,11 @@ export interface CalendarUpdate {
   notify?: CalendarNotify;
   kind?: CalendarKind;
   repeat?: CalendarRepeat | null;
+  /**
+   * Só esta vez (#485): numa vez de uma repetição, com o `start`, a vez ganha um `⏭` e uma linha avulsa logo abaixo
+   * leva a vez para o `start` novo. A série e a hora dela não mudam. É o Sim da sugestão "atrasada".
+   */
+  only?: boolean;
 }
 
 // ---------------------------------------------------------------- datas
@@ -249,6 +254,19 @@ export function parseWhen(rest: string): LineWhen | null {
   const skip = sortedDays([...title.matchAll(SKIP)].map((m) => m[2]!).filter(isDay));
   title = title.replace(BELL, "$1").replace(MUTE, "$1").replace(REPEAT, "$1").replace(SKIP, "$1").replace(/\s+/g, " ").trim();
   return { title, kind, start, end, allDay, notify, repeat: rep ? REPEAT_TOKEN[rep[2]!]! : null, skip };
+}
+
+/**
+ * O pedaço do título que a linha da nota leria como outra coisa (#493): a tag do tipo (`#foco`, `#reminder`…), `🔔`,
+ * `🔕`, `🔁`, `⏭` ou uma data com `@`. `null` quando o título pode ir. O `calendar.create`/`update` recusa com ele, e o
+ * "+ Novo" o mostra antes de criar.
+ */
+export function titleProblem(title: string): string | null {
+  const mark = /🔔|🔕|🔁|⏭/u.exec(title)?.[0] ?? /(?:^|\s)(@\s?\d[\d-]*(?: \d{1,2}:\d{2}(?:-\d{1,2}:\d{2})?)?)/.exec(title)?.[1];
+  if (mark) return mark;
+  for (const m of title.matchAll(TAG)) if (KIND_TAGS[m[2]!.toLowerCase()]) return `#${m[2]}`;
+  // Outro pedaço que a leitura tira do título (a regra de antes, inteira): devolve o título todo.
+  return parseWhen(`${title} @ 2026-01-01`)?.title === title.replace(/\s+/g, " ").trim() ? null : title.trim();
 }
 
 /** O pedaço `@ …` de uma data. */

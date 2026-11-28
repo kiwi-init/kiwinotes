@@ -252,12 +252,20 @@
 .kn-cal-allday,
 .kn-cal-hours { display: grid; }
 .kn-cal-head { border-bottom: 1px solid var(--cal-line); padding: 6px 0; }
-.kn-cal-dayhead {
+/*
+ * A cabeça do dia: o número e o nome lado a lado. Na coluna estreita (#495), todas mudam juntas para o nome embaixo do
+ * número, em vez de ele encostar no dia seguinte (a consulta é pela largura da coluna, e as colunas são iguais).
+ */
+.kn-cal-dayhead { container-type: inline-size; min-width: 0; color: var(--text-2); }
+.kn-cal-dayhead-in {
   display: flex;
   align-items: baseline;
   justify-content: center;
   gap: 6px;
-  color: var(--text-2);
+  padding: 0 2px;
+}
+@container (max-width: 84px) {
+  .kn-cal-dayhead-in { flex-direction: column; align-items: center; gap: 0; }
 }
 .kn-cal-dayhead b { font-size: 16px; color: var(--text); }
 .kn-cal-dayhead[data-today] b {
@@ -537,3 +545,4 @@
   .kn-cal-item[data-pulse],
   .kn-cal-card { animation: none; }
 }
+.kn-cal-title-problem { color: var(--danger); font-size: 12px; margin: -2px 0 6px; }

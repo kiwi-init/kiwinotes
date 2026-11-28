@@ -139,6 +139,28 @@ try {
     checks.push("with the agent off, Agente › Voz links to the Geral tab, and the keyboard focus goes to that tab");
     checks.push("?topic=meetings&tab=yours opens that tab; a tab id from another topic falls back to the last one opened there");
   }
+
+  // 6. O "Ligar o agente" do gato dormindo (#497): abre Agente › Geral, com o interruptor à vista, mesmo que a última aba
+  // do Agente tenha sido a Memória. Em pt e en (o rótulo da linha muda com a língua).
+  for (const lang of ["pt", "en"] as const) {
+    const r = await ctx.send({ cmd: "invoke", cap: "settings.set", args: { language: lang } });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 1100, height: 720, motion: false, browser: "webkit", query: {} });
+    const p = w.page;
+    await p.evaluate((k) => localStorage.setItem(k, "memory"), lastTabKey("agent"));
+    await p.waitForSelector('.kn-hub-pane[data-section="home"]:not([hidden]) .kn-home-asleep', { timeout: 15000 });
+    await p.locator(".kn-home-asleep-hit").click();
+    await p.locator(".kn-home-menu-item").click();
+    await expectTab(p, "agent", "general");
+    const sw = p.locator(`${panel("agent")} .kn-prefs-tabpanel[data-tab=general] .kn-row:has(.kn-row-label:text-is("${translate(lang, "agent.enable")}")) [role=switch]`);
+    await sw.waitFor({ state: "visible", timeout: 15000 });
+    assert.ok(await sw.evaluate((e) => { const r = e.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }), `${lang}: o interruptor fora da vista`);
+    await Bun.sleep(300);
+    await p.screenshot({ path: join(out, `ligar-o-agente-${lang}.png`) });
+    problems.push(...w.report.problems);
+    await w.close();
+    checks.push(`${lang}: with the agent off and Agente › Memória as the last tab, the sleeping cat's "${translate(lang, "home.agentTurnOn")}" opens Agente › Geral with the switch in view`);
+  }
 } finally {
   await browser.close();
   await cli(["stop"]).catch(() => {});

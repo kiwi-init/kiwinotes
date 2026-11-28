@@ -6,6 +6,7 @@
 // - O ⤢ abre o painel largo (Item · Nota · Ligações), e o item fica marcado; o ⤡ fecha e volta ao item.
 // - O link da nota no cartão abre a aba Notas naquela nota, com a linha do item marcada.
 // - A Semana da Início tem o "Abrir o calendário".
+// - O Sim da "atrasada" numa pendência repetida leva só a vez para amanhã, e a sugestão não volta na vez anterior (#485).
 // Os prints de cada vista, em pt e en, e um vídeo da ida e da volta do painel largo.
 // Da raiz do app: `bun scripts/calendar-ui-check.ts [pasta]`. Pegue `kiwi lock bench`.
 import assert from "node:assert/strict";
@@ -108,6 +109,8 @@ try {
   await cli(["start", "--no-helper"]);
   // Notas inventadas: pendências com data e hora, uma sem data, e uma reunião de hoje com a ata.
   await invoke("notes.create", { folder: "Projeto X", title: "Pendências", content: `# Pendências\n\n- [ ] Revisar o orçamento @ ${day(0)} 10:00\n- [ ] Mandar a proposta à Ana @ ${day(1)} 15:00\n- [ ] Escolher o fornecedor\n` });
+  // Uma pendência repetida que começou há 3 dias, à meia-noite: sempre tem uma vez atrasada, a qualquer hora (#485).
+  await invoke("notes.create", { folder: "Casa", title: "Rotina", content: `# Rotina\n\n- [ ] Regar as plantas @ ${day(-3)} 00:00 🔁 dia\n` });
   await invoke("notes.create", { folder: "Casa", title: "Mudança", content: `# Mudança\n\n- [ ] Comprar fita e caixas @ ${day(2)} 09:00\n- [ ] Levar a geladeira\n` });
   await invoke("notes.create", { folder: "Reuniões", title: "Revisão do Projeto X", content: `---\ntype: meeting\ndate: "${day(0)}"\nstart: "${at(0, 14)}"\nduration: 1800\nparticipants: [Ana, Bruno]\n---\n\nPauta: o orçamento e a data da entrega.\n` });
   await invoke("settings.set", { kiwicat: { overlay: false, show: true } });
@@ -198,11 +201,39 @@ try {
       await p.waitForSelector(item("Revisão do Projeto X"));
       checks.push(`${lang}: o filtro esconde o Projeto X (na grade e no sem data) e as reuniões, e fica ao recarregar`);
 
+      // O rodapé do + Novo diz o arquivo de verdade: a pendência vai ao Calendário.md, e a Nota vira uma nota nova com o título (#492).
+      {
+        const where = () => p.locator(`${pane} .kn-cal-newform .kn-cal-where`).innerText();
+        await p.locator(`${pane} .kn-cal-new`).click();
+        assert.equal(await where(), lang === "pt" ? "Vai para Calendário.md." : "Goes to Calendário.md.");
+        await p.locator(`${pane} .kn-cal-newform [data-kind="note"]`).click();
+        await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Plano: Q1");
+        await p.selectOption(`${pane} .kn-cal-newform select[name="project"]`, "Projeto X");
+        const note = lang === "pt" ? "Vira a nota Projeto X/Plano Q1.md." : "Becomes the note Projeto X/Plano Q1.md.";
+        assert.equal(await where(), note, `${lang}: o rodapé da Nota (#492)`);
+        await p.screenshot({ path: join(shots, "novo-nota.png") });
+        await p.locator(`${pane} .kn-cal-newform button.kn-cal-btn[type="button"]`).click();
+        await p.waitForSelector(`${pane} .kn-cal-newform`, { state: "detached" });
+        checks.push(`${lang}: o + Novo diz "${note}" com o tipo Nota, e Calendário.md na pendência (#492)`);
+      }
+
       if (lang === "en") {
         // O item que o pt esticou até 24 h (4c), em inglês: o bloco e o cartão com o (+1 day) (T34131).
         await plusOneDay(p, "11:00–11:00 (+1 day)");
         await p.screenshot({ path: join(shots, "mais-um-dia.png") });
         checks.push(`${lang}: o item de 24 h mostra 11:00–11:00 (+1 day) no bloco e no cartão`);
+
+        // O motivo do título com a tag do tipo (#493), em inglês; o Cancelar fecha sem criar.
+        await p.locator(`${pane} .kn-cal-new`).click();
+        await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Plan the #focus block");
+        const why = p.locator(`${pane} .kn-cal-newform .kn-cal-title-problem`);
+        await why.waitFor();
+        assert.equal((await why.textContent())?.trim(), "The title can’t have “#focus”: in the note, it sets the item’s kind, alert, repetition or date.");
+        assert.ok(await p.locator(`${pane} .kn-cal-newform button[type="submit"]`).isDisabled(), "Create is off");
+        await p.locator(`${pane} .kn-cal-newform`).screenshot({ path: join(shots, "titulo-com-tag.png") });
+        await p.locator(`${pane} .kn-cal-newform button[type="button"].kn-cal-btn`).click();
+        assert.equal(await p.locator(`${pane} .kn-cal-newform`).count(), 0, "o Cancelar fecha o + Novo");
+        checks.push(`${lang}: o + Novo com "Plan the #focus block" mostra o motivo em inglês e desliga o Create`);
       }
 
       if (lang === "pt") {
@@ -252,15 +283,77 @@ try {
         await p.screenshot({ path: join(shots, "esticar-24h.png") });
         checks.push(`${lang}: esticar além de 24 h para em 24 h (${(await line()).trim()}), sem aviso de erro, e o bloco e o cartão dizem 11:00–11:00 (+1 dia)`);
 
+        // 4d. O Sim da "atrasada" numa pendência repetida (#485). O painel usa o relógio de verdade, e outra pendência pode ser
+        // a atrasada mais nova: o "Agora não" nas outras até a sugestão ser a da Rotina.
+        const sug = `${pane} .kn-cal-kiwi-sug`;
+        const sugItem = () => p.locator(sug).getAttribute("data-item", { timeout: 5_000 }).catch(() => null);
+        const rotina = async () => (await invoke("notes.get", { path: "Casa/Rotina.md" })).content as string;
+        for (let n = 0; ; n++) {
+          await p.waitForSelector(`${sug}[data-rule="overdue"]`);
+          const was = await sugItem();
+          if (was?.includes("Rotina.md")) break;
+          assert.ok(n < 8, `a sugestão da pendência repetida não apareceu: ${was}`);
+          await p.locator(`${sug} [data-action="dismiss"]`).click();
+          await p.waitForFunction(([s, w]) => document.querySelector(s)?.getAttribute("data-item") !== w, [sug, was] as const);
+        }
+        const asked = (await sugItem())!;
+        const vez = asked.split("~")[1]!;
+        await p.locator(`${sug} [data-action="accept"]`).click();
+        // A nota: a série ganha o ⏭ da vez, e a linha avulsa leva a vez para amanhã, 9h. A hora da série não muda.
+        for (let n = 0; !(await rotina()).includes(`- [ ] Regar as plantas @ ${day(1)} 09:00\n`); n++) { assert.ok(n < 50, await rotina()); await Bun.sleep(100); }
+        assert.ok((await rotina()).includes(`- [ ] Regar as plantas @ ${day(-3)} 00:00 🔁 dia ⏭ ${vez}\n`), await rotina());
+        // A vez anterior segue aberta e atrasada (a pendência segura a série, #483): sem a resposta guardada, ela voltaria.
+        const antes = (await invoke("calendar.items", { from: day(-3), to: vez })).items as { title: string; start: string; done?: boolean }[];
+        assert.ok(antes.some((i) => i.title === "Regar as plantas" && !i.done), "a vez anterior está aberta");
+        // A sugestão sai da vez respondida, e por 1 s nenhuma vez da Rotina volta (o painel relê depois do Sim).
+        await p.waitForFunction(([s, w]) => document.querySelector(s)?.getAttribute("data-item") !== w, [sug, asked] as const);
+        for (let n = 0; n < 10; n++) {
+          const now = await p.locator(sug).getAttribute("data-item", { timeout: 100 }).catch(() => null);
+          assert.ok(!now?.includes("Rotina.md"), `a sugestão voltou na vez anterior: ${now}`);
+          await Bun.sleep(100);
+        }
+        await p.screenshot({ path: join(shots, "sim-repeticao.png") });
+        checks.push(`${lang}: o Sim da atrasada na pendência repetida põe o ⏭ ${vez} e a linha de amanhã, 9h, e a sugestão não volta na vez anterior (#485)`);
+
         // 4b. O + Novo, sem projeto, cria a linha no Calendário.md e o item na tela.
         await p.locator(`${pane} .kn-cal-new`).click();
+        // 4b'. Um título com a tag do tipo (#493): o motivo aparece embaixo do campo, com o pedaço, e o Criar desliga.
+        await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Revisar #foco do mês");
+        const why = p.locator(`${pane} .kn-cal-newform .kn-cal-title-problem`);
+        await why.waitFor();
+        assert.equal((await why.textContent())?.trim(), "O título não pode ter “#foco”: na nota, isso vira o tipo, o aviso, a repetição ou a data do item.");
+        assert.ok(await p.locator(`${pane} .kn-cal-newform button[type="submit"]`).isDisabled(), "o Criar fica desligado");
+        await p.locator(`${pane} .kn-cal-newform`).screenshot({ path: join(shots, "titulo-com-tag.png") });
+        checks.push(`${lang}: o + Novo com "Revisar #foco do mês" mostra o motivo com o pedaço e desliga o Criar`);
+        // Uma data com hora no título: o aviso cita a data inteira, não só "@ 2" (lead #34500).
+        await p.fill(`${pane} .kn-cal-newform input[name="title"]`, `Aula @ ${day(1)} 10:00-11:30 sala 3`);
+        await p.waitForFunction((s) => document.querySelector(s)?.textContent?.includes("10:00-11:30"), `${pane} .kn-cal-newform .kn-cal-title-problem`);
+        assert.equal((await why.textContent())?.trim(), `O título não pode ter “@ ${day(1)} 10:00-11:30”: na nota, isso vira o tipo, o aviso, a repetição ou a data do item.`);
+        await p.locator(`${pane} .kn-cal-newform`).screenshot({ path: join(shots, "titulo-com-data.png") });
+        checks.push(`${lang}: o + Novo com uma data e hora no título cita "@ ${day(1)} 10:00-11:30" inteira`);
         await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Ligar para o Bruno");
+        assert.equal(await why.count(), 0, "o motivo some com o título comum");
         await p.fill(`${pane} .kn-cal-newform input[name="day"]`, day(0));
         await p.fill(`${pane} .kn-cal-newform input[name="time"]`, "16:00");
         await p.locator(`${pane} .kn-cal-newform button[type="submit"]`).click();
         await p.waitForSelector(item("Ligar para o Bruno"));
         assert.match((await invoke("notes.get", { path: "Calendário.md" })).content, new RegExp(`Ligar para o Bruno @ ${day(0)} 16:00`));
         checks.push(`${lang}: o + Novo cria "Ligar para o Bruno" no Calendário.md e na tela`);
+
+        // 4b'. No Mês seguinte, o + Novo sugere o dia 1 dele, não a segunda da grade, que cai no mês de hoje (#491).
+        const before = (await p.locator(`${pane} .kn-cal`).getAttribute("data-view")) as (typeof VIEWS)[number];
+        await view(p, "month");
+        await p.locator(`${pane} .kn-cal-tool > .kn-cal-ic`, { hasText: "›" }).click();
+        const n = new Date();
+        const first = `${new Date(n.getFullYear(), n.getMonth() + 1, 1).getFullYear()}-${String(((n.getMonth() + 1) % 12) + 1).padStart(2, "0")}-01`;
+        await p.locator(`${pane} .kn-cal-new`).click();
+        assert.equal(await p.inputValue(`${pane} .kn-cal-newform input[name="day"]`), first, `${lang}: o + Novo no Mês seguinte sugere o dia 1 (#491)`);
+        await p.screenshot({ path: join(shots, "novo-mes-seguinte.png") });
+        await p.locator(`${pane} .kn-cal-newform button.kn-cal-btn[type="button"]`).click();
+        await p.waitForSelector(`${pane} .kn-cal-newform`, { state: "detached" });
+        await p.locator(`${pane} .kn-cal-tool > .kn-cal-btn:not(.kn-cal-new)`).click();
+        await view(p, before);
+        checks.push(`${lang}: no Mês seguinte, o + Novo sugere ${first}, o dia 1 do mês à vista (#491)`);
 
         // 4c. O link da nota abre as Notas naquela nota, na linha do item.
         await hoverCard(p, "Revisar o orçamento");

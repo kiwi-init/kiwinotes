@@ -34,6 +34,7 @@ import {
   parseAgenda,
   parseWhen,
   rewriteWhen,
+  titleProblem,
   toMs,
 } from "../shared/calendar.ts";
 import { isMeetingNote } from "../shared/meeting-note.ts";
@@ -86,7 +87,10 @@ interface Located {
   internal: boolean;
 }
 
-export function calendarService(sources: () => Promise<CalendarSources>) {
+/** O dia de hoje (AAAA-MM-DD, na hora local); os testes passam um fixo. */
+export type CalendarToday = () => string;
+
+export function calendarService(sources: () => Promise<CalendarSources>, today: CalendarToday = () => dayOf(Date.now())) {
   /** As pastas onde ler: as Notas, e a das reuniões se for outra. */
   const vaults = (src: CalendarSources): Located[] =>
     src.meetings === src.notes ? [{ vault: src.notes, internal: false }] : [{ vault: src.notes, internal: false }, { vault: src.meetings, internal: true }];
@@ -163,6 +167,13 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
     return { dated, undated };
   }
 
+  /**
+   * Os itens já lidos de cada nota, pela versão do índice (#486). A conferência dos avisos roda a cada 30 s e lia do disco
+   * toda nota com uma caixa aberta; agora só lê a que mudou desde a última vez. O `save` e o vigia de arquivos trocam a
+   * versão no índice, então a nota mudada (no app ou fora dele) é relida na conferência seguinte.
+   */
+  const parsed = new Map<string, { version: string; got: { dated: CalendarItem[]; undated: CalendarItem[] } }>();
+
   /** Todas as notas que podem ter um item: uma data na linha, uma caixa aberta ou o `agenda:`. */
   async function readAll(src: CalendarSources): Promise<{ dated: CalendarItem[]; undated: CalendarItem[] }> {
     const dated: CalendarItem[] = [];
@@ -175,13 +186,24 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
         const key = `${where.internal}:${meta.path}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        const note = await where.vault.get(meta.path).catch(() => null);
-        if (!note) continue; // sumiu entre o índice e a leitura
-        const got = itemsOfNote(note, where);
-        dated.push(...got.dated);
-        undated.push(...got.undated);
+        let cached = parsed.get(key);
+        if (cached?.version !== meta.version) {
+          const note = await where.vault.get(meta.path).catch(() => null);
+          if (!note) {
+            parsed.delete(key);
+            continue; // sumiu entre o índice e a leitura
+          }
+          // A versão da leitura, não a do índice: se o arquivo mudou no meio, a próxima conferência relê.
+          cached = { version: note.version, got: itemsOfNote(note, where) };
+          parsed.set(key, cached);
+        }
+        // Cópias: quem recebe os itens pode mudá-los, e o guardado tem de ficar como a nota está.
+        dated.push(...cached.got.dated.map((it) => structuredClone(it)));
+        undated.push(...cached.got.undated.map((it) => structuredClone(it)));
       }
     }
+    // A nota que saiu das candidatas (apagada, ou sem caixa nem data) sai do guardado.
+    for (const key of parsed.keys()) if (!seen.has(key)) parsed.delete(key);
     for (const m of await listMeetings(src.meetings, src.liveSession)) {
       if (m.live) continue;
       const startMs = m.start ? Date.parse(m.start) : Number.NaN;
@@ -254,6 +276,16 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
       if (!parts) throw new CalendarError("E_CONFLICT", "the item changed in the note; read again");
       const [, lead, , box, rest] = parts as unknown as [string, string, string | undefined, string | undefined, string];
       const cur = parseWhen(rest);
+      if (u.only) {
+        if (!cur?.repeat || !at.occurrence) throw new CalendarError("E_BAD_ARGS", "calendar.update: only is for one time of a repetition");
+        const content = onlyThisTime(at.raw, at.line, { lead, box, rest, cr }, cur, at.occurrence, u, src.locale);
+        const fresh = itemsOfNote({ ...at.note, content }, at.where);
+        const item = [...fresh.dated, ...fresh.undated].find((i) => i.source?.line === at.line + 1);
+        if (!item) throw new CalendarError("E_CONFLICT", "the item left the calendar");
+        const res = await src.notes.save(at.note.path, content, at.note.version);
+        if (!res.saved) continue;
+        return item;
+      }
       let patch: Parameters<typeof rewriteWhen>[1] = {};
       let newBox = box === undefined ? null : box === " " ? " " : "x";
       if (u.title !== undefined) patch.title = u.title;
@@ -285,8 +317,11 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
       if (u.done !== undefined) {
         if (u.done && cur?.repeat && at.occurrence) {
           const step = cur.repeat === "daily" ? 1 : 7;
+          // A 1ª vez em aberto. Num lembrete, a vez que já passou sem o Feito não segura a série (#483): conta de hoje,
+          // ou da vez marcada, se ela for antes. Numa pendência, a vez atrasada continua segurando.
+          const from = cur.kind === "reminder" ? (at.occurrence < today() ? at.occurrence : today()) : "";
           let first = cur.start.slice(0, 10);
-          while (cur.skip.includes(first)) first = addDays(first, step);
+          while (first < from || cur.skip.includes(first)) first = addDays(first, step);
           if (at.occurrence !== first) {
             // Uma vez depois da 1ª em aberto: só ela sai da agenda (`⏭`), e as de antes seguem abertas (#450).
             patch = { ...patch, skip: [...cur.skip, at.occurrence] };
@@ -478,6 +513,35 @@ function shiftBy(v: string, ms: number): string {
   return v.length === 10 ? dayOf(moved) : dayTimeOfMs(moved);
 }
 
+/**
+ * O "só esta vez" (#485): a série ganha o `⏭` da vez, e uma linha avulsa logo abaixo leva a vez para o `start` novo,
+ * com a mesma duração e sem a repetição. A série, a hora dela e as outras vezes não mudam.
+ */
+function onlyThisTime(
+  raw: readonly string[],
+  at: number,
+  l: { lead: string; box: string | undefined; rest: string; cr: string },
+  cur: NonNullable<ReturnType<typeof parseWhen>>,
+  occurrence: string,
+  u: CalendarUpdate,
+  locale: "pt" | "en",
+): string {
+  const start = u.start!;
+  const allDay = u.allDay ?? isDay(start);
+  const timed = !allDay && !isDay(start) && !isDay(cur.start);
+  const end = allDay ? null : u.end !== undefined ? u.end : timed && cur.end ? shiftBy(cur.end, toMs(start) - toMs(cur.start)) : null;
+  if (typeof end === "string") {
+    if (toMs(end) <= toMs(start)) throw new CalendarError("E_BAD_ARGS", "calendar.update: end must be after start");
+    if (toMs(end) - toMs(start) > CALENDAR_LIMITS.spanHours * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
+  }
+  const box = l.box === undefined ? "" : "[ ] ";
+  const series = `${l.lead}${l.box === undefined ? "" : `[${l.box === " " ? " " : "x"}] `}${rewriteWhen(l.rest, { skip: [...cur.skip, occurrence] }, locale)}${l.cr}`;
+  const once = `${l.lead}${box}${rewriteWhen(l.rest, { start, end, allDay, repeat: null }, locale)}${l.cr}`;
+  const lines = [...raw];
+  lines.splice(at, 1, series, once);
+  return lines.join("\n");
+}
+
 /** O `end` de uma vez da repetição (o fim da série andado até aquela vez). */
 function occurrenceOf(end: string, start: string, day: string): string {
   return shiftBy(end, toMs(day) - toMs(start.slice(0, 10)));
@@ -524,7 +588,7 @@ function checkTimes(start: unknown, end: unknown, allDay: unknown, cap: string) 
 function checkTitle(title: unknown, cap: string): void {
   if (typeof title !== "string" || !title.trim() || title.length > CALENDAR_LIMITS.title || /[\r\n]/.test(title))
     throw new CalendarError("E_BAD_ARGS", `${cap}: title must be one line, 1 to ${CALENDAR_LIMITS.title} characters`);
-  if (parseWhen(`${title} @ 2026-01-01`)?.title !== title.replace(/\s+/g, " ").trim() || /🔔|🔕|🔁|⏭|(^|\s)@\s?\d/.test(title))
+  if (titleProblem(title))
     throw new CalendarError("E_BAD_ARGS", `${cap}: title can't have a date, a kind tag, 🔔, 🔕, 🔁 or ⏭`);
 }
 
@@ -550,6 +614,11 @@ function checkUpdate(u: CalendarUpdate): void {
   if (u.notify !== undefined && !isCalendarNotify(u.notify)) throw new CalendarError("E_BAD_ARGS", "calendar.update: unknown notify");
   if (u.kind !== undefined && (!isCalendarKind(u.kind) || u.kind === "note")) throw new CalendarError("E_BAD_ARGS", "calendar.update: kind is meeting, reminder, task or focus");
   if (u.repeat !== undefined && u.repeat !== null && !isCalendarRepeat(u.repeat)) throw new CalendarError("E_BAD_ARGS", "calendar.update: repeat is daily, weekly or null");
+  if (u.only !== undefined) {
+    if (typeof u.only !== "boolean") throw new CalendarError("E_BAD_ARGS", "calendar.update: only must be true or false");
+    const extra = Object.keys(u).filter((k) => !["id", "only", "start", "end", "allDay"].includes(k));
+    if (u.only && (u.start === undefined || extra.length)) throw new CalendarError("E_BAD_ARGS", "calendar.update: only takes start (and end, allDay)");
+  }
   const keys = Object.keys(u).filter((k) => k !== "id");
   if (!keys.length) throw new CalendarError("E_BAD_ARGS", "calendar.update: nothing to change");
 }

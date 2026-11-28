@@ -27,11 +27,15 @@ export interface SuggestItem {
   notify: CalendarKiwiNotify;
   readOnly?: boolean;
   source: { path: string } | null;
+  /** A vez de uma repetição: a sugestão vale para a série, não para cada vez (#485). */
+  repeat?: string | null;
 }
 
 /** A mudança que o botão da sugestão manda ao `calendar.update`. */
 export interface SuggestPatch {
   start?: string;
+  /** Só esta vez, numa repetição (#485): a série e a hora dela não mudam. */
+  only?: boolean;
   notify?: CalendarKiwiNotify;
 }
 
@@ -107,7 +111,8 @@ export function isoLocal(ms: number, allDay: boolean): string {
   return allDay ? date : `${date}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-const keyOf = (rule: SuggestRule, i: SuggestItem) => `${rule}|${i.source?.path ?? i.id}|${i.title}|${i.start}`;
+// Numa repetição, a chave é a da série: respondida numa vez, a sugestão não volta nas outras (#485).
+const keyOf = (rule: SuggestRule, i: SuggestItem) => `${rule}|${i.source?.path ?? i.id}|${i.title}|${i.repeat ? `🔁 ${i.repeat}` : i.start}`;
 const open = (i: SuggestItem) => !i.done && !i.readOnly;
 
 /** Já passou: a hora, ou o dia inteiro no dia todo. */
@@ -146,7 +151,7 @@ export function suggestion(items: readonly SuggestItem[], now: number, locale: L
         at: spokenTime(startMs(late.start), locale),
         time: spokenTime(new Date(tomorrow).setHours(MOVE_TO_HOUR, 0, 0, 0), locale),
       }),
-      accept: { label: translate(locale, "calendarKiwi.suggest.move"), patch: { start: isoLocal(target, late.allDay) } },
+      accept: { label: translate(locale, "calendarKiwi.suggest.move"), patch: { start: isoLocal(target, late.allDay), ...(late.repeat ? { only: true } : {}) } },
       dismissLabel,
     };
   }

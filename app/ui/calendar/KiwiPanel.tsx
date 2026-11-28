@@ -11,7 +11,7 @@ import { type CalendarItem, type CalendarItems, type CalendarUpdate } from "../.
 import { suggestion } from "../../src/shared/calendar-kiwi.ts";
 import { useT } from "../src/i18n.ts";
 import { type CalendarFilter, NO_FILTER, passes } from "./filter.ts";
-import { dismissedStore, dropStart, dropUpdate, panelRange, todayItems } from "./kiwi-panel.ts";
+import { answerYes, dismissedStore, dropStart, dropUpdate, panelRange, todayItems } from "./kiwi-panel.ts";
 import type { CalendarStore } from "./source.ts";
 import { HOUR_PX } from "./views.tsx";
 
@@ -92,7 +92,8 @@ export function KiwiPanel({
     if (!sug || busy) return;
     setBusy(true);
     try {
-      await save({ id: sug.itemId, ...sug.accept.patch });
+      await answerYes(sug, save, dismissed);
+      setHidden(dismissed.keys());
     } finally {
       setBusy(false);
       reload();
