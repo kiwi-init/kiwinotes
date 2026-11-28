@@ -2,6 +2,9 @@
    (`lab/calendario-propostas/proto.html`): caixas arredondadas só com o fundo na cor do tipo, sem barra do lado. */
 
 .kn-cal {
+  /* As camadas do Calendário (o painel largo, os cartões, os menus) ficam dentro dele: o Kiwi e o balão do hub,
+     que vêm depois, sempre por cima (T34741). */
+  isolation: isolate;
   --cal-meeting: #6e9cf7;
   --cal-reminder: #fbbf24;
   --cal-task: #c084fc;
@@ -207,9 +210,16 @@
   transition: flex-basis var(--slow, 0.5s) var(--ease, ease);
 }
 .kn-cal-side:empty { display: none; }
-/* Com o painel largo aberto, a grade cede o lugar dele; na volta, tudo contrai ao mesmo tempo. */
+/*
+ * Com o painel largo aberto (T34741), o painel do Kiwi estica embaixo dele até a largura dele, e a grade vai até a
+ * folga de sempre (o gap) antes do painel, sem faixa vazia. Sem o painel do Kiwi, a grade cede o lugar pela margem.
+ * Na ida e na volta, a grade e o painel do Kiwi mudam no mesmo passo do painel largo.
+ */
 .kn-cal-main { transition: margin-right 0.55s cubic-bezier(.2,.8,.2,1); }
-.kn-cal[data-wide] .kn-cal-main { margin-right: min(540px, calc(100% - 40px)); }
+.kn-cal[data-panel] .kn-cal-side { transition: flex-basis 0.55s cubic-bezier(.2,.8,.2,1); }
+.kn-cal[data-wide] .kn-cal-side { flex-basis: min(540px, 100%); }
+.kn-cal[data-wide] .kn-cal-main { margin-right: calc(min(540px, 100%) + 14px); }
+.kn-cal[data-wide] .kn-cal-main:has(~ .kn-cal-side:not(:empty)) { margin-right: 0; }
 
 /* ---------------------------------------------------------------- os itens */
 .kn-cal-item {
@@ -541,7 +551,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .kn-cal-main,
-  .kn-cal-side { transition: none; }
+  .kn-cal-side,
+  .kn-cal[data-panel] .kn-cal-side { transition: none; }
   .kn-cal-item[data-pulse],
   .kn-cal-card { animation: none; }
 }

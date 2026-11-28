@@ -161,14 +161,23 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     const r = root.current;
     const main = r?.querySelector<HTMLElement>(".kn-cal-main");
     if (!r || !main) return null;
+    // A grade e o painel do Kiwi vão para o tamanho final sem animar, medem e voltam ao ponto em que estavam.
+    const aside = side.current;
     const was = getComputedStyle(main).marginRight;
+    const basis = aside ? getComputedStyle(aside).flexBasis : "";
     main.style.transition = "none";
+    if (aside) aside.style.transition = "none";
     const el = itemEl(id);
     const rect = el ? rectIn(el, r) : null;
     main.style.marginRight = was;
+    if (aside) aside.style.flexBasis = basis;
     void main.offsetWidth;
     main.style.transition = "";
     main.style.marginRight = "";
+    if (aside) {
+      aside.style.transition = "";
+      aside.style.flexBasis = "";
+    }
     return rect;
   };
 
@@ -312,7 +321,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
   const projects = load.state === "ready" ? load.data.projects : [];
 
   return (
-    <div className="kn-cal" ref={root} data-view={view} data-wide={wide ? "" : undefined} aria-label={t("calendar.aria")}>
+    <div className="kn-cal" ref={root} data-view={view} data-wide={wide ? "" : undefined} data-panel={open ? "" : undefined} aria-label={t("calendar.aria")}>
       <div className="kn-cal-tool">
         <h1 className="kn-cal-title">{periodTitle(view, range.days, anchor, locale)}</h1>
         <button type="button" className="kn-cal-ic" aria-label={t("calendar.prev")} onClick={() => setAnchor((a) => stepAnchor(view, a, -1))}>
