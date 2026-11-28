@@ -57,6 +57,12 @@ describe("readCalendarAsk", () => {
       ["reunião das 9h às 10h", "2026-11-27T09:00", null],
       ["reunião de 9h às 10h", "2026-11-27T09:00", null],
       ["reunião de 9 horas às 10 horas amanhã", "2026-11-27T09:00", null],
+      // A mesma unidade nas duas pontas é intervalo só quando é plausível (#34969): o começo entre 6 e 23 e o fim depois.
+      ["reunião de 2 horas às 10 horas amanhã", "2026-11-27T10:00", null],
+      ["marca uma reunião de 1 hora às 14 horas", "2026-11-27T14:00", null],
+      ["reunião de 1h às 14h", "2026-11-27T14:00", null],
+      ["workshop de 3 horas às 3 da tarde", "2026-11-27T15:00", null],
+      ["plantão de 8h às 17h na segunda", "2026-11-30T08:00", null],
     ];
     for (const [text, start, notify] of cases) expect([text, ask(text)]).toEqual([text, { start, notify }]);
   });

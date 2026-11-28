@@ -104,15 +104,23 @@ const cut = (t: string, at: [number, number]) => `${t.slice(0, at[0])} ${t.slice
  * block". Sai do texto antes da hora, como a antecedência. "das 9h às 10h" fica (é o começo e o fim).
  */
 function withoutDuration(t: string): string {
-  // Com "de", só a unidade por extenso ("reunião de 9h" é a hora); com "por", "durante" e "for", também o "2h". O
-  // intervalo ("de 9 horas às 10 horas") fica, só quando a outra ponta tem a mesma unidade por extenso; "de 1 hora às
-  // 14h" e "por 2h às 10h" são a duração e a hora (#34851).
-  const n = `(?:\\d{1,3}|${NUM_WORD})`;
-  const half = `(?:\\s+e\\s+meia|\\s+and a half)?\\b`;
-  const de = new RegExp(`\\bde\\s+${n}\\s*(?:horas?|hours?|min(?:uto|ute)?s?)${half}(?!\\s*(?:as|a|ate|-)\\s*\\d{1,2}\\s*(?:horas?|hours?)\\b)`, "g");
+  // Com "por", "durante" e "for", o "2h" e o "2 horas" são sempre a duração. Com "de" sozinho, só a unidade por
+  // extenso ("reunião de 9h" é a hora). Com "de N … às M", é o intervalo só quando é plausível (#34969): o começo
+  // N entre 6 e 23 e o fim M depois dele ("de 9h às 10h", "de 9 horas às 10 horas"). Fora disso ("de 2 horas às 10
+  // horas", "de 1h às 14h", "de 30 minutos às 16h", "de uma hora e meia às 15h"), o "de N" é a duração.
+  const n = `(\\d{1,3}|${NUM_WORD})`;
+  const half = `(\\s+e\\s+meia|\\s+and a half)?\\b`;
+  const de = new RegExp(`\\bde\\s+${n}\\s*(hs?|hrs?|horas?|hours?|min(?:uto|ute)?s?)${half}(?=(\\s*(?:as|a|ate|-)\\s*(\\d{1,2})(?!\\d))?)`, "g");
   const por = new RegExp(`\\b(?:por|durante|for)\\s+${n}\\s*(?:h|hs|hrs?|horas?|hours?|min(?:uto|ute)?s?)${half}`, "g");
   const en = new RegExp(`\\b(?:\\d{1,3}|${NUM_WORD})[- ]?(?:hours?|hrs?|minutes?|mins?)(?:\\s+and a half)?(?=\\s+(?:long\\s+)?(?:meeting|block|session|call|focus|slot|event)\\b)`, "g");
-  return t.replace(de, " ").replace(por, " ").replace(en, " ");
+  const deCut = (all: string, num: string, unit: string, halfOf: string | undefined, to: string | undefined, end: string | undefined) => {
+    const compact = /^(hs?|hrs?)$/.test(unit);
+    if (to === undefined) return compact ? all : " ";
+    if (unit[0] === "m" || halfOf) return " ";
+    const from = /^\d/.test(num) ? Number(num) : NUM[num]!;
+    return from >= 6 && from <= 23 && pm(t, Number(end)) > from ? all : " ";
+  };
+  return t.replace(de, deCut).replace(por, " ").replace(en, " ");
 }
 
 /** O que o pedido diz de hora, dia e aviso; os dois `null` quando não diz nada disso. */
