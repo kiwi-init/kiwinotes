@@ -190,8 +190,15 @@ export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = fa
   }, [settled, viewKey]);
   useEffect(() => { clock.current?.hold(hovering || bigOpen || hidden); }, [hovering, bigOpen, hidden]);
 
-  /** O × do balão e o Esc: fecha agora; a resposta fica para voltar com o mouse no Kiwi. */
+  /**
+   * O × do balão e o Esc: fecha agora; a resposta fica para voltar com o mouse no Kiwi. Com o pedido ainda correndo
+   * (decisão #33542), os dois fazem o mesmo que o [Parar], como no overlay: o `done` cancelado tira o balão.
+   */
   const closeBubble = () => {
+    if (feed.current?.working()) {
+      void api.agent.cancel().catch(() => {});
+      return;
+    }
     feed.current?.close();
     tick.current();
   };

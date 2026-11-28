@@ -580,6 +580,29 @@ describe("o andamento enquanto o agente trabalha (spec #32534, Cena 2, T33177)",
   const NOTA = "Clientes/Ana Souza - contrato.md";
   const TRECHO = "o contrato da Ana vence em março";
 
+  test("o × e o Esc cancelam só com o pedido correndo (decisão #33542): o `working()` do balão", () => {
+    const f = new BubbleFeed(fits(60));
+    expect(f.working()).toBe(false);
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "status", status: "thinking" }), 0);
+    // O andamento e a fala antes do `done`: o pedido corre, o × cancela.
+    expect(f.working()).toBe(true);
+    f.event(ev({ type: "speech", text: "Anotei na nota." }), 10);
+    expect(f.working()).toBe(true);
+    // Acabou: a resposta na tela, o × só fecha.
+    f.event(ev({ type: "done", stopReason: "end_turn", text: "Anotei na nota." }), 20);
+    expect(f.working()).toBe(false);
+    // Um pedido novo corre de novo; fechado, o × não cancela mais nada.
+    f.event(ev({ id: "p2", type: "started" }), 30);
+    expect(f.working()).toBe(true);
+    f.close();
+    expect(f.working()).toBe(false);
+    // Cancelado, também acabou.
+    f.event(ev({ id: "p3", type: "started" }), 40);
+    f.event(ev({ id: "p3", type: "done", stopReason: "cancelled", text: "" }), 50);
+    expect(f.working()).toBe(false);
+  });
+
   test("o passo troca a cada ferramenta, num balão só, com o [Parar], e nunca o nome nem o texto de uma nota", () => {
     const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);

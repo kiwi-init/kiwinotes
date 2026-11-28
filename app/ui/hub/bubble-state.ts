@@ -247,6 +247,14 @@ export class BubbleFeed {
   /** O balão não anima mais o texto (spec #27881); a tela ainda avisa quando o movimento reduzido muda. */
   setReduced(_on: boolean): void {}
 
+  /**
+   * O pedido do balão ainda corre (spec #32534, decisão #33542): o × e o Esc fazem o mesmo que o [Parar], como no
+   * overlay. Fora do pedido (acabou, ou o balão já foi fechado), os dois só fecham.
+   */
+  working(): boolean {
+    return this.request !== null && !this.ended && !this.dismissed;
+  }
+
   /** O texto inteiro do pedido, para o [Ver mais]. */
   all(): string {
     return this.said;

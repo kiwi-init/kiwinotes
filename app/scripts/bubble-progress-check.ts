@@ -247,6 +247,31 @@ async function hub(theme: "light" | "dark") {
     await p.waitForSelector(BUBBLE, { state: "detached", timeout: 5_000 });
     assert.ok((w.report.invokes["agent.cancel"] ?? 0) >= 1, JSON.stringify(w.report.invokes));
     checks.push(`hub (${theme}): the step with "${OUVIU}" on top and Stop, never the note's name; the answer takes the place; Stop calls agent.cancel and the bubble leaves`);
+
+    // 3. O × e o Esc durante o pedido (decisão #33542): fazem o mesmo que o [Parar], como no overlay.
+    const cancels = () => w.report.invokes["agent.cancel"] ?? 0;
+    for (const [how, act] of [
+      ["×", () => p.locator(`${BUBBLE} .kn-bubble-close`).click()],
+      ["Esc", () => p.keyboard.press("Escape")],
+    ] as const) {
+      const before = cancels();
+      const r = await voiceAsk(PERGUNTA);
+      await textIs("Procurando nas suas notas");
+      await act();
+      await waitFor(`o done cancelado pelo ${how}`, () => !!doneOf(r.id));
+      assert.equal(doneOf(r.id)!.stopReason, "cancelled", `hub: o ${how} durante o pedido não cancelou`);
+      await p.waitForSelector(BUBBLE, { state: "detached", timeout: 5_000 });
+      assert.equal(cancels(), before + 1, `hub: o ${how} durante o pedido: agent.cancel ${JSON.stringify(w.report.invokes)}`);
+    }
+    // 4. Com a resposta na tela (o pedido acabou), o × só fecha: nenhum agent.cancel.
+    const last = await voiceAsk(PERGUNTA);
+    await waitFor("o done", () => !!doneOf(last.id));
+    await p.waitForFunction((sel) => !!document.querySelector(`${sel} .kn-bubble-typed`)?.textContent?.startsWith("Pela nota"), BUBBLE, { timeout: 10_000 });
+    const before = cancels();
+    await p.locator(`${BUBBLE} .kn-bubble-close`).click();
+    await p.waitForSelector(BUBBLE, { state: "detached", timeout: 5_000 });
+    assert.equal(cancels(), before, "hub: o × depois da resposta chamou o agent.cancel");
+    checks.push(`hub (${theme}): during the request, × and Esc cancel it like Stop (agent.cancel, done cancelled); after the answer, × only closes`);
     assert.deepEqual(w.report.problems, [], "hub: problemas na página");
   } finally {
     await w.close();
