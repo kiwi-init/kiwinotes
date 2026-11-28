@@ -23,16 +23,16 @@ Fontes das referências:
 
 | # | Comportamento | Nas referências | No Kiwi hoje | Estado |
 |---|---|---|---|---|
-| 1.1 | Ir para hoje pela tecla | Google `t`, Mac ⌘T, Teams ⌘T | só o botão "Hoje" | falta: T34762 |
-| 1.2 | Período anterior e próximo pela tecla | Google `k`/`j`, Mac ⌘← e ⌘→, Teams ⌥⌘← e ⌥⌘→ | só os botões ‹ e › | falta: T34762 |
-| 1.3 | Trocar a vista pela tecla | Google `d` `w` `m` `a` (ou 1 a 5), Mac ⌘1 a ⌘4, Teams ⌃⌘1 a ⌃⌘5 | só os botões das vistas. O lead decidiu (#34756): teclas simples, como no Google Agenda (D, W, M, A e Y), sem ⌘ e só fora de campo de texto | falta: T34762 |
-| 1.4 | Novo item pela tecla | Google `c`, Mac ⌘N, Teams ⌘N | só o botão "+ Novo" | falta: T34762 |
-| 1.5 | Ir para uma data | Google `g`, Mac ⇧⌘T | não há | falta: T34762 |
+| 1.1 | Ir para hoje pela tecla | Google `t`, Mac ⌘T, Teams ⌘T | a tecla T, fora de campo de texto, e o botão "Hoje" (`keys.test.ts`, `calendar-keys-check`) | cumpre (T34762) |
+| 1.2 | Período anterior e próximo pela tecla | Google `k`/`j`, Mac ⌘← e ⌘→, Teams ⌥⌘← e ⌥⌘→ | J e K, ou → e ← fora da escolha da vista e do item com o foco, e os botões ‹ e › (`keys.test.ts`, `calendar-keys-check`) | cumpre (T34762) |
+| 1.3 | Trocar a vista pela tecla | Google `d` `w` `m` `a` (ou 1 a 5), Mac ⌘1 a ⌘4, Teams ⌃⌘1 a ⌃⌘5 | D, W, M e A (e Y, quando o Ano existir), sem ⌘ e só fora de campo de texto (lead #34756); cada botão diz a tecla no `aria-keyshortcuts` (`keys.test.ts`, `calendar-keys-check`) | cumpre (T34762) |
+| 1.4 | Novo item pela tecla | Google `c`, Mac ⌘N, Teams ⌘N | a tecla C abre o "+ Novo", com o foco no título (`calendar-keys-check`) | cumpre (T34762) |
+| 1.5 | Ir para uma data | Google `g`, Mac ⇧⌘T | a tecla G abre o "ir para uma data": o Enter vai ao dia, o Esc fecha (`calendar-keys-check`) | cumpre (T34762) |
 | 1.6 | Apagar o item escolhido com Delete, com Desfazer | Google Delete e `z`, Mac Delete e ⌘Z | não dá para apagar | falta B (T34745) |
 | 1.7 | Andar entre os itens pelo teclado | Mac: Tab e as setas | Tab anda entre os itens, e Enter ou espaço abre o painel largo. As setas não andam, nem entre os itens nem entre os dias (confirmado pela snug-puma, #34801) | falta: T34765 (as setas) |
 | 1.8 | Mover o item pelo teclado | Mac: ⌃⌥↑ e ⌃⌥↓ andam 15 min, e ⌃⌥← e ⌃⌥→ andam um dia | não há | falta: T34765 |
 | 1.9 | Esc fecha e Enter confirma | nas três | Esc fecha o painel largo, o "+ Novo" e o seletor de projetos. Enter cria no "+ Novo" | cumpre |
-| 1.10 | A lista dos atalhos | Google e Teams: `?` | não há | falta: T34762 |
+| 1.10 | A lista dos atalhos | Google e Teams: `?` | a tecla ? abre a lista dos atalhos, em pt e en, com o foco nela; o Esc e o clique fora fecham e devolvem o foco (`keys.test.ts`, `calendar-keys-check`) | cumpre (T34762) |
 | 1.11 | Buscar itens | Google `/`, Mac ⌘F | o ⌘K da aba é o pedido ao Kiwi, e não há busca de itens no Calendário | falta: T34778 |
 | 1.12 | Desfazer a última mudança (mover, esticar, editar) | Google `z`, Mac ⌘Z | não há | falta: T34767 (a parte B só faz o Desfazer do apagar) |
 
@@ -183,7 +183,7 @@ Cada "falta" tem a task que a fecha. As partes do spec:
 - **C, o Kiwi:** T34753 (11.4 e 12.1 a 12.3) e T34755 (12.4).
 
 As que a régua achou e o lead abriu (#34756):
-- **T34762:** os atalhos de teclado e a lista do `?` (1.1 a 1.5 e 1.10);
+- **T34762:** os atalhos de teclado e a lista do `?` (1.1 a 1.5 e 1.10), já cumpre;
 - **T34765:** as setas, o arrastar entre o dia todo e as horas, e o Esc (1.7, 1.8, 2.7 e 2.8);
 - **T34767:** desfazer e refazer tudo, e duplicar (1.12 e 11.6);
 - **T34768:** o "Hoje" rola até o agora, deslizar, a pinça e a transição (3.4, 4.2, 4.3 e 13.2);

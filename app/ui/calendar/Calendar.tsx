@@ -13,6 +13,8 @@ import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WI
 import { type CalendarFilter, filterStorage, passes, readFilter, shownProjects, toggleAllProjects, toggleKind, toggleProject, writeFilter } from "./filter.ts";
 import { periodTitle } from "./format.ts";
 import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, newItemDay, noteLine, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { calendarKey, VIEW_KEY } from "./keys.ts";
+import { GoToDate, KeysHelp } from "./KeySheets.tsx";
 import { KiwiAskBox } from "./KiwiAsk.tsx";
 import { KiwiPanel } from "./KiwiPanel.tsx";
 import { NewItem } from "./NewItem.tsx";
@@ -52,6 +54,13 @@ const initialView = (): CalendarView => {
 const dayAt = (x: number, y: number): string | null =>
   (document.elementFromPoint(x, y)?.closest("[data-day]") as HTMLElement | null)?.dataset.day ?? null;
 
+/**
+ * Uma janela do hub à vista por cima (a busca, o onboarding, uma folha das Notas): aí as teclas são dela. O cartão do
+ * hover não conta, e o que está numa aba escondida não aparece (não tem caixa).
+ */
+const otherDialogShown = () =>
+  [...document.querySelectorAll<HTMLElement>('[aria-modal="true"], [role="dialog"]')].some((d) => !d.closest(".kn-cal-card") && d.getClientRects().length > 0);
+
 const errCode = (e: unknown) => (e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "");
 
 export function Calendar({ active, source: given, onOpenNote, catColor }: { active: boolean; source?: CalendarStore; onOpenNote(path: string, internal: boolean, line?: number): void; catColor?: unknown }) {
@@ -66,6 +75,8 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
   const [notice, setNotice] = useState<string | null>(null);
   const [face, setFace] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // As folhas do teclado (T34762): a lista dos atalhos e o "ir para uma data".
+  const [sheet, setSheet] = useState<"help" | "goto" | null>(null);
   // O filtro por tipo e por projeto (T32408): vale nas quatro vistas e no painel do Kiwi, e fica no aparelho.
   const [filter, setFilterState] = useState<CalendarFilter>(() => readFilter(filterStorage()));
   const setFilter = (f: CalendarFilter) => {
@@ -297,6 +308,30 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     setView("day");
   };
 
+  // ---------------------------------------------------------------- o teclado (T34762)
+
+  // As teclas simples do keys.ts, só com a aba à vista e nada por cima: o "+ Novo", as folhas, o painel largo, o
+  // arrastar e as janelas do hub (a busca, o onboarding) têm as teclas deles.
+  const keyState = useRef({ active, busy: false, view });
+  keyState.current = { active, busy: creating || !!sheet || !!open || !!dragView, view };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const s = keyState.current;
+      if (!s.active || s.busy) return;
+      if (otherDialogShown()) return;
+      const act = calendarKey(e);
+      if (!act) return;
+      e.preventDefault();
+      if (act.type === "today") setAnchor(todayOf());
+      else if (act.type === "step") setAnchor((a) => stepAnchor(s.view, a, act.dir));
+      else if (act.type === "view") setView(act.view);
+      else if (act.type === "new") setCreating(true);
+      else setSheet(act.type);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
+
   // Com o painel largo aberto na Semana, o fim de semana vazio sai da grade, para os dias úteis caberem (lead #32229).
   const wide = !!open && open.state !== "closing";
   const gridDays = useMemo(
@@ -315,13 +350,13 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     <div className="kn-cal" ref={root} data-view={view} data-wide={wide ? "" : undefined} aria-label={t("calendar.aria")}>
       <div className="kn-cal-tool">
         <h1 className="kn-cal-title">{periodTitle(view, range.days, anchor, locale)}</h1>
-        <button type="button" className="kn-cal-ic" aria-label={t("calendar.prev")} onClick={() => setAnchor((a) => stepAnchor(view, a, -1))}>
+        <button type="button" className="kn-cal-ic" aria-label={t("calendar.prev")} aria-keyshortcuts="K ArrowLeft" onClick={() => setAnchor((a) => stepAnchor(view, a, -1))}>
           ‹
         </button>
-        <button type="button" className="kn-cal-btn" onClick={() => setAnchor(today)}>
+        <button type="button" className="kn-cal-btn" aria-keyshortcuts="T" onClick={() => setAnchor(today)}>
           {t("calendar.today")}
         </button>
-        <button type="button" className="kn-cal-ic" aria-label={t("calendar.next")} onClick={() => setAnchor((a) => stepAnchor(view, a, 1))}>
+        <button type="button" className="kn-cal-ic" aria-label={t("calendar.next")} aria-keyshortcuts="J ArrowRight" onClick={() => setAnchor((a) => stepAnchor(view, a, 1))}>
           ›
         </button>
         <span className="kn-cal-sp" />
@@ -332,12 +367,12 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
         <span className="kn-cal-sp" />
         <div className="kn-cal-views" role="radiogroup" aria-label={t("calendar.views")}>
           {CALENDAR_VIEWS.map((v) => (
-            <button type="button" role="radio" key={v} data-view={v} aria-checked={view === v} onClick={() => setView(v)}>
+            <button type="button" role="radio" key={v} data-view={v} aria-keyshortcuts={VIEW_KEY[v]} aria-checked={view === v} onClick={() => setView(v)}>
               {t(`calendar.view.${v}`)}
             </button>
           ))}
         </div>
-        <button type="button" className="kn-cal-btn kn-cal-primary kn-cal-new" onClick={() => setCreating(true)}>
+        <button type="button" className="kn-cal-btn kn-cal-primary kn-cal-new" aria-keyshortcuts="C" onClick={() => setCreating(true)}>
           {t("calendar.new")}
         </button>
       </div>
@@ -433,6 +468,17 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
             } catch {
               setNotice(t("calendar.saveFailed"));
             }
+          }}
+        />
+      ) : null}
+      {sheet === "help" ? <KeysHelp onClose={() => setSheet(null)} /> : null}
+      {sheet === "goto" ? (
+        <GoToDate
+          day={anchor}
+          onClose={() => setSheet(null)}
+          onGo={(d) => {
+            setAnchor(d);
+            setSheet(null);
           }}
         />
       ) : null}

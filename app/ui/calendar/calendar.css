@@ -546,3 +546,49 @@
   .kn-cal-card { animation: none; }
 }
 .kn-cal-title-problem { color: var(--danger); font-size: 12px; margin: -2px 0 6px; }
+
+/* As folhas do teclado (T34762): a lista dos atalhos (`?`) e o "ir para uma data" (`G`), com o mesmo vidro do "+ Novo". */
+.kn-cal-sheet {
+  position: absolute;
+  z-index: 31;
+  top: 54px;
+  right: 20px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-float, 0 18px 50px rgb(0 0 0 / 0.35));
+  color: var(--text);
+}
+.kn-cal-sheet:focus { outline: none; }
+.kn-cal-sheet:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kn-cal-sheet h3 { margin: 0 0 10px; font-size: 15px; }
+.kn-cal-keys { width: 320px; }
+.kn-cal-keys dl { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }
+.kn-cal-keys dl > div { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 10px; }
+.kn-cal-keys dt { margin: 0; white-space: nowrap; }
+.kn-cal-keys dd { margin: 0; font-size: 13px; }
+.kn-cal-keys kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 6px;
+  font: 600 12px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+}
+.kn-cal-keys > p { margin: 0; font-size: 12px; }
+.kn-cal-goto { width: 260px; }
+.kn-cal-goto form { display: flex; flex-direction: column; gap: 10px; }
+.kn-cal-goto input {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+.kn-cal-goto .kn-cal-acts { justify-content: flex-end; }
