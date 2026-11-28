@@ -44,4 +44,9 @@ export const ptCalendarKiwi = {
   "calendarKiwi.panel.notify": "o Kiwi avisa {when}",
   // A busca do Kiwi (⌘K) na barra do Calendário.
   "calendarKiwi.ask.placeholder": "Peça ao Kiwi: “me lembra da entrega amanhã às 9h”",
+  "calendarKiwi.ask.label": "Pedido ao Kiwi",
+  "calendarKiwi.ask.thinking": "Pensando…",
+  "calendarKiwi.ask.failed": "Não deu para pedir agora. Tente de novo daqui a pouco.",
+  "calendarKiwi.ask.stop": "Parar",
+  "calendarKiwi.ask.close": "Fechar a resposta",
 } as const;

@@ -162,4 +162,30 @@ describe("a busca do Kiwi (⌘K)", () => {
     setAppLocale({ setting: "en", locale: "en", system: "en" });
     expect(renderToStaticMarkup(<KiwiAskBox active face={null} available />)).toContain("Ask Kiwi");
   });
+
+  test("a barra é um campo; pensando, os pontos e o Parar; no fim, a resposta debaixo dela e o × (T34755)", () => {
+    const idle = renderToStaticMarkup(<KiwiAskBox active face={null} available />);
+    expect(idle).toMatch(/<input[^>]*class="kn-cal-ask-input"[^>]*placeholder="Peça ao Kiwi/);
+    expect(idle).toContain('aria-label="Pedido ao Kiwi"');
+    expect(idle).toContain('data-phase="idle"');
+    expect(idle).not.toContain("kn-cal-ask-answer");
+    const base = { id: "r1", asked: "o que tenho amanhã?", answer: "", speech: null };
+    const thinking = renderToStaticMarkup(<KiwiAskBox active face={null} available initial={{ ...base, phase: "thinking" }} />);
+    expect(thinking).toContain('class="kn-cal-ask-dots"');
+    expect(thinking).not.toContain("<kbd>");
+    expect(thinking).toMatch(/role="status"[^>]*>Pensando…</);
+    expect(thinking).toContain(">Parar<");
+    const answering = renderToStaticMarkup(<KiwiAskBox active face={null} available initial={{ ...base, phase: "answering", answer: "Amanhã você" }} />);
+    expect(answering).toContain('class="kn-cal-ask-answer" data-phase="answering"');
+    expect(answering).toMatch(/role="status"[^>]*>Amanhã você</);
+    const done = renderToStaticMarkup(<KiwiAskBox active face={null} available initial={{ ...base, phase: "done", answer: "Amanhã você tem a feira." }} />);
+    expect(done).toContain("o que tenho amanhã?");
+    expect(done).toMatch(/role="status"[^>]*>Amanhã você tem a feira\.</);
+    expect(done).toContain('aria-label="Fechar a resposta"');
+    expect(done).toContain("<kbd>⌘K</kbd>");
+    const error = renderToStaticMarkup(<KiwiAskBox active face={null} available initial={{ ...base, phase: "error" }} />);
+    expect(error).toContain("Não deu para pedir agora.");
+    setAppLocale({ setting: "en", locale: "en", system: "en" });
+    expect(renderToStaticMarkup(<KiwiAskBox active face={null} available initial={{ ...base, phase: "thinking" }} />)).toMatch(/Thinking…[\s\S]*>Stop</);
+  });
 });

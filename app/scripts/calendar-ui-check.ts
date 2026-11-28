@@ -1,5 +1,5 @@
 // T32157 (spec #32129, parte 4): a aba Calendário no hub de verdade, com o headless e notas inventadas. Nunca abre
-// janela, nem liga o mic, nem o agente.
+// janela, nem liga o mic; o agente, só o falso.
 // - A aba Calendário vem depois de Ditado e abre na Semana, com o painel do Kiwi à direita.
 // - Dia · Semana · Mês · Agenda trocam a vista, e os itens das notas e da reunião aparecem nelas.
 // - O hover num item mostra o cartão com um só ⤢, no canto de cima à direita.
@@ -7,13 +7,16 @@
 // - O link da nota no cartão abre a aba Notas naquela nota, com a linha do item marcada.
 // - A Semana da Início tem o "Abrir o calendário".
 // - O Sim da "atrasada" numa pendência repetida leva só a vez para amanhã, e a sugestão não volta na vez anterior (#485).
+// - A barra "Peça ao Kiwi" (T34755): escreve-se nela, o Enter manda ao agente falso, e ela passa por ouvindo, pensando e
+//   respondendo, com a resposta debaixo dela; o × fecha. Com um vídeo curto da animação.
 // Os prints de cada vista, em pt e en, e um vídeo da ida e da volta do painel largo.
 // Da raiz do app: `bun scripts/calendar-ui-check.ts [pasta]`. Pegue `kiwi lock bench`.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, renameSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
+import { fakeRegistry } from "../src/agent/fake/registry";
 import { connect, request } from "./cli";
 import { openWindow, type UiContext } from "./ui-page";
 
@@ -21,9 +24,18 @@ const app = resolve(import.meta.dir, "..");
 const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T32157-calendar"));
 mkdirSync(out, { recursive: true });
 const data = mkdtempSync(join(tmpdir(), "kiwi-calendar-"));
+// Só o agente falso (KIWI_FAKE_AGENT), com o adaptador num registro falso: ele fica desligado até o passo 7 (a barra do Kiwi).
+// O THINK_MS segura o "pensando" o bastante para o print e o vídeo.
+const registry = fakeRegistry([
+  { name: "@agentclientprotocol/claude-agent-acp", version: "0.106.0", files: { "dist/index.js": "" } },
+  { name: "zod", version: "4.6.7", files: { "index.js": "" } },
+]);
+const packages = join(data, "packages.json");
+writeFileSync(packages, JSON.stringify(registry.pinned));
+const env = { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_FAKE_AGENT_THINK_MS: "1500", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages };
 
 async function cli(args: string[]) {
-  const p = Bun.spawn([process.execPath, join(app, "scripts/cli.ts"), ...args, "--data", data], { cwd: app, stdout: "pipe", stderr: "pipe" });
+  const p = Bun.spawn([process.execPath, join(app, "scripts/cli.ts"), ...args, "--data", data], { cwd: app, stdout: "pipe", stderr: "pipe", env });
   const text = await new Response(p.stdout).text();
   const err = await new Response(p.stderr).text();
   assert.equal(await p.exited, 0, text + err);
@@ -378,6 +390,95 @@ try {
     }
   }
   await invoke("settings.set", { language: "pt" });
+
+  // 7. A barra "Peça ao Kiwi" (ponto 7 do spec #34706, T34755), com o agente falso ligado: ela é um campo, o ⌘K põe o foco,
+  // o Enter manda, e a resposta aparece debaixo dela, passando por ouvindo, pensando e respondendo.
+  await invoke("agent.enable", { consent: true });
+  await invoke("agent.configure", { onboarding: { state: "done" } });
+  await invoke("agent.download");
+  for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 300, "o adaptador falso não ficou pronto"); await Bun.sleep(100); }
+  const ASK = `${pane} .kn-cal-ask`;
+  const phase = (p: Page, ph: string, timeout = 8000) => p.waitForSelector(`${ASK}[data-phase="${ph}"]`, { timeout });
+  const answer = `${ASK} .kn-cal-ask-text`;
+  for (const lang of ["pt", "en"] as const) {
+    await invoke("settings.set", { language: lang });
+    const shots = join(out, lang);
+    const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 1300, height: 800, motion: false, browser: "webkit", query: { section: "calendar" } });
+    const p = w.page;
+    try {
+      await p.waitForSelector(`${pane}:not([hidden]) .kn-cal[data-view="week"]`);
+      const input = p.locator(`${ASK} .kn-cal-ask-input`);
+      await input.waitFor();
+      assert.match((await input.getAttribute("placeholder")) ?? "", lang === "pt" ? /^Peça ao Kiwi/ : /^Ask Kiwi/);
+      await phase(p, "idle");
+      // O ⌘K põe o foco na barra (não abre o campo do gato do canto): ouvindo.
+      await p.keyboard.press("Meta+k");
+      await phase(p, "listening");
+      assert.equal(await input.evaluate((el) => el === document.activeElement), true, "o ⌘K põe o foco na barra");
+      const pedido = lang === "pt" ? "me lembra da feira amanhã" : "remind me about the market tomorrow";
+      await input.type(pedido);
+      await p.screenshot({ path: join(shots, "barra-ouvindo.png") });
+      // O Enter manda: pensando, com os pontos e o "Pensando…" debaixo.
+      await input.press("Enter");
+      await phase(p, "thinking");
+      await p.waitForSelector(`${ASK} .kn-cal-ask-dots`);
+      assert.equal(await p.locator(answer).innerText(), lang === "pt" ? "Pensando…" : "Thinking…");
+      assert.equal(await input.inputValue(), "", "o campo esvazia ao mandar");
+      await p.screenshot({ path: join(shots, "barra-pensando.png") });
+      // A resposta do agente falso, ali na barra.
+      await phase(p, "done");
+      assert.match(await p.locator(answer).innerText(), new RegExp(`Você disse: "${pedido}"`));
+      assert.equal(await p.locator(`${ASK} .kn-cal-ask-asked`).innerText(), pedido);
+      await p.screenshot({ path: join(shots, "barra-resposta.png") });
+      checks.push(`${lang}: a barra do Kiwi: o ⌘K foca (ouvindo), o Enter manda (pensando) e a resposta "Você disse: …" fica debaixo dela`);
+      // Respondendo: o /lento escreve em 20 pedaços; a barra mostra o texto chegando, com o Parar.
+      await input.fill("/lento");
+      await input.press("Enter");
+      await phase(p, "answering");
+      await p.waitForFunction((sel) => /pedaço [3-9]/.test(document.querySelector(sel)?.textContent ?? ""), answer);
+      assert.equal(await p.locator(`${ASK} .kn-cal-ask-act`).innerText(), lang === "pt" ? "Parar" : "Stop");
+      await p.screenshot({ path: join(shots, "barra-respondendo.png") });
+      await phase(p, "done");
+      assert.match(await p.locator(answer).innerText(), /pedaço 20/);
+      checks.push(`${lang}: a barra mostra o texto chegando (respondendo, com o Parar) e a resposta inteira no fim`);
+      // O × fecha a resposta, e a barra volta ao convite.
+      await p.locator(`${ASK} .kn-cal-ask-act`).click();
+      await p.waitForSelector(`${ASK} .kn-cal-ask-answer`, { state: "detached" });
+      await phase(p, "idle");
+      checks.push(`${lang}: o × fecha a resposta e a barra volta ao convite`);
+      assert.deepEqual(w.report.problems, [], "problemas na página");
+    } finally {
+      await w.close();
+    }
+  }
+  await invoke("settings.set", { language: "pt" });
+  {
+    const video = join(out, "video-barra");
+    const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 1300, height: 800, motion: true, browser: "webkit", query: { section: "calendar" }, video });
+    try {
+      const p = w.page;
+      const input = p.locator(`${ASK} .kn-cal-ask-input`);
+      await input.waitFor();
+      await p.waitForTimeout(600);
+      await p.keyboard.press("Meta+k");
+      await phase(p, "listening");
+      await input.type("o que tenho amanhã", { delay: 60 });
+      await p.waitForTimeout(500);
+      await input.press("Enter");
+      await phase(p, "done");
+      await p.waitForTimeout(1000);
+      await input.type("/lento", { delay: 60 });
+      await input.press("Enter");
+      await phase(p, "done");
+      await p.waitForTimeout(1200);
+    } finally {
+      await w.close();
+    }
+    const [webm] = readdirSync(video).filter((f) => f.endsWith(".webm"));
+    assert.ok(webm, "sem o vídeo da barra");
+    renameSync(join(video, webm), join(out, "barra.webm"));
+    checks.push("o vídeo da barra: ouvindo, pensando, respondendo e a resposta");
+  }
 
   // 6. O vídeo da animação: com movimento, a ida e a volta do painel largo.
   const video = join(out, "video");

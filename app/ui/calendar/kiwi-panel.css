@@ -82,8 +82,11 @@
   outline-offset: -1px;
 }
 
-/* A busca do Kiwi (⌘K) na barra de cima, entre a navegação e as vistas. */
+/* A barra "Peça ao Kiwi" na barra de cima, entre a navegação e as vistas (T32156): escreve-se nela, e ela tem a
+   animação de cada fase (ponto 7 do spec #34706, T34755). */
 .kn-cal-ask {
+  --ask-tone: var(--cal-meeting);
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -92,18 +95,27 @@
   flex: 0 1 420px;
   margin-right: 8px;
   padding: 5px 8px 5px 6px;
-  border: 1px solid color-mix(in srgb, var(--cal-meeting) 32%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--ask-tone) 32%, var(--border));
   border-radius: 11px;
   background: var(--surface);
   color: var(--text-3);
-  font: inherit;
-  text-align: left;
-  cursor: text;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.kn-cal-ask:hover { border-color: color-mix(in srgb, var(--cal-meeting) 55%, var(--border)); }
-.kn-cal-ask:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.kn-cal-ask img { width: 22px; height: 22px; flex: none; }
-.kn-cal-ask span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kn-cal-ask:hover { border-color: color-mix(in srgb, var(--ask-tone) 55%, var(--border)); }
+.kn-cal-ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.kn-cal-ask-face { display: flex; flex: none; width: 22px; height: 22px; transform-origin: 50% 85%; }
+.kn-cal-ask-face img { width: 22px; height: 22px; }
+.kn-cal-ask-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+}
+.kn-cal-ask-input::placeholder { color: var(--text-3); text-overflow: ellipsis; }
 .kn-cal-ask kbd {
   flex: none;
   padding: 1px 5px;
@@ -111,4 +123,79 @@
   border-radius: 5px;
   font: 11px var(--sans);
   color: var(--text-3);
+}
+/* Ouvindo: o Kiwi balança devagar, atento. */
+.kn-cal-ask[data-phase="listening"] .kn-cal-ask-face { animation: kn-ask-listen 1.6s ease-in-out infinite; }
+/* Pensando: a cabeça inclina, e os três pontos sobem um depois do outro. */
+.kn-cal-ask[data-phase="thinking"] .kn-cal-ask-face { animation: kn-ask-think 1.2s ease-in-out infinite; }
+.kn-cal-ask-dots { display: flex; gap: 3px; flex: none; padding: 0 2px; }
+.kn-cal-ask-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--ask-tone); animation: kn-ask-dot 1s ease-in-out infinite; }
+.kn-cal-ask-dots i:nth-child(2) { animation-delay: 0.15s; }
+.kn-cal-ask-dots i:nth-child(3) { animation-delay: 0.3s; }
+/* Respondendo: a borda brilha, correndo, e o texto chega com o cursor piscando no fim. */
+.kn-cal-ask[data-phase="answering"] {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(90deg, var(--ask-tone), var(--accent), var(--ask-tone)) border-box;
+  background-size: 100% 100%, 200% 100%;
+  animation: kn-ask-glow 1.4s linear infinite;
+}
+.kn-cal-ask[data-phase="answering"] .kn-cal-ask-face { animation: kn-ask-talk 0.5s ease-in-out infinite; }
+.kn-cal-ask-answer[data-phase="answering"] .kn-cal-ask-text::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--text-2);
+  animation: kn-ask-caret 0.9s steps(1) infinite;
+}
+.kn-cal-ask-answer {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+  color: var(--text);
+  animation: kn-ask-in 0.18s ease-out;
+}
+.kn-cal-ask-asked { grid-column: 1; margin: 0; font-size: 12px; color: var(--text-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kn-cal-ask-text { grid-column: 1; margin: 0; max-height: 9.5em; overflow: auto; white-space: pre-wrap; line-height: 1.45; }
+.kn-cal-ask-answer[data-phase="thinking"] .kn-cal-ask-text { color: var(--text-2); }
+.kn-cal-ask-answer[data-phase="error"] .kn-cal-ask-text { color: var(--danger); }
+.kn-cal-ask-act {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.kn-cal-ask-act:hover { color: var(--text); border-color: var(--text-3); }
+@keyframes kn-ask-listen { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-2px) rotate(-4deg); } }
+@keyframes kn-ask-think { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(10deg); } }
+@keyframes kn-ask-talk { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08, 0.94); } }
+@keyframes kn-ask-dot { 0%, 60%, 100% { transform: translateY(0); opacity: 0.45; } 30% { transform: translateY(-4px); opacity: 1; } }
+@keyframes kn-ask-glow { to { background-position: 0 0, -200% 0; } }
+@keyframes kn-ask-caret { 50% { opacity: 0; } }
+@keyframes kn-ask-in { from { opacity: 0; transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) {
+  .kn-cal-ask,
+  .kn-cal-ask *,
+  .kn-cal-ask-answer { animation: none !important; }
 }

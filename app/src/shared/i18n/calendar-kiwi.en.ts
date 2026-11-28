@@ -38,4 +38,9 @@ export const enCalendarKiwi: { readonly [K in keyof typeof ptCalendarKiwi]: Entr
   "calendarKiwi.panel.inProject": "{project}: {title}",
   "calendarKiwi.panel.notify": "Kiwi reminds you {when}",
   "calendarKiwi.ask.placeholder": "Ask Kiwi: “remind me about the delivery tomorrow at 9”",
+  "calendarKiwi.ask.label": "Request to Kiwi",
+  "calendarKiwi.ask.thinking": "Thinking…",
+  "calendarKiwi.ask.failed": "Couldn't ask right now. Try again in a moment.",
+  "calendarKiwi.ask.stop": "Stop",
+  "calendarKiwi.ask.close": "Close the answer",
 };
