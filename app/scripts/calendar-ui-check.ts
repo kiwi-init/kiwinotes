@@ -321,6 +321,7 @@ try {
         assert.match(await p.inputValue(`${form} input[name="time"]`), /^\d\d:00$/, `${lang}: desmarcar o Dia todo põe uma hora (#531)`);
         await p.locator(`${form} input[name="allDay"]`).check();
         assert.equal(await p.inputValue(`${form} input[name="time"]`), "", `${lang}: marcar o Dia todo apaga a hora (#531)`);
+        // O Esc logo depois do clique na caixa ainda fecha (o WebKit não dá o foco à caixa clicada).
         await p.keyboard.press("Escape");
         await p.waitForSelector(form, { state: "detached" });
         await view(p, before);

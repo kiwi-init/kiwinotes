@@ -129,6 +129,8 @@ export function NewItem({ day, time: startTime = "", end: endTime = "", near, pr
             name="allDay"
             checked={!time}
             onChange={(e) => {
+              // O WebKit não dá o foco a uma caixa clicada: sem isto, o Esc depois do clique caía fora do formulário.
+              e.target.focus();
               if (e.target.checked) {
                 setTime("");
                 setEnd("");
