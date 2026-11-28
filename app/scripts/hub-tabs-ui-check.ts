@@ -108,6 +108,7 @@ async function narrowDictation(p: Page, label: string) {
     assert.ok(bar.shown, `${label}: o Ditado a 480 px (faixa rolada até o ${to === "end" ? "fim" : "começo"}) inteiro fora do esmaecido: ${JSON.stringify(bar)}`);
     assert.equal(bar.ghosts, 0);
     matchesSelection(await snapshot(p));
+    await p.screenshot({ path: resolve(out, `ditado-480-${label.replace(/ /g, "-")}-${to}.png`), clip: { x: 0, y: 0, width: 480, height: 60 } });
   }
   await p.locator('.kn-tab[data-section=notes]').evaluate((el: HTMLElement) => el.click());
   await settled(p);
@@ -341,7 +342,6 @@ try {
         await p.waitForSelector(".kn-hub-end > *", { timeout: 8000 });
         assert.equal(await p.locator('.kn-tab[data-section=dictation]').innerText(), "Dictation");
         await narrowDictation(p, "en");
-        await p.screenshot({ path: resolve(out, "ditado-480-en.png"), clip: { x: 0, y: 0, width: 480, height: 60 } });
         assert.deepEqual(w.report.problems, []);
         console.log("ok en: o Ditado a 480 px");
       } finally {
