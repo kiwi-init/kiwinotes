@@ -101,6 +101,9 @@ describe("readCalendarAsk", () => {
       ["reunião às 15h para ver os itens de 1 a 4", "2026-11-27T15:00", null],
       ["semana de 3 a 7 às 9h", "2026-11-27T09:00", null],
       ["foco das 9 às 11 e almoço às 12h", "2026-11-27T09:00", null],
+      // Com marca de hora numa ponta, o intervalo ganha da outra hora da frase.
+      ["dentista de 2 a 4 da tarde, e às 18h o jantar", "2026-11-27T14:00", null],
+      ["às 8h o café, e o foco de 9 horas a 11", "2026-11-27T09:00", null],
       // Quantidade e datas não são hora.
       ["férias de 10 a 15 dias", null, null],
       ["viagem de 10 a 15 de dezembro", null, null],
