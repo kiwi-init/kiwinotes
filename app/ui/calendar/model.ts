@@ -2,7 +2,7 @@
 // (com as sobreposições lado a lado), e a conta do arrastar e do esticar em passos de 15 min. A tela (Calendar.tsx)
 // só desenha o que sai daqui; os testes ficam em model.test.ts.
 
-import { addDays, type CalendarItem, dayOf, dayTimeOf, toMs } from "../../src/shared/calendar.ts";
+import { addDays, CALENDAR_LIMITS, type CalendarItem, dayOf, dayTimeOf, toMs } from "../../src/shared/calendar.ts";
 
 export const CALENDAR_VIEWS = ["day", "week", "month", "agenda"] as const;
 export type CalendarView = (typeof CALENDAR_VIEWS)[number];
@@ -161,11 +161,14 @@ export function moveItem(item: CalendarItem, deltaMin: number, deltaDays: number
   return { start: shift(item.start), end: item.end ? shift(item.end) : null };
 }
 
-/** Esticar a borda de baixo: o fim vai `deltaMin` minutos (em passos de 15), com 15 min de duração no mínimo. */
+/**
+ * Esticar a borda de baixo: o fim vai `deltaMin` minutos (em passos de 15), com 15 min de duração no mínimo e 24 h no
+ * máximo, o teto do `calendar.update` (#480): passou disso, o esticar para no teto, na prévia e ao soltar.
+ */
 export function resizeItem(item: CalendarItem, deltaMin: number): { end: string } | null {
   if (item.allDay) return null;
   const { start, end } = spanOf(item);
-  const next = Math.max(start + SNAP_MIN * MIN, end + snap(deltaMin) * MIN);
+  const next = Math.min(start + CALENDAR_LIMITS.spanHours * 60 * MIN, Math.max(start + SNAP_MIN * MIN, end + snap(deltaMin) * MIN));
   return next === end && item.end ? null : { end: dayTimeOf(next) };
 }
 

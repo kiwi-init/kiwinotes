@@ -272,7 +272,7 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
         const from = start ?? cur?.start;
         if (timed && typeof end === "string" && from && !isDay(from)) {
           if (toMs(end) <= toMs(from)) throw new CalendarError("E_BAD_ARGS", "calendar.update: end must be after start");
-          if (toMs(end) - toMs(from) > 24 * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
+          if (toMs(end) - toMs(from) > CALENDAR_LIMITS.spanHours * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
         }
         patch = { ...patch, ...(start !== undefined ? { start } : {}), ...(end !== undefined ? { end } : {}), ...(u.allDay !== undefined ? { allDay: u.allDay } : {}) };
         if (!cur && start === undefined) throw new CalendarError("E_BAD_ARGS", "an undated item needs start");
@@ -509,7 +509,7 @@ function checkTimes(start: unknown, end: unknown, allDay: unknown, cap: string) 
   if (end !== undefined && end !== null && !isDayTime(end)) throw new CalendarError("E_BAD_ARGS", `${cap}: end must be AAAA-MM-DDTHH:MM or null`);
   if (allDay !== undefined && typeof allDay !== "boolean") throw new CalendarError("E_BAD_ARGS", `${cap}: allDay must be true or false`);
   if (typeof start === "string" && typeof end === "string" && toMs(end) <= toMs(start)) throw new CalendarError("E_BAD_ARGS", `${cap}: end must be after start`);
-  if (typeof start === "string" && typeof end === "string" && toMs(end) - toMs(start) > 24 * 3_600_000) throw new CalendarError("E_BAD_ARGS", `${cap}: at most 24 h`);
+  if (typeof start === "string" && typeof end === "string" && toMs(end) - toMs(start) > CALENDAR_LIMITS.spanHours * 3_600_000) throw new CalendarError("E_BAD_ARGS", `${cap}: at most 24 h`);
 }
 
 /** Um título vai numa linha da nota: sem quebra, sem os pedaços que a linha lê (`@ data`, `🔔`, `🔁`). */
