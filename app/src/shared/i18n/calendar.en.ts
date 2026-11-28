@@ -82,5 +82,6 @@ export const enCalendar: { readonly [K in keyof typeof ptCalendar]: Entry } = {
   "calendar.new.create": "Create",
   "calendar.new.cancel": "Cancel",
   "calendar.new.where": "Goes to {path}.",
+  "calendar.new.titleProblem": "The title can’t have “{piece}”: in the note, it sets the item’s kind, alert, repetition or date.",
   "calendar.resize": "Stretch",
 };

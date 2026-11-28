@@ -34,6 +34,7 @@ import {
   parseAgenda,
   parseWhen,
   rewriteWhen,
+  titleProblem,
   toMs,
 } from "../shared/calendar.ts";
 import { isMeetingNote } from "../shared/meeting-note.ts";
@@ -587,7 +588,7 @@ function checkTimes(start: unknown, end: unknown, allDay: unknown, cap: string) 
 function checkTitle(title: unknown, cap: string): void {
   if (typeof title !== "string" || !title.trim() || title.length > CALENDAR_LIMITS.title || /[\r\n]/.test(title))
     throw new CalendarError("E_BAD_ARGS", `${cap}: title must be one line, 1 to ${CALENDAR_LIMITS.title} characters`);
-  if (parseWhen(`${title} @ 2026-01-01`)?.title !== title.replace(/\s+/g, " ").trim() || /🔔|🔕|🔁|⏭|(^|\s)@\s?\d/.test(title))
+  if (titleProblem(title))
     throw new CalendarError("E_BAD_ARGS", `${cap}: title can't have a date, a kind tag, 🔔, 🔕, 🔁 or ⏭`);
 }
 
