@@ -68,8 +68,13 @@ export function ligarVozDoGato<P extends PreviaDaVoz>(o: VozDoGatoOpts<P>): VozD
     evento: falaNaTela((e) => o.naTela(e)),
     ...(o.log ? { log: o.log } : {}),
   });
-  // O aviso falado (o Calendário, o "Testar") também cala quando o mic abre: senão cai na transcrição do pedido.
-  const offUmaVez = [o.helper?.on("agent.record.started", pararUmaVez), o.helper?.on("meeting.started", pararUmaVez)];
+  // O aviso falado (o Calendário, o "Testar") também cala quando o mic abre: senão cai na transcrição do pedido, da
+  // reunião ou do ditado (#459).
+  const offUmaVez = [
+    o.helper?.on("agent.record.started", pararUmaVez),
+    o.helper?.on("meeting.started", pararUmaVez),
+    o.helper?.on("record.started", pararUmaVez),
+  ];
   const off = ligarFalaPlayer(player, {
     agent: o.agent,
     ...(o.helper ? { helper: o.helper } : {}),
@@ -118,7 +123,7 @@ export interface VozDoGatoNoAppOpts<P extends PreviaDaVoz> {
     saida: SpeechHelper;
     /** A mídia dos outros apps (`speech.duck`, `speech.unduck`). */
     midia: MidiaHelper;
-    /** O atalho, o gato fechado e a reunião, que cortam a fala. */
+    /** O atalho, o gato fechado, a reunião e o ditado (#459), que cortam a fala. */
     eventos: NonNullable<FalaPlayerWiring["helper"]>;
   };
   /** As janelas abertas agora: cada uma recebe o `agent.speech`. */

@@ -74,6 +74,7 @@ describe("parseWhen e rewriteWhen", () => {
       allDay: false,
       notify: "30m",
       repeat: "weekly",
+      skip: [],
     });
     expect(parseWhen("Entrega @ 2026-11-27")).toMatchObject({ allDay: true, start: "2026-11-27", end: null, kind: null, notify: null });
     expect(parseWhen("Plantão @ 2026-11-27 22:00-02:00")?.end).toBe("2026-11-28T02:00");
@@ -230,7 +231,7 @@ describe("calendar.update", () => {
     expect(read("Projeto X/Planejamento.md")).toBe(presa);
   });
 
-  test("numa repetição: mover uma vez move a série; Feito passa para a próxima vez", async () => {
+  test("numa repetição: mover uma vez move a série; Feito na 1ª vez em aberto passa para a próxima", async () => {
     const { cal, read } = await open({ "Projeto X/Planejamento.md": PROJETO });
     const rep = (await cal.items({ from: "2026-12-01", to: "2026-12-02" })).items.find((i) => i.title === "Bloco de escrita")!;
     expect(rep.id).toMatch(/~2026-12-01$/);
@@ -238,6 +239,10 @@ describe("calendar.update", () => {
     expect(read("Projeto X/Planejamento.md")).toContain("- [ ] Bloco de escrita @ 2026-11-24 09:00-10:00 #foco 🔁 semana\n");
     const again = (await cal.items({ from: "2026-12-01", to: "2026-12-02" })).items.find((i) => i.title === "Bloco de escrita")!;
     await cal.update({ id: again.id, done: true });
+    // A 1ª vez (24/11) segue aberta: a de 01/12 sai sozinha (#450).
+    expect(read("Projeto X/Planejamento.md")).toContain("- [ ] Bloco de escrita @ 2026-11-24 09:00-10:00 #foco 🔁 semana ⏭ 2026-12-01\n");
+    const first = (await cal.items({ from: "2026-11-24", to: "2026-11-25" })).items.find((i) => i.title === "Bloco de escrita")!;
+    await cal.update({ id: first.id, done: true });
     expect(read("Projeto X/Planejamento.md")).toContain("- [ ] Bloco de escrita @ 2026-12-08 09:00-10:00 #foco 🔁 semana\n");
   });
 
@@ -271,6 +276,98 @@ describe("calendar.update", () => {
     expect(await code(cal.update({ id, title: "Com data @ 2026-11-30" }))).toBe("E_BAD_ARGS");
     expect(await code(cal.update({ id: "n:Nada.md#0:00000000", done: true }))).toBe("E_NOT_FOUND");
     expect(await code(cal.update({ id: "x:qualquer", done: true }))).toBe("E_BAD_ARGS");
+  });
+});
+
+describe("calendar.update: a duração (#449)", () => {
+  const NOTA = "# Projeto X\n\n- Ensaio da banda @ 2026-12-02 10:00-11:00 #reuniao\n";
+  const first = async (cal: Awaited<ReturnType<typeof open>>["cal"]) => (await cal.items({ from: "2026-12-01", to: "2026-12-03" })).items[0]!;
+
+  test("mudar só o start (o calendar_update do agente) mantém a duração de 1 h", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": NOTA });
+    const moved = await cal.update({ id: (await first(cal)).id, start: "2026-12-02T15:00" });
+    expect(moved.end).toBe("2026-12-02T16:00");
+    expect(read("Projeto X/Pendências.md")).toContain("@ 2026-12-02 15:00-16:00");
+  });
+
+  test("só o start, para tarde da noite: o fim passa da meia-noite com a mesma duração", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": NOTA });
+    const moved = await cal.update({ id: (await first(cal)).id, start: "2026-12-02T23:30" });
+    expect(moved.end).toBe("2026-12-03T00:30");
+    expect(read("Projeto X/Pendências.md")).toContain("@ 2026-12-02 23:30-00:30");
+  });
+
+  test("um end a mais de 24 h do começo da linha é recusado, e não vira outro horário calado", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": NOTA });
+    expect(await code(cal.update({ id: (await first(cal)).id, end: "2026-12-03T12:00" }))).toBe("E_BAD_ARGS");
+    expect(read("Projeto X/Pendências.md")).toBe(NOTA);
+  });
+
+  test("um end antes do começo da linha é recusado; um end depois dele, até 24 h, grava", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": NOTA });
+    const id = (await first(cal)).id;
+    expect(await code(cal.update({ id, end: "2026-12-02T09:00" }))).toBe("E_BAD_ARGS");
+    expect(await code(cal.update({ id, end: "2026-12-02T10:00" }))).toBe("E_BAD_ARGS");
+    expect(read("Projeto X/Pendências.md")).toBe(NOTA);
+    const longer = await cal.update({ id, end: "2026-12-02T12:30" });
+    expect(longer).toMatchObject({ start: "2026-12-02T10:00", end: "2026-12-02T12:30" });
+    expect(read("Projeto X/Pendências.md")).toContain("@ 2026-12-02 10:00-12:30");
+  });
+
+  test("numa repetição, mudar só o start de uma vez move a série e mantém a duração", async () => {
+    const { cal, read } = await open({ "Projeto X/Planejamento.md": PROJETO });
+    const rep = (await cal.items({ from: "2026-12-01", to: "2026-12-02" })).items.find((i) => i.title === "Bloco de escrita")!;
+    const moved = await cal.update({ id: rep.id, start: "2026-12-01T14:00" });
+    expect(moved).toMatchObject({ start: "2026-11-24T14:00", end: "2026-11-24T15:00" });
+    expect(read("Projeto X/Planejamento.md")).toContain("- [ ] Bloco de escrita @ 2026-11-24 14:00-15:00 #foco 🔁 semana\n");
+  });
+});
+
+describe("calendar.update numa nota com agenda: a duração (#484)", () => {
+  const ENSAIO = `---\nagenda: "2026-12-02 10:00-11:00"\n---\n\n# Ensaio da banda\n`;
+  const ID = "f:Ensaio da banda.md";
+
+  test("mudar só o start mantém a duração de 1 h", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    const moved = await cal.update({ id: ID, start: "2026-12-02T15:00" });
+    expect(moved).toMatchObject({ start: "2026-12-02T15:00", end: "2026-12-02T16:00" });
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-02 15:00-16:00"');
+  });
+
+  test("só o start, para tarde da noite: o fim passa da meia-noite com a mesma duração", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    const moved = await cal.update({ id: ID, start: "2026-12-02T23:30" });
+    expect(moved.end).toBe("2026-12-03T00:30");
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-02 23:30-00:30"');
+  });
+
+  test("um end antes do start da nota, igual a ele ou a mais de 24 h é recusado, e nada muda", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    for (const end of ["2026-12-02T09:00", "2026-12-02T10:00", "2026-12-03T12:00"]) expect(await code(cal.update({ id: ID, end }))).toBe("E_BAD_ARGS");
+    expect(read("Ensaio da banda.md")).toBe(ENSAIO);
+  });
+
+  test("start e end juntos gravam os dois (o fim pedido, e não o da nota); a mais de 24 h, recusa", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    expect(await code(cal.update({ id: ID, start: "2026-12-03T15:00", end: "2026-12-04T16:00" }))).toBe("E_BAD_ARGS");
+    expect(read("Ensaio da banda.md")).toBe(ENSAIO);
+    expect(await cal.update({ id: ID, start: "2026-12-02T15:00", end: "2026-12-02T17:00" })).toMatchObject({ start: "2026-12-02T15:00", end: "2026-12-02T17:00" });
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-02 15:00-17:00"');
+  });
+
+  test("um end depois do start, até 24 h, grava; o aviso sozinho não mexe no horário", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    expect(await cal.update({ id: ID, end: "2026-12-02T12:30" })).toMatchObject({ start: "2026-12-02T10:00", end: "2026-12-02T12:30" });
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-02 10:00-12:30"');
+    await cal.update({ id: ID, notify: "none" });
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-02 10:00-12:30"');
+  });
+
+  test("o dia inteiro e a volta para um horário seguem como antes", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    expect(await cal.update({ id: ID, allDay: true })).toMatchObject({ start: "2026-12-02", end: null, allDay: true });
+    expect(await cal.update({ id: ID, allDay: false, start: "2026-12-03T09:00" })).toMatchObject({ start: "2026-12-03T09:00", end: null });
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-03 09:00"');
   });
 });
 
@@ -356,5 +453,66 @@ describe("alertsBetween", () => {
     expect(a.key).toBe(b.key);
     const c = alertsBetween([item({ start: "2026-11-27T15:00" })], 0, Number.MAX_SAFE_INTEGER)[0]!;
     expect(c.key).not.toBe(a.key);
+  });
+});
+
+describe("calendar.update: Feito numa repetição (#450)", () => {
+  const REGAR = "# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-07 08:00 #lembrete 🔁 dia\n";
+  const starts = async (cal: Awaited<ReturnType<typeof open>>["cal"], from = "2026-12-07", to = "2026-12-10") =>
+    (await cal.items({ from, to })).items.map((i) => i.start);
+
+  test("o Feito na 3ª vez não apaga a 1ª e a 2ª, que ainda estão abertas", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": REGAR });
+    const vezes = (await cal.items({ from: "2026-12-07", to: "2026-12-10" })).items;
+    expect(vezes.map((i) => i.start)).toEqual(["2026-12-07T08:00", "2026-12-08T08:00", "2026-12-09T08:00"]);
+    await cal.update({ id: vezes[2]!.id, done: true });
+    expect(await starts(cal)).toEqual(["2026-12-07T08:00", "2026-12-08T08:00"]);
+    expect(await starts(cal, "2026-12-10", "2026-12-11")).toEqual(["2026-12-10T08:00"]);
+    expect(read("Projeto X/Pendências.md")).toBe("# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-07 08:00 #lembrete 🔁 dia ⏭ 2026-12-09\n");
+  });
+
+  test("os ⏭ vão em ordem de dia, seja qual for a ordem dos cliques", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": REGAR });
+    const vezes = (await cal.items({ from: "2026-12-07", to: "2026-12-10" })).items;
+    await cal.update({ id: vezes[2]!.id, done: true });
+    const de8 = (await cal.items({ from: "2026-12-08", to: "2026-12-09" })).items[0]!;
+    await cal.update({ id: de8.id, done: true });
+    expect(read("Projeto X/Pendências.md")).toContain("🔁 dia ⏭ 2026-12-08 ⏭ 2026-12-09\n");
+    expect(await starts(cal)).toEqual(["2026-12-07T08:00"]);
+  });
+
+  test("o Feito na 1ª vez em aberto anda a série, pula as já feitas e tira os ⏭ que ficaram para trás", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": "# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-07 08:00 #lembrete 🔁 dia ⏭ 2026-12-08 ⏭ 2026-12-10\n" });
+    const primeira = (await cal.items({ from: "2026-12-07", to: "2026-12-08" })).items[0]!;
+    await cal.update({ id: primeira.id, done: true });
+    expect(read("Projeto X/Pendências.md")).toBe("# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-09 08:00 #lembrete 🔁 dia ⏭ 2026-12-10\n");
+    expect(await starts(cal, "2026-12-07", "2026-12-12")).toEqual(["2026-12-09T08:00", "2026-12-11T08:00"]);
+  });
+
+  test("o ⏭ com e sem U+FE0F, fora de ordem: a linha lê os dois, e o título fica limpo", () => {
+    const w = parseWhen("Regar as plantas @ 2026-12-07 08:00 🔁 dia ⏭️ 2026-12-09 ⏭ 2026-12-08")!;
+    expect(w.skip).toEqual(["2026-12-08", "2026-12-09"]);
+    expect(w.title).toBe("Regar as plantas");
+    expect(rewriteWhen("Regar as plantas @ 2026-12-07 08:00 🔁 dia ⏭️ 2026-12-09", { skip: [...w.skip, "2026-12-11"] }, "pt")).toBe(
+      "Regar as plantas @ 2026-12-07 08:00 🔁 dia ⏭ 2026-12-08 ⏭ 2026-12-09 ⏭ 2026-12-11",
+    );
+  });
+
+  test("mover a série leva os ⏭ junto; tirar a repetição tira os ⏭; o título não aceita ⏭", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": "# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-07 08:00 #lembrete 🔁 dia ⏭ 2026-12-09\n" });
+    const de8 = (await cal.items({ from: "2026-12-08", to: "2026-12-09" })).items[0]!;
+    await cal.update({ id: de8.id, start: "2026-12-09T08:00" });
+    expect(read("Projeto X/Pendências.md")).toContain("@ 2026-12-08 08:00 #lembrete 🔁 dia ⏭ 2026-12-10\n");
+    const de9 = (await cal.items({ from: "2026-12-09", to: "2026-12-10" })).items[0]!;
+    expect(await code(cal.update({ id: de9.id, title: "Regar ⏭ 2026-12-12" }))).toBe("E_BAD_ARGS");
+    await cal.update({ id: de9.id, repeat: null });
+    expect(read("Projeto X/Pendências.md")).toBe("# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-08 08:00 #lembrete\n");
+  });
+
+  test("o cartão do Calendário e a Início não mostram o ⏭", async () => {
+    const { cal } = await open({ "Projeto X/Pendências.md": "# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-07 08:00 #lembrete 🔁 dia ⏭ 2026-12-09\n" });
+    const its = (await cal.items({ from: "2026-12-07", to: "2026-12-12" })).items;
+    expect(its.map((i) => i.title)).toEqual(Array(4).fill("Regar as plantas"));
+    expect(its[0]!.skip).toEqual(["2026-12-09"]);
   });
 });

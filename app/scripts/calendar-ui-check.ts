@@ -211,6 +211,28 @@ try {
         await until(new RegExp(`@ ${day(0)} 11:00-\\d\\d:\\d\\d`), "esticar a borda");
         checks.push(`${lang}: arrastar muda a hora na nota (${(await line()).trim()}), e esticar põe o fim`);
 
+        // 4c. Esticar além de 24 h (#480): o esticar para em 24 h, a nota fica com o fim no dia seguinte, na mesma hora,
+        // e a tela não mostra o "Não consegui gravar". 30 h passam da janela: o resto do gesto vai à window, onde a tela
+        // escuta o pointermove e o pointerup depois do pointerdown na borda.
+        await show(p, "Revisar o orçamento");
+        await p.locator(item("Revisar o orçamento")).first().hover();
+        const rb = await p.locator(`${item("Revisar o orçamento")} .kn-cal-resize`).first().boundingBox();
+        assert.ok(rb);
+        const [rx, ry] = [rb.x + rb.width / 2, rb.y + rb.height / 2];
+        await p.mouse.move(rx, ry);
+        await p.mouse.down();
+        await p.mouse.move(rx, ry + 40, { steps: 4 });
+        await p.evaluate(([x, y]) => {
+          dispatchEvent(new PointerEvent("pointermove", { clientX: x, clientY: y, bubbles: true }));
+          dispatchEvent(new PointerEvent("pointerup", { clientX: x, clientY: y, bubbles: true }));
+        }, [rx, ry + 30 * 48] as const);
+        await p.mouse.up();
+        await until(new RegExp(`@ ${day(0)} 11:00-11:00`), "esticar além de 24 h para em 24 h");
+        await Bun.sleep(300);
+        assert.equal(await p.locator(`${pane} .kn-cal-notice`).count(), 0, `sem o aviso de erro: ${await p.locator(`${pane} .kn-cal-notice`).first().textContent().catch(() => "")}`);
+        await p.screenshot({ path: join(shots, "esticar-24h.png") });
+        checks.push(`${lang}: esticar além de 24 h para em 24 h (${(await line()).trim()}), sem aviso de erro`);
+
         // 4b. O + Novo, sem projeto, cria a linha no Calendário.md e o item na tela.
         await p.locator(`${pane} .kn-cal-new`).click();
         await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Ligar para o Bruno");

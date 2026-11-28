@@ -8,6 +8,7 @@
 // - O tipo pela tag: `#lembrete`/`#reminder`, `#reuniao`/`#meeting`, `#foco`/`#focus`. Sem tag e com caixa: pendência.
 // - O aviso: `🔔 0` (na hora), `🔔 10m`, `🔔 30m`, `🔔 1d` (na véspera), ou `🔕` (nenhum). Sem ele, o padrão do tipo.
 // - A repetição: `🔁 dia`/`🔁 daily` ou `🔁 semana`/`🔁 weekly`.
+// - Uma vez feita da repetição, fora da primeira em aberto: `⏭ AAAA-MM-DD`, um por vez, em ordem de dia (#450).
 
 export const CALENDAR_KINDS = ["meeting", "reminder", "task", "note", "focus"] as const;
 export type CalendarKind = (typeof CALENDAR_KINDS)[number];
@@ -51,6 +52,8 @@ export interface CalendarItem {
   /** Quem estava na reunião gravada. */
   people?: string[];
   repeat?: CalendarRepeat;
+  /** As vezes da repetição já feitas (`⏭ AAAA-MM-DD`), fora da primeira em aberto: a agenda as pula (#450). */
+  skip?: string[];
   /** Não se arrasta nem se estica: a reunião gravada. */
   readOnly: boolean;
   /** A nota de onde veio; `line` 0-based (null no item da nota inteira). `internal`: a pasta interna das reuniões. */
@@ -71,6 +74,9 @@ export const CALENDAR_LIMITS = {
   rangeDays: 62,
   undated: 50,
   title: 300,
+  /** A duração mais longa de um item com hora: o `calendar.create` e o `calendar.update` recusam mais, e o esticar
+   *  da tela para nela (#480). */
+  spanHours: 24,
 } as const;
 
 /** O que o `calendar.source` devolve: o texto da nota e a linha do item (0-based; `null` na nota inteira). */
@@ -184,6 +190,10 @@ const TAG = /(^|\s)#([\p{L}]+)(?=\s|$|[.,;!?])/gu;
 const BELL = /(^|\s)🔔\s?(0|10m|30m|1d)(?=\s|$)/;
 const MUTE = /(^|\s)🔕(?=\s|$)/;
 const REPEAT = /(^|\s)🔁\s?(dia|daily|semana|weekly)(?=\s|$)/;
+/** Uma vez feita: `⏭` (com ou sem o seletor de emoji U+FE0F, que o teclado do Mac põe) e o dia. */
+const SKIP = /(^|\s)⏭\uFE0F?\s?(\d{4}-\d{2}-\d{2})(?=\s|$)/g;
+/** O texto sem os `⏭ AAAA-MM-DD`: a Início mostra a pendência sem eles. */
+export const withoutSkips = (s: string) => s.replace(SKIP, "$1");
 
 /** O que a linha de um item diz, sem o texto da caixa: o título ainda com a marcação (links, ênfase). */
 export interface LineWhen {
@@ -196,7 +206,12 @@ export interface LineWhen {
   /** `null`: a linha não diz, vale o padrão do tipo. */
   notify: CalendarNotify | null;
   repeat: CalendarRepeat | null;
+  /** As vezes feitas da repetição (`⏭ AAAA-MM-DD`), sem repetir e em ordem de dia. */
+  skip: string[];
 }
+
+/** Os dias, sem repetir e em ordem: a linha fica igual seja qual for a ordem dos cliques. */
+export const sortedDays = (days: readonly string[]) => [...new Set(days)].sort();
 
 const hhmm = (h: string, m: string) => (Number(h) < 24 && Number(m) < 60 ? `${pad(Number(h))}:${m}` : null);
 
@@ -231,8 +246,9 @@ export function parseWhen(rest: string): LineWhen | null {
   const bell = BELL.exec(title);
   const notify: CalendarNotify | null = MUTE.test(title) ? "none" : bell ? NOTIFY_TOKEN[bell[2]!]! : null;
   const rep = REPEAT.exec(title);
-  title = title.replace(BELL, "$1").replace(MUTE, "$1").replace(REPEAT, "$1").replace(/\s+/g, " ").trim();
-  return { title, kind, start, end, allDay, notify, repeat: rep ? REPEAT_TOKEN[rep[2]!]! : null };
+  const skip = sortedDays([...title.matchAll(SKIP)].map((m) => m[2]!).filter(isDay));
+  title = title.replace(BELL, "$1").replace(MUTE, "$1").replace(REPEAT, "$1").replace(SKIP, "$1").replace(/\s+/g, " ").trim();
+  return { title, kind, start, end, allDay, notify, repeat: rep ? REPEAT_TOKEN[rep[2]!]! : null, skip };
 }
 
 /** O pedaço `@ …` de uma data. */
@@ -245,7 +261,7 @@ export function whenToken(start: string, end: string | null, allDay: boolean): s
 
 /** Os pedaços de uma linha nova ou mudada, na ordem que o Kiwi escreve: título, data, tipo, aviso, repetição. */
 export function formatWhen(
-  o: { title: string; kind: CalendarKind; start: string; end: string | null; allDay: boolean; notify: CalendarNotify | null; repeat: CalendarRepeat | null },
+  o: { title: string; kind: CalendarKind; start: string; end: string | null; allDay: boolean; notify: CalendarNotify | null; repeat: CalendarRepeat | null; skip?: readonly string[] },
   locale: "pt" | "en",
 ): string {
   const parts = [o.title.trim(), whenToken(o.start, o.end, o.allDay)];
@@ -254,6 +270,7 @@ export function formatWhen(
   if (o.notify === "none") parts.push("🔕");
   else if (o.notify) parts.push(`🔔 ${TOKEN_OF[o.notify]}`);
   if (o.repeat) parts.push(`🔁 ${REPEAT_OF[locale][o.repeat]}`);
+  if (o.repeat) for (const d of sortedDays(o.skip ?? [])) parts.push(`⏭ ${d}`);
   return parts.join(" ");
 }
 
@@ -263,7 +280,7 @@ export function formatWhen(
  */
 export function rewriteWhen(
   rest: string,
-  patch: { title?: string; start?: string; end?: string | null; allDay?: boolean; kind?: CalendarKind; notify?: CalendarNotify | null; repeat?: CalendarRepeat | null },
+  patch: { title?: string; start?: string; end?: string | null; allDay?: boolean; kind?: CalendarKind; notify?: CalendarNotify | null; repeat?: CalendarRepeat | null; skip?: readonly string[] },
   locale: "pt" | "en",
 ): string {
   const cur = parseWhen(rest);
@@ -273,7 +290,7 @@ export function rewriteWhen(
   };
   if (patch.title !== undefined) {
     // Um título novo troca o texto todo: os pedaços do item voltam do zero.
-    const base = cur ?? { kind: null, start: patch.start ?? "", end: null, allDay: true, notify: null, repeat: null };
+    const base = cur ?? { kind: null, start: patch.start ?? "", end: null, allDay: true, notify: null, repeat: null, skip: [] };
     return formatWhen(
       {
         title: patch.title,
@@ -283,6 +300,7 @@ export function rewriteWhen(
         allDay: patch.allDay ?? base.allDay,
         notify: patch.notify !== undefined ? patch.notify : base.notify,
         repeat: patch.repeat !== undefined ? patch.repeat : base.repeat,
+        skip: patch.skip ?? base.skip,
       },
       locale,
     );
@@ -314,6 +332,13 @@ export function rewriteWhen(
   if (patch.repeat !== undefined) {
     out = out.replace(REPEAT, "$1");
     if (patch.repeat) add(`🔁 ${REPEAT_OF[locale][patch.repeat]}`);
+  }
+  if (patch.skip !== undefined || patch.repeat !== undefined) {
+    // Os `⏭` vão depois do `🔁`, em ordem de dia; sem repetição, saem.
+    const repeat = patch.repeat !== undefined ? patch.repeat : (cur?.repeat ?? null);
+    const skip = patch.skip ?? cur?.skip ?? [];
+    out = out.replace(SKIP, "$1");
+    if (repeat) for (const d of sortedDays(skip)) add(`⏭ ${d}`);
   }
   return out.replace(/ {2,}/g, " ").replace(/\s+$/, "");
 }

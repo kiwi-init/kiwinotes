@@ -155,6 +155,7 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
         ...(it.box !== null || kind === "task" ? { done: it.box === "x" } : {}),
         notify: when.notify ?? DEFAULT_NOTIFY[kind],
         ...(when.repeat ? { repeat: when.repeat } : {}),
+        ...(when.repeat && when.skip.length ? { skip: when.skip } : {}),
         readOnly: false,
         source: source(it.line),
       });
@@ -263,15 +264,39 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
         // Mover uma vez de uma repetição move a série inteira pelo mesmo tanto.
         const shift = at.occurrence && cur && u.start !== undefined ? toMs(u.start) - toMs(at.occurrence === cur.start.slice(0, 10) ? cur.start : `${at.occurrence}${cur.start.slice(10)}`) : 0;
         const start = u.start !== undefined ? (at.occurrence && cur ? shiftBy(cur.start, shift) : u.start) : undefined;
-        const end = u.end !== undefined ? (u.end && at.occurrence && cur?.end ? shiftBy(cur.end, toMs(u.end) - toMs(occurrenceOf(cur.end, cur.start, at.occurrence))) : u.end) : undefined;
+        const asked = u.end !== undefined ? (u.end && at.occurrence && cur?.end ? shiftBy(cur.end, toMs(u.end) - toMs(occurrenceOf(cur.end, cur.start, at.occurrence))) : u.end) : undefined;
+        // Só o start: o fim anda junto, e a duração fica, como no arrastar da tela (#449).
+        const timed = u.allDay !== true && !!cur && !isDay(cur.start);
+        const end = asked === undefined && start !== undefined && timed && cur?.end && !isDay(start) ? shiftBy(cur.end, toMs(start) - toMs(cur.start)) : asked;
+        // Só um dos dois: o outro vem da linha, e o par passa pela mesma régua do checkTimes.
+        const from = start ?? cur?.start;
+        if (timed && typeof end === "string" && from && !isDay(from)) {
+          if (toMs(end) <= toMs(from)) throw new CalendarError("E_BAD_ARGS", "calendar.update: end must be after start");
+          if (toMs(end) - toMs(from) > CALENDAR_LIMITS.spanHours * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
+        }
         patch = { ...patch, ...(start !== undefined ? { start } : {}), ...(end !== undefined ? { end } : {}), ...(u.allDay !== undefined ? { allDay: u.allDay } : {}) };
         if (!cur && start === undefined) throw new CalendarError("E_BAD_ARGS", "an undated item needs start");
       }
+      // Mover a série leva junto as vezes já feitas (`⏭`), pelos mesmos dias.
+      if (cur?.skip.length && patch.start !== undefined) {
+        const days = Math.round((toMs(patch.start.slice(0, 10)) - toMs(cur.start.slice(0, 10))) / 86_400_000);
+        if (days) patch.skip = cur.skip.map((d) => addDays(d, days));
+      }
       if (u.done !== undefined) {
         if (u.done && cur?.repeat && at.occurrence) {
-          // O Feito numa repetição passa a série para a próxima vez, e a caixa continua aberta.
-          const next = addDays(at.occurrence, cur.repeat === "daily" ? 1 : 7);
-          patch = { ...patch, start: `${next}${cur.start.slice(10)}`, ...(cur.end ? { end: shiftBy(cur.end, toMs(`${next}${cur.start.slice(10)}`) - toMs(cur.start)) } : {}) };
+          const step = cur.repeat === "daily" ? 1 : 7;
+          let first = cur.start.slice(0, 10);
+          while (cur.skip.includes(first)) first = addDays(first, step);
+          if (at.occurrence !== first) {
+            // Uma vez depois da 1ª em aberto: só ela sai da agenda (`⏭`), e as de antes seguem abertas (#450).
+            patch = { ...patch, skip: [...cur.skip, at.occurrence] };
+          } else {
+            // O Feito na 1ª vez em aberto passa a série para a próxima (pulando as já feitas), e a caixa continua aberta.
+            let next = addDays(first, step);
+            while (cur.skip.includes(next)) next = addDays(next, step);
+            const start = `${next}${cur.start.slice(10)}`;
+            patch = { ...patch, start, ...(cur.end ? { end: shiftBy(cur.end, toMs(start) - toMs(cur.start)) } : {}), skip: cur.skip.filter((d) => d > next) };
+          }
         } else newBox = u.done ? "x" : " ";
       }
       const newRest = Object.keys(patch).length ? rewriteWhen(rest, patch, src.locale) : rest;
@@ -302,7 +327,15 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
       if (!cur) throw new CalendarError("E_CONFLICT", "the note has no agenda anymore; read again");
       const allDay = u.allDay ?? cur.allDay;
       const start = u.start ?? cur.start;
-      const end = allDay ? null : u.end !== undefined ? u.end : cur.end;
+      // Como nas linhas (#449, #484): só o start leva o fim junto, e a duração fica.
+      const timed = !allDay && !cur.allDay && !isDay(cur.start) && !isDay(start);
+      const moved = u.end === undefined && u.start !== undefined && timed && cur.end ? shiftBy(cur.end, toMs(start) - toMs(cur.start)) : undefined;
+      const end = allDay ? null : (moved ?? (u.end !== undefined ? u.end : cur.end));
+      // Só um dos dois: o outro vem da nota, e o par passa pela mesma régua do checkTimes.
+      if ((u.start !== undefined || u.end !== undefined) && !allDay && typeof end === "string" && !isDay(start)) {
+        if (toMs(end) <= toMs(start)) throw new CalendarError("E_BAD_ARGS", "calendar.update: end must be after start");
+        if (toMs(end) - toMs(start) > CALENDAR_LIMITS.spanHours * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
+      }
       let content = setFrontmatter(note.content, "agenda", agendaValue(start, end, allDay));
       if (u.notify !== undefined) content = setFrontmatter(content, "aviso", u.notify === DEFAULT_NOTIFY.note ? null : NOTE_NOTIFY_OF[u.notify]);
       const res = await src.notes.save(path, content, note.version);
@@ -399,7 +432,7 @@ export function occurrences(it: CalendarItem, from: string, to: string): Calenda
     d = addDays(d, Math.max(0, gap - step));
   }
   for (let i = 0; d < to && i < 400; i++, d = addDays(d, step)) {
-    if (d < day) continue;
+    if (d < day || it.skip?.includes(d)) continue;
     const shift = toMs(d) - toMs(day);
     const s = shiftBy(it.start, shift);
     const e = it.end ? shiftBy(it.end, shift) : null;
@@ -484,15 +517,15 @@ function checkTimes(start: unknown, end: unknown, allDay: unknown, cap: string) 
   if (end !== undefined && end !== null && !isDayTime(end)) throw new CalendarError("E_BAD_ARGS", `${cap}: end must be AAAA-MM-DDTHH:MM or null`);
   if (allDay !== undefined && typeof allDay !== "boolean") throw new CalendarError("E_BAD_ARGS", `${cap}: allDay must be true or false`);
   if (typeof start === "string" && typeof end === "string" && toMs(end) <= toMs(start)) throw new CalendarError("E_BAD_ARGS", `${cap}: end must be after start`);
-  if (typeof start === "string" && typeof end === "string" && toMs(end) - toMs(start) > 24 * 3_600_000) throw new CalendarError("E_BAD_ARGS", `${cap}: at most 24 h`);
+  if (typeof start === "string" && typeof end === "string" && toMs(end) - toMs(start) > CALENDAR_LIMITS.spanHours * 3_600_000) throw new CalendarError("E_BAD_ARGS", `${cap}: at most 24 h`);
 }
 
 /** Um título vai numa linha da nota: sem quebra, sem os pedaços que a linha lê (`@ data`, `🔔`, `🔁`). */
 function checkTitle(title: unknown, cap: string): void {
   if (typeof title !== "string" || !title.trim() || title.length > CALENDAR_LIMITS.title || /[\r\n]/.test(title))
     throw new CalendarError("E_BAD_ARGS", `${cap}: title must be one line, 1 to ${CALENDAR_LIMITS.title} characters`);
-  if (parseWhen(`${title} @ 2026-01-01`)?.title !== title.replace(/\s+/g, " ").trim() || /🔔|🔕|🔁|(^|\s)@\s?\d/.test(title))
-    throw new CalendarError("E_BAD_ARGS", `${cap}: title can't have a date, a kind tag, 🔔, 🔕 or 🔁`);
+  if (parseWhen(`${title} @ 2026-01-01`)?.title !== title.replace(/\s+/g, " ").trim() || /🔔|🔕|🔁|⏭|(^|\s)@\s?\d/.test(title))
+    throw new CalendarError("E_BAD_ARGS", `${cap}: title can't have a date, a kind tag, 🔔, 🔕, 🔁 or ⏭`);
 }
 
 function checkCreate(c: CalendarCreate): void {

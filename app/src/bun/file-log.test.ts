@@ -87,7 +87,8 @@ test("o erro do fs logado inteiro não leva o caminho da nota (#457)", async () 
   expect(text).not.toContain("Projeto X");
 });
 
-for (const name of ["Nota da Ana.md", "Ana's plano secreto.md", 'o "Projeto X" de hoje.md']) {
+// #464: a aspa seguida de vírgula no nome (`Ana', plano secreto.md`) deixava o fim no log.
+for (const name of ["Nota da Ana.md", "Ana's plano secreto.md", 'o "Projeto X" de hoje.md', "Ana', plano secreto.md"]) {
   test(`o erro do fs com o nome ${JSON.stringify(name)} não leva o nome ao log (T32572)`, async () => {
     fresh();
     const fake = { debug: () => {}, log: () => {}, info: () => {}, warn: () => {}, error: () => {} } as unknown as Console;

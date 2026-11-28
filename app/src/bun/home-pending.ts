@@ -1,6 +1,7 @@
 // As Pendências da aba Início (T15875, harry #15873): os `- [ ]` abertos das notas e os próximos passos das atas, por
 // nota, da editada por último para a mais velha. Só lê os arquivos do Mac: nada chama o agente.
 import { type HomePending, type PendingGroup, type PendingItem, PENDING_LIMITS } from "../shared/home.ts";
+import { withoutSkips } from "../shared/calendar.ts";
 import { frontmatterOf } from "../shared/meetings.ts";
 import { isMeetingNote } from "../shared/meeting-note.ts";
 import type { NoteMeta } from "../notes/vault.ts";
@@ -129,7 +130,7 @@ export const withoutComments = (s: string) => s.replace(/%%[\s\S]*?%%/g, (m) => 
 
 /** O texto do item sem a marcação: links viram o nome, ênfase e código saem. */
 export function plain(s: string): string {
-  return s
+  return withoutSkips(s)
     .replace(/\[\[([^\]|]*)\|([^\]]*)\]\]/g, "$2")
     .replace(/\[\[([^\]]*)\]\]/g, "$1")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")

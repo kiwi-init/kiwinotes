@@ -2,7 +2,7 @@
 // (com as sobreposições lado a lado), e a conta do arrastar e do esticar em passos de 15 min. A tela (Calendar.tsx)
 // só desenha o que sai daqui; os testes ficam em model.test.ts.
 
-import { addDays, type CalendarItem, dayOf, dayTimeOf, toMs } from "../../src/shared/calendar.ts";
+import { addDays, CALENDAR_LIMITS, type CalendarItem, dayOf, dayTimeOf, toMs } from "../../src/shared/calendar.ts";
 
 export const CALENDAR_VIEWS = ["day", "week", "month", "agenda"] as const;
 export type CalendarView = (typeof CALENDAR_VIEWS)[number];
@@ -69,10 +69,24 @@ export function onDay(item: Pick<CalendarItem, "start" | "end" | "allDay">, day:
   return start < toMs(addDays(day, 1)) && end > toMs(day);
 }
 
+/**
+ * Quanto a caixa de cima da cascata fica abaixo do começo da de baixo, no mínimo, em minutos (#466): as duas linhas
+ * dela, o título e a hora (uns 35 px, com a hora de 48 px), e um respiro. Começando antes disso, a de cima cobria a hora
+ * da de baixo.
+ */
+export const NEAR_MIN = 50;
+/** A altura mínima que sobra a uma caixa empurrada, em minutos: a caixa curta da grade (18 px). */
+export const MIN_SHOWN_MIN = 23;
+
 /** Um item na grade de um dia: o começo e o fim em minutos desde a meia-noite (cortados no dia), e a coluna. */
 export interface Placed {
   item: CalendarItem;
   top: number;
+  /**
+   * Onde a caixa começa na grade, em minutos: o `top`, ou mais abaixo quando ela começa logo depois de uma caixa que
+   * ela cobre (#466), para a hora da de baixo continuar à vista. O fim não muda.
+   */
+  shownTop: number;
   bottom: number;
   col: number;
   cols: number;
@@ -89,7 +103,8 @@ export function layoutDay(items: CalendarItem[], day: string): Placed[] {
     .filter((i) => !i.allDay && onDay(i, day))
     .map((item) => {
       const { start, end } = spanOf(item);
-      return { item, top: Math.max(0, (start - d0) / MIN), bottom: Math.min(DAY_MIN, (end - d0) / MIN), col: 0, cols: 1 };
+      const top = Math.max(0, (start - d0) / MIN);
+      return { item, top, shownTop: top, bottom: Math.min(DAY_MIN, (end - d0) / MIN), col: 0, cols: 1 };
     })
     .sort((a, b) => a.top - b.top || b.bottom - a.bottom || a.item.id.localeCompare(b.item.id));
   let group: Placed[] = [];
@@ -109,6 +124,9 @@ export function layoutDay(items: CalendarItem[], day: string): Placed[] {
     if (col < 0) col = ends.length;
     ends[col] = p.bottom;
     p.col = col;
+    // A caixa desce até abaixo das duas linhas de cada caixa mais funda que ela cobre (#466), sem passar do próprio fim.
+    for (const q of group) if (q.col < col && q.bottom > p.top) p.shownTop = Math.max(p.shownTop, q.shownTop + NEAR_MIN);
+    p.shownTop = Math.min(p.shownTop, Math.max(p.top, p.bottom - MIN_SHOWN_MIN));
     group.push(p);
     groupEnd = Math.max(groupEnd, p.bottom);
   }
@@ -143,11 +161,14 @@ export function moveItem(item: CalendarItem, deltaMin: number, deltaDays: number
   return { start: shift(item.start), end: item.end ? shift(item.end) : null };
 }
 
-/** Esticar a borda de baixo: o fim vai `deltaMin` minutos (em passos de 15), com 15 min de duração no mínimo. */
+/**
+ * Esticar a borda de baixo: o fim vai `deltaMin` minutos (em passos de 15), com 15 min de duração no mínimo e 24 h no
+ * máximo, o teto do `calendar.update` (#480): passou disso, o esticar para no teto, na prévia e ao soltar.
+ */
 export function resizeItem(item: CalendarItem, deltaMin: number): { end: string } | null {
   if (item.allDay) return null;
   const { start, end } = spanOf(item);
-  const next = Math.max(start + SNAP_MIN * MIN, end + snap(deltaMin) * MIN);
+  const next = Math.min(start + CALENDAR_LIMITS.spanHours * 60 * MIN, Math.max(start + SNAP_MIN * MIN, end + snap(deltaMin) * MIN));
   return next === end && item.end ? null : { end: dayTimeOf(next) };
 }
 

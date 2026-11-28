@@ -115,7 +115,7 @@ const enBase: { readonly [K in keyof typeof PT_PARTS.base]: Entry } = {
   "pill.mic.default": "the default",
   "pill.micLostEmpty": "No audio from the microphone",
   "pill.noteCreated": "Now a note: {title}",
-  "pill.noteFailed": "Couldn't create the note: text is in History",
+  "pill.noteFailed": "Note not created: text is in History",
   "pill.pasteFailed": "Couldn't paste the text",
   "pill.modelUnavailable": "The voice model isn't ready",
   "pill.sttFailed": "Couldn't transcribe",

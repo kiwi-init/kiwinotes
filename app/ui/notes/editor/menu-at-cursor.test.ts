@@ -54,4 +54,22 @@ describe("o título e o callout do cursor, sem a nota inteira (spec #13385)", ()
       expect([pos, calloutAtCursor(state)]).toEqual([pos, calloutAt(NOTE, pos)]);
     }
   });
+
+  // #465: o título desenhado é um bloco só, e o clique nele dá o começo da linha. Na 1ª linha da nota, a posição 0.
+  // (Com frontmatter, o editor recebe o texto sem ele, e o título também começa no 0.)
+  test("o título na 1ª linha, com o cursor no começo dela (#465)", () => {
+    const doc = "# Bolo de cenoura\n\nTexto do bolo.\n";
+    for (const pos of [0, 2, 17]) {
+      const state = EditorState.create({ doc, selection: EditorSelection.cursor(pos), extensions: [md] });
+      expect([pos, headingAtCursor(state)?.title]).toEqual([pos, "Bolo de cenoura"]);
+    }
+    const setext = EditorState.create({ doc: "Bolo\n====\n\nTexto.\n", selection: EditorSelection.cursor(0), extensions: [md] });
+    expect(headingAtCursor(setext)?.title).toBe("Bolo");
+    // O frontmatter continua sem título, também no fim da cerca de baixo.
+    const fm = "---\ntags: [a]\n---\n# Bolo\n";
+    for (const pos of [0, 4, 16]) {
+      const state = EditorState.create({ doc: fm, selection: EditorSelection.cursor(pos), extensions: [md] });
+      expect([pos, headingAtCursor(state)]).toEqual([pos, undefined]);
+    }
+  });
 });

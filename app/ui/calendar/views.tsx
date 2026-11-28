@@ -134,8 +134,9 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
           {days.map((d) => (
             <div key={d} className="kn-cal-col" data-day={d} data-today={d === today ? "" : undefined}>
               {layoutDay(items, d).map((p) => {
-                const top = (p.top / 60) * HOUR_PX;
-                const height = Math.max(18, ((p.bottom - p.top) / 60) * HOUR_PX - 3);
+                // A caixa começa no `shownTop`: na cascata, abaixo da hora da que ela cobre (#466). A hora escrita é a de verdade.
+                const top = (p.shownTop / 60) * HOUR_PX;
+                const height = Math.max(18, ((p.bottom - p.shownTop) / 60) * HOUR_PX - 3);
                 const short = height < 34;
                 return (
                   <ItemBox

@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { CalendarItem } from "../../src/shared/calendar.ts";
-import { itemsOfDay, layoutDay, mondayOf, moveItem, noteLine, nowMinutes, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { MIN_SHOWN_MIN, NEAR_MIN, itemsOfDay, layoutDay, mondayOf, moveItem, noteLine, nowMinutes, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
 
 const item = (o: Partial<CalendarItem> & Pick<CalendarItem, "id" | "start">): CalendarItem => ({
   kind: "task",
@@ -62,6 +62,44 @@ describe("a grade das horas", () => {
     expect(by.d).toMatchObject({ col: 0, cols: 1, top: 14 * 60, bottom: 14 * 60 + 30 });
   });
 
+  // #466: a caixa de cima que começava menos de NEAR_MIN depois cobria a hora da de baixo (a 2ª linha dela).
+  test("na cascata, a caixa que começa logo depois da de baixo desce até abaixo da hora dela, sem mudar o fim", () => {
+    const placed = layoutDay(
+      [
+        item({ id: "ana", start: "2026-11-26T14:00", end: "2026-11-26T15:00" }),
+        item({ id: "perto", start: "2026-11-26T14:30", end: "2026-11-26T16:00" }),
+        item({ id: "longo", start: "2026-11-26T08:00", end: "2026-11-26T11:00" }),
+        item({ id: "depois", start: "2026-11-26T10:00", end: "2026-11-26T11:00" }),
+      ],
+      "2026-11-26",
+    );
+    const by = Object.fromEntries(placed.map((p) => [p.item.id, p]));
+    expect(NEAR_MIN).toBeGreaterThanOrEqual(42);
+    // A de cima começa às 14:30, mas a caixa só a partir de 14:00 + NEAR_MIN; o fim é o de verdade.
+    expect(by.perto).toMatchObject({ col: 1, top: 14 * 60 + 30, shownTop: 14 * 60 + NEAR_MIN, bottom: 16 * 60 });
+    expect(by.ana!.shownTop).toBe(14 * 60);
+    // Começou 2 h depois: a hora da de baixo já ficou para trás, a caixa fica na hora dela.
+    expect(by.depois).toMatchObject({ col: 1, top: 10 * 60, shownTop: 10 * 60 });
+  });
+
+  test("a caixa empurrada nunca passa do próprio fim, e três no mesmo começo descem uma abaixo da outra", () => {
+    const placed = layoutDay(
+      [
+        item({ id: "a", start: "2026-11-26T09:00", end: "2026-11-26T11:30" }),
+        item({ id: "b", start: "2026-11-26T09:00", end: "2026-11-26T11:30" }),
+        item({ id: "c", start: "2026-11-26T09:00", end: "2026-11-26T11:30" }),
+        item({ id: "curta", start: "2026-11-26T15:00", end: "2026-11-26T16:00" }),
+        item({ id: "rapida", start: "2026-11-26T15:00", end: "2026-11-26T15:30" }),
+      ],
+      "2026-11-26",
+    );
+    const by = Object.fromEntries(placed.map((p) => [p.item.id, p]));
+    expect([by.a!.shownTop, by.b!.shownTop, by.c!.shownTop]).toEqual([9 * 60, 9 * 60 + NEAR_MIN, 9 * 60 + 2 * NEAR_MIN]);
+    // A de 30 min não cabe abaixo da hora da outra: desce só até sobrar o mínimo dela.
+    expect(by.rapida!.shownTop).toBe(15 * 60 + 30 - MIN_SHOWN_MIN);
+    for (const p of placed) expect(p.bottom - p.shownTop).toBeGreaterThanOrEqual(Math.min(MIN_SHOWN_MIN, p.bottom - p.top));
+  });
+
   test("o que passa da meia-noite aparece cortado nos dois dias", () => {
     const late = item({ id: "x", start: "2026-11-26T23:00", end: "2026-11-27T01:00" });
     expect(layoutDay([late], "2026-11-26")[0]).toMatchObject({ top: 23 * 60, bottom: 24 * 60 });
@@ -105,6 +143,17 @@ describe("arrastar e esticar", () => {
     expect(resizeItem(meeting, 4)).toBeNull();
     // Sem fim: esticar grava o fim (a meia hora da grade mais o que andou).
     expect(resizeItem(item({ id: "s", start: "2026-11-26T09:00" }), 15)).toEqual({ end: "2026-11-26T09:45" });
+  });
+
+  test("esticar para em 24 h, o teto do calendar.update (#480)", () => {
+    // meeting: 10:00–11:00. Trinta horas a mais param no dia seguinte, às 10:00, e não no que o calendar.update recusa.
+    expect(resizeItem(meeting, 30 * 60)).toEqual({ end: "2026-11-27T10:00" });
+    expect(resizeItem(meeting, 23 * 60)).toEqual({ end: "2026-11-27T10:00" });
+    expect(resizeItem(meeting, 22 * 60)).toEqual({ end: "2026-11-27T09:00" });
+    // Já no teto: esticar mais não muda nada, e a tela não grava.
+    expect(resizeItem({ ...meeting, end: "2026-11-27T10:00" }, 120)).toBeNull();
+    // Sem fim também para em 24 h.
+    expect(resizeItem(item({ id: "s", start: "2026-11-26T09:00" }), 40 * 60)).toEqual({ end: "2026-11-27T09:00" });
   });
 
   test("o link abre na linha 1-based da nota", () => {
