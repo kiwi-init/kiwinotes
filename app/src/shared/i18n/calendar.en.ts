@@ -80,6 +80,8 @@ export const enCalendar: { readonly [K in keyof typeof ptCalendar]: Entry } = {
   "calendar.new.time": "Time",
   "calendar.new.end": "Until",
   "calendar.new.allDay": "All day",
+  "calendar.createdHidden": "“{title}” was created, but the filter hides it.",
+  "calendar.showIt": "Show it",
   "calendar.new.create": "Create",
   "calendar.new.cancel": "Cancel",
   "calendar.new.where": "Goes to {path}.",

@@ -156,6 +156,13 @@ describe("o + Novo: dia todo à vista (#531)", () => {
   test("em inglês", () => {
     english();
     expect(form()).toContain("All day");
+    expect(form()).toContain("10 min before");
+  });
+  test("o aviso vem no + Novo, no padrão do tipo (régua 11.7)", () => {
+    const html = form();
+    // A Pendência, o tipo que o + Novo abre, não avisa; as cinco escolhas estão lá.
+    expect(html).toMatch(/<select name="notify">.*<option value="none" selected="">não avisa<\/option>/);
+    for (const n of ["atTime", "10m", "30m", "dayBefore"]) expect(html).toContain(`value="${n}"`);
   });
   test("desmarcar sugere a próxima hora cheia, até as 23:00", () => {
     expect(nextHour(new Date(2026, 10, 25, 9, 40))).toBe("10:00");

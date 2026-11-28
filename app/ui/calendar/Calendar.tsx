@@ -6,11 +6,11 @@ import "./calendar.css";
 
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { addDays, type CalendarItem, type CalendarItems, type CalendarNotify, type CalendarUpdate } from "../../src/shared/calendar.ts";
+import { addDays, type CalendarItem, type CalendarItems, type CalendarKind, type CalendarNotify, type CalendarUpdate } from "../../src/shared/calendar.ts";
 import { kiwiFace } from "../notes/editor/kiwi-face.ts";
 import { useT } from "../src/i18n.ts";
 import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WIDE_PX, WidePanel, type WideState } from "./Detail.tsx";
-import { type CalendarFilter, filterStorage, passes, readFilter, shownProjects, toggleAllProjects, toggleKind, toggleProject, writeFilter } from "./filter.ts";
+import { type CalendarFilter, filterStorage, passes, readFilter, reveal, shownProjects, toggleAllProjects, toggleKind, toggleProject, writeFilter } from "./filter.ts";
 import { periodTitle } from "./format.ts";
 import { CALENDAR_VIEWS, type CalendarView, clockOf, isCalendarView, moveItem, newItemDay, noteLine, onDay, resizeItem, resizeTop, slotSpan, stepAnchor, viewRange } from "./model.ts";
 import { KiwiAskBox } from "./KiwiAsk.tsx";
@@ -88,6 +88,8 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
   const [now, setNow] = useState(() => Date.now());
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [notice, setNotice] = useState<string | null>(null);
+  // O item recém-criado que o filtro esconde (régua 10.9): o aviso diz, e o "Mostrar" tira o filtro do tipo e do projeto dele.
+  const [hiddenNew, setHiddenNew] = useState<{ title: string; kind: CalendarKind; project: string | null } | null>(null);
   const [face, setFace] = useState<string | null>(null);
   const [creating, setCreating] = useState<Creating | null>(null);
   // Cada abertura do "+ Novo" é um formulário novo: o clique noutro horário troca o dia e a hora dele.
@@ -442,6 +444,24 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
           {t("calendar.legend.kiwi")}
         </span>
       </div>
+      {hiddenNew ? (
+        <div className="kn-cal-notice" role="status" data-hidden-new="">
+          {t("calendar.createdHidden", { title: hiddenNew.title })}
+          <button
+            type="button"
+            className="kn-cal-btn"
+            onClick={() => {
+              setFilter(reveal(filter, hiddenNew));
+              setHiddenNew(null);
+            }}
+          >
+            {t("calendar.showIt")}
+          </button>
+          <button type="button" className="kn-cal-ic" aria-label={t("calendar.close")} onClick={() => setHiddenNew(null)}>
+            ✕
+          </button>
+        </div>
+      ) : null}
       {notice ? (
         <div className="kn-cal-notice" role="status">
           {notice}
@@ -512,6 +532,8 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
             try {
               await source.create(c);
               setCreating(null);
+              const made = { title: c.title, kind: c.kind, project: c.project ?? null };
+              setHiddenNew(passes(filter, made) ? null : made);
               if (c.start.slice(0, 10) < range.from || c.start.slice(0, 10) >= range.to) setAnchor(c.start.slice(0, 10));
               reload();
             } catch {

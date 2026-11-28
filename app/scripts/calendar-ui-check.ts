@@ -250,6 +250,10 @@ try {
         assert.ok(Math.abs(fb.y - db.y) < 2 || fb.y + fb.height <= 800, `${lang}: o formulário fica na altura do rascunho ou dentro da janela`);
         assert.equal(await p.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name), "title", "o foco já está no título");
         assert.equal(await p.isChecked(`${form} input[name="allDay"]`), false, `${lang}: com a hora do vazio, o Dia todo vem desmarcado (#531)`);
+        // O aviso no + Novo (régua 11.7): a Pendência vem sem aviso; com "30 min antes", o item sai com a marca do Kiwi.
+        assert.equal(await p.inputValue(`${form} select[name="notify"]`), "none", `${lang}: a Pendência vem sem aviso`);
+        await p.selectOption(`${form} select[name="notify"]`, "30m");
+        await p.locator(`${form} input[name="title"]`).focus();
         await p.keyboard.type(title);
         await p.screenshot({ path: join(shots, "criar-clicando.png") });
         await p.keyboard.press("Enter");
@@ -257,7 +261,8 @@ try {
         await calHas(new RegExp(`${title} @ ${day(0)} 09:30-10:00`), "o Enter cria 9:30–10:00");
         await p.waitForSelector(item(title));
         assert.equal(await draft.count(), 0, "o rascunho sai junto com o formulário");
-        checks.push(`${lang}: o clique às 9:35 no vazio abre o rascunho 09:30–10:00 com o formulário ao lado, e o Enter cria "${title}" no Calendário.md`);
+        assert.equal(await p.locator(`${item(title)} .kn-cal-kiwi-mark`).count(), 1, `${lang}: o aviso escolhido no + Novo vai para o item (régua 11.7)`);
+        checks.push(`${lang}: o clique às 9:35 no vazio abre o rascunho 09:30–10:00 com o formulário ao lado, e o Enter cria "${title}" no Calendário.md, com o aviso de 30 min escolhido no + Novo`);
 
         // 5b. O arrastar, e o Esc.
         const a0 = await yAt(7 + 5 / 60);
@@ -315,6 +320,29 @@ try {
         await p.waitForSelector(form, { state: "detached" });
         await view(p, before);
         checks.push(`${lang}: o clique no vazio do dia ${day(3)} no Mês abre o + Novo nele, com o Dia todo marcado e a hora em branco (#531), e o Esc fecha`);
+
+        // 5e. Criar com o tipo escondido pelo filtro (régua 10.9): o aviso diz, e o Mostrar tira o filtro do tipo.
+        const hidden = lang === "pt" ? "Ideia escondida" : "Hidden idea";
+        const legendTask = p.locator(`${pane} .kn-cal-legend button[data-kind="task"]`);
+        await legendTask.click();
+        assert.equal(await legendTask.getAttribute("aria-pressed"), "false", "a Pendência escondida");
+        await p.locator(`${pane} .kn-cal-new`).click();
+        await p.fill(`${form} input[name="title"]`, hidden);
+        await p.fill(`${form} input[name="day"]`, day(0));
+        await p.fill(`${form} input[name="time"]`, "18:00");
+        await p.locator(`${form} input[name="title"]`).press("Enter");
+        await p.waitForSelector(form, { state: "detached" });
+        const warn = p.locator(`${pane} .kn-cal-notice[data-hidden-new]`);
+        await warn.waitFor();
+        const said = lang === "pt" ? `“${hidden}” foi criado, mas o filtro esconde esse item.` : `“${hidden}” was created, but the filter hides it.`;
+        assert.ok((await warn.innerText()).includes(said), `${lang}: o aviso do item escondido: ${await warn.innerText()}`);
+        assert.equal(await p.locator(item(hidden)).count(), 0, "escondido pelo filtro");
+        await p.screenshot({ path: join(shots, "criado-escondido.png") });
+        await warn.locator("button.kn-cal-btn").click();
+        await p.waitForSelector(item(hidden));
+        assert.equal(await legendTask.getAttribute("aria-pressed"), "true", "o Mostrar tira o filtro da Pendência");
+        assert.equal(await warn.count(), 0, "o aviso sai");
+        checks.push(`${lang}: criar "${hidden}" com a Pendência escondida avisa "${said}", e o Mostrar põe o item e o tipo à vista (régua 10.9)`);
       }
 
       if (lang === "en") {

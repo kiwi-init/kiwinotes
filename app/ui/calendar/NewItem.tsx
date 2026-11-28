@@ -4,7 +4,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { CALENDAR_KINDS, type CalendarCreate, type CalendarKind, titleProblem } from "../../src/shared/calendar.ts";
+import { CALENDAR_KINDS, CALENDAR_NOTIFY, type CalendarCreate, type CalendarKind, type CalendarNotify, DEFAULT_NOTIFY, titleProblem } from "../../src/shared/calendar.ts";
 import { noteFileName } from "../../src/shared/note-name.ts";
 import { useT } from "../src/i18n.ts";
 import type { Rect } from "./Detail.tsx";
@@ -45,6 +45,9 @@ export function NewItem({ day, time: startTime = "", end: endTime = "", near, pr
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<CalendarKind>("task");
   const [project, setProject] = useState("");
+  // O aviso (régua 11.7): segue o padrão do tipo até a pessoa escolher outro.
+  const [notify, setNotify] = useState<CalendarNotify | null>(null);
+  const shownNotify = notify ?? DEFAULT_NOTIFY[kind];
   const [date, setDate] = useState(day);
   const [time, setTime] = useState(startTime);
   const [end, setEnd] = useState(endTime);
@@ -71,6 +74,7 @@ export function NewItem({ day, time: startTime = "", end: endTime = "", near, pr
       start: time ? `${date}T${time}` : date,
       end: time && end ? `${date}T${end}` : null,
       allDay: !time,
+      notify: shownNotify,
     });
   };
   return (
@@ -132,6 +136,16 @@ export function NewItem({ day, time: startTime = "", end: endTime = "", near, pr
             }}
           />
           {t("calendar.new.allDay")}
+        </label>
+        <label>
+          {t("calendar.notify.title")}
+          <select name="notify" value={shownNotify} onChange={(e) => setNotify(e.target.value as CalendarNotify)}>
+            {CALENDAR_NOTIFY.map((n) => (
+              <option key={n} value={n}>
+                {t(`calendar.notify.${n}`)}
+              </option>
+            ))}
+          </select>
         </label>
         <div className="kn-cal-newrow">
           <label>

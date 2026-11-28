@@ -24,6 +24,12 @@ export const toggleKind = (f: CalendarFilter, k: CalendarKind): CalendarFilter =
   kinds: f.kinds.includes(k) ? f.kinds.filter((x) => x !== k) : [...f.kinds, k],
 });
 
+/** Põe à mostra o tipo e o projeto de um item que o filtro escondia (o "Mostrar" do item recém-criado, régua 10.9). */
+export const reveal = (f: CalendarFilter, i: Pick<CalendarItem, "kind" | "project">): CalendarFilter => ({
+  kinds: f.kinds.filter((k) => k !== i.kind),
+  projects: f.projects.filter((p) => p !== i.project),
+});
+
 /** Mostra ou esconde um projeto. */
 export const toggleProject = (f: CalendarFilter, p: string): CalendarFilter => ({
   ...f,

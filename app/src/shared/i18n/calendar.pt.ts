@@ -77,6 +77,8 @@ export const ptCalendar = {
   "calendar.new.time": "Hora",
   "calendar.new.end": "Até",
   "calendar.new.allDay": "Dia todo",
+  "calendar.createdHidden": "“{title}” foi criado, mas o filtro esconde esse item.",
+  "calendar.showIt": "Mostrar",
   "calendar.new.create": "Criar",
   "calendar.new.cancel": "Cancelar",
   "calendar.new.where": "Vai para {path}.",

@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { FILTER_STORAGE_KEY, NO_FILTER, passes, readFilter, shownProjects, toggleAllProjects, toggleKind, toggleProject, writeFilter } from "./filter.ts";
+import { FILTER_STORAGE_KEY, NO_FILTER, passes, readFilter, reveal, shownProjects, toggleAllProjects, toggleKind, toggleProject, writeFilter } from "./filter.ts";
 
 const memory = () => {
   const m = new Map<string, string>();
@@ -54,6 +54,17 @@ describe("os botões", () => {
     const f = toggleProject(NO_FILTER, "Casa");
     expect(passes(f, { kind: "task", project: "Projeto novo" })).toBe(true);
   });
+});
+
+test("o Mostrar do item recém-criado tira do filtro só o tipo e o projeto dele (régua 10.9)", () => {
+  const f = { kinds: ["meeting", "task"] as const, projects: ["Projeto X", "Casa"] };
+  const made = { kind: "task", project: "Projeto X" } as const;
+  expect(passes({ kinds: [...f.kinds], projects: f.projects }, made)).toBe(false);
+  const r = reveal({ kinds: [...f.kinds], projects: f.projects }, made);
+  expect(r).toEqual({ kinds: ["meeting"], projects: ["Casa"] });
+  expect(passes(r, made)).toBe(true);
+  // Sem projeto: só o tipo sai.
+  expect(reveal({ kinds: ["task"], projects: ["Casa"] }, { kind: "task", project: null })).toEqual({ kinds: [], projects: ["Casa"] });
 });
 
 describe("o filtro guardado", () => {
