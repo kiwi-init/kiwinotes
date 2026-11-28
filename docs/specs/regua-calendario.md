@@ -114,8 +114,8 @@ Fontes das referências:
 
 | # | Comportamento | Nas referências | No Kiwi hoje | Estado |
 |---|---|---|---|---|
-| 10.1 | Itens no mesmo horário ficam lado a lado e dividem a coluna (ponto 9) | Teams e Google | em cascata, um por cima do outro | falta A (T34737) |
-| 10.2 | "+N" quando não cabem, no Dia e na Semana | Google e Teams | não há | falta A (T34737) |
+| 10.1 | Itens no mesmo horário ficam lado a lado e dividem a coluna (ponto 9) | Teams e Google | lado a lado: cada grupo de sobreposição tem as colunas dele, e o item se estica pelas colunas livres (`layoutDay`, T34737, PR #535) | cumpre: o `model.test` e o `calendar-ui.test`, e o passo 3a do `calendar-ui-check` (o Dia e a Semana, em pt e en) |
+| 10.2 | "+N" quando não cabem, no Dia e na Semana | Google e Teams | as colunas que não cabem (44 px no mínimo) viram um "+N", que abre a lista dentro da grade, com o cartão e o arrastar (`fitColumns`, T34737, PR #535) | cumpre: o `model.test` e o passo 3a do `calendar-ui-check` (a Semana e o Dia estreito a 600 px) |
 | 10.3 | "+N" no Mês | nas três | até 3 itens por dia, depois o "+n" | cumpre |
 | 10.4 | Um item de vários dias, numa barra só | nas três | o teto é de 24 h (#449), e o item de mais de um dia não existe | falta: T34781. O lead decidiu que entra (#34756) |
 | 10.5 | Vários calendários com cor, para mostrar e esconder | nas três | o filtro por tipo e por projeto, que fica salvo (T32408) | cumpre |
