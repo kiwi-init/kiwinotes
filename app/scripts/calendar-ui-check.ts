@@ -4,6 +4,7 @@
 // - Dia · Semana · Mês · Agenda trocam a vista, e os itens das notas e da reunião aparecem nelas.
 // - O hover num item mostra o cartão com um só ⤢, no canto de cima à direita.
 // - O ⤢ abre o painel largo (Item · Nota · Ligações), e o item fica marcado; o ⤡ fecha e volta ao item.
+// - O aviso livre: o "🔔 50m" da linha sai no cartão como "50 min antes" (T34753).
 // - O link da nota no cartão abre a aba Notas naquela nota, com a linha do item marcada.
 // - A Semana da Início tem o "Abrir o calendário".
 // - Os itens do mesmo horário ficam lado a lado (ponto 9, spec #34706): metade da coluna cada no par, o grupo de cinco
@@ -121,7 +122,7 @@ try {
   // Cinco coisas de dia todo no mesmo dia, para o teto da faixa (10.8).
   await invoke("notes.create", { folder: "Casa", title: "Feriado", content: `# Feriado\n\n${["Feira", "Doar roupas", "Aniversário da Bia", "Trocar o filtro", "Devolver o livro"].map((t) => `- ${t} @ ${day(3)} #lembrete`).join("\n")}\n` });
   await invoke("notes.create", { folder: "Casa", title: "Hábitos", content: `# Hábitos\n\n- [ ] Tomar água @ ${day(1)} 08:00 🔁 dia\n- Café com a Ana @ ${day(1)} 10:00-10:30 #reuniao\n` });
-  await invoke("notes.create", { folder: "Casa", title: "Mudança", content: `# Mudança\n\n- [ ] Comprar fita e caixas @ ${day(2)} 09:00\n- [ ] Levar a geladeira\n` });
+  await invoke("notes.create", { folder: "Casa", title: "Mudança", content: `# Mudança\n\n- [ ] Comprar fita e caixas @ ${day(2)} 09:00\n- [ ] Pagar a conta @ ${day(1)} 11:00 #lembrete 🔔 50m\n- [ ] Levar a geladeira\n` });
   // Amanhã, cinco coisas às 18h e um par às 20h, para o lado a lado (ponto 9): amanhã, para nada delas virar "atrasada".
   await invoke("notes.create", { folder: "Casa", title: "Agenda cheia", content: `# Agenda cheia\n\n${CROWD.map((t, i) => `- [ ] ${t} @ ${day(1)} 18:${i % 2 ? "15" : "00"}-19:00`).join("\n")}\n${PAIR.map((t) => `- [ ] ${t} @ ${day(1)} 20:00-21:00`).join("\n")}\n` });
   await invoke("notes.create", { folder: "Reuniões", title: "Revisão do Projeto X", content: `---\ntype: meeting\ndate: "${day(0)}"\nstart: "${at(0, 14)}"\nduration: 1800\nparticipants: [Ana, Bruno]\n---\n\nPauta: o orçamento e a data da entrega.\n` });
@@ -179,6 +180,17 @@ try {
       await p.screenshot({ path: join(shots, "largo.png") });
       await p.locator(`${pane} .kn-cal-collapse`).click();
       await wide(p, "gone");
+
+      // 3b. O aviso livre (T34753): o "🔔 50m" da linha sai no cartão como "50 min antes".
+      await show(p, "Pagar a conta");
+      await p.locator(item("Pagar a conta")).first().hover({ position: { x: 8, y: 8 } });
+      const free = lang === "pt" ? "50 min antes" : "50 min before";
+      await p.waitForFunction(([s, t]) => [...document.querySelectorAll(s)].some((e) => e.textContent?.includes(t)), [`${pane} .kn-cal-card .kn-cal-kw`, free] as const, { timeout: 5_000 })
+        .catch(async () => assert.fail(`o aviso no cartão: ${await p.locator(`${pane} .kn-cal-card .kn-cal-kw`).allTextContents()}`));
+      await p.screenshot({ path: join(shots, "aviso-livre.png") });
+      await p.mouse.move(2, 2);
+      await p.waitForSelector(`${pane} .kn-cal-card`, { state: "detached" }).catch(() => {});
+      checks.push(`${lang}: o "🔔 50m" da linha sai no cartão como "${free}" (T34753)`);
       assert.equal(await p.locator(`${pane} .kn-cal-item[data-open]`).count(), 0, "nenhum item marcado depois do ⤡");
       checks.push(`${lang}: o hover com um só ⤢ no canto, o painel largo com Item · Nota · Ligações, e o ⤡ de volta`);
 
