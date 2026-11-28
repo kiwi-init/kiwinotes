@@ -131,7 +131,7 @@ Fontes das referências:
 | 11.1 | Mudar a data, o início, o fim e o "dia todo" por campos, no cartão (ponto 3) | nas três | só arrastando | falta B (T34745) |
 | 11.2 | Mudar o título, o tipo, o projeto, o aviso, a repetição e o texto, no cartão (ponto 4) | nas três | só o aviso, o Feito e o "adiar 1 dia" | falta B (T34745) |
 | 11.3 | Apagar pelo cartão, com Desfazer | nas três | não há | falta B (T34745) |
-| 11.4 | Aviso com qualquer antecedência | nas três | o `🔔` aceita minutos, horas e dias até 30 dias (`🔔 50m`, `🔔 2h`, `🔔 3d`), na nota, nos avisos, no cartão e na ferramenta do Kiwi (`bun/calendar.test.ts`, "a linha lê e escreve 🔔 50m…" e "criar e mudar com o aviso livre"; `calendar-ui-check` 3b, pt e en) | cumpre |
+| 11.4 | Aviso com qualquer antecedência | nas três | o `🔔` aceita minutos, horas e dias até 30 dias (`🔔 50m`, `🔔 2h`, `🔔 3d`), na nota, nos avisos, no cartão e na ferramenta do Kiwi (`bun/calendar.test.ts`, "a linha lê e escreve 🔔 50m…" e "criar e mudar com o aviso livre"; `calendar-ui-check`, o passo do aviso livre no cartão, pt e en) | cumpre |
 | 11.5 | A repetição mensal, anual, nos dias úteis ou a que a pessoa montar | nas três | só a diária e a semanal | falta: T34775 |
 | 11.6 | Duplicar um item | Google (Duplicar) e Mac (copiar e colar) | não há | falta: T34767 |
 | 11.7 | O "+ Novo" já pede o aviso e a repetição | nas três | só o título, o tipo, o projeto, o dia, o início e o fim (snug-puma, #34801) | falta: T34748 o aviso e T34775 a repetição (lead #34834) |

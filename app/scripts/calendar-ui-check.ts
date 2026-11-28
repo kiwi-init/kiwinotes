@@ -181,7 +181,7 @@ try {
       await p.locator(`${pane} .kn-cal-collapse`).click();
       await wide(p, "gone");
 
-      // 3b. O aviso livre (T34753): o "🔔 50m" da linha sai no cartão como "50 min antes".
+      // 3. (fim) O aviso livre (T34753): o "🔔 50m" da linha sai no cartão como "50 min antes".
       await show(p, "Pagar a conta");
       await p.locator(item("Pagar a conta")).first().hover({ position: { x: 8, y: 8 } });
       const free = lang === "pt" ? "50 min antes" : "50 min before";
