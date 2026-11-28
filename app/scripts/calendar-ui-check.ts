@@ -229,6 +229,39 @@ try {
         checks.push(`${lang}: o + Novo diz "${note}" com o tipo Nota, e Calendário.md na pendência (#492)`);
       }
 
+      // 3c. A repetição no + Novo (T34775): as prontas e o Personalizar… (a cada 2 semanas, seg e qua, 10 vezes), em
+      // claro e escuro. Criar põe a regra na linha do Calendário.md, e a vez da semana seguinte não aparece.
+      {
+        const form = `${pane} .kn-cal-newform`;
+        const title = lang === "pt" ? "Aula de violão" : "Guitar lesson";
+        await p.locator(`${pane} .kn-cal-new`).click();
+        await p.fill(`${form} input[name="title"]`, title);
+        const presets = await p.locator(`${form} select[name="repeat"] option`).allTextContents();
+        assert.deepEqual(presets, lang === "pt" ? ["não repete", "todo dia", "toda semana", "todo mês", "todo ano", "nos dias úteis", "Personalizar…"] : ["doesn't repeat", "every day", "every week", "every month", "every year", "on weekdays", "Custom…"]);
+        await p.selectOption(`${form} select[name="repeat"]`, "custom");
+        await p.fill(`${form} input[name="every"]`, "2");
+        await p.selectOption(`${form} select[name="unit"]`, "w");
+        for (const wd of ["1", "3"]) await p.locator(`${form} [data-weekday="${wd}"]`).click();
+        await p.locator(`${form} input[name="ends"][value="count"]`).check();
+        await p.fill(`${form} input[name="count"]`, "10");
+        const says = lang === "pt" ? "a cada 2 semanas, seg e qua, 10 vezes" : "every 2 weeks, Mon and Wed, 10 times";
+        assert.equal((await p.locator(`${form} .kn-cal-repeat-says`).textContent())?.trim(), says);
+        await p.locator(form).screenshot({ path: join(shots, "repeticao-claro.png") });
+        await p.emulateMedia({ colorScheme: "dark" });
+        await p.locator(form).screenshot({ path: join(shots, "repeticao-escuro.png") });
+        await p.emulateMedia({ colorScheme: "light" });
+        // Sem hora, no dia que o + Novo sugere: a regra vai na linha, e o Criar só liga com o "até" preenchido.
+        await p.locator(`${form} input[name="ends"][value="until"]`).check();
+        await p.fill(`${form} input[name="until"]`, "");
+        assert.ok(await p.locator(`${form} button[type="submit"]`).isDisabled(), "o 'até' vazio desliga o Criar");
+        await p.locator(`${form} input[name="ends"][value="count"]`).check();
+        await p.locator(`${form} button[type="submit"]`).click();
+        await p.waitForSelector(form, { state: "detached" });
+        const cal = (await invoke("notes.get", { path: "Calendário.md" })).content as string;
+        assert.match(cal, new RegExp(`- \\[ \\] ${title} @ \\d{4}-\\d{2}-\\d{2} 🔁 2w:mo,we/10x`));
+        checks.push(`${lang}: o + Novo mostra as repetições prontas e monta "${says}", em claro e escuro, e a linha leva 🔁 2w:mo,we/10x (T34775)`);
+      }
+
       if (lang === "en") {
         // O item que o pt esticou até 24 h (4c), em inglês: o bloco e o cartão com o (+1 day) (T34131).
         await plusOneDay(p, "11:00–11:00 (+1 day)");
