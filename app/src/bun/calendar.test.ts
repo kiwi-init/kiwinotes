@@ -561,3 +561,72 @@ describe("calendar.update: Feito numa repetição (#450)", () => {
     expect(its[0]!.skip).toEqual(["2026-12-09"]);
   });
 });
+
+// Os avisos conferem a cada 30 s e liam do disco toda nota com caixa aberta (#486): só a nota que mudou é relida.
+describe("calendar.items: só relê a nota que mudou (#486)", () => {
+  const TAREFAS = "# Tarefas\n\n- [ ] Escolher o fornecedor\n";
+  async function counted() {
+    const t = await open({ "Projeto X/Pendências.md": PROJETO, "Projeto X/Tarefas.md": TAREFAS, "Casa.md": "# Casa\n\n- [ ] Levar a geladeira\n" });
+    const read: string[] = [];
+    const get = t.vault.get.bind(t.vault);
+    t.vault.get = (p: unknown) => (read.push(String(p)), get(p));
+    const items = async () => {
+      read.length = 0;
+      const r = await t.cal.items({ from: "2026-11-23", to: "2026-11-30" });
+      return { r, read: [...read].sort() };
+    };
+    return { ...t, items };
+  }
+
+  test("sem mudança, a conferência seguinte não lê nenhuma nota, e os itens são os mesmos", async () => {
+    const { items } = await counted();
+    const a = await items();
+    expect(a.read).toEqual(["Casa.md", "Projeto X/Pendências.md", "Projeto X/Tarefas.md"]);
+    const b = await items();
+    expect(b.read).toEqual([]);
+    expect(b.r).toEqual(a.r);
+  });
+
+  test("a nota gravada pelo app é relida, e só ela", async () => {
+    const { items, write } = await counted();
+    await items();
+    await write("Projeto X/Tarefas.md", "# Tarefas\n\n- [ ] Escolher o fornecedor @ 2026-11-25 09:00\n");
+    const b = await items();
+    expect(b.read).toEqual(["Projeto X/Tarefas.md"]);
+    expect(b.r.items.find((i) => i.title === "Escolher o fornecedor")?.start).toBe("2026-11-25T09:00");
+    expect(b.r.undated.map((i) => i.title)).not.toContain("Escolher o fornecedor");
+  });
+
+  test("a nota mudada fora do app é relida quando o vigia a vê, e a apagada sai", async () => {
+    const t = await counted();
+    t.vault.watch(); // o app liga o vigia (stores.ts, folders-workspace.ts)
+    await Bun.sleep(1_200); // a conferida do watch(), depois de 1 s (T6412)
+    await t.items();
+    writeFileSync(path.join(t.vault.root, "Casa.md"), "# Casa\n\n- [ ] Levar a geladeira @ 2026-11-26\n");
+    rmSync(path.join(t.vault.root, "Projeto X/Tarefas.md"));
+    let b = await t.items();
+    for (let n = 0; n < 250 && !b.r.items.some((i) => i.title === "Levar a geladeira"); n++) {
+      await Bun.sleep(20);
+      b = await t.items();
+    }
+    expect(b.r.items.find((i) => i.title === "Levar a geladeira")?.start).toBe("2026-11-26");
+    for (let n = 0; n < 250 && b.r.undated.some((i) => i.title === "Escolher o fornecedor"); n++) {
+      await Bun.sleep(20);
+      b = await t.items();
+    }
+    expect(b.r.undated.map((i) => i.title)).not.toContain("Escolher o fornecedor");
+  }, 15_000);
+
+  test("mudar um item devolvido não muda o que a próxima leitura dá", async () => {
+    const { items } = await counted();
+    const a = await items();
+    a.r.items[0]!.title = "Outro";
+    a.r.items[0]!.source!.path = "x.md";
+    a.r.undated[0]!.title = "Outro";
+    const b = await items();
+    expect(b.read).toEqual([]);
+    expect(b.r.items[0]!.title).not.toBe("Outro");
+    expect(b.r.items[0]!.source!.path).not.toBe("x.md");
+    expect(b.r.undated.map((i) => i.title)).not.toContain("Outro");
+  });
+});
