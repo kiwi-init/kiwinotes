@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { Vault } from "../notes/vault.ts";
-import { addDays, type CalendarItem, dayOf, notifyAt, parseWhen, rewriteWhen, titleProblem, toMs } from "../shared/calendar.ts";
+import { addDays, type CalendarItem, dayOf, itemTextOf, notifyAt, parseWhen, rewriteWhen, titleProblem, toMs } from "../shared/calendar.ts";
 import { tempDir } from "../../test/tmp.ts";
 import { whereOf } from "../../ui/calendar/NewItem.tsx";
 import { alertsBetween, calendarService, occurrences, setFrontmatter } from "./calendar.ts";
@@ -868,5 +868,37 @@ describe("calendar.delete e calendar.restore (T34745)", () => {
     expect(await code(cal.remove({ id: "" }))).toBe("E_BAD_ARGS");
     expect(await code(cal.restore({ path: "Projeto X/Planejamento.md", at: -1, removed: [], added: [], prev: null }))).toBe("E_BAD_ARGS");
     expect(read("Projeto X/Planejamento.md")).toBe(PROJETO);
+  });
+});
+
+describe("calendar.update: o texto do item (T34745)", () => {
+  test("numa linha, o texto vira as linhas embaixo dela, com recuo; as em branco saem; o resto da nota fica", async () => {
+    const nota = "# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-11-27 10:00\n  - ver a planilha\n- Café com a equipe @ 2026-11-28 09:00 #reuniao\n";
+    const { cal, read } = await open({ "Projeto X/Planejamento.md": nota });
+    const it = (await cal.items({ from: "2026-11-27", to: "2026-11-28" })).items.find((i) => i.title === "Revisar o orçamento")!;
+    const src = (await cal.source(it.id))!;
+    expect(itemTextOf(src.text, src.line)).toBe("- ver a planilha");
+    const got = await cal.update({ id: it.id, text: "Levar os números do mês.\n\n- [ ] perguntar à Ana\n" });
+    expect(got).toMatchObject({ title: "Revisar o orçamento", start: "2026-11-27T10:00" });
+    expect(read("Projeto X/Planejamento.md")).toBe(
+      "# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-11-27 10:00\n  Levar os números do mês.\n  - [ ] perguntar à Ana\n- Café com a equipe @ 2026-11-28 09:00 #reuniao\n",
+    );
+    const again = (await cal.source(got.id))!;
+    expect(itemTextOf(again.text, again.line)).toBe("Levar os números do mês.\n- [ ] perguntar à Ana");
+    // Texto vazio tira as linhas de baixo.
+    await cal.update({ id: got.id, text: "" });
+    expect(read("Projeto X/Planejamento.md")).toBe("# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-11-27 10:00\n- Café com a equipe @ 2026-11-28 09:00 #reuniao\n");
+  });
+
+  test("numa nota com agenda:, troca o corpo e deixa o frontmatter; junto de outro campo é recusado", async () => {
+    const pauta = '---\nagenda: "2026-11-27 09:00-09:30"\n---\n\n# Pauta\n\nTrazer os números.\n';
+    const { cal, read } = await open({ "Projeto X/Pauta.md": pauta });
+    const f = (await cal.items({ from: "2026-11-27", to: "2026-11-28" })).items.find((i) => i.id.startsWith("f:"))!;
+    const src = (await cal.source(f.id))!;
+    expect(itemTextOf(src.text, src.line)).toBe("# Pauta\n\nTrazer os números.");
+    await cal.update({ id: f.id, text: "# Pauta\n\nTrazer os números e a lista da Ana." });
+    expect(read("Projeto X/Pauta.md")).toBe('---\nagenda: "2026-11-27 09:00-09:30"\n---\n\n# Pauta\n\nTrazer os números e a lista da Ana.\n');
+    expect(await code(cal.update({ id: f.id, text: "x", title: "y" }))).toBe("E_BAD_ARGS");
+    expect(await code(cal.update({ id: f.id, text: "x".repeat(20_001) }))).toBe("E_BAD_ARGS");
   });
 });

@@ -74,6 +74,8 @@ export const CALENDAR_LIMITS = {
   rangeDays: 62,
   undated: 50,
   title: 300,
+  /** O texto de um item no painel (T34745). */
+  text: 20_000,
   /** A duração mais longa de um item com hora: o `calendar.create` e o `calendar.update` recusam mais, e o esticar
    *  da tela para nela (#480). */
   spanHours: 24,
@@ -120,6 +122,11 @@ export interface CalendarUpdate {
    * leva a vez para o `start` novo. A série e a hora dela não mudam. É o Sim da sugestão "atrasada".
    */
   only?: boolean;
+  /**
+   * O texto do item (T34745), sozinho: numa linha, as linhas embaixo dela (com recuo; as em branco saem, porque uma
+   * linha em branco acaba o bloco); numa nota com `agenda:`, o corpo inteiro. O frontmatter e a linha do item ficam.
+   */
+  text?: string;
 }
 
 /**
@@ -142,6 +149,43 @@ export interface CalendarUndo {
   removed: string[];
   added: string[];
   prev: string | null;
+}
+
+/** O recuo de uma linha, com o tab valendo 4. */
+const indentOf = (s: string) => /^[ \t]*/.exec(s)![0].replace(/\t/g, "    ").length;
+
+/** O fim (exclusivo) do bloco de um item: a linha dele e as de baixo com recuo maior, o texto que ele leva (T34745). */
+export function blockEndOf(lines: readonly string[], line: number): number {
+  const own = indentOf(lines[line] ?? "");
+  let end = line + 1;
+  while (end < lines.length && lines[end]!.trim() && indentOf(lines[end]!) > own) end++;
+  return end;
+}
+
+/** A primeira linha do corpo, depois do frontmatter; 0 sem ele. */
+export function bodyStartOf(lines: readonly string[]): number {
+  if (lines[0]?.replace(/\r$/, "") !== "---") return 0;
+  const k = lines.findIndex((l, i) => i > 0 && l.replace(/\r$/, "") === "---");
+  return k < 0 ? 0 : k + 1;
+}
+
+/**
+ * O texto de um item (T34745), o que o painel mostra para editar: numa linha, as linhas embaixo dela com recuo maior,
+ * sem o recuo em comum; numa nota com `agenda:` (`line` null), o corpo, sem o frontmatter e as linhas em branco do
+ * começo e do fim.
+ */
+export function itemTextOf(text: string, line: number | null): string {
+  const lines = text.split("\n").map((l) => l.replace(/\r$/, ""));
+  if (line === null) {
+    const body = lines.slice(bodyStartOf(lines));
+    while (body.length && !body[0]!.trim()) body.shift();
+    while (body.length && !body[body.length - 1]!.trim()) body.pop();
+    return body.join("\n");
+  }
+  const kids = lines.slice(line + 1, blockEndOf(lines, line));
+  if (!kids.length) return "";
+  const cut = Math.min(...kids.map((l) => /^[ \t]*/.exec(l)![0].length));
+  return kids.map((l) => l.slice(cut)).join("\n");
 }
 
 // ---------------------------------------------------------------- datas

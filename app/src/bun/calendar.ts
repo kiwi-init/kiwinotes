@@ -13,6 +13,8 @@ import { createHash } from "node:crypto";
 
 import {
   addDays,
+  blockEndOf,
+  bodyStartOf,
   CALENDAR_LIMITS,
   type CalendarCreate,
   type CalendarDelete,
@@ -267,6 +269,7 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
     checkUpdate(u);
     const src = await sources();
     if (u.id.startsWith("m:")) throw new CalendarError("E_READONLY", "a recorded meeting can't change");
+    if (u.text !== undefined) return setText(src, u);
     if (u.project !== undefined) {
       if (u.id.startsWith("f:")) throw new CalendarError("E_BAD_ARGS", "calendar.update: a note with agenda changes folder in Notes");
       return moveToProject(src, u);
@@ -440,13 +443,47 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
     return null;
   }
 
-  /** O fim (exclusivo) do bloco de um item: a linha dele e as de baixo com recuo maior, o texto que ele leva. */
-  function blockEnd(raw: string[], line: number): number {
-    const indent = (s: string) => /^[ \t]*/.exec(s)![0].replace(/\t/g, "    ").length;
-    const own = indent(raw[line]!);
-    let end = line + 1;
-    while (end < raw.length && raw[end]!.trim() && indent(raw[end]!) > own) end++;
-    return end;
+  const blockEnd = blockEndOf;
+
+  /**
+   * O texto do item (T34745): numa linha, troca as linhas embaixo dela pelas do texto, com o recuo da linha mais dois
+   * espaços (as em branco saem: acabariam o bloco); numa nota com `agenda:`, troca o corpo e deixa o frontmatter.
+   */
+  async function setText(src: CalendarSources, u: CalendarUpdate): Promise<CalendarItem> {
+    const text = u.text!.replace(/\r\n?/g, "\n");
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (u.id.startsWith("f:")) {
+        const path = u.id.slice(2);
+        const note = await src.notes.get(path).catch(() => null);
+        if (!note) throw new CalendarError("E_NOT_FOUND", `no note ${path}`);
+        const lines = note.content.split("\n");
+        const head = lines.slice(0, bodyStartOf(lines));
+        const content = `${head.length ? `${head.join("\n")}\n\n` : ""}${text.replace(/\n+$/, "")}\n`;
+        const res = await src.notes.save(path, content, note.version);
+        if (!res.saved) continue;
+        const item = itemsOfNote({ ...note, ...res.meta, content }, { vault: src.notes, internal: false }).dated.find((i) => i.id === u.id);
+        if (!item) throw new CalendarError("E_CONFLICT", "the item left the calendar");
+        return item;
+      }
+      const at = await locate(src, u.id);
+      if (!at) throw new CalendarError("E_BAD_ARGS", "unknown id");
+      if (at.where.internal) throw new CalendarError("E_READONLY", "the meetings folder is read-only here");
+      const raw = at.raw[at.line]!;
+      const cr = raw.endsWith("\r") ? "\r" : "";
+      const pad = `${/^[ \t]*/.exec(raw)![0]}  `;
+      const kids = text.split("\n").filter((l) => l.trim()).map((l) => `${pad}${l.trimEnd()}${cr}`);
+      const lines = [...at.raw];
+      lines.splice(at.line + 1, blockEnd(at.raw, at.line) - at.line - 1, ...kids);
+      const content = lines.join("\n");
+      const res = await src.notes.save(at.note.path, content, at.note.version);
+      if (!res.saved) continue;
+      const fresh = itemsOfNote({ ...at.note, ...res.meta, content }, at.where);
+      const series = u.id.replace(/~\d{4}-\d{2}-\d{2}$/, "");
+      const item = [...fresh.dated, ...fresh.undated].find((i) => i.id === series || i.source?.line === at.line);
+      if (!item) throw new CalendarError("E_CONFLICT", "the item left the calendar");
+      return item;
+    }
+    throw new CalendarError("E_CONFLICT", "the note changed while saving; read again");
   }
 
   /** O projeto de um item de linha (T34745): o bloco sai da nota dele e vai para o fim da nota do outro projeto. */
@@ -753,6 +790,10 @@ function checkUpdate(u: CalendarUpdate): void {
   if (u.notify !== undefined && !isCalendarNotify(u.notify)) throw new CalendarError("E_BAD_ARGS", "calendar.update: unknown notify");
   if (u.kind !== undefined && (!isCalendarKind(u.kind) || u.kind === "note")) throw new CalendarError("E_BAD_ARGS", "calendar.update: kind is meeting, reminder, task or focus");
   if (u.repeat !== undefined && u.repeat !== null && !isCalendarRepeat(u.repeat)) throw new CalendarError("E_BAD_ARGS", "calendar.update: repeat is daily, weekly or null");
+  if (u.text !== undefined) {
+    if (typeof u.text !== "string" || u.text.length > CALENDAR_LIMITS.text) throw new CalendarError("E_BAD_ARGS", `calendar.update: text is a string up to ${CALENDAR_LIMITS.text} characters`);
+    if (Object.keys(u).some((k) => k !== "id" && k !== "text")) throw new CalendarError("E_BAD_ARGS", "calendar.update: text goes alone");
+  }
   if (u.project !== undefined) {
     if (u.project !== null && (typeof u.project !== "string" || !u.project || u.project.includes("/")))
       throw new CalendarError("E_BAD_ARGS", "calendar.update: project is a top-level folder name or null");
