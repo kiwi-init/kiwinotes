@@ -7,7 +7,7 @@ import "./kiwi-panel.css";
 
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { type CalendarItem, type CalendarItems, type CalendarUpdate } from "../../src/shared/calendar.ts";
+import { type CalendarItem, type CalendarItems, type CalendarUpdate, notifyText } from "../../src/shared/calendar.ts";
 import { suggestion } from "../../src/shared/calendar-kiwi.ts";
 import { useT } from "../src/i18n.ts";
 import { type CalendarFilter, NO_FILTER, passes } from "./filter.ts";
@@ -56,7 +56,7 @@ export function KiwiPanel({
   now: number;
   face: string | null;
   /** O mesmo `save` da tela: grava pelo main, e o conflito vira o aviso de cima. */
-  save(u: CalendarUpdate): Promise<void>;
+  save(u: CalendarUpdate): Promise<boolean | void>;
   storage?: Pick<Storage, "getItem" | "setItem"> | null;
   /** Os itens já lidos (os testes desenhados e o print); sem eles, o painel lê sozinho. */
   initial?: CalendarItems | null;
@@ -157,7 +157,7 @@ export function KiwiPanel({
   }, [target]);
 
   const notifyLine = (i: CalendarItem) =>
-    i.readOnly || i.notify === "none" ? (i.project ?? "") : t("calendarKiwi.panel.notify", { when: t(`calendar.notify.${i.notify}`) });
+    i.readOnly || i.notify === "none" ? (i.project ?? "") : t("calendarKiwi.panel.notify", { when: t(notifyText(i.notify).key, notifyText(i.notify).params) });
 
   return (
     <div className="kn-cal-kiwi" aria-label={t("calendarKiwi.panel.aria")} data-dragging={ghost ? "" : undefined}>

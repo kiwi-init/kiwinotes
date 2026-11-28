@@ -131,7 +131,7 @@ Fontes das referências:
 | 11.1 | Mudar a data, o início, o fim e o "dia todo" por campos, no cartão (ponto 3) | nas três | só arrastando | falta B (T34745) |
 | 11.2 | Mudar o título, o tipo, o projeto, o aviso, a repetição e o texto, no cartão (ponto 4) | nas três | só o aviso, o Feito e o "adiar 1 dia" | falta B (T34745) |
 | 11.3 | Apagar pelo cartão, com Desfazer | nas três | não há | falta B (T34745) |
-| 11.4 | Aviso com qualquer antecedência | nas três | só "na hora", "10 min", "30 min" e "na véspera" | falta C (T34753) |
+| 11.4 | Aviso com qualquer antecedência | nas três | o `🔔` aceita minutos, horas e dias até 30 dias (`🔔 50m`, `🔔 2h`, `🔔 3d`), na nota, nos avisos, no cartão e na ferramenta do Kiwi (`bun/calendar.test.ts`, "a linha lê e escreve 🔔 50m…" e "criar e mudar com o aviso livre"; `calendar-ui-check`, o passo do aviso livre no cartão, pt e en) | cumpre |
 | 11.5 | A repetição mensal, anual, nos dias úteis ou a que a pessoa montar | nas três | só a diária e a semanal | falta: T34775 |
 | 11.6 | Duplicar um item | Google (Duplicar) e Mac (copiar e colar) | não há | falta: T34767 |
 | 11.7 | O "+ Novo" já pede o aviso e a repetição | nas três | só o título, o tipo, o projeto, o dia, o início e o fim (snug-puma, #34801) | falta: T34748 o aviso e T34775 a repetição (lead #34834) |
@@ -141,9 +141,9 @@ Fontes das referências:
 
 | # | Comportamento | Nas referências | No Kiwi hoje | Estado |
 |---|---|---|---|---|
-| 12.1 | "Me lembra às 10h e me avisa 50 min antes" vira um lembrete às 10:00 com o aviso 50 min antes (ponto 2) | n/a (só o Kiwi tem) | pode virar um item das 9:10 às 10:00, ou dois itens | falta C (T34753) |
-| 12.2 | O mesmo pedido repetido não duplica o item | n/a | duplica | falta C (T34753) |
-| 12.3 | O Kiwi apaga e muda os itens, e a pessoa desfaz pela Atividade (ponto 6) | n/a | só há o `calendar_create` e o `calendar_update`, sem apagar | falta C (T34753) |
+| 12.1 | "Me lembra às 10h e me avisa 50 min antes" vira um lembrete às 10:00 com o aviso 50 min antes (ponto 2) | n/a (só o Kiwi tem) | um item só, às 10:00, com o aviso de 50 min; o Kiwi lê a hora, a duração, o intervalo e o aviso do pedido e manda a linha com o cartão (`calendar-pedido.test.ts`; `calendar-tools.test.ts`, "o aviso de 50 min"; `service.test.ts`, "frases variadas de hora e aviso", com o agente falso) | cumpre |
+| 12.2 | O mesmo pedido repetido não duplica o item | n/a | o mesmo título na mesma hora é o mesmo item; com outro aviso, muda o aviso dele (`calendar-tools.test.ts`, "o mesmo pedido de novo não cria outro item"; `service.test.ts`, "o mesmo pedido duas vezes não duplica") | cumpre |
+| 12.3 | O Kiwi apaga e muda os itens, e a pessoa desfaz pela Atividade (ponto 6) | n/a | o `calendar_delete` apaga os itens do Kiwi e os da pessoa, e o Desfazer da Atividade traz a linha de volta; a reunião gravada não se apaga (`calendar-tools.test.ts`, "apaga a linha pelo id"; `bun/calendar.test.ts`, "a linha sai e o resto da nota fica"; `service.test.ts`, "apagar tira a linha, e o Desfazer da Atividade a traz de volta") | cumpre |
 | 12.4 | A barra de cima aceita texto, tem a animação dela e mostra a resposta (ponto 7) | n/a | é só um botão que abre o Kiwi da tela | falta C (T34755) |
 
 ## 13. Animações e desempenho

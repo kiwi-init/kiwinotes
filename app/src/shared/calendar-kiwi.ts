@@ -9,7 +9,7 @@
 // 3. **Reunião amanhã cedo:** uma reunião de amanhã antes das 10h com aviso menor que 30 min. Oferece 30 min antes.
 // O "Agora não" guarda a chave da sugestão (a tela guarda), e a mesma não volta.
 
-import type { CalendarKind, CalendarNotify } from "./calendar.ts";
+import { type CalendarKind, type CalendarNotify, notifyMinutes } from "./calendar.ts";
 import { type Locale, translate } from "./i18n/index.ts";
 
 export type CalendarKiwiKind = CalendarKind;
@@ -179,7 +179,7 @@ export function suggestion(items: readonly SuggestItem[], now: number, locale: L
   const early = byStart.find((i) => {
     if (i.kind !== "meeting" || i.allDay || !open(i) || !free("meetingTomorrow", i)) return false;
     const s = startMs(i.start);
-    return daysBetween(now, s) === 1 && new Date(s).getHours() < EARLY_MEETING_HOUR && (i.notify === "none" || i.notify === "atTime" || i.notify === "10m");
+    return daysBetween(now, s) === 1 && new Date(s).getHours() < EARLY_MEETING_HOUR && (notifyMinutes(i.notify) ?? -1) < 30;
   });
   if (early) {
     return {

@@ -1,13 +1,16 @@
-// As ferramentas do agente no Calendário (spec #32129, T32156): `calendar_list`, `calendar_create` e `calendar_update`,
-// pelo mesmo caminho da tela (o `calendarService` da T32154, pelas capacidades `calendar.*`). O agente lê e muda os
+// As ferramentas do agente no Calendário (spec #32129, T32156): `calendar_list`, `calendar_create`, `calendar_update` e
+// `calendar_delete` (spec #34706, T34753), pelo mesmo caminho da tela (o `calendarService` da T32154, pelas capacidades `calendar.*`). O agente lê e muda os
 // itens como a pessoa: uma linha numa nota (`- [ ] Revisar @ 2026-11-27 10:00 🔔 30m`) ou o `agenda:` de uma nota.
 //
 // - **Como as outras escritas:** antes de mudar a nota, o texto de antes vai ao registro do agente (`journal.keep`), e a
 //   escrita volta como `change`: a Atividade mostra, e o [Desfazer] devolve a nota. Uma escrita que falha solta a cópia.
 // - **O guardrail:** o título que sai para o agente passa pelo filtro, e o que ele manda volta sem marcador de outra nota.
 // - **O id:** o agente recebe o `id` do item e o manda de volta no `calendar_update`. Um `E_CONFLICT` diz "leia de novo".
+// - **Um pedido = um item** (T34753): o `calendar_create` de um item que já está lá (o mesmo tipo, título e começo, em
+//   aberto) não cria outro; muda só o aviso, o fim ou a repetição que vieram diferentes, ou nada.
+// - **O aviso livre** (T34753): `notify` é qualquer antecedência (`50m`, `2h`, `3d`, até 30 dias), além dos de antes.
 
-import { type CalendarCreate, type CalendarItem, type CalendarItems, type CalendarUpdate, CALENDAR_KINDS, CALENDAR_NOTIFY, CALENDAR_REPEATS, CALENDAR_LIMITS } from "../../shared/calendar.ts";
+import { type CalendarCreate, type CalendarDeleted, type CalendarItem, type CalendarItems, type CalendarUpdate, CALENDAR_KINDS, CALENDAR_REPEATS, CALENDAR_LIMITS, isDay, normalNotify } from "../../shared/calendar.ts";
 import { PROJECT_NOTE, ROOT_NOTE } from "../../bun/calendar.ts";
 import type { DoubtDecider, SecretGuard } from "../../guardrail/filter.ts";
 import type { VaultWriter } from "./writer.ts";
@@ -17,18 +20,20 @@ export interface CalendarSink {
   items(a: { from: string; to: string }): Promise<CalendarItems>;
   create(c: CalendarCreate): Promise<CalendarItem>;
   update(u: CalendarUpdate): Promise<CalendarItem>;
+  delete(a: { id: string }): Promise<CalendarDeleted>;
 }
 
-/** O Calendário pelas capacidades da tela (`calendar.items`, `calendar.create`, `calendar.update`). */
-export function calendarFromCapabilities(caps: Record<"calendar.items" | "calendar.create" | "calendar.update", (args: unknown) => unknown>): CalendarSink {
+/** O Calendário pelas capacidades da tela (`calendar.items`, `calendar.create`, `calendar.update`, `calendar.delete`). */
+export function calendarFromCapabilities(caps: Record<"calendar.items" | "calendar.create" | "calendar.update" | "calendar.delete", (args: unknown) => unknown>): CalendarSink {
   return {
     items: async (a) => (await caps["calendar.items"](a)) as CalendarItems,
     create: async (c) => (await caps["calendar.create"](c)) as CalendarItem,
     update: async (u) => (await caps["calendar.update"](u)) as CalendarItem,
+    delete: async (a) => (await caps["calendar.delete"](a)) as CalendarDeleted,
   };
 }
 
-export const KIWI_CALENDAR_TOOL_NAMES = ["calendar_list", "calendar_create", "calendar_update"] as const;
+export const KIWI_CALENDAR_TOOL_NAMES = ["calendar_list", "calendar_create", "calendar_update", "calendar_delete"] as const;
 export type CalendarToolName = (typeof KIWI_CALENDAR_TOOL_NAMES)[number];
 
 /** O período padrão do `calendar_list`, em dias, a partir de hoje. */
@@ -38,9 +43,12 @@ export const CALENDAR_LIST_MAX = 100;
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** O aviso, nas duas que escrevem: o que o agente erra é pôr a antecedência no começo ou no fim (spec #34706). */
+const NOTIFY_PROP = { type: "string", description: "A antecedência: 50m, 2h, 3d (até 30 dias), atTime (na hora), dayBefore ou none." };
+
 const whenProp = (o: string) => ({ type: "string", description: `${o}: AAAA-MM-DDTHH:MM na hora local, ou só AAAA-MM-DD no dia todo.` });
 
-/** As definições das três, no formato do `KIWI_TOOLS`. */
+/** As definições das quatro, no formato do `KIWI_TOOLS`. */
 export const CALENDAR_TOOL_DEFS = [
   {
     name: "calendar_list" as const,
@@ -58,7 +66,7 @@ export const CALENDAR_TOOL_DEFS = [
   {
     name: "calendar_create" as const,
     title: "Pôr no calendário",
-    description: `Um item novo no calendário: uma linha no fim da nota "${PROJECT_NOTE}" do projeto (ou "${ROOT_NOTE}", sem projeto), ou uma nota com data (kind note). O aviso, sem notify, é o padrão do tipo (10 min antes da reunião, na hora do lembrete). Só quando a pessoa pedir. A pessoa desfaz pela Atividade.`,
+    description: `Um item novo no calendário: uma linha no fim da nota "${PROJECT_NOTE}" do projeto (ou "${ROOT_NOTE}", sem projeto), ou uma nota com data (kind note). start é a hora do compromisso, e o "avisa X antes" vai em notify: "às 10h, me avisa 50 min antes" é um item só, start 10:00 e notify 50m, sem end. Só quando a pessoa pedir; repetir não duplica. A pessoa desfaz pela Atividade.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -67,7 +75,7 @@ export const CALENDAR_TOOL_DEFS = [
         start: whenProp("O começo"),
         end: whenProp("O fim, no mesmo dia (opcional)"),
         project: { type: "string", description: "A pasta do projeto, como o projects_list devolve. Sem ele, na raiz." },
-        notify: { type: "string", enum: [...CALENDAR_NOTIFY], description: "none, atTime, 10m, 30m ou dayBefore (na véspera)." },
+        notify: NOTIFY_PROP,
         repeat: { type: "string", enum: [...CALENDAR_REPEATS] },
       },
       required: ["title", "kind", "start"],
@@ -89,9 +97,21 @@ export const CALENDAR_TOOL_DEFS = [
         end: { type: ["string", "null"], description: "O fim novo, ou null para tirar." },
         allDay: { type: "boolean" },
         done: { type: "boolean" },
-        notify: { type: "string", enum: [...CALENDAR_NOTIFY] },
+        notify: NOTIFY_PROP,
         repeat: { type: ["string", "null"], enum: [...CALENDAR_REPEATS, null] },
       },
+      required: ["id"],
+      additionalProperties: false,
+    },
+    writes: true as const,
+  },
+  {
+    name: "calendar_delete" as const,
+    title: "Tirar do calendário",
+    description: "Apaga um item pelo id do calendar_list, da pessoa ou do Kiwi: a linha sai da nota (numa repetição, a série); a nota com data fica, sem a data. Só quando a pessoa pedir. A reunião gravada não sai. A pessoa desfaz pela Atividade.",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string", description: "O id do item, como o calendar_list devolve." } },
       required: ["id"],
       additionalProperties: false,
     },
@@ -186,11 +206,19 @@ export interface CalendarToolResult {
   change?: CalendarChange;
 }
 
-/** Roda uma das três. */
+/** Roda uma das quatro. */
 export async function calendarTool(d: CalendarToolDeps, name: CalendarToolName, raw: unknown): Promise<CalendarToolResult> {
   if (name === "calendar_list") return list(d, raw);
   if (!d.writer || !d.journal) throw new CalendarToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta \`${name}\``);
-  return name === "calendar_create" ? create(d, raw) : update(d, raw);
+  return name === "calendar_create" ? create(d, raw) : name === "calendar_update" ? update(d, raw) : remove(d, raw);
+}
+
+/** O aviso como o agente mandou (`50 min`, `2h`, `120`), na forma curta; o erro diz o que vale. */
+function notifyArg(v: unknown): unknown {
+  if (v === undefined) return undefined;
+  const n = normalNotify(v);
+  if (n === null) throw bad(`notify: ${NOTIFY_PROP.description}`);
+  return n;
 }
 
 async function list(d: CalendarToolDeps, raw: unknown): Promise<CalendarToolResult> {
@@ -226,19 +254,19 @@ async function projectOf(d: CalendarToolDeps, wanted: string): Promise<string> {
 }
 
 /** Escreve guardando antes a cópia da nota (se ela existe): a Atividade e o [Desfazer] funcionam como nas notas. */
-async function journaled(d: CalendarToolDeps, path: string | null, run: () => Promise<CalendarItem>): Promise<{ item: CalendarItem; change: CalendarChange }> {
+async function journaled<T extends CalendarItem | CalendarDeleted>(d: CalendarToolDeps, path: string | null, run: () => Promise<T>): Promise<{ item: T; change: CalendarChange }> {
   const writer = d.writer!;
   const journal = d.journal!;
   const before = path ? await writer.get(path).catch(() => null) : null;
   const copy = before ? await journal.keep(before.path, before.content) : undefined;
-  let item: CalendarItem;
+  let item: T;
   try {
     item = await run();
   } catch (e) {
     if (copy) await journal.drop(copy).catch(() => {});
     throw e;
   }
-  const at = item.source?.path ?? path;
+  const at = ("source" in item ? item.source?.path : item.path) ?? path;
   if (!at) throw new CalendarToolError("E_FAILED", "o item não tem nota");
   const after = await writer.get(at);
   const folder = await writer.folder().catch(() => null);
@@ -261,14 +289,40 @@ async function create(d: CalendarToolDeps, raw: unknown): Promise<CalendarToolRe
   if (typeof a.title !== "string" || !a.title.trim()) throw bad("title é obrigatório");
   if (typeof a.kind !== "string") throw bad(`kind é um de: ${CALENDAR_KINDS.join(", ")}`);
   if (typeof a.start !== "string") throw bad("start é obrigatório: AAAA-MM-DDTHH:MM, ou AAAA-MM-DD no dia todo");
+  const notify = notifyArg(a.notify);
   const project = typeof a.project === "string" && a.project.trim() ? await projectOf(d, a.project.trim()) : null;
   // Um item novo não tem segredo dele: um marcador aqui é de outra nota, e o filtro recusa.
   const title = restored(d, "\u0000nova", a.title.trim());
-  const c = { ...a, title, project } as unknown as CalendarCreate;
+  const c = { ...a, title, project, ...(notify !== undefined ? { notify } : {}) } as unknown as CalendarCreate;
+  // Um pedido = um item (T34753): o mesmo item, em aberto, não se cria de novo.
+  const twin = await twinOf(d, c);
+  if (twin) return again(d, twin, c);
   // A nota que muda: a nova (kind note) não existe antes; a linha vai na "Pendências" do projeto, ou na da raiz.
   const path = c.kind === "note" ? null : `${project ? `${project}/` : ""}${project ? PROJECT_NOTE : ROOT_NOTE}.md`;
   const { item, change } = await journaled(d, path, () => d.calendar.create(c));
   return { value: { item: await shown(item, d), mudou: change.kind === "created" ? `criou ${change.path}` : `acrescentou uma linha em ${change.path}` }, target: change.path, change };
+}
+
+/** O item que já está no calendário com o mesmo tipo, título, começo e projeto, em aberto; `null` se não há. */
+async function twinOf(d: CalendarToolDeps, c: CalendarCreate): Promise<CalendarItem | null> {
+  const day = c.start.slice(0, 10);
+  if (!DATE.test(day)) return null;
+  const { items } = await d.calendar.items({ from: day, to: plusDays(day, 1) }).catch(() => ({ items: [] as CalendarItem[] }));
+  const start: string = isDay(c.start) ? c.start : String(c.start).slice(0, 16);
+  const title = fold(c.title);
+  return items.find((i) => !i.readOnly && !i.done && i.kind === c.kind && i.start === start && fold(i.title) === title && (i.project ?? null) === (c.project ?? null)) ?? null;
+}
+
+/** O pedido repetido: muda só o aviso, o fim ou a repetição que vieram diferentes; senão, nada muda. */
+async function again(d: CalendarToolDeps, twin: CalendarItem, c: CalendarCreate): Promise<CalendarToolResult> {
+  const u: Record<string, unknown> = {};
+  if (c.notify !== undefined && c.notify !== twin.notify) u.notify = c.notify;
+  if (c.end !== undefined && (c.end ?? null) !== twin.end && twin.kind !== "note") u.end = c.end;
+  if (c.repeat !== undefined && (c.repeat ?? undefined) !== twin.repeat && twin.kind !== "note") u.repeat = c.repeat;
+  const path = pathOfId(twin.id);
+  if (!Object.keys(u).length || !path) return { value: { item: await shown(twin, d), mudou: "nada: o item já estava no calendário" }, target: twin.source?.path ?? twin.id };
+  const { item, change } = await journaled(d, path, () => d.calendar.update({ id: twin.id, ...u } as unknown as CalendarUpdate));
+  return { value: { item: await shown(item, d), mudou: `o item já estava no calendário; mudou ${Object.keys(u).join(", ")} em ${change.path}` }, target: change.path, change };
 }
 
 async function update(d: CalendarToolDeps, raw: unknown): Promise<CalendarToolResult> {
@@ -276,7 +330,18 @@ async function update(d: CalendarToolDeps, raw: unknown): Promise<CalendarToolRe
   if (typeof a.id !== "string" || !a.id) throw bad("id é obrigatório: o id do item, como o calendar_list devolve");
   const path = pathOfId(a.id);
   if (!path) throw new CalendarToolError(a.id.startsWith("m:") ? "E_READONLY" : "E_BAD_ARGS", a.id.startsWith("m:") ? "a reunião gravada não muda" : "id desconhecido: leia de novo com calendar_list");
-  const u = { ...a, ...(typeof a.title === "string" ? { title: restored(d, path, a.title.trim()) } : {}) } as unknown as CalendarUpdate;
+  const notify = notifyArg(a.notify);
+  const u = { ...a, ...(typeof a.title === "string" ? { title: restored(d, path, a.title.trim()) } : {}), ...(notify !== undefined ? { notify } : {}) } as unknown as CalendarUpdate;
   const { item, change } = await journaled(d, path, () => d.calendar.update(u));
   return { value: { item: await shown(item, d), mudou: `mudou o item em ${change.path}` }, target: change.path, change };
+}
+
+async function remove(d: CalendarToolDeps, raw: unknown): Promise<CalendarToolResult> {
+  const a = obj(raw, ["id"]);
+  if (typeof a.id !== "string" || !a.id) throw bad("id é obrigatório: o id do item, como o calendar_list devolve");
+  const path = pathOfId(a.id);
+  if (!path) throw new CalendarToolError(a.id.startsWith("m:") ? "E_READONLY" : "E_BAD_ARGS", a.id.startsWith("m:") ? "a reunião gravada não sai do calendário" : "id desconhecido: leia de novo com calendar_list");
+  const id = a.id;
+  const { change } = await journaled(d, path, () => d.calendar.delete({ id }));
+  return { value: { apagou: id, mudou: `tirou o item de ${change.path}` }, target: change.path, change };
 }
