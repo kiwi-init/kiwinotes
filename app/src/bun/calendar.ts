@@ -334,7 +334,7 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
       // Só um dos dois: o outro vem da nota, e o par passa pela mesma régua do checkTimes.
       if ((u.start !== undefined || u.end !== undefined) && !allDay && typeof end === "string" && !isDay(start)) {
         if (toMs(end) <= toMs(start)) throw new CalendarError("E_BAD_ARGS", "calendar.update: end must be after start");
-        if (toMs(end) - toMs(start) > 24 * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
+        if (toMs(end) - toMs(start) > CALENDAR_LIMITS.spanHours * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
       }
       let content = setFrontmatter(note.content, "agenda", agendaValue(start, end, allDay));
       if (u.notify !== undefined) content = setFrontmatter(content, "aviso", u.notify === DEFAULT_NOTIFY.note ? null : NOTE_NOTIFY_OF[u.notify]);
