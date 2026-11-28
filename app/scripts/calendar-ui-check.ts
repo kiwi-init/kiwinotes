@@ -217,6 +217,92 @@ try {
         checks.push(`${lang}: o + Novo diz "${note}" com o tipo Nota, e Calendário.md na pendência (#492)`);
       }
 
+      // 5. Criar no vazio e esticar a borda de cima (spec #34706, ponto 5, T34748), no Dia de hoje: o clique às 9:35 abre o
+      // rascunho das 9:30 às 10:00 com o formulário ao lado, e o Enter cria; arrastar das 7:05 às 8:20 marca 7:00–8:30, e o
+      // Esc desiste sem gravar; o vazio de um dia do Mês abre o + Novo nele; a borda de cima puxa o começo 1 h para cima.
+      {
+        const title = lang === "pt" ? "Café com a Ana" : "Coffee with Ana";
+        const cal = async () => ((await invoke("notes.get", { path: "Calendário.md" }).catch(() => ({ content: "" }))).content as string);
+        const calHas = async (re: RegExp, what: string) => {
+          for (let n = 0; !re.test(await cal()); n++) { assert.ok(n < 50, `${lang}: ${what}: ${await cal()}`); await Bun.sleep(100); }
+        };
+        const form = `${pane} .kn-cal-newform`;
+        const before = (await p.locator(`${pane} .kn-cal`).getAttribute("data-view")) as (typeof VIEWS)[number];
+        await view(p, "day");
+        await p.locator(`${pane} .kn-cal-scroll`).evaluate((el) => { el.scrollTop = 6 * 48; });
+        const col = p.locator(`${pane} .kn-cal-col[data-day="${day(0)}"]`);
+        const yAt = async (h: number) => { const b = await col.boundingBox(); assert.ok(b); return { x: b.x + b.width / 2, y: b.y + h * 48 }; };
+
+        // 5a. O clique.
+        const c = await yAt(9 + 35 / 60);
+        await p.mouse.click(c.x, c.y);
+        await p.waitForSelector(form);
+        assert.deepEqual(
+          [await p.inputValue(`${form} input[name="day"]`), await p.inputValue(`${form} input[name="time"]`), await p.inputValue(`${form} input[name="end"]`)],
+          [day(0), "09:30", "10:00"],
+          `${lang}: o clique às 9:35 abre 9:30–10:00`,
+        );
+        const draft = p.locator(`${pane} .kn-cal-draft`);
+        assert.equal((await draft.innerText()).replace(/\s+/g, " ").trim(), `${lang === "pt" ? "(sem título)" : "(no title)"} 09:30–10:00`);
+        const [db, fb] = [await draft.boundingBox(), await p.locator(form).boundingBox()];
+        assert.ok(db && fb && (fb.x >= db.x + db.width || fb.x + fb.width <= db.x), `${lang}: o formulário abre ao lado do rascunho, sem cobri-lo`);
+        assert.ok(Math.abs(fb.y - db.y) < 2 || fb.y + fb.height <= 800, `${lang}: o formulário fica na altura do rascunho ou dentro da janela`);
+        assert.equal(await p.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name), "title", "o foco já está no título");
+        await p.keyboard.type(title);
+        await p.screenshot({ path: join(shots, "criar-clicando.png") });
+        await p.keyboard.press("Enter");
+        await p.waitForSelector(form, { state: "detached" });
+        await calHas(new RegExp(`${title} @ ${day(0)} 09:30-10:00`), "o Enter cria 9:30–10:00");
+        await p.waitForSelector(item(title));
+        assert.equal(await draft.count(), 0, "o rascunho sai junto com o formulário");
+        checks.push(`${lang}: o clique às 9:35 no vazio abre o rascunho 09:30–10:00 com o formulário ao lado, e o Enter cria "${title}" no Calendário.md`);
+
+        // 5b. O arrastar, e o Esc.
+        const a0 = await yAt(7 + 5 / 60);
+        await p.mouse.move(a0.x, a0.y);
+        await p.mouse.down();
+        await p.mouse.move(a0.x, a0.y + (75 / 60) * 48, { steps: 8 });
+        assert.equal((await draft.innerText()).replace(/\s+/g, " ").trim().slice(-11), "07:00–08:30", `${lang}: o rascunho acompanha o arrastar`);
+        await p.mouse.up();
+        await p.waitForSelector(form);
+        assert.deepEqual([await p.inputValue(`${form} input[name="time"]`), await p.inputValue(`${form} input[name="end"]`)], ["07:00", "08:30"], `${lang}: arrastar das 7:05 às 8:20 marca 7:00–8:30`);
+        await p.screenshot({ path: join(shots, "criar-arrastando.png") });
+        const was = await cal();
+        await p.keyboard.press("Escape");
+        await p.waitForSelector(form, { state: "detached" });
+        assert.equal(await draft.count(), 0, "o Esc tira o rascunho");
+        await Bun.sleep(300);
+        assert.equal(await cal(), was, "o Esc não grava nada");
+        checks.push(`${lang}: arrastar das 7:05 às 8:20 no vazio marca 07:00–08:30, e o Esc desiste sem gravar`);
+
+        // 5c. A borda de cima: 1 h para cima, o fim fica.
+        await p.locator(item(title)).first().hover();
+        const tb = await p.locator(`${item(title)} .kn-cal-resize-top`).first().boundingBox();
+        assert.ok(tb);
+        await p.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2);
+        await p.mouse.down();
+        await p.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2 - 48, { steps: 8 });
+        await p.mouse.up();
+        await calHas(new RegExp(`${title} @ ${day(0)} 08:30-10:00`), "a borda de cima puxa o começo para 8:30");
+        await p.screenshot({ path: join(shots, "esticar-comeco.png") });
+        checks.push(`${lang}: a borda de cima de "${title}" puxa o começo para 08:30 e deixa o fim às 10:00`);
+
+        // 5d. O vazio de um dia do Mês: o + Novo abre naquele dia, sem hora, com o dia marcado.
+        await view(p, "month");
+        const cell = p.locator(`${pane} .kn-cal-cell[data-day="${day(3)}"]`);
+        const cb = await cell.boundingBox();
+        assert.ok(cb);
+        await p.mouse.click(cb.x + cb.width - 6, cb.y + cb.height - 6);
+        await p.waitForSelector(form);
+        assert.deepEqual([await p.inputValue(`${form} input[name="day"]`), await p.inputValue(`${form} input[name="time"]`)], [day(3), ""], `${lang}: o vazio do Mês abre o + Novo no dia`);
+        assert.equal(await cell.getAttribute("data-drafting"), "", "o dia fica marcado");
+        await p.screenshot({ path: join(shots, "criar-no-mes.png") });
+        await p.keyboard.press("Escape");
+        await p.waitForSelector(form, { state: "detached" });
+        await view(p, before);
+        checks.push(`${lang}: o clique no vazio do dia ${day(3)} no Mês abre o + Novo nele, e o Esc fecha`);
+      }
+
       if (lang === "en") {
         // O item que o pt esticou até 24 h (4c), em inglês: o bloco e o cartão com o (+1 day) (T34131).
         await plusOneDay(p, "11:00–11:00 (+1 day)");

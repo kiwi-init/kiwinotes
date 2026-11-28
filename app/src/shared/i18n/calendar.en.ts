@@ -85,5 +85,7 @@ export const enCalendar: { readonly [K in keyof typeof ptCalendar]: Entry } = {
   "calendar.new.titleProblem": "The title can’t have “{piece}”: in the note, it sets the item’s kind, alert, repetition or date.",
   "calendar.new.whereNote": "Becomes the note {path}.",
   "calendar.new.whereNoteBlank": "Becomes a new note, named after the title.",
-  "calendar.resize": "Stretch",
+  "calendar.resize": "Stretch the end",
+  "calendar.resizeTop": "Stretch the start",
+  "calendar.draft": "(no title)",
 };

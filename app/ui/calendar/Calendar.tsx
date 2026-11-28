@@ -12,12 +12,12 @@ import { useT } from "../src/i18n.ts";
 import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WIDE_PX, WidePanel, type WideState } from "./Detail.tsx";
 import { type CalendarFilter, filterStorage, passes, readFilter, shownProjects, toggleAllProjects, toggleKind, toggleProject, writeFilter } from "./filter.ts";
 import { periodTitle } from "./format.ts";
-import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, newItemDay, noteLine, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { CALENDAR_VIEWS, type CalendarView, clockOf, isCalendarView, moveItem, newItemDay, noteLine, onDay, resizeItem, resizeTop, slotSpan, stepAnchor, viewRange } from "./model.ts";
 import { KiwiAskBox } from "./KiwiAsk.tsx";
 import { KiwiPanel } from "./KiwiPanel.tsx";
 import { NewItem } from "./NewItem.tsx";
 import { apiStore, type CalendarStore, todayOf } from "./source.ts";
-import { AgendaList, type DragMode, HOUR_PX, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
+import { AgendaList, type DragMode, type Draft, HOUR_PX, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
 
 type Load = { state: "loading" } | { state: "ready"; data: CalendarItems } | { state: "error" };
 
@@ -31,6 +31,30 @@ interface Drag {
   /** A prévia, em minutos e dias desde o começo do arrastar. */
   dm: number;
   dd: number;
+}
+
+/** O que o arrastar muda no item: mover, esticar o fim ou esticar o começo. */
+const dragPatch = (item: CalendarItem, d: Pick<Drag, "mode" | "dm" | "dd">) =>
+  d.mode === "move" ? moveItem(item, d.dm, d.dd) : d.mode === "resize-top" ? resizeTop(item, d.dm) : resizeItem(item, d.dm);
+
+/** O "+ Novo" aberto: pelo botão (sem nada), pelo vazio da grade (o dia, a hora e o rascunho) ou pelo vazio do Mês. */
+interface Creating {
+  day?: string;
+  time?: string;
+  end?: string;
+  /** Onde o formulário abre, ao lado do rascunho ou do dia (na tela, relativo ao `.kn-cal`). */
+  near?: Rect;
+  draft?: Draft;
+  monthDay?: string;
+}
+
+/** O botão apertado no vazio de uma coluna, enquanto o arrastar marca o horário. */
+interface Slot {
+  day: string;
+  col: HTMLElement;
+  y: number;
+  start: number;
+  moved: boolean;
 }
 
 interface Open {
@@ -65,7 +89,13 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [notice, setNotice] = useState<string | null>(null);
   const [face, setFace] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<Creating | null>(null);
+  // Cada abertura do "+ Novo" é um formulário novo: o clique noutro horário troca o dia e a hora dele.
+  const [createSeq, setCreateSeq] = useState(0);
+  const create = (c: Creating) => {
+    setCreating(c);
+    setCreateSeq((n) => n + 1);
+  };
   // O filtro por tipo e por projeto (T32408): vale nas quatro vistas e no painel do Kiwi, e fica no aparelho.
   const [filter, setFilterState] = useState<CalendarFilter>(() => readFilter(filterStorage()));
   const setFilter = (f: CalendarFilter) => {
@@ -259,7 +289,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
       if (!d?.moved) return;
       const item = items.find((i) => i.id === d.id);
       if (!item) return;
-      const patch = d.mode === "move" ? moveItem(item, d.dm, d.dd) : resizeItem(item, d.dm);
+      const patch = dragPatch(item, d);
       if (patch) void save({ id: item.id, ...patch });
     };
     addEventListener("pointermove", move);
@@ -273,13 +303,58 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, view]);
 
+  // ---------------------------------------------------------------- criar no vazio (spec #34706, ponto 5)
+
+  // O clique num horário vazio abre o rascunho de meia hora ali; o arrastar marca o começo e o fim, de 15 em 15 min.
+  const slot = useRef<Slot | null>(null);
+  const [liveDraft, setLiveDraft] = useState<Draft | null>(null);
+  const slotDown = (e: ReactPointerEvent<HTMLElement>, day: string, minute: number) => {
+    if (e.button !== 0 || open) return;
+    e.preventDefault();
+    clearTimeout(hideTimer.current);
+    setHover(null);
+    slot.current = { day, col: e.currentTarget, y: e.clientY, start: minute, moved: false };
+    setLiveDraft({ day, ...slotSpan(minute, minute, false) });
+  };
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const s = slot.current;
+      if (!s) return;
+      if (!s.moved && Math.abs(e.clientY - s.y) < DRAG_START_PX) return;
+      s.moved = true;
+      const minute = ((e.clientY - s.col.getBoundingClientRect().top) / HOUR_PX) * 60;
+      setLiveDraft({ day: s.day, ...slotSpan(s.start, minute, true) });
+    };
+    const up = (e: PointerEvent) => {
+      const s = slot.current;
+      if (!s) return;
+      slot.current = null;
+      const minute = ((e.clientY - s.col.getBoundingClientRect().top) / HOUR_PX) * 60;
+      const span = slotSpan(s.start, s.moved ? minute : s.start, s.moved);
+      const draft = { day: s.day, ...span };
+      setLiveDraft(null);
+      const near = root.current ? rectIn(s.col, root.current) : undefined;
+      create({ day: s.day, time: clockOf(span.from), end: clockOf(span.to), draft, near: near && { ...near, top: near.top + (span.from / 60) * HOUR_PX, height: ((span.to - span.from) / 60) * HOUR_PX } });
+    };
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", up);
+    addEventListener("pointercancel", up);
+    return () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+      removeEventListener("pointercancel", up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const draft = liveDraft ?? creating?.draft ?? null;
+
   /** Os itens com a prévia do arrastar aplicada (o item vai junto com o ponteiro, em passos de 15 min). */
   const visible = useMemo(() => items.filter((i) => passes(filter, i)), [items, filter]);
   const shown = useMemo(() => {
     if (!dragView?.moved) return visible;
     return visible.map((i) => {
       if (i.id !== dragView.id) return i;
-      const p = dragView.mode === "move" ? moveItem(i, dragView.dm, dragView.dd) : resizeItem(i, dragView.dm);
+      const p = dragPatch(i, dragView);
       return p ? { ...i, ...p } : i;
     });
   }, [visible, dragView]);
@@ -289,6 +364,11 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     onLeave: hideCard,
     onPointerDown: startDrag,
     onOpen: (item, el) => expand(item, el),
+    onSlotDown: slotDown,
+    onEmptyDay: (day, el) => {
+      if (open || !root.current) return;
+      create({ day, near: rectIn(el, root.current), monthDay: day });
+    },
   };
   const st: ItemState = { openId: open?.item.id ?? null, dragId: dragView?.moved ? dragView.id : null, pulseId: pulse, kiwiFace: face };
 
@@ -337,7 +417,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
             </button>
           ))}
         </div>
-        <button type="button" className="kn-cal-btn kn-cal-primary kn-cal-new" onClick={() => setCreating(true)}>
+        <button type="button" className="kn-cal-btn kn-cal-primary kn-cal-new" onClick={() => create({})}>
           {t("calendar.new")}
         </button>
       </div>
@@ -382,11 +462,11 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
               </button>
             </p>
           ) : view === "month" ? (
-            <MonthGrid days={range.days} anchor={anchor} items={shown} today={today} h={handlers} s={st} onDay={goDay} />
+            <MonthGrid days={range.days} anchor={anchor} items={shown} today={today} h={handlers} s={st} onDay={goDay} draftDay={creating?.monthDay ?? null} />
           ) : view === "agenda" ? (
             <AgendaList days={range.days} items={shown} today={today} h={handlers} s={st} />
           ) : (
-            <TimeGrid days={gridDays} items={shown} today={today} now={now} h={handlers} s={st} />
+            <TimeGrid days={gridDays} items={shown} today={today} now={now} h={handlers} s={st} draft={draft} />
           )}
         </div>
         {/* O lugar do painel do Kiwi (T32156): ele estica embaixo do painel largo e contrai junto na volta. */}
@@ -421,13 +501,17 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
       ) : null}
       {creating ? (
         <NewItem
-          day={newItemDay(view, anchor, today)}
+          key={createSeq}
+          day={creating.day ?? newItemDay(view, anchor, today)}
+          time={creating.time}
+          end={creating.end}
+          near={creating.near}
           projects={load.state === "ready" ? load.data.projects : []}
-          onCancel={() => setCreating(false)}
+          onCancel={() => setCreating(null)}
           onCreate={async (c) => {
             try {
               await source.create(c);
-              setCreating(false);
+              setCreating(null);
               if (c.start.slice(0, 10) < range.from || c.start.slice(0, 10) >= range.to) setAnchor(c.start.slice(0, 10));
               reload();
             } catch {

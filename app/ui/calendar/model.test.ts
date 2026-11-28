@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { CalendarItem } from "../../src/shared/calendar.ts";
-import { MIN_SHOWN_MIN, NEAR_MIN, itemsOfDay, layoutDay, mondayOf, moveItem, newItemDay, noteLine, nowMinutes, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { clockOf, MIN_SHOWN_MIN, NEAR_MIN, itemsOfDay, layoutDay, mondayOf, moveItem, newItemDay, noteLine, nowMinutes, onDay, resizeItem, resizeTop, slotSpan, stepAnchor, viewRange } from "./model.ts";
 
 const item = (o: Partial<CalendarItem> & Pick<CalendarItem, "id" | "start">): CalendarItem => ({
   kind: "task",
@@ -154,6 +154,45 @@ describe("arrastar e esticar", () => {
     expect(resizeItem({ ...meeting, end: "2026-11-27T10:00" }, 120)).toBeNull();
     // Sem fim também para em 24 h.
     expect(resizeItem(item({ id: "s", start: "2026-11-26T09:00" }), 40 * 60)).toEqual({ end: "2026-11-27T09:00" });
+  });
+
+  test("esticar a borda de cima muda o começo e deixa o fim (spec #34706, ponto 5)", () => {
+    const m = item({ id: "m", start: "2026-11-26T10:00", end: "2026-11-26T11:00" });
+    expect(resizeTop(m, -30)).toEqual({ start: "2026-11-26T09:30", end: "2026-11-26T11:00" });
+    expect(resizeTop(m, 20)).toEqual({ start: "2026-11-26T10:15", end: "2026-11-26T11:00" });
+    // 15 min no mínimo: puxar o começo para depois do fim para a 15 min dele.
+    expect(resizeTop(m, 500)).toEqual({ start: "2026-11-26T10:45", end: "2026-11-26T11:00" });
+    expect(resizeTop(m, 5)).toBeNull();
+    // Atravessa a meia-noite para trás e para em 24 h.
+    expect(resizeTop(m, -11 * 60)).toEqual({ start: "2026-11-25T23:00", end: "2026-11-26T11:00" });
+    expect(resizeTop(m, -40 * 60)).toEqual({ start: "2026-11-25T11:00", end: "2026-11-26T11:00" });
+    // Sem fim: grava o fim da meia hora da grade, para ele não andar junto.
+    expect(resizeTop(item({ id: "s", start: "2026-11-26T09:00" }), -15)).toEqual({ start: "2026-11-26T08:45", end: "2026-11-26T09:30" });
+    expect(resizeTop(item({ id: "a", start: "2026-11-26", allDay: true }), -60)).toBeNull();
+  });
+
+  test("o clique no vazio marca meia hora a partir do quarto de hora", () => {
+    expect(slotSpan(9 * 60 + 40, 9 * 60 + 40, false)).toEqual({ from: 9 * 60 + 30, to: 10 * 60 });
+    expect(slotSpan(0, 0, false)).toEqual({ from: 0, to: 30 });
+    // No fim do dia, não passa da meia-noite.
+    expect(slotSpan(23 * 60 + 50, 23 * 60 + 50, false)).toEqual({ from: 23 * 60 + 45, to: 24 * 60 });
+    expect(slotSpan(-30, -30, false)).toEqual({ from: 0, to: 30 });
+  });
+
+  test("o arrastar no vazio vai do começo ao fim, em passos de 15 min, para baixo ou para cima", () => {
+    expect(slotSpan(9 * 60 + 5, 10 * 60 + 20, true)).toEqual({ from: 9 * 60, to: 10 * 60 + 30 });
+    expect(slotSpan(10 * 60 + 20, 9 * 60 + 5, true)).toEqual({ from: 9 * 60, to: 10 * 60 + 30 });
+    // Arrastar pouco ainda dá 15 min.
+    expect(slotSpan(9 * 60 + 1, 9 * 60 + 2, true)).toEqual({ from: 9 * 60, to: 9 * 60 + 15 });
+    // Para dentro do dia.
+    expect(slotSpan(22 * 60, 30 * 60, true)).toEqual({ from: 22 * 60, to: 24 * 60 });
+    expect(slotSpan(60, -100, true)).toEqual({ from: 0, to: 60 });
+  });
+
+  test("a hora dos campos", () => {
+    expect(clockOf(0)).toBe("00:00");
+    expect(clockOf(9 * 60 + 5)).toBe("09:05");
+    expect(clockOf(24 * 60)).toBe("23:59");
   });
 
   test("o link abre na linha 1-based da nota", () => {

@@ -195,3 +195,37 @@ export function nowMinutes(day: string, now: number): number | null {
 /** A linha 1-based da nota de onde o item veio (o `source.line` do contrato é 0-based). */
 export const noteLine = (item: Pick<CalendarItem, "source">): number | undefined =>
   item.source?.line == null ? undefined : item.source.line + 1;
+
+/**
+ * Esticar a borda de cima (spec #34706, ponto 5): o começo vai `deltaMin` minutos (em passos de 15) e o fim fica onde
+ * está, com 15 min de duração no mínimo e 24 h no máximo, como a borda de baixo.
+ */
+export function resizeTop(item: CalendarItem, deltaMin: number): { start: string; end: string } | null {
+  if (item.allDay) return null;
+  const { start, end } = spanOf(item);
+  const next = Math.max(end - CALENDAR_LIMITS.spanHours * 60 * MIN, Math.min(end - SNAP_MIN * MIN, start + snap(deltaMin) * MIN));
+  return next === start ? null : { start: dayTimeOf(next), end: dayTimeOf(end) };
+}
+
+/**
+ * O horário que o clique ou o arrastar no vazio marca (spec #34706, ponto 5), em minutos desde a meia-noite. O clique
+ * abre meia hora a partir do quarto de hora de cima; o arrastar vai do quarto de hora onde começou até o quarto de hora
+ * onde está, para cima ou para baixo, com 15 min no mínimo, sem sair do dia.
+ */
+export function slotSpan(fromMin: number, toMin: number, dragged: boolean): { from: number; to: number } {
+  const clamp = (m: number) => Math.max(0, Math.min(DAY_MIN, m));
+  const down = (m: number) => Math.floor(clamp(m) / SNAP_MIN) * SNAP_MIN;
+  if (!dragged) {
+    const from = Math.min(DAY_MIN - SNAP_MIN, down(fromMin));
+    return { from, to: Math.min(DAY_MIN, from + DEFAULT_MIN) };
+  }
+  const lo = Math.min(DAY_MIN - SNAP_MIN, down(Math.min(fromMin, toMin)));
+  const hi = Math.ceil(clamp(Math.max(fromMin, toMin)) / SNAP_MIN) * SNAP_MIN;
+  return { from: lo, to: Math.min(DAY_MIN, Math.max(lo + SNAP_MIN, hi)) };
+}
+
+/** Os minutos como "HH:MM" para os campos de hora; o fim do dia (24:00) vira 23:59, o último que o campo aceita. */
+export function clockOf(min: number): string {
+  if (min >= DAY_MIN) return "23:59";
+  return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+}

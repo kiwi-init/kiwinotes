@@ -82,5 +82,7 @@ export const ptCalendar = {
   "calendar.new.titleProblem": "O título não pode ter “{piece}”: na nota, isso vira o tipo, o aviso, a repetição ou a data do item.",
   "calendar.new.whereNote": "Vira a nota {path}.",
   "calendar.new.whereNoteBlank": "Vira uma nota nova, com o título de nome.",
-  "calendar.resize": "Esticar",
+  "calendar.resize": "Esticar o fim",
+  "calendar.resizeTop": "Esticar o começo",
+  "calendar.draft": "(sem título)",
 } as const;

@@ -9,6 +9,7 @@ import { type CalendarItem, parseWhen } from "../../src/shared/calendar.ts";
 import { setAppLocale } from "../src/i18n.ts";
 import { type DetailActions, HoverCard } from "./Detail.tsx";
 import { memorySource } from "./source.ts";
+import { placeNear } from "./NewItem.tsx";
 import { AgendaList, cascadeStyle, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
 import { viewRange } from "./model.ts";
 
@@ -56,7 +57,10 @@ describe("as vistas do Calendário", () => {
     expect(html.match(/data-depth="1"/g)?.length).toBe(1);
     expect(html).toMatch(/data-depth="1"[^>]*style="[^"]*width:calc\(100% - min\(16px, 45%\) \* 1 - 6px\)/);
     expect(html).toMatch(/data-id="m:r"[^>]*data-readonly=""/);
-    expect(html.match(/kn-cal-resize/g)?.length).toBe(2);
+    // As duas bordas de cada item que se muda (spec #34706, ponto 5); o só de leitura não tem nenhuma.
+    expect(html.match(/class="kn-cal-resize"/g)?.length).toBe(2);
+    expect(html.match(/class="kn-cal-resize kn-cal-resize-top"/g)?.length).toBe(2);
+    expect(html).toContain('aria-label="Esticar o começo"');
     // O Kiwi marca só o que ele avisa.
     expect(html.match(/kn-cal-kiwi-mark/g)?.length).toBe(3);
   });
@@ -87,6 +91,46 @@ describe("as vistas do Calendário", () => {
       renderToStaticMarkup(<HoverCard item={items[0]!} at={{ left: 0, top: 0, width: 300, height: 0 }} face={null} a={a} onExpand={() => {}} onEnter={() => {}} onLeave={() => {}} />);
     for (const text of ["all day", "Meeting", "Open the note", "10 min before"]) expect(html).toContain(text);
     for (const text of ["Dia todo", "Reunião", "Abrir a nota"]) expect(html).not.toContain(text);
+  });
+});
+
+describe("criar no vazio (spec #34706, ponto 5)", () => {
+  test("o rascunho aparece na coluna do dia, na hora marcada, com o horário", () => {
+    const html = renderToStaticMarkup(<TimeGrid days={week.days} items={items} today="2026-11-25" now={now} h={h} s={s} draft={{ day: "2026-11-26", from: 9 * 60 + 30, to: 10 * 60 + 45 }} />);
+    expect(html.match(/kn-cal-draft/g)?.length).toBe(1);
+    // Dentro da coluna do dia 26, 9,5 h × 48 px do topo e 1,25 h de altura (menos a folga de 3 px).
+    expect(html).toMatch(/data-day="2026-11-26"[^>]*>(?:(?!kn-cal-col).)*class="kn-cal-draft" style="top:456px;height:57px"/);
+    expect(html).toContain("(sem título)");
+    expect(html).toContain("09:30–10:45");
+    expect(renderToStaticMarkup(<TimeGrid days={week.days} items={items} today="2026-11-25" now={now} h={h} s={s} />)).not.toContain("kn-cal-draft");
+  });
+
+  test("o rascunho em inglês", () => {
+    english();
+    const html = renderToStaticMarkup(<TimeGrid days={week.days} items={items} today="2026-11-25" now={now} h={h} s={s} draft={{ day: "2026-11-26", from: 0, to: 30 }} />);
+    expect(html).toContain("(no title)");
+    expect(html).toContain('aria-label="Stretch the start"');
+    expect(html).not.toContain("sem título");
+  });
+
+  test("o dia do Mês que está criando fica marcado", () => {
+    const month = viewRange("month", "2026-11-25");
+    const html = renderToStaticMarkup(<MonthGrid days={month.days} anchor="2026-11-25" items={items} today="2026-11-25" h={h} s={s} onDay={() => {}} draftDay="2026-11-12" />);
+    expect(html.match(/data-drafting/g)?.length).toBe(1);
+    expect(html).toMatch(/data-day="2026-11-12"[^>]*data-drafting=""/);
+  });
+
+  test("o formulário abre à direita do rascunho, ou à esquerda quando não cabe, sem sair da tela", () => {
+    const box = { width: 340, height: 400 };
+    const area = { width: 1200, height: 800 };
+    expect(placeNear({ left: 100, top: 200, width: 150, height: 48 }, box, area)).toEqual({ left: 258, top: 200 });
+    // Na última coluna, vai para a esquerda.
+    expect(placeNear({ left: 1000, top: 200, width: 150, height: 48 }, box, area)).toEqual({ left: 652, top: 200 });
+    // Embaixo, sobe para caber; em cima, desce até a folga.
+    expect(placeNear({ left: 100, top: 700, width: 150, height: 48 }, box, area)).toEqual({ left: 258, top: 392 });
+    expect(placeNear({ left: 100, top: -300, width: 150, height: 48 }, box, area)).toEqual({ left: 258, top: 8 });
+    // Janela estreita: não sai pela esquerda.
+    expect(placeNear({ left: 20, top: 10, width: 300, height: 48 }, box, { width: 500, height: 800 }).left).toBe(8);
   });
 });
 

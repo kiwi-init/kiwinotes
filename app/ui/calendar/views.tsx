@@ -7,7 +7,7 @@ import { type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactN
 import type { CalendarItem } from "../../src/shared/calendar.ts";
 import { useT } from "../src/i18n.ts";
 import { agendaHead, dayHead, timeRange, weekdayNames } from "./format.ts";
-import { itemsOfDay, layoutDay, nowMinutes } from "./model.ts";
+import { clockOf, itemsOfDay, layoutDay, nowMinutes } from "./model.ts";
 
 /** A altura de uma hora na grade, em px. */
 export const HOUR_PX = 48;
@@ -24,7 +24,14 @@ export function cascadeStyle(col: number, cols: number) {
 /** Quantos itens cabem num dia do Mês antes do "+n". */
 const MONTH_MAX = 3;
 
-export type DragMode = "move" | "resize";
+export type DragMode = "move" | "resize" | "resize-top";
+
+/** O rascunho do clique ou do arrastar no vazio (spec #34706, ponto 5): o dia e os minutos desde a meia-noite. */
+export interface Draft {
+  day: string;
+  from: number;
+  to: number;
+}
 
 /** O que as vistas avisam à tela. */
 export interface ItemHandlers {
@@ -32,6 +39,10 @@ export interface ItemHandlers {
   onLeave(): void;
   onPointerDown(e: ReactPointerEvent<HTMLElement>, item: CalendarItem, mode: DragMode): void;
   onOpen(item: CalendarItem, el: HTMLElement): void;
+  /** O botão apertado no vazio de uma coluna da grade, nos minutos desde a meia-noite. */
+  onSlotDown?(e: ReactPointerEvent<HTMLElement>, day: string, minute: number): void;
+  /** O clique no vazio de um dia do Mês. */
+  onEmptyDay?(day: string, el: HTMLElement): void;
 }
 
 export interface ItemState {
@@ -80,7 +91,7 @@ function ItemBox({ item, h, s, style, children, className = "", depth }: { item:
 }
 
 /** A grade das horas: os dias em colunas, a faixa do dia todo em cima e a linha vermelha do agora. */
-export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; items: CalendarItem[]; today: string; now: number; h: ItemHandlers; s: ItemState }) {
+export function TimeGrid({ days, items, today, now, h, s, draft }: { days: string[]; items: CalendarItem[]; today: string; now: number; h: ItemHandlers; s: ItemState; draft?: Draft | null }) {
   const { t, locale } = useT();
   const scroller = useRef<HTMLDivElement>(null);
   const cols = { gridTemplateColumns: `52px repeat(${days.length}, minmax(0, 1fr))` };
@@ -134,7 +145,18 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
             ))}
           </div>
           {days.map((d) => (
-            <div key={d} className="kn-cal-col" data-day={d} data-today={d === today ? "" : undefined}>
+            <div
+              key={d}
+              className="kn-cal-col"
+              data-day={d}
+              data-today={d === today ? "" : undefined}
+              onPointerDown={(e) => {
+                // Só o vazio da coluna: o item, as bordas e o rascunho têm o deles.
+                if (e.target !== e.currentTarget || !h.onSlotDown) return;
+                const top = e.currentTarget.getBoundingClientRect().top;
+                h.onSlotDown(e, d, ((e.clientY - top) / HOUR_PX) * 60);
+              }}
+            >
               {layoutDay(items, d).map((p) => {
                 // A caixa começa no `shownTop`: na cascata, abaixo da hora da que ela cobre (#466). A hora escrita é a de verdade.
                 const top = (p.shownTop / 60) * HOUR_PX;
@@ -154,6 +176,16 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
                     {short ? null : <span>{timeRange(p.item, t("calendar.allDay"), t("calendar.nextDay"))}{p.item.project ? ` · ${p.item.project}` : ""}</span>}
                     {p.item.readOnly ? null : (
                       <i
+                        className="kn-cal-resize kn-cal-resize-top"
+                        aria-label={t("calendar.resizeTop")}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          h.onPointerDown(e, p.item, "resize-top");
+                        }}
+                      />
+                    )}
+                    {p.item.readOnly ? null : (
+                      <i
                         className="kn-cal-resize"
                         aria-label={t("calendar.resize")}
                         onPointerDown={(e) => {
@@ -165,6 +197,14 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
                   </ItemBox>
                 );
               })}
+              {draft && draft.day === d ? (
+                <div className="kn-cal-draft" style={{ top: (draft.from / 60) * HOUR_PX, height: Math.max(18, ((draft.to - draft.from) / 60) * HOUR_PX - 3) }} aria-hidden="true">
+                  <b>{t("calendar.draft")}</b>
+                  <span>
+                    {clockOf(draft.from)}–{clockOf(draft.to)}
+                  </span>
+                </div>
+              ) : null}
               {d === today && nowMin !== null ? <div className="kn-cal-now" style={{ top: (nowMin / 60) * HOUR_PX }} /> : null}
             </div>
           ))}
@@ -175,7 +215,7 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
 }
 
 /** O Mês: 6 semanas, de segunda a domingo, com até 3 itens por dia e o "+n". */
-export function MonthGrid({ days, anchor, items, today, h, s, onDay }: { days: string[]; anchor: string; items: CalendarItem[]; today: string; h: ItemHandlers; s: ItemState; onDay(day: string): void }) {
+export function MonthGrid({ days, anchor, items, today, h, s, onDay, draftDay }: { days: string[]; anchor: string; items: CalendarItem[]; today: string; h: ItemHandlers; s: ItemState; onDay(day: string): void; draftDay?: string | null }) {
   const { t, locale } = useT();
   const month = anchor.slice(0, 7);
   return (
@@ -189,7 +229,18 @@ export function MonthGrid({ days, anchor, items, today, h, s, onDay }: { days: s
         {days.map((d) => {
           const list = itemsOfDay(items, d);
           return (
-            <div key={d} className="kn-cal-cell" data-day={d} data-today={d === today ? "" : undefined} data-out={d.slice(0, 7) !== month ? "" : undefined}>
+            <div
+              key={d}
+              className="kn-cal-cell"
+              data-day={d}
+              data-today={d === today ? "" : undefined}
+              data-out={d.slice(0, 7) !== month ? "" : undefined}
+              data-drafting={draftDay === d ? "" : undefined}
+              onClick={(e) => {
+                // O vazio do dia cria nele (spec #34706, ponto 5); o número abre o Dia e o item abre o cartão.
+                if (e.target === e.currentTarget) h.onEmptyDay?.(d, e.currentTarget);
+              }}
+            >
               <button type="button" className="kn-cal-cell-n" onClick={() => onDay(d)}>
                 {Number(d.slice(8))}
               </button>
