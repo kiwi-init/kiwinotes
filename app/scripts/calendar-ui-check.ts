@@ -135,7 +135,8 @@ try {
         // As cabeças de data saem como o `format.ts` as escreve, só com a 1ª maiúscula: nenhum CSS muda o texto. Em pt,
         // o `capitalize` punha "Sexta-Feira, 27 De Novembro" na Agenda (#494).
         const heads = await p.locator(`${pane} .kn-cal-dayhead, ${pane} .kn-cal-month-head span, ${pane} .kn-cal-agenda-day h3`).evaluateAll((els) =>
-          els.map((e) => ({ shown: (e as HTMLElement).innerText.replace(/\s+/g, " ").trim(), text: (e.textContent ?? "").replace(/\s+/g, " ").trim() })),
+          // Sem os espaços: o número do dia é um item do flex, e o innerText põe uma quebra entre ele e o nome.
+          els.map((e) => ({ shown: (e as HTMLElement).innerText.replace(/\s+/g, ""), text: (e.textContent ?? "").replace(/\s+/g, "") })),
         );
         assert.ok(heads.length > 0, `${lang}/${v}: nenhuma cabeça de data`);
         for (const h of heads) assert.equal(h.shown, h.text, `${lang}/${v}: a cabeça de data saiu diferente do texto (#494)`);
