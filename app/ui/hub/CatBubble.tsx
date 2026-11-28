@@ -19,7 +19,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { BubbleLink } from "../../src/shared/ui-contract";
 import { api } from "../src/api";
-import { appLocale } from "../src/i18n";
+import { appLocale, t } from "../src/i18n";
+import { shortcutLabel } from "../../src/shared/shortcuts";
 import { BUBBLE_LINES, BubbleFeed, type BubbleView, type ChunkLink, readingMs } from "./bubble-state";
 import { BubbleClock } from "./bubble-clock";
 import { BubblePresence } from "./BubblePresence";
@@ -73,6 +74,9 @@ function measurer(): { fits: (s: string) => boolean; dispose: () => void } {
   };
 }
 
+/** O texto do "Não ouvi" no idioma do app, com o atalho como a tela o mostra ("Control", "⌥ Espaço"). */
+export const notHeardText = (shortcut: string) => t("hub.bubble.notHeard", { key: shortcutLabel(shortcut, appLocale().locale) });
+
 /**
  * `drop`: o pedido mandado pelo campo tira do canto a resposta de antes, no mesmo render em que a pergunta fica (T15377).
  * Sem isso, ela voltava ao lado da pergunta (o `hidden` cai quando o campo fecha) e ainda ficava à espera do pedido novo.
@@ -109,6 +113,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = fa
     const f = new BubbleFeed(m.fits, reduced, Date.now, () => appLocale().locale);
     feed.current = f;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let announceTimer: ReturnType<typeof setTimeout> | undefined;
     // O relógio do balão (spec #32534): no fim, ele sai como no ×; a resposta fica para o `recall`.
     // A pergunta é texto novo: o Kiwi acende a marca, se o mouse está longe (`onAsk`).
     clock.current = new BubbleClock({ ask: (on) => { setAsking(on); if (on) onAskRef.current?.(); }, leave: () => { f.close(); refresh(); } });
@@ -120,7 +125,10 @@ export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = fa
       setSaid(f.all());
       setSaidLinks((old) => (sameLinks(old, f.links()) ? old : f.links()));
       const a = f.takeAnnouncement();
-      if (a) setAnnounce(a);
+      if (a) {
+        clearTimeout(announceTimer);
+        setAnnounce(a);
+      }
       const next = f.nextWake(now);
       if (Number.isFinite(next)) timer = setTimeout(refresh, Math.max(0, next - now));
     };
@@ -139,11 +147,24 @@ export function CatBubble({ reduced, hidden = false, onShown, drop, yieldTo = fa
     // A fala pelo Control (spec #9876): o texto entendido aparece no balão quando o pedido começa, se veio.
     const offVoice = api.agent.onVoice((v) => {
       // Sem o texto ("Mostrar o que eu falei" desligado, spec #26055), o balão espera a resposta.
+      if (v.phase === "idle" && v.notHeard) {
+        // A fala curta ou vazia (spec #32534, Cena 4): o "Não ouvi", com o atalho dos Ajustes, por `NOT_HEARD_MS`.
+        const text = notHeardText(v.notHeard.shortcut);
+        f.notHeard(text, performance.now());
+        refresh();
+        // O leitor de tela também ouve, com o balão escondido (o mouse longe): a região viva esvazia e recebe o texto no
+        // tick seguinte, para um segundo "Não ouvi" igual ser lido de novo (no mesmo tick, o React juntaria os dois).
+        setAnnounce("");
+        clearTimeout(announceTimer);
+        announceTimer = setTimeout(() => setAnnounce(text), 50);
+        return;
+      }
       if (v.phase !== "asked" || !v.text) return;
       f.heard(v.id, v.text, performance.now());
       refresh();
     });
     return () => {
+      clearTimeout(announceTimer);
       off();
       offVoice();
       clearTimeout(timer);

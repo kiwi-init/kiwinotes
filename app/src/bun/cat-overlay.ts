@@ -28,6 +28,7 @@ import { limitBubble } from "../../ui/settings/usageText.ts";
 import { type Locale, translate } from "../shared/i18n/index.ts";
 import { mainLocale } from "./locale.ts";
 import { AgentProgress } from "../shared/agent-progress.ts";
+import { shortcutLabel } from "../shared/shortcuts.ts";
 import { ptCatOverlay } from "../shared/i18n/catoverlay.pt.ts";
 import type { Command } from "../shared/ipc.ts";
 import { CAT_SIZE, type CatPosition, DEFAULT_CAT_POSITION } from "../shared/kiwicat-place.ts";
@@ -88,6 +89,10 @@ export function shiftLinks(links: readonly BubbleLink[] | undefined, start: numb
 
 /** A pergunta antes de sair (spec #13380). A página a mostra na língua do app (T29351); esta é a do catálogo em pt. */
 export const ASK_LINE = ptCatOverlay["catOverlay.ask"];
+
+/** O "Não ouvi" (spec #32534, Cena 4), com o atalho dos Ajustes como a tela o mostra ("Control", "⌥ Espaço"). */
+export const notHeardLine = (shortcut: string, locale: Locale = mainLocale.get()) =>
+  translate(locale, "catOverlay.notHeard", { key: shortcutLabel(shortcut, locale) });
 
 /** O balão do erro: o que a pessoa lê quando a fala não virou resposta, na língua do app (T29351). */
 export const voiceErrorLine = (message: string, locale: Locale = mainLocale.get()) =>
@@ -166,6 +171,11 @@ export class CatOverlay {
   private bubbleExit = 0;
   /** O balão está com a pergunta "Precisa de mais alguma coisa?" (spec #13380). */
   private asking = false;
+  /**
+   * O balão de agora é um aviso curto (o "Não ouvi", spec #32534): o gato sai no `stay` dele, sem a espera da resposta,
+   * e o mouse que sai do balão volta a esse `stay`.
+   */
+  private notice: { stay: number; exit: number } | null = null;
   /**
    * Os pedidos que vieram da fala pelo Control, pelo id do `asked` (um pedido que começou enquanto a pessoa segurava o
    * Control, como uma rotina, não entra). Cada um sai no `done` ou no `error` dele.
@@ -450,12 +460,27 @@ export class CatOverlay {
     return { text, ...(shown.length ? { links: shown } : {}), ...(summary !== text ? { summary } : {}) };
   }
 
+  /** Um aviso curto no balão: fica `stay` (o mouse em cima segura) e o gato sai, sem a espera da resposta. */
+  private shortNotice(text: string, stay: number, exit: number): void {
+    this.bubbleShown = true;
+    this.asking = false;
+    this.bubbleNow = { text, error: false };
+    this.bubbleExit = exit;
+    this.notice = { stay, exit };
+    this.host.send({ type: "catOverlay.bubble", ...this.bubbleNow });
+    if (this.held) {
+      this.phase = "lingering";
+      this.cancelTimer();
+    } else this.linger(stay, exit);
+  }
+
   /**
    * O balão (spec #12938, #13378, #13380): a resposta inteira, de uma vez, sem troca de frase por tempo. O gato fica: a
    * espera (`idleAsk`, a pergunta e `askLeave`) começa agora, e a pessoa com o balão (`hold`) a segura. Um pedido novo, o
    * hub à vista, o × ou o overlay desligado tiram o balão.
    */
   private speak(text: string, error: boolean, stay: number, exit: number, links?: BubbleLink[], summary?: string): void {
+    this.notice = null;
     if (!text) return this.linger(stay, exit);
     this.phase = "lingering";
     this.cancelTimer();
@@ -504,7 +529,8 @@ export class CatOverlay {
     if (held) this.cancelTimer();
     else {
       this.setAsking(false);
-      this.waitIdle();
+      if (this.notice) this.linger(this.notice.stay, this.notice.exit);
+      else this.waitIdle();
     }
   }
 
@@ -579,6 +605,14 @@ export class CatOverlay {
       if (this.overlayShown && (this.phase === "lingering" || this.phase === "shown")) {
         this.phase = "shown";
         this.setAsking(false);
+        // O "Não ouvi" já disse o que tinha a dizer: a fala nova o tira, em vez de ele ficar até a resposta.
+        if (this.notice) {
+          this.notice = null;
+          this.bubbleShown = false;
+          this.bubbleNow = null;
+          this.held = false;
+          this.host.send({ type: "catOverlay.bubble", text: null });
+        }
         this.host.send({ type: "catOverlay.state", estado: "ouvindo" });
         return;
       }
@@ -601,6 +635,13 @@ export class CatOverlay {
       if (this.activity.attend(false) === before) return;
       if (this.phase === "corner") this.phase = "idle";
       if (this.phase !== "shown") return;
+      if (v.notHeard) {
+        // A fala curta ou vazia (spec #32534, Cena 4): o gato fica confuso e diz como tentar de novo, e sai no tempo do
+        // erro. Um balão de antes (a conversa) dá lugar a este.
+        this.host.send({ type: "catOverlay.state", estado: "erro" });
+        this.shortNotice(notHeardLine(v.notHeard.shortcut), OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+        return;
+      }
       if (v.error) {
         // O pedido não saiu: o gato diz por quê antes de sair (spec #12938).
         this.host.send({ type: "catOverlay.state", estado: "erro" });
@@ -677,6 +718,7 @@ export class CatOverlay {
     // Sem balão, o helper solta o `hold` sem avisar.
     this.held = false;
     this.asking = false;
+    this.notice = null;
     this.phase = "shown";
     this.overlayShown = true;
     this.host.where(true);
@@ -706,6 +748,7 @@ export class CatOverlay {
     this.bubbleShown = false;
     this.held = false;
     this.asking = false;
+    this.notice = null;
     this.host.send({ type: "catOverlay.hide", fadeMs });
     this.host.where(false);
   }

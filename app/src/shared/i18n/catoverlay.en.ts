@@ -11,6 +11,7 @@ export const enCatOverlay: { readonly [K in keyof typeof ptCatOverlay]: string }
   "catOverlay.stop": "Stop",
   "catOverlay.heard": "What Kiwi heard",
   "catOverlay.voiceError": "I couldn't reach the agent: {message}",
+  "catOverlay.notHeard": "I didn't catch that. Hold {key} and speak.",
   "catOverlay.unknownError": "unknown error",
   "catOverlay.didIt": "Done.",
   "catOverlay.ready": "All set.",

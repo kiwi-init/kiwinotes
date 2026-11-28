@@ -150,13 +150,42 @@ describe("o atalho Control (spec #9876)", () => {
     expect(r.ui).toEqual([]);
   });
 
-  test("a fala curta demais ou vazia não manda nada, e o gato volta", async () => {
+  test("a fala curta demais ou vazia não manda nada, e o gato diz \"Não ouvi\" com o atalho (spec #32534, Cena 4)", async () => {
     const r = rig();
     await flush();
     await r.talk("oi", AGENT_VOICE_MIN_MS - 1);
     await r.talk("   ");
     expect(r.asked).toEqual([]);
-    expect(r.ui.filter((u) => u.phase === "idle")).toEqual([{ phase: "idle", cancelled: true }, { phase: "idle", cancelled: true }]);
+    const notHeard: AgentVoiceUi = { phase: "idle", cancelled: true, notHeard: { shortcut: "control" } };
+    expect(r.ui.filter((u) => u.phase === "idle")).toEqual([notHeard, notHeard]);
+    // No limite, meio segundo já é fala.
+    await r.talk("oi", AGENT_VOICE_MIN_MS);
+    expect(r.asked).toEqual(["Oi."]);
+  });
+
+  test("o \"Não ouvi\" leva o atalho escolhido nos Ajustes (spec #32534)", async () => {
+    const r = rig();
+    await flush();
+    r.voice.settingsChanged({ ...r.settings, shortcuts: { ...r.settings.shortcuts, agent: "option+space" } });
+    await r.talk("", 1200);
+    expect(r.ui.at(-1)).toEqual({ phase: "idle", cancelled: true, notHeard: { shortcut: "option+space" } });
+  });
+
+  test("a gravação sem nenhuma amostra também diz \"Não ouvi\"; sem a escuta confirmada, o gato só volta", async () => {
+    const r = rig();
+    await flush();
+    r.emit({ type: "agent.record.started", reason: "hotkey" });
+    r.emit({ type: "agent.listening", latched: false });
+    r.emit({ type: "agent.record.stopping", mode: "ptt" });
+    r.emit({ type: "agent.record.stopped", reason: "hotkey", mode: "ptt", durationMs: 900, samples: 0 });
+    expect(r.ui.at(-1)).toEqual({ phase: "idle", cancelled: true, notHeard: { shortcut: "control" } });
+    // Sem o `agent.listening`, o gato nem mostrou que ouvia: nada de "Não ouvi".
+    r.ui.length = 0;
+    r.emit({ type: "agent.record.started", reason: "hotkey" });
+    r.emit({ type: "agent.record.stopping", mode: "ptt" });
+    r.emit({ type: "agent.record.stopped", reason: "hotkey", mode: "ptt", durationMs: 300, samples: 0 });
+    expect(r.ui).toEqual([{ phase: "idle", cancelled: true }]);
+    expect(r.asked).toEqual([]);
   });
 
   test("um ⌃C (cancelado antes de confirmar) não mexe no gato; o Esc depois da escuta volta ao repouso", async () => {

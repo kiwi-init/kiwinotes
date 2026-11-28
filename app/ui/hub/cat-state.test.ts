@@ -173,3 +173,45 @@ describe("o gato novo: os 8 estados de hoje na tabela 1.1 (spec #14813)", () => 
     expect(a.look.emote).toBe("confuso");
   });
 });
+
+describe("o \"Não ouvi\" (spec #32534, Cena 4)", () => {
+  test("sem pedido, o gato fica confuso (não o limite) até o fim do aviso, e volta ao repouso", () => {
+    const c = new CatActivity(false);
+    c.attend(true);
+    c.attend(false);
+    c.limited = true;
+    expect(c.notHeard()).toBe("erro");
+    expect(c.look).toEqual({ estado: "repouso", emote: "confuso" });
+    expect(c.notHeardEnd()).toBe("repouso");
+    // Um segundo fim não mexe em nada.
+    expect(c.notHeardEnd()).toBe("repouso");
+  });
+
+  test("um pedido no meio passa por cima: o fim do aviso não tira o gato do pedido", () => {
+    const c = new CatActivity(false);
+    c.notHeard();
+    c.event(started("p1"));
+    expect(c.notHeardEnd()).toBe("acordou");
+    // O erro de um pedido não é desfeito pelo fim de um aviso de antes.
+    const d = new CatActivity(false);
+    d.notHeard();
+    d.event(started("p1"));
+    d.event(error("p1"));
+    expect(d.notHeardEnd()).toBe("erro");
+  });
+
+  test("com um pedido em andamento, o \"Não ouvi\" não muda o gato", () => {
+    const c = new CatActivity(false);
+    c.event(started("p1"));
+    c.event(running("p1"));
+    expect(c.notHeard()).toBe("agindo");
+    expect(c.notHeardEnd()).toBe("agindo");
+  });
+
+  test("uma fala nova no meio do aviso: o gato vai ouvir, e o fim do aviso não o tira dali", () => {
+    const c = new CatActivity(false);
+    c.notHeard();
+    expect(c.attend(true)).toBe("ouvindo");
+    expect(c.notHeardEnd()).toBe("ouvindo");
+  });
+});

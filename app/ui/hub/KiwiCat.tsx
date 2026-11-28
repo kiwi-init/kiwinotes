@@ -6,6 +6,7 @@ import type { AgentStatus, AppSettings } from "../../src/shared/ui-contract";
 import type { createKiwiCat } from "../kiwicat/cat";
 import { api, has } from "../src/api";
 import { CatActivity } from "./cat-state";
+import { NOT_HEARD_MS } from "./bubble-state";
 import { CatAsk } from "./CatAsk";
 import { BubblePresence } from "./BubblePresence";
 import { CatBubble } from "./CatBubble";
@@ -132,6 +133,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
     // A fala pelo Control (spec #9876): `ouvindo` com as ondas seguindo a voz; ao soltar as ondas somem na hora, e o
     // gato segue atento até o pedido começar. Cancelada ou vazia, ele volta ao repouso.
     let talking = false;
+    let confusedTimer: ReturnType<typeof setTimeout> | undefined;
     const offVoice = api.agent.onVoice(v => {
       const before = activity.state;
       if (v.phase === "listening") {
@@ -151,6 +153,12 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
         talking = false;
         cat?.update({ voz: null });
         activity.attend(false);
+        // A fala curta ou vazia (spec #32534, Cena 4): o gato fica confuso por `NOT_HEARD_MS`, com o "Não ouvi" no balão.
+        if (v.notHeard) {
+          activity.notHeard();
+          clearTimeout(confusedTimer);
+          confusedTimer = setTimeout(() => { const at = activity.state; activity.notHeardEnd(); if (activity.state !== at) state(); }, NOT_HEARD_MS);
+        }
         if (activity.state !== before) state();
       }
     });
@@ -175,7 +183,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     void create();
     return () => {
-      gone = true; off(); offVoice(); offSpeech(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility); refresh.current = () => {};
+      gone = true; off(); offVoice(); clearTimeout(confusedTimer); offSpeech(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility); refresh.current = () => {};
       handle.current = undefined;
       if (cat) void cat.dispose();
     };

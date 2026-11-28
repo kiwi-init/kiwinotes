@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentTurnEvent, BubbleLink } from "../../src/shared/ui-contract";
-import { ANSWER_HOLD_MS, BubbleFeed, bubblePlain, plainLinks, readingMs, summaryOf, webLine } from "./bubble-state";
+import { ANSWER_HOLD_MS, BubbleFeed, NOT_HEARD_MS, bubblePlain, plainLinks, readingMs, summaryOf, webLine } from "./bubble-state";
 
 const fits = (max: number) => (s: string) => [...s].length <= max;
 const ev = (e: Record<string, unknown>) => ({ id: "p1", ...e }) as AgentTurnEvent;
@@ -753,5 +753,54 @@ describe("a última resposta de volta (spec #32534, Cena 3)", () => {
     expect(f.view(0)).toBeNull();
     f.close();
     expect(f.recall()).toBe(false);
+  });
+});
+
+describe("o \"Não ouvi\" (spec #32534, Cena 4)", () => {
+  const LINE = "Não ouvi. Segure o Control e fale.";
+
+  test("fica NOT_HEARD_MS e sai, com o relógio acordando a tela no fim", () => {
+    const f = new BubbleFeed(fits(80));
+    f.notHeard(LINE, 1000);
+    expect(f.view(1000)).toMatchObject({ text: LINE, error: false, more: false });
+    expect(f.nextWake(1000)).toBe(1000 + NOT_HEARD_MS);
+    expect(NOT_HEARD_MS).toBe(2200);
+    expect(f.view(1000 + NOT_HEARD_MS - 1)?.text).toBe(LINE);
+    expect(f.view(1000 + NOT_HEARD_MS)).toBeNull();
+    expect(f.nextWake(1000 + NOT_HEARD_MS)).toBe(Infinity);
+  });
+
+  test("cobre a resposta de antes e a devolve quando sai", () => {
+    const f = run(new BubbleFeed(fits(80)), [{ type: "text", text: "Pronto, anotei." }, { type: "done", text: "Pronto, anotei.", stopReason: "end_turn" }]);
+    const answer = f.view(0);
+    expect(answer?.text).toBe("Pronto, anotei.");
+    f.notHeard(LINE, 10);
+    expect(f.view(10)?.text).toBe(LINE);
+    expect(f.view(10 + NOT_HEARD_MS)).toEqual(answer);
+    // Um balão fechado continua fechado depois do aviso.
+    f.close();
+    f.notHeard(LINE, 5000);
+    expect(f.view(5000)?.text).toBe(LINE);
+    expect(f.view(5000 + NOT_HEARD_MS)).toBeNull();
+  });
+
+  test("com um pedido andando, o passo seguinte toma o lugar do aviso, e o aviso não devolve o passo velho", () => {
+    const f = run(new BubbleFeed(fits(80)), [{ type: "status", status: "running", tool: "notes_search" }]);
+    const step = f.view(0)!;
+    expect(step.stop).toBe(true);
+    f.notHeard(LINE, 10);
+    expect(f.view(10)?.text).toBe(LINE);
+    f.event(ev({ type: "status", status: "running", tool: "notes_read" }), 20);
+    expect(f.view(20)).toMatchObject({ text: "Lendo uma nota", stop: true, key: step.key });
+    expect(f.view(10 + NOT_HEARD_MS)).toMatchObject({ text: "Lendo uma nota", key: step.key });
+  });
+
+  test("um pedido que começa no meio tira o aviso, sem segurá-lo no canto", () => {
+    const f = new BubbleFeed(fits(80));
+    f.notHeard(LINE, 0);
+    f.event(ev({ id: "p2", type: "started" }), 100);
+    expect(f.view(100)).toBeNull();
+    f.event(ev({ id: "p2", type: "done", text: "Feito.", stopReason: "end_turn" }), 200);
+    expect(f.view(200 + NOT_HEARD_MS)?.text).toBe("Feito.");
   });
 });
