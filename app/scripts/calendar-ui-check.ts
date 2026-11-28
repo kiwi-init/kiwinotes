@@ -7,7 +7,7 @@
 // - O link da nota no cartão abre a aba Notas naquela nota, com a linha do item marcada.
 // - A Semana da Início tem o "Abrir o calendário".
 // - Os itens do mesmo horário ficam lado a lado (ponto 9, spec #34706): metade da coluna cada no par, o grupo de cinco
-//   inteiro no Dia e com um "+N" na Semana estreita; o "+N" abre os outros, com o cartão e o arrastar.
+//   inteiro no Dia e com um "+N" na Semana estreita; o "+N" abre os outros, com o cartão e o arrastar; no Dia estreito, a lista abre dentro da grade.
 // - O Sim da "atrasada" numa pendência repetida leva só a vez para amanhã, e a sugestão não volta na vez anterior (#485).
 // Os prints de cada vista, em pt e en, e um vídeo da ida e da volta do painel largo.
 // Da raiz do app: `bun scripts/calendar-ui-check.ts [pasta]`. Pegue `kiwi lock bench`.
@@ -252,8 +252,25 @@ try {
           checks.push(`${lang}: arrastar "${hidden}" da lista do +N muda a hora na nota, e de volta`);
         }
         await p.keyboard.press("Escape");
+        // O Dia estreito: o +N fica na coluna da direita da grade, e a lista abre para dentro dela, à vista (revisão do T34737).
+        await view(p, "day");
+        await p.setViewportSize({ width: 600, height: 800 });
+        const dayMore = p.locator(`${col} .kn-cal-more-btn`);
+        await dayMore.waitFor();
+        const dayN = (await dayMore.textContent())?.trim();
+        await dayMore.click();
+        const list = p.locator(`${col} .kn-cal-more-list`);
+        await list.waitFor();
+        const lb = (await list.boundingBox())!;
+        const gb = (await p.locator(`${pane} .kn-cal-scroll`).boundingBox())!;
+        assert.ok(lb.x >= gb.x - 0.5 && lb.x + lb.width <= gb.x + gb.width + 0.5, `${lang}/dia estreito: a lista dentro da grade (${lb.x}–${lb.x + lb.width} em ${gb.x}–${gb.x + gb.width})`);
+        assert.ok(await p.evaluate(([x, y, s]) => !!document.elementFromPoint(x, y)?.closest(s), [lb.x + lb.width / 2, lb.y + Math.min(lb.height / 2, 20), ".kn-cal-more-list"] as const), `${lang}/dia estreito: a lista à vista, não cortada`);
+        await p.screenshot({ path: join(shots, "lado-a-lado-dia-estreito.png") });
+        await p.keyboard.press("Escape");
+        await p.setViewportSize({ width: 1300, height: 800 });
         await p.locator(`${pane} .kn-cal-tool > .kn-cal-btn`).first().click();
         await p.waitForSelector(item("Revisar o orçamento"));
+        checks.push(`${lang}: o Dia estreito (600 px) tem o ${dayN}, e a lista dele abre dentro da grade, à vista`);
         checks.push(`${lang}: lado a lado: as cinco das 18h com um quinto do Dia cada; na Semana, ${shown} à vista e o +${5 - shown} com o resto e o cartão; o par das 20h com metade da coluna`);
       }
 

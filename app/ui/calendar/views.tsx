@@ -153,7 +153,7 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
           </div>
           {days.map((d, di) => (
             <div key={d} className="kn-cal-col" data-day={d} data-today={d === today ? "" : undefined}>
-              <DayColumn day={d} items={items} fit={fit} last={di === days.length - 1 && days.length > 1} h={h} s={s} openMore={openMore} setOpenMore={setOpenMore} />
+              <DayColumn day={d} items={items} fit={fit} last={di === days.length - 1} h={h} s={s} openMore={openMore} setOpenMore={setOpenMore} />
               {d === today && nowMin !== null ? <div className="kn-cal-now" style={{ top: (nowMin / 60) * HOUR_PX }} /> : null}
             </div>
           ))}
