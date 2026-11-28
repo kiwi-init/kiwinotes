@@ -350,7 +350,7 @@ function Hub() {
                   settingsRequest={settingsRequest}
                   onOpenNote={openNote}
                   catColor={settings?.kiwicat?.cor}
-                  home={{ cat: homeCat, view: homeView, searchShortcut, onSearch: openSearch, onDictation: () => go("dictation"), onAgentSettings: () => openSettings("agent"), onCalendar: () => go("calendar") }}
+                  home={{ cat: homeCat, view: homeView, searchShortcut, onSearch: openSearch, onDictation: () => go("dictation"), onAgentSettings: () => openSettings("agent", t("agent.enable")), onCalendar: () => go("calendar") }}
                 />
               </HubBarContext.Provider>
             </section>
