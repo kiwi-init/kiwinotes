@@ -732,6 +732,11 @@ describe("titleProblem: o pedaço que não pode ir no título (#493)", () => {
     expect(titleProblem("Revisar #foco do mês")).toBe("#foco");
     expect(titleProblem("Revisar o #lembrete")).toBe("#lembrete");
     expect(titleProblem("Pagar conta @ 2")).toBe("@ 2");
+    // A data inteira, com a hora e o fim, aparece toda no aviso (lead #34500).
+    expect(titleProblem("Ler @ 2026-01-01")).toBe("@ 2026-01-01");
+    expect(titleProblem("Ler @2026-01-01 e depois")).toBe("@2026-01-01");
+    expect(titleProblem("Aula @ 2026-01-01 10:00-11:30 sala 3")).toBe("@ 2026-01-01 10:00-11:30");
+    expect(titleProblem("Aula @ 2026-01-01 9:00")).toBe("@ 2026-01-01 9:00");
     expect(titleProblem("Ler 🔔 0")).toBe("🔔");
     expect(titleProblem("Plan the #meeting")).toBe("#meeting");
     expect(titleProblem("Regar 🔁 dia")).toBe("🔁");

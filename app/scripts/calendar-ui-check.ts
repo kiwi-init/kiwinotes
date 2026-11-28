@@ -309,6 +309,12 @@ try {
         assert.ok(await p.locator(`${pane} .kn-cal-newform button[type="submit"]`).isDisabled(), "o Criar fica desligado");
         await p.locator(`${pane} .kn-cal-newform`).screenshot({ path: join(shots, "titulo-com-tag.png") });
         checks.push(`${lang}: o + Novo com "Revisar #foco do mês" mostra o motivo com o pedaço e desliga o Criar`);
+        // Uma data com hora no título: o aviso cita a data inteira, não só "@ 2" (lead #34500).
+        await p.fill(`${pane} .kn-cal-newform input[name="title"]`, `Aula @ ${day(1)} 10:00-11:30 sala 3`);
+        await p.waitForFunction((s) => document.querySelector(s)?.textContent?.includes("10:00-11:30"), `${pane} .kn-cal-newform .kn-cal-title-problem`);
+        assert.equal((await why.textContent())?.trim(), `O título não pode ter “@ ${day(1)} 10:00-11:30”: na nota, isso vira o tipo, o aviso, a repetição ou a data do item.`);
+        await p.locator(`${pane} .kn-cal-newform`).screenshot({ path: join(shots, "titulo-com-data.png") });
+        checks.push(`${lang}: o + Novo com uma data e hora no título cita "@ ${day(1)} 10:00-11:30" inteira`);
         await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Ligar para o Bruno");
         assert.equal(await why.count(), 0, "o motivo some com o título comum");
         await p.fill(`${pane} .kn-cal-newform input[name="day"]`, day(0));
