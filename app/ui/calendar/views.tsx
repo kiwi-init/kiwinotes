@@ -206,6 +206,10 @@ function DayColumn({ day, items, fit, last, h, s, openMore, setOpenMore }: { day
 }
 
 /** O "+N" de uma faixa com itens escondidos: abre a lista deles, cada um com o cartão e o arrastar de sempre. */
+/** A largura da lista do "+N" e o respiro dela até o "+N" e até a borda da grade. */
+const LIST_PX = 220;
+const LIST_GAP = 4;
+
 function MoreSlot({ run, open, last, h, s, onToggle }: { run: MoreRun; open: boolean; last: boolean; h: ItemHandlers; s: ItemState; onToggle(on: boolean): void }) {
   const { t } = useT();
   const ref = useRef<HTMLDivElement>(null);
@@ -223,6 +227,20 @@ function MoreSlot({ run, open, last, h, s, onToggle }: { run: MoreRun; open: boo
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  // A lista abre do lado pedido, mas sempre dentro da grade (a área que rola): medida ao abrir, ela encosta na borda
+  // e fica mais estreita se a grade não tem 220 px (o Dia estreito, revisão do T34737).
+  const [place, setPlace] = useState<CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    const slot = ref.current;
+    const grid = slot?.closest(".kn-cal-scroll");
+    if (!open || !slot || !grid) return setPlace(null);
+    const a = slot.getBoundingClientRect();
+    const g = grid.getBoundingClientRect();
+    const w = Math.min(LIST_PX, g.width - 2 * LIST_GAP);
+    const want = last ? a.left - LIST_GAP - w : a.right + LIST_GAP;
+    const left = Math.max(g.left + LIST_GAP, Math.min(want, g.right - LIST_GAP - w));
+    setPlace({ left: left - a.left, right: "auto", width: w });
+  }, [open, last]);
   const top = (run.top / 60) * HOUR_PX;
   const height = Math.max(18, ((run.bottom - run.top) / 60) * HOUR_PX - 3);
   return (
@@ -231,7 +249,7 @@ function MoreSlot({ run, open, last, h, s, onToggle }: { run: MoreRun; open: boo
         {t("calendar.more", { n: run.items.length })}
       </button>
       {open ? (
-        <div className="kn-cal-more-list" role="group" data-side={last ? "left" : "right"}>
+        <div className="kn-cal-more-list" role="group" data-side={last ? "left" : "right"} style={place ?? undefined}>
           {run.items.map((i) => (
             <ItemBox key={i.id} item={i} h={h} s={s} className="kn-cal-row kn-cal-more-item">
               <b>{i.title}</b>
