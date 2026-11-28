@@ -84,69 +84,104 @@ export function onDay(item: Pick<CalendarItem, "start" | "end" | "allDay">, day:
   return start < toMs(addDays(day, 1)) && end > toMs(day);
 }
 
-/**
- * Quanto a caixa de cima da cascata fica abaixo do começo da de baixo, no mínimo, em minutos (#466): as duas linhas
- * dela, o título e a hora (uns 35 px, com a hora de 48 px), e um respiro. Começando antes disso, a de cima cobria a hora
- * da de baixo.
- */
-export const NEAR_MIN = 50;
-/** A altura mínima que sobra a uma caixa empurrada, em minutos: a caixa curta da grade (18 px). */
-export const MIN_SHOWN_MIN = 23;
-
-/** Um item na grade de um dia: o começo e o fim em minutos desde a meia-noite (cortados no dia), e a coluna. */
+/** Um item na grade de um dia: o começo e o fim em minutos desde a meia-noite (cortados no dia), e onde ele fica. */
 export interface Placed {
   item: CalendarItem;
   top: number;
-  /**
-   * Onde a caixa começa na grade, em minutos: o `top`, ou mais abaixo quando ela começa logo depois de uma caixa que
-   * ela cobre (#466), para a hora da de baixo continuar à vista. O fim não muda.
-   */
-  shownTop: number;
   bottom: number;
+  /** A coluna do item no grupo dele, a contar da esquerda. */
   col: number;
+  /** Quantas colunas o grupo tem: a largura do dia se divide por elas. 1 é a largura cheia. */
   cols: number;
+  /** Quantas colunas o item ocupa: ele se estica para a direita enquanto nada do grupo cruza com ele ali. */
+  span: number;
+  /** O grupo de sobreposição (os que se cruzam, direto ou em cadeia), contado na ordem do dia. */
+  group: number;
 }
 
 /**
- * Os itens com hora de um dia, na grade. Os que se cruzam ganham uma profundidade (`col`): a tela os desenha em
- * cascata, o mais fundo por cima e um pouco deslocado, para os dois continuarem legíveis (lead #32229). `cols` é a
- * profundidade do grupo.
+ * Os itens com hora de um dia, na grade. Os que se cruzam ficam lado a lado, dividindo a largura do dia, como no Teams
+ * e no Google Agenda (ponto 9 do spec #34706): cada grupo de sobreposição (A cruza B, B cruza C) tem as colunas dele, e
+ * cada item fica na primeira coluna livre na hora em que começa. O que não cruza com nada tem a largura cheia.
  */
 export function layoutDay(items: CalendarItem[], day: string): Placed[] {
   const d0 = toMs(day);
-  const timed = items
+  const timed: Placed[] = items
     .filter((i) => !i.allDay && onDay(i, day))
     .map((item) => {
       const { start, end } = spanOf(item);
-      const top = Math.max(0, (start - d0) / MIN);
-      return { item, top, shownTop: top, bottom: Math.min(DAY_MIN, (end - d0) / MIN), col: 0, cols: 1 };
+      return { item, top: Math.max(0, (start - d0) / MIN), bottom: Math.min(DAY_MIN, (end - d0) / MIN), col: 0, cols: 1, span: 1, group: 0 };
     })
     .sort((a, b) => a.top - b.top || b.bottom - a.bottom || a.item.id.localeCompare(b.item.id));
   let group: Placed[] = [];
   let groupEnd = -1;
+  let n = 0;
+  const ends: number[] = [];
   const close = () => {
     const cols = Math.max(1, ...group.map((p) => p.col + 1));
-    for (const p of group) p.cols = cols;
-    group = [];
-  };
-  const ends: number[] = [];
-  for (const p of timed) {
-    if (p.top >= groupEnd && group.length) {
-      close();
-      ends.length = 0;
+    for (const p of group) {
+      p.cols = cols;
+      // Estica para a direita pelas colunas onde nada do grupo cruza com ele.
+      while (p.col + p.span < cols && !group.some((q) => q.col === p.col + p.span && q.top < p.bottom && q.bottom > p.top)) p.span++;
     }
+    group = [];
+    ends.length = 0;
+    n++;
+  };
+  for (const p of timed) {
+    if (p.top >= groupEnd && group.length) close();
     let col = ends.findIndex((e) => e <= p.top);
     if (col < 0) col = ends.length;
     ends[col] = p.bottom;
     p.col = col;
-    // A caixa desce até abaixo das duas linhas de cada caixa mais funda que ela cobre (#466), sem passar do próprio fim.
-    for (const q of group) if (q.col < col && q.bottom > p.top) p.shownTop = Math.max(p.shownTop, q.shownTop + NEAR_MIN);
-    p.shownTop = Math.min(p.shownTop, Math.max(p.top, p.bottom - MIN_SHOWN_MIN));
+    p.group = n;
     group.push(p);
     groupEnd = Math.max(groupEnd, p.bottom);
   }
   if (group.length) close();
   return timed;
+}
+
+/** O "+N" de um grupo que não cabe: a faixa de horas dos itens escondidos, na última coluna à vista. */
+export interface MoreRun {
+  top: number;
+  bottom: number;
+  col: number;
+  cols: number;
+  items: CalendarItem[];
+}
+
+/**
+ * Quando o dia é estreito demais para as colunas de um grupo (`max` é quantas cabem), as primeiras `max - 1` ficam à
+ * vista e a última vira um "+N" para cada faixa de horas que tem item escondido. O grupo que cabe não muda.
+ */
+export function fitColumns(placed: Placed[], max: number): { shown: Placed[]; more: MoreRun[] } {
+  const fit = Math.max(2, Math.floor(max));
+  const shown: Placed[] = [];
+  const more: MoreRun[] = [];
+  const hidden = new Map<number, Placed[]>();
+  for (const p of placed) {
+    if (p.cols <= fit) {
+      shown.push(p);
+      continue;
+    }
+    const keep = fit - 1;
+    if (p.col < keep) shown.push({ ...p, cols: fit, span: Math.min(p.span, keep - p.col) });
+    else hidden.set(p.group, [...(hidden.get(p.group) ?? []), p]);
+  }
+  for (const list of hidden.values()) {
+    let run: MoreRun | null = null;
+    for (const p of [...list].sort((a, b) => a.top - b.top)) {
+      if (run && p.top < run.bottom) {
+        run.bottom = Math.max(run.bottom, p.bottom);
+        run.items.push(p.item);
+      } else {
+        run = { top: p.top, bottom: p.bottom, col: fit - 1, cols: fit, items: [p.item] };
+        more.push(run);
+      }
+    }
+  }
+  return { shown, more };
 }
 
 /** Os itens de dia todo de um dia, e os de cada dia na ordem da Agenda e do Mês (dia todo primeiro, depois a hora). */
