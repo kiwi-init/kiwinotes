@@ -12,7 +12,7 @@ import { useT } from "../src/i18n.ts";
 import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WIDE_PX, WidePanel, type WideState } from "./Detail.tsx";
 import { type CalendarFilter, filterStorage, passes, readFilter, shownProjects, toggleAllProjects, toggleKind, toggleProject, writeFilter } from "./filter.ts";
 import { periodTitle } from "./format.ts";
-import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, noteLine, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, newItemDay, noteLine, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
 import { KiwiAskBox } from "./KiwiAsk.tsx";
 import { KiwiPanel } from "./KiwiPanel.tsx";
 import { NewItem } from "./NewItem.tsx";
@@ -421,7 +421,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
       ) : null}
       {creating ? (
         <NewItem
-          day={view === "day" ? anchor : today >= range.from && today < range.to ? today : range.from}
+          day={newItemDay(view, anchor, today)}
           projects={load.state === "ready" ? load.data.projects : []}
           onCancel={() => setCreating(false)}
           onCreate={async (c) => {
