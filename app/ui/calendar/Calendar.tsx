@@ -15,6 +15,7 @@ import { periodTitle } from "./format.ts";
 import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, newItemDay, noteLine, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
 import { KiwiAskBox } from "./KiwiAsk.tsx";
 import { KiwiPanel } from "./KiwiPanel.tsx";
+import { trySave } from "./kiwi-panel.ts";
 import { NewItem } from "./NewItem.tsx";
 import { apiStore, type CalendarStore, todayOf } from "./source.ts";
 import { AgendaList, type DragMode, HOUR_PX, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
@@ -198,8 +199,9 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
 
   // ---------------------------------------------------------------- escrever
 
-  const save = async (u: CalendarUpdate) => {
-    try {
+  const save = (u: CalendarUpdate): Promise<boolean> =>
+    trySave(
+      async () => {
       const fresh = await source.update(u);
       // A pendência sem data que ganhou dia (o arrasto do painel do Kiwi, T32156) ainda não está na grade: entra agora.
       setLoad((l) =>
@@ -211,11 +213,12 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
       );
       setOpen((o) => (o && o.item.id === u.id ? { ...o, item: fresh } : o));
       setHover((h) => (h && h.item.id === u.id ? { ...h, item: fresh } : h));
-    } catch (e) {
-      setNotice(t(errCode(e) === "E_CONFLICT" ? "calendar.conflict" : "calendar.saveFailed"));
-      reload();
-    }
-  };
+      },
+      (e) => {
+        setNotice(t(errCode(e) === "E_CONFLICT" ? "calendar.conflict" : "calendar.saveFailed"));
+        reload();
+      },
+    );
 
   const actions: DetailActions = {
     openNote: (item) => item.source && onOpenNote(item.source.path, item.source.internal, noteLine(item)),

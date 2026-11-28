@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { CalendarItem, CalendarItems } from "../../src/shared/calendar.ts";
 import { suggestion } from "../../src/shared/calendar-kiwi.ts";
 import { setAppLocale } from "../src/i18n.ts";
-import { DISMISS_KEEP_MS, DISMISS_STORAGE_KEY, dismissedStore, dropStart, dropUpdate, panelRange, todayItems } from "./kiwi-panel.ts";
+import { answerYes, DISMISS_KEEP_MS, DISMISS_STORAGE_KEY, dismissedStore, dropStart, dropUpdate, panelRange, todayItems, trySave } from "./kiwi-panel.ts";
 import { KiwiPanel } from "./KiwiPanel.tsx";
 import { isAskShortcut, KiwiAskBox } from "./KiwiAsk.tsx";
 import { openKiwiAsk, provideKiwiAsk } from "../hub/kiwi-ask.ts";
@@ -161,5 +161,28 @@ describe("a busca do Kiwi (⌘K)", () => {
     expect(renderToStaticMarkup(<KiwiAskBox active face={null} available={false} />)).toBe("");
     setAppLocale({ setting: "en", locale: "en", system: "en" });
     expect(renderToStaticMarkup(<KiwiAskBox active face={null} available />)).toContain("Ask Kiwi");
+  });
+});
+
+describe("o Sim que não grava (#534)", () => {
+  const sug = { itemId: "n:Casa.md#2:abcdef12", key: "overdue:Casa.md:Pagar a conta", accept: { patch: { start: "2026-11-27T09:00" } } };
+
+  test("um E_CONFLICT: o aviso sai, e a sugestão não fica guardada como respondida", async () => {
+    const answered = new Set<string>();
+    const failed: string[] = [];
+    // Como o `save` da tela: o update rejeita, o trySave avisa e devolve false.
+    const save = (u: { id: string }) => trySave(async () => Promise.reject(Object.assign(new Error("changed"), { code: "E_CONFLICT", id: u.id })), (e) => failed.push((e as { code: string }).code));
+    expect(await answerYes(sug as never, save, answered)).toBe(false);
+    expect(failed).toEqual(["E_CONFLICT"]);
+    expect([...answered]).toEqual([]);
+  });
+
+  test("gravou: a sugestão fica respondida; um save que não diz nada (os de antes) também conta como gravado", async () => {
+    const answered = new Set<string>();
+    expect(await answerYes(sug as never, (u) => trySave(async () => u, () => {}), answered)).toBe(true);
+    expect([...answered]).toEqual([sug.key]);
+    const other = new Set<string>();
+    expect(await answerYes(sug as never, async () => {}, other)).toBe(true);
+    expect([...other]).toEqual([sug.key]);
   });
 });

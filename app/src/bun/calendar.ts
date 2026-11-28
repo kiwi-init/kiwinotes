@@ -265,6 +265,8 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
     checkUpdate(u);
     // O aviso na forma curta (`60m` vira `1h`): a linha e o item dizem o mesmo.
     if (u.notify !== undefined) u = { ...u, notify: normalNotify(u.notify)! };
+    // Um start com hora tira o dia todo (#528): "passa para as 10h" num item de dia todo vira 10:00, nunca um ok calado.
+    if (u.allDay === undefined && typeof u.start === "string" && !isDay(u.start)) u = { ...u, allDay: false };
     const src = await sources();
     if (u.id.startsWith("m:")) throw new CalendarError("E_READONLY", "a recorded meeting can't change");
     if (u.id.startsWith("f:")) return updateNote(src, u);
@@ -296,6 +298,7 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
       if (u.notify !== undefined) patch.notify = u.notify === DEFAULT_NOTIFY[u.kind ?? cur?.kind ?? "task"] && !cur?.notify ? null : u.notify;
       if (u.repeat !== undefined) patch.repeat = u.repeat;
       if (u.start !== undefined || u.end !== undefined || u.allDay !== undefined) {
+        if (u.allDay === false && u.start === undefined && (!cur || cur.allDay)) throw new CalendarError("E_BAD_ARGS", NEEDS_TIME);
         // Mover uma vez de uma repetição move a série inteira pelo mesmo tanto.
         const shift = at.occurrence && cur && u.start !== undefined ? toMs(u.start) - toMs(at.occurrence === cur.start.slice(0, 10) ? cur.start : `${at.occurrence}${cur.start.slice(10)}`) : 0;
         const start = u.start !== undefined ? (at.occurrence && cur ? shiftBy(cur.start, shift) : u.start) : undefined;
@@ -363,6 +366,7 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
       if (!note) throw new CalendarError("E_NOT_FOUND", `no note ${path}`);
       const cur = parseAgenda(frontmatterOf(note.content)?.agenda);
       if (!cur) throw new CalendarError("E_CONFLICT", "the note has no agenda anymore; read again");
+      if (u.allDay === false && u.start === undefined && cur.allDay) throw new CalendarError("E_BAD_ARGS", NEEDS_TIME);
       const allDay = u.allDay ?? cur.allDay;
       const start = u.start ?? cur.start;
       // Como nas linhas (#449, #484): só o start leva o fim junto, e a duração fica.
@@ -646,10 +650,14 @@ function checkCreate(c: CalendarCreate): void {
     throw new CalendarError("E_BAD_ARGS", "calendar.create: project is a top-level folder name or null");
 }
 
+/** O dia todo não sai sem uma hora (#528): o `allDay: false` vem com o start da hora. */
+const NEEDS_TIME = "calendar.update: to leave all day, send start with the time (AAAA-MM-DDTHH:MM)";
+
 function checkUpdate(u: CalendarUpdate): void {
   if (!u || typeof u !== "object" || typeof u.id !== "string" || !u.id) throw new CalendarError("E_BAD_ARGS", "calendar.update: id is required");
   if (u.title !== undefined) checkTitle(u.title, "calendar.update");
   checkTimes(u.start, u.end, u.allDay, "calendar.update");
+  if (u.allDay === false && typeof u.start === "string" && isDay(u.start)) throw new CalendarError("E_BAD_ARGS", NEEDS_TIME);
   if (u.done !== undefined && typeof u.done !== "boolean") throw new CalendarError("E_BAD_ARGS", "calendar.update: done must be true or false");
   if (u.notify !== undefined && normalNotify(u.notify) === null) throw new CalendarError("E_BAD_ARGS", NOTIFY_HELP("calendar.update"));
   if (u.kind !== undefined && (!isCalendarKind(u.kind) || u.kind === "note")) throw new CalendarError("E_BAD_ARGS", "calendar.update: kind is meeting, reminder, task or focus");
