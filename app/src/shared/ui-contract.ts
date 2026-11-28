@@ -350,7 +350,10 @@ export type { NoteModel };
 //   de antes: `50m`, `2h`, `3d` (até 30 dias), e o item volta com a forma curta (`60m` vira `1h`, `24h` vira
 //   `dayBefore`). O `calendar.delete` apaga a linha do item na nota (a série inteira, numa repetição), ou tira o
 //   `agenda:` de uma nota com data, sem apagar a nota. E_READONLY numa reunião gravada.
-export const UI_CONTRACT_VERSION = "1.110.0";
+// 1.111.0 (T34775, spec #34706): as repetições novas. O `repeat` aceita, além de `daily` e `weekly`, `monthly`, `yearly`,
+//   `weekdays` e a regra montada: `2w:mo,we` (a cada 2 semanas, seg e qua), `3d/10x` (10 vezes), `1m/2026-12-31` (até o
+//   dia). O item volta com a forma curta (`1d` vira `daily`). O Feito na última vez da regra marca a caixa. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.111.0";
 
 /** A voz do Kiwi pelo ElevenLabs nos Ajustes (T31628): só se há chave, nunca ela. */
 export interface ElevenLabsStatus {

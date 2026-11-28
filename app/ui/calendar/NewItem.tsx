@@ -4,9 +4,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { CALENDAR_KINDS, type CalendarCreate, type CalendarKind, titleProblem } from "../../src/shared/calendar.ts";
+import { CALENDAR_KINDS, type CalendarCreate, type CalendarKind, type CalendarRepeat, titleProblem } from "../../src/shared/calendar.ts";
 import { noteFileName } from "../../src/shared/note-name.ts";
 import { useT } from "../src/i18n.ts";
+import { RepeatField } from "./RepeatField.tsx";
 
 const inFolder = (project: string, name: string) => `${project ? `${project}/` : ""}${name}.md`;
 
@@ -25,11 +26,13 @@ export function NewItem({ day, projects, onCancel, onCreate }: { day: string; pr
   const [date, setDate] = useState(day);
   const [time, setTime] = useState("");
   const [end, setEnd] = useState("");
+  // A repetição (T34775): `undefined` é o "Personalizar…" com algo faltando, e o Criar espera.
+  const [repeat, setRepeat] = useState<CalendarRepeat | null | undefined>(null);
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => field.current?.focus(), []);
   // O pedaço que a nota leria como tipo, aviso, repetição ou data (#493): o Criar fica desligado e o motivo aparece.
   const bad = title.trim() ? titleProblem(title) : null;
-  const ok = title.trim() && !bad && /^\d{4}-\d{2}-\d{2}$/.test(date) && (!end || (time && end > time));
+  const ok = title.trim() && !bad && /^\d{4}-\d{2}-\d{2}$/.test(date) && (!end || (time && end > time)) && (kind === "note" || repeat !== undefined);
   const submit = () => {
     if (!ok) return;
     onCreate({
@@ -39,6 +42,8 @@ export function NewItem({ day, projects, onCancel, onCreate }: { day: string; pr
       start: time ? `${date}T${time}` : date,
       end: time && end ? `${date}T${end}` : null,
       allDay: !time,
+      // A nota não repete (o main recusa).
+      ...(kind !== "note" && repeat ? { repeat } : {}),
     });
   };
   return (
@@ -98,6 +103,7 @@ export function NewItem({ day, projects, onCancel, onCreate }: { day: string; pr
             <input type="time" name="end" step={900} value={end} disabled={!time} onChange={(e) => setEnd(e.target.value)} />
           </label>
         </div>
+        {kind !== "note" ? <RepeatField value={repeat ?? null} day={date} onChange={setRepeat} /> : null}
         {(() => {
           const w = whereOf(kind, project, title);
           return <p className="kn-cal-muted kn-cal-where">{t(w.key, w.path ? { path: w.path } : undefined)}</p>;

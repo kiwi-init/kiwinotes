@@ -1,6 +1,7 @@
 // As datas da aba Calendário na língua do app (T32155): o título do período, a cabeça de cada dia e a hora dos itens.
 
-import type { CalendarItem } from "../../src/shared/calendar.ts";
+import { CALENDAR_REPEATS, type CalendarItem, type CalendarRepeat, type CalendarRepeatPreset, repeatRule } from "../../src/shared/calendar.ts";
+import type { Params, TextKey } from "../../src/shared/i18n/index.ts";
 import type { CalendarView } from "./model.ts";
 
 type Locale = "pt" | "en";
@@ -62,3 +63,27 @@ export function whenLine(item: Pick<CalendarItem, "start" | "end" | "allDay">, l
 
 /** A cabeça de um dia na Agenda: "Quinta, 26 de novembro". */
 export const agendaHead = (day: string, l: Locale) => cap(fmt(l, { weekday: "long", day: "numeric", month: "long" }).format(at(day)));
+
+/** Os dias da semana numa lista: "seg, qua e sex", "Mon, Wed and Fri" (0 = domingo). */
+function weekdayList(days: readonly number[], l: Locale, and: string): string {
+  const names = days.map((d) => clean(fmt(l, { weekday: "short" }).format(at(`2026-11-${String(22 + d).padStart(2, "0")}`))));
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} ${and} ${names[names.length - 1]}` : (names[0] ?? "");
+}
+
+/** "26 nov 2026": o dia do fim de uma repetição. */
+const shortDate = (day: string, l: Locale) => clean(fmt(l, { day: "numeric", month: "short", year: "numeric" }).format(at(day)));
+
+/**
+ * Como a tela diz uma repetição (T34775): "toda semana", "nos dias úteis", "a cada 2 semanas, seg e qua, até 31 dez
+ * 2026", "every 3 days, 10 times". `t` é o tradutor da tela.
+ */
+export function repeatLabel(rep: CalendarRepeat, l: Locale, t: (key: TextKey, params?: Params) => string): string {
+  if ((CALENDAR_REPEATS as readonly string[]).includes(rep)) return t(`calendar.repeat.${rep as CalendarRepeatPreset}`);
+  const r = repeatRule(rep);
+  if (!r) return rep;
+  const parts = [t(`calendar.repeat.every.${r.unit}`, { n: r.every })];
+  if (r.days.length) parts.push(weekdayList(r.days, l, t("calendar.repeat.and")));
+  if (r.until) parts.push(t("calendar.repeat.until", { date: shortDate(r.until, l) }));
+  else if (r.count !== null) parts.push(t("calendar.repeat.times", { n: r.count }));
+  return parts.join(", ");
+}

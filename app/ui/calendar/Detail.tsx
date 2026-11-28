@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { CALENDAR_NOTIFY, type CalendarItem, type CalendarNotify, notifyText } from "../../src/shared/calendar.ts";
 import { useT } from "../src/i18n.ts";
-import { whenLine } from "./format.ts";
+import { repeatLabel, whenLine } from "./format.ts";
 import { noteLine } from "./model.ts";
 import type { CalendarSource } from "../../src/shared/calendar.ts";
 import type { CalendarStore } from "./source.ts";
@@ -390,7 +390,7 @@ export function WidePanel(props: {
               {item.repeat ? (
                 <div className="kn-cal-row-kv">
                   <i>{t("calendar.row.repeat")}</i>
-                  <span>{t(`calendar.repeat.${item.repeat}`)}</span>
+                  <span>{repeatLabel(item.repeat, locale, t)}</span>
                 </div>
               ) : null}
               {item.detail ? (

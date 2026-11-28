@@ -304,3 +304,34 @@ describe("kiwi escrever/desmarcar (T34753)", () => {
     expect(tools("me lembra às 10h de ligar para a Ana")).not.toContain("calendar_delete");
   });
 });
+
+describe("kiwi escrever: as repetições novas (spec #34706, T34775)", () => {
+  test("agendar e remarcar aceitam as prontas, a palavra da linha e a regra; a forma curta vai para a nota", async () => {
+    const r = await rig();
+    await r.call({ fazer: "escrever", alvo: "Pagar a conta", opcoes: { como: "agendar", tipo: "reminder", inicio: "2026-11-30T09:00", projeto: "Projeto X", repetir: "monthly" } });
+    await r.call({ fazer: "escrever", alvo: "Escrever", opcoes: { como: "agendar", tipo: "focus", inicio: "2026-11-30T08:00", projeto: "Projeto X", repetir: " 2W:we,mo/10x " } });
+    await r.call({ fazer: "escrever", alvo: "Alongar", opcoes: { como: "agendar", tipo: "task", inicio: "2026-11-30", projeto: "Projeto X", repetir: "úteis" } });
+    const p = r.read("Projeto X/Pendências.md");
+    expect(p).toContain("Pagar a conta @ 2026-11-30 09:00 #lembrete 🔁 mês");
+    expect(p).toContain("Escrever @ 2026-11-30 08:00 #foco 🔁 2w:mo,we/10x");
+    expect(p).toContain("Alongar @ 2026-11-30 🔁 úteis");
+    // O id muda com a linha: o achar/agenda de novo antes de cada remarcar.
+    const idOf = async () => ((await r.call({ fazer: "achar", opcoes: { como: "agenda" } })).value as { items: { id: string; title: string }[] }).items.find((i) => i.title === "Revisar o orçamento")!.id;
+    await r.call({ fazer: "escrever", alvo: await idOf(), opcoes: { como: "remarcar", repetir: "1y/2030-11-27" } });
+    expect(r.read("Projeto X/Plano.md")).toContain("- [ ] Revisar o orçamento @ 2026-11-27 10:00 🔁 1y/2030-11-27");
+    await r.call({ fazer: "escrever", alvo: await idOf(), opcoes: { como: "remarcar", repetir: null } });
+    expect(r.read("Projeto X/Plano.md")).toContain("- [ ] Revisar o orçamento @ 2026-11-27 10:00\n");
+  });
+
+  test("a repetição que não vale: erro que ensina a forma, nada escrito", async () => {
+    const r = await rig();
+    for (const no of ["a cada 2 semanas", "0d", "1m:mo", "1d/0x"]) {
+      const e = await r.call({ fazer: "escrever", alvo: "X", opcoes: { como: "agendar", tipo: "task", inicio: "2026-11-30", repetir: no } }).then(
+        () => null,
+        (err: Error & { code?: string }) => err,
+      );
+      expect([no, e?.code, e?.message]).toEqual([no, "E_BAD_ARGS", expect.stringContaining("repeat: daily, weekly, monthly, yearly, weekdays, ou a regra: 2w:mo,we")]);
+    }
+    expect(() => r.read("Calendário.md")).toThrow();
+  });
+});

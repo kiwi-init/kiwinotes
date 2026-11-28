@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { Vault } from "../notes/vault.ts";
-import { addDays, type CalendarItem, dayOf, isCalendarNotify, normalNotify, notifyAt, notifyMinutes, notifyText, parseWhen, rewriteWhen, titleProblem, toMs } from "../shared/calendar.ts";
+import { addDays, type CalendarItem, dayOf, isCalendarNotify, isCalendarRepeat, normalNotify, normalRepeat, repeatDays, repeatRule, notifyAt, notifyMinutes, notifyText, parseWhen, rewriteWhen, titleProblem, toMs } from "../shared/calendar.ts";
 import { translate } from "../shared/i18n/index.ts";
 import { tempDir } from "../../test/tmp.ts";
 import { whereOf } from "../../ui/calendar/NewItem.tsx";
@@ -902,5 +902,98 @@ describe("o dia todo que ganha uma hora (#528)", () => {
     expect(await code(cal.update({ id: "f:Pauta.md", allDay: false }))).toBe("E_BAD_ARGS");
     expect(await cal.update({ id: "f:Pauta.md", start: "2026-11-27T09:00" })).toMatchObject({ start: "2026-11-27T09:00", allDay: false });
     expect(read("Pauta.md")).toContain('agenda: "2026-11-27 09:00"');
+  });
+});
+
+describe("as repetições novas (spec #34706, T34775)", () => {
+  // 2026-12-07 é uma segunda.
+  const rule = (v: string) => repeatRule(v)!;
+  const days = (v: string, first: string, from: string, to: string) => repeatDays(rule(v), first, from, to);
+
+  test("a forma curta: as prontas, as palavras da linha, a regra montada; o que não vale é null", () => {
+    expect(["daily", "weekly", "monthly", "yearly", "weekdays"].map(normalRepeat)).toEqual(["daily", "weekly", "monthly", "yearly", "weekdays"]);
+    expect(["1d", "1W", "mês", "ano", "úteis", "1w:fr,mo,tu,we,th", " 2w : we, mo "].map(normalRepeat)).toEqual(["daily", "weekly", "monthly", "yearly", "weekdays", "weekdays", "2w:mo,we"]);
+    expect(["1d/10x", "1m/2026-12-31", "3d", "2w:mo,mo,su"].map(normalRepeat)).toEqual(["1d/10x", "1m/2026-12-31", "3d", "2w:mo,su"]);
+    for (const no of ["0d", "100d", "1m:mo", "1w:xx", "1d/0x", "1d/1000x", "1d/2026-02-30", "2 semanas", "hourly", 7, null]) expect([no, normalRepeat(no)]).toEqual([no, null]);
+    expect(isCalendarRepeat("2w:mo,we")).toBe(true);
+    expect(isCalendarRepeat("1d")).toBe(false); // a forma curta é "daily"
+  });
+
+  test("os dias: a cada N, os dias da semana, o mês sem o dia, o 29 de fevereiro, o fim por dia e por vezes", () => {
+    expect(days("3d", "2026-12-07", "2026-12-07", "2026-12-17")).toEqual(["2026-12-07", "2026-12-10", "2026-12-13", "2026-12-16"]);
+    expect(days("weekdays", "2026-12-07", "2026-12-10", "2026-12-17")).toEqual(["2026-12-10", "2026-12-11", "2026-12-14", "2026-12-15", "2026-12-16"]);
+    // A cada 2 semanas, segunda e quarta, começando numa quarta: a segunda da 1ª semana fica de fora.
+    expect(days("2w:mo,we", "2026-12-09", "2026-12-01", "2027-01-01")).toEqual(["2026-12-09", "2026-12-21", "2026-12-23"]);
+    expect(days("monthly", "2027-01-31", "2027-01-01", "2027-06-01")).toEqual(["2027-01-31", "2027-03-31", "2027-05-31"]);
+    expect(days("yearly", "2028-02-29", "2028-01-01", "2037-01-01")).toEqual(["2028-02-29", "2032-02-29", "2036-02-29"]);
+    expect(days("1w/3x", "2026-12-07", "2026-12-01", "2027-03-01")).toEqual(["2026-12-07", "2026-12-14", "2026-12-21"]);
+    expect(days("1d/2026-12-09", "2026-12-07", "2026-12-01", "2027-01-01")).toEqual(["2026-12-07", "2026-12-08", "2026-12-09"]);
+    // O número de vezes conta da 1ª, mesmo olhando depois: só a 3ª cai a partir de 21/12.
+    expect(days("1w/3x", "2026-12-07", "2026-12-20", "2027-03-01")).toEqual(["2026-12-21"]);
+    expect(days("1w:mo,we/3x", "2026-12-09", "2026-12-01", "2027-01-01")).toEqual(["2026-12-09", "2026-12-14", "2026-12-16"]);
+    expect(days("1m/2x", "2027-01-31", "2027-01-01", "2027-12-01")).toEqual(["2027-01-31", "2027-03-31"]);
+    // Anos à frente sem andar dia a dia.
+    expect(days("daily", "2020-01-01", "2026-12-07", "2026-12-09")).toEqual(["2026-12-07", "2026-12-08"]);
+  });
+
+  test("a linha: lê e escreve cada uma, em pt e en; um 🔁 que não é repetição fica no título", () => {
+    for (const [tok, rep] of [["mês", "monthly"], ["monthly", "monthly"], ["ano", "yearly"], ["úteis", "weekdays"], ["uteis", "weekdays"], ["weekdays", "weekdays"], ["2w:mo,we", "2w:mo,we"], ["1m/2026-12-31", "1m/2026-12-31"], ["3d/10x", "3d/10x"]] as const)
+      expect([tok, parseWhen(`Pagar a conta @ 2026-12-10 #lembrete 🔁 ${tok}`)]).toMatchObject([tok, { title: "Pagar a conta", repeat: rep }]);
+    expect(parseWhen("Pagar a conta @ 2026-12-10 🔁 talvez")).toMatchObject({ title: "Pagar a conta 🔁 talvez", repeat: null });
+    expect(rewriteWhen("Pagar a conta @ 2026-12-10", { repeat: "monthly" }, "pt")).toBe("Pagar a conta @ 2026-12-10 🔁 mês");
+    expect(rewriteWhen("Pagar a conta @ 2026-12-10", { repeat: "weekdays" }, "en")).toBe("Pagar a conta @ 2026-12-10 🔁 weekdays");
+    expect(rewriteWhen("Pagar a conta @ 2026-12-10 🔁 semana", { repeat: "2w:mo,we/10x" }, "pt")).toBe("Pagar a conta @ 2026-12-10 🔁 2w:mo,we/10x");
+  });
+
+  test("criar e ler: a regra vai na linha, e o calendar.items abre as vezes; a repetição que não vale volta E_BAD_ARGS", async () => {
+    const { cal, read } = await open({});
+    await cal.create({ kind: "reminder", title: "Pagar a conta", start: "2027-01-31T09:00", repeat: "monthly" });
+    await cal.create({ kind: "focus", title: "Escrever", start: "2026-12-09T08:00", end: "2026-12-09T09:00", repeat: "2w:mo,we" });
+    await cal.create({ kind: "task", title: "Alongar", start: "2026-12-07", repeat: "weekdays" });
+    expect(read("Calendário.md")).toContain("- [ ] Pagar a conta @ 2027-01-31 09:00 #lembrete 🔁 mês");
+    expect(read("Calendário.md")).toContain("Escrever @ 2026-12-09 08:00-09:00 #foco 🔁 2w:mo,we");
+    expect(read("Calendário.md")).toContain("- [ ] Alongar @ 2026-12-07 🔁 úteis");
+    const its = (await cal.items({ from: "2026-12-07", to: "2026-12-26" })).items;
+    expect(its.filter((i) => i.title === "Escrever").map((i) => i.start)).toEqual(["2026-12-09T08:00", "2026-12-21T08:00", "2026-12-23T08:00"]);
+    expect(its.filter((i) => i.title === "Alongar")).toHaveLength(15); // 7 a 25/12: três semanas úteis
+    const mar = (await cal.items({ from: "2027-02-01", to: "2027-04-01" })).items.filter((i) => i.title === "Pagar a conta");
+    expect(mar.map((i) => i.start)).toEqual(["2027-03-31T09:00"]);
+    for (const bad of ["2 semanas", "1d", "0w", "1m:mo"]) expect([bad, await code(cal.create({ kind: "task", title: "X", start: "2026-12-07", repeat: bad as never }))]).toEqual([bad, "E_BAD_ARGS"]);
+  });
+
+  test("os avisos saem em cada vez da regra montada", async () => {
+    const { cal } = await open({ "Calendário.md": "- [ ] Tomar o remédio @ 2026-12-07 08:00 #lembrete 🔔 10m 🔁 1w:mo,fr\n" });
+    const its = (await cal.items({ from: "2026-12-07", to: "2026-12-14" })).items;
+    const al = alertsBetween(its, toMs("2026-12-07T00:00"), toMs("2026-12-14T00:00"));
+    expect(al.map((a) => a.item.start)).toEqual(["2026-12-07T08:00", "2026-12-11T08:00"]);
+    expect(al[0]!.at).toBe(toMs("2026-12-07T07:50"));
+  });
+
+  test("o Feito anda a série pela regra; com N vezes, a conta desce; na última vez, a série acaba e a caixa marca", async () => {
+    const { cal, read } = await open({ "Calendário.md": "- [ ] Regar @ 2026-12-09 08:00 🔁 1w:mo,we/3x\n" });
+    const done1 = async () => cal.update({ id: (await cal.items({ from: "2026-12-01", to: "2027-01-01" })).items[0]!.id, done: true });
+    await done1();
+    expect(read("Calendário.md")).toBe("- [ ] Regar @ 2026-12-14 08:00 🔁 1w:mo,we/2x\n");
+    await done1();
+    expect(read("Calendário.md")).toBe("- [ ] Regar @ 2026-12-16 08:00 🔁 1w:mo,we/1x\n");
+    await done1();
+    expect(read("Calendário.md")).toBe("- [x] Regar @ 2026-12-16 08:00 🔁 1w:mo,we/1x\n");
+    expect((await cal.items({ from: "2026-12-17", to: "2027-01-01" })).items).toEqual([]);
+  });
+
+  test("o Feito na última vez antes do 'até' também acaba a série; o mês sem o dia é pulado", async () => {
+    const { cal, read } = await open({ "Calendário.md": "- [ ] Fechar o mês @ 2027-01-31 🔁 1m/2027-04-01\n" });
+    const first = async (from: string, to: string) => (await cal.items({ from, to })).items[0]!;
+    await cal.update({ id: (await first("2027-01-01", "2027-02-01")).id, done: true });
+    expect(read("Calendário.md")).toBe("- [ ] Fechar o mês @ 2027-03-31 🔁 1m/2027-04-01\n");
+    await cal.update({ id: (await first("2027-03-01", "2027-04-01")).id, done: true });
+    expect(read("Calendário.md")).toBe("- [x] Fechar o mês @ 2027-03-31 🔁 1m/2027-04-01\n");
+  });
+
+  test("mover uma vez move a série, e os dias escolhidos andam junto", async () => {
+    const { cal, read } = await open({ "Calendário.md": "- [ ] Escrever @ 2026-12-07 08:00 #foco 🔁 1w:mo,we\n" });
+    const seg = (await cal.items({ from: "2026-12-07", to: "2026-12-08" })).items[0]!;
+    await cal.update({ id: seg.id, start: "2026-12-08T08:00" });
+    expect(read("Calendário.md")).toBe("- [ ] Escrever @ 2026-12-08 08:00 #foco 🔁 1w:tu,th\n");
   });
 });

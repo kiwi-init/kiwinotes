@@ -6,7 +6,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 
-import { agendaHead, dayHead, periodTitle, timeRange, weekdayNames, whenLine } from "./format.ts";
+import { translate } from "../../src/shared/i18n/index.ts";
+import { agendaHead, dayHead, periodTitle, repeatLabel, timeRange, weekdayNames, whenLine } from "./format.ts";
 
 describe("as cabeças de data", () => {
   test("a Agenda em pt: dia da semana e mês em minúscula, só a 1ª maiúscula", () => {
@@ -53,5 +54,18 @@ describe("a hora de um item", () => {
   test("o cartão mostra o dia do começo e a hora com o +1 dia", () => {
     expect(whenLine({ start: "2026-11-27T11:00", end: "2026-11-28T11:00", allDay: false }, "pt", DIA_TODO, MAIS_UM)).toBe("Sex, 27 de nov · 11:00–11:00 (+1 dia)");
     expect(whenLine({ start: "2026-11-27T11:00", end: "2026-11-27T12:00", allDay: false }, "en", "all day", "(+1 day)")).toBe("Fri, Nov 27 · 11:00–12:00");
+  });
+});
+
+describe("a repetição no cartão (spec #34706, T34775)", () => {
+  const label = (rep: string, l: "pt" | "en") => repeatLabel(rep as never, l, (k, p) => translate(l, k, p));
+  test("as prontas e a regra montada, em pt e en", () => {
+    expect(["daily", "monthly", "yearly", "weekdays"].map((r) => label(r, "pt"))).toEqual(["todo dia", "todo mês", "todo ano", "nos dias úteis"]);
+    expect(label("2w:mo,we", "pt")).toBe("a cada 2 semanas, seg e qua");
+    expect(label("2w:mo,we", "en")).toBe("every 2 weeks, Mon and Wed");
+    expect(label("1w:mo,we,fr/10x", "pt")).toBe("toda semana, seg, qua e sex, 10 vezes");
+    expect(label("3d/2026-12-31", "pt")).toBe("a cada 3 dias, até 31 de dez de 2026");
+    expect(label("1m/1x", "en")).toBe("every month, once");
+    expect(label("1y/2030-02-01", "en")).toBe("every year, until Feb 1, 2030");
   });
 });

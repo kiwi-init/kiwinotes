@@ -10,7 +10,7 @@
 //   aberto) não cria outro; muda só o aviso, o fim ou a repetição que vieram diferentes, ou nada.
 // - **O aviso livre** (T34753): `notify` é qualquer antecedência (`50m`, `2h`, `3d`, até 30 dias), além dos de antes.
 
-import { type CalendarCreate, type CalendarDeleted, type CalendarItem, type CalendarItems, type CalendarUpdate, CALENDAR_KINDS, CALENDAR_REPEATS, CALENDAR_LIMITS, isDay, normalNotify } from "../../shared/calendar.ts";
+import { type CalendarCreate, type CalendarDeleted, type CalendarItem, type CalendarItems, type CalendarUpdate, CALENDAR_KINDS, CALENDAR_LIMITS, isDay, normalNotify, normalRepeat } from "../../shared/calendar.ts";
 import { PROJECT_NOTE, ROOT_NOTE } from "../../bun/calendar.ts";
 import type { DoubtDecider, SecretGuard } from "../../guardrail/filter.ts";
 import type { VaultWriter } from "./writer.ts";
@@ -44,6 +44,10 @@ export const CALENDAR_LIST_MAX = 100;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** O aviso, nas duas que escrevem: o que o agente erra é pôr a antecedência no começo ou no fim (spec #34706). */
+const REPEAT_PROP = {
+  type: "string",
+  description: "daily, weekly, monthly, yearly, weekdays, ou a regra: 2w:mo,we, 3d/10x (10 vezes), 1m/2026-12-31 (até).",
+};
 const NOTIFY_PROP = { type: "string", description: "A antecedência: 50m, 2h, 3d (até 30 dias), atTime (na hora), dayBefore ou none." };
 
 const whenProp = (o: string) => ({ type: "string", description: `${o}: AAAA-MM-DDTHH:MM na hora local, ou só AAAA-MM-DD no dia todo.` });
@@ -76,7 +80,7 @@ export const CALENDAR_TOOL_DEFS = [
         end: whenProp("O fim, no mesmo dia (opcional)"),
         project: { type: "string", description: "A pasta do projeto, como o projects_list devolve. Sem ele, na raiz." },
         notify: NOTIFY_PROP,
-        repeat: { type: "string", enum: [...CALENDAR_REPEATS] },
+        repeat: REPEAT_PROP,
       },
       required: ["title", "kind", "start"],
       additionalProperties: false,
@@ -98,7 +102,7 @@ export const CALENDAR_TOOL_DEFS = [
         allDay: { type: "boolean" },
         done: { type: "boolean" },
         notify: NOTIFY_PROP,
-        repeat: { type: ["string", "null"], enum: [...CALENDAR_REPEATS, null] },
+        repeat: { ...REPEAT_PROP, type: ["string", "null"] },
       },
       required: ["id"],
       additionalProperties: false,
@@ -214,6 +218,14 @@ export async function calendarTool(d: CalendarToolDeps, name: CalendarToolName, 
 }
 
 /** O aviso como o agente mandou (`50 min`, `2h`, `120`), na forma curta; o erro diz o que vale. */
+/** A repetição na forma curta ("2 semanas" não: a regra é `2w`). */
+function repeatArg(v: unknown): unknown {
+  if (v === undefined || v === null) return v;
+  const r = normalRepeat(v);
+  if (r === null) throw bad(`repeat: ${REPEAT_PROP.description}`);
+  return r;
+}
+
 function notifyArg(v: unknown): unknown {
   if (v === undefined) return undefined;
   const n = normalNotify(v);
@@ -290,10 +302,11 @@ async function create(d: CalendarToolDeps, raw: unknown): Promise<CalendarToolRe
   if (typeof a.kind !== "string") throw bad(`kind é um de: ${CALENDAR_KINDS.join(", ")}`);
   if (typeof a.start !== "string") throw bad("start é obrigatório: AAAA-MM-DDTHH:MM, ou AAAA-MM-DD no dia todo");
   const notify = notifyArg(a.notify);
+  const repeat = repeatArg(a.repeat);
   const project = typeof a.project === "string" && a.project.trim() ? await projectOf(d, a.project.trim()) : null;
   // Um item novo não tem segredo dele: um marcador aqui é de outra nota, e o filtro recusa.
   const title = restored(d, "\u0000nova", a.title.trim());
-  const c = { ...a, title, project, ...(notify !== undefined ? { notify } : {}) } as unknown as CalendarCreate;
+  const c = { ...a, title, project, ...(notify !== undefined ? { notify } : {}), ...(repeat !== undefined ? { repeat } : {}) } as unknown as CalendarCreate;
   // Um pedido = um item (T34753): o mesmo item, em aberto, não se cria de novo.
   const twin = await twinOf(d, c);
   if (twin) return again(d, twin, c);
@@ -331,7 +344,8 @@ async function update(d: CalendarToolDeps, raw: unknown): Promise<CalendarToolRe
   const path = pathOfId(a.id);
   if (!path) throw new CalendarToolError(a.id.startsWith("m:") ? "E_READONLY" : "E_BAD_ARGS", a.id.startsWith("m:") ? "a reunião gravada não muda" : "id desconhecido: leia de novo com calendar_list");
   const notify = notifyArg(a.notify);
-  const u = { ...a, ...(typeof a.title === "string" ? { title: restored(d, path, a.title.trim()) } : {}), ...(notify !== undefined ? { notify } : {}) } as unknown as CalendarUpdate;
+  const repeat = repeatArg(a.repeat);
+  const u = { ...a, ...(typeof a.title === "string" ? { title: restored(d, path, a.title.trim()) } : {}), ...(notify !== undefined ? { notify } : {}), ...(repeat !== undefined ? { repeat } : {}) } as unknown as CalendarUpdate;
   const { item, change } = await journaled(d, path, () => d.calendar.update(u));
   return { value: { item: await shown(item, d), mudou: `mudou o item em ${change.path}` }, target: change.path, change };
 }

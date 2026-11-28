@@ -546,3 +546,14 @@
   .kn-cal-card { animation: none; }
 }
 .kn-cal-title-problem { color: var(--danger); font-size: 12px; margin: -2px 0 6px; }
+
+/* A repetição no "+ Novo" (T34775): as prontas num seletor e o "Personalizar…" logo abaixo. */
+.kn-cal-repeat { display: flex; flex-direction: column; gap: 6px; }
+.kn-cal-repeat-custom { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.kn-cal-repeat-custom input[type="number"] { width: 4.5em; }
+.kn-cal-repeat-days { display: flex; flex-wrap: wrap; gap: 4px; }
+.kn-cal-repeat-days button { border-radius: 999px; padding: 3px 9px; font-size: 12px; }
+.kn-cal-repeat-days button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 25%, var(--surface)); border-color: var(--accent); }
+.kn-cal-repeat-ends { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13px; }
+.kn-cal-repeat-ends label { display: inline-flex; align-items: center; gap: 6px; }
+.kn-cal-repeat-says { margin: 0; }
