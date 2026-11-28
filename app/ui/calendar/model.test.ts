@@ -107,6 +107,17 @@ describe("arrastar e esticar", () => {
     expect(resizeItem(item({ id: "s", start: "2026-11-26T09:00" }), 15)).toEqual({ end: "2026-11-26T09:45" });
   });
 
+  test("esticar para em 24 h, o teto do calendar.update (#480)", () => {
+    // meeting: 10:00–11:00. Trinta horas a mais param no dia seguinte, às 10:00, e não no que o calendar.update recusa.
+    expect(resizeItem(meeting, 30 * 60)).toEqual({ end: "2026-11-27T10:00" });
+    expect(resizeItem(meeting, 23 * 60)).toEqual({ end: "2026-11-27T10:00" });
+    expect(resizeItem(meeting, 22 * 60)).toEqual({ end: "2026-11-27T09:00" });
+    // Já no teto: esticar mais não muda nada, e a tela não grava.
+    expect(resizeItem({ ...meeting, end: "2026-11-27T10:00" }, 120)).toBeNull();
+    // Sem fim também para em 24 h.
+    expect(resizeItem(item({ id: "s", start: "2026-11-26T09:00" }), 40 * 60)).toEqual({ end: "2026-11-27T09:00" });
+  });
+
   test("o link abre na linha 1-based da nota", () => {
     expect(noteLine(item({ id: "n", start: "2026-11-26", source: { path: "Projeto X/Pendências.md", line: 13, internal: false } }))).toBe(14);
     expect(noteLine(item({ id: "f", start: "2026-11-26", source: { path: "Projeto X/Ideias.md", line: null, internal: false } }))).toBeUndefined();

@@ -74,6 +74,9 @@ export const CALENDAR_LIMITS = {
   rangeDays: 62,
   undated: 50,
   title: 300,
+  /** A duração mais longa de um item com hora: o `calendar.create` e o `calendar.update` recusam mais, e o esticar
+   *  da tela para nela (#480). */
+  spanHours: 24,
 } as const;
 
 /** O que o `calendar.source` devolve: o texto da nota e a linha do item (0-based; `null` na nota inteira). */
