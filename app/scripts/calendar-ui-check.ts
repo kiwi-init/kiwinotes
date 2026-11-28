@@ -6,6 +6,7 @@
 // - O ⤢ abre o painel largo (Item · Nota · Ligações), e o item fica marcado; o ⤡ fecha e volta ao item.
 // - O link da nota no cartão abre a aba Notas naquela nota, com a linha do item marcada.
 // - A Semana da Início tem o "Abrir o calendário".
+// - O Sim da "atrasada" numa pendência repetida leva só a vez para amanhã, e a sugestão não volta na vez anterior (#485).
 // Os prints de cada vista, em pt e en, e um vídeo da ida e da volta do painel largo.
 // Da raiz do app: `bun scripts/calendar-ui-check.ts [pasta]`. Pegue `kiwi lock bench`.
 import assert from "node:assert/strict";
@@ -108,6 +109,8 @@ try {
   await cli(["start", "--no-helper"]);
   // Notas inventadas: pendências com data e hora, uma sem data, e uma reunião de hoje com a ata.
   await invoke("notes.create", { folder: "Projeto X", title: "Pendências", content: `# Pendências\n\n- [ ] Revisar o orçamento @ ${day(0)} 10:00\n- [ ] Mandar a proposta à Ana @ ${day(1)} 15:00\n- [ ] Escolher o fornecedor\n` });
+  // Uma pendência repetida que começou há 3 dias, à meia-noite: sempre tem uma vez atrasada, a qualquer hora (#485).
+  await invoke("notes.create", { folder: "Casa", title: "Rotina", content: `# Rotina\n\n- [ ] Regar as plantas @ ${day(-3)} 00:00 🔁 dia\n` });
   await invoke("notes.create", { folder: "Casa", title: "Mudança", content: `# Mudança\n\n- [ ] Comprar fita e caixas @ ${day(2)} 09:00\n- [ ] Levar a geladeira\n` });
   await invoke("notes.create", { folder: "Reuniões", title: "Revisão do Projeto X", content: `---\ntype: meeting\ndate: "${day(0)}"\nstart: "${at(0, 14)}"\nduration: 1800\nparticipants: [Ana, Bruno]\n---\n\nPauta: o orçamento e a data da entrega.\n` });
   await invoke("settings.set", { kiwicat: { overlay: false, show: true } });
@@ -251,6 +254,38 @@ try {
         await plusOneDay(p, "11:00–11:00 (+1 dia)");
         await p.screenshot({ path: join(shots, "esticar-24h.png") });
         checks.push(`${lang}: esticar além de 24 h para em 24 h (${(await line()).trim()}), sem aviso de erro, e o bloco e o cartão dizem 11:00–11:00 (+1 dia)`);
+
+        // 4d. O Sim da "atrasada" numa pendência repetida (#485). O painel usa o relógio de verdade, e outra pendência pode ser
+        // a atrasada mais nova: o "Agora não" nas outras até a sugestão ser a da Rotina.
+        const sug = `${pane} .kn-cal-kiwi-sug`;
+        const sugItem = () => p.locator(sug).getAttribute("data-item", { timeout: 5_000 }).catch(() => null);
+        const rotina = async () => (await invoke("notes.get", { path: "Casa/Rotina.md" })).content as string;
+        for (let n = 0; ; n++) {
+          await p.waitForSelector(`${sug}[data-rule="overdue"]`);
+          const was = await sugItem();
+          if (was?.includes("Rotina.md")) break;
+          assert.ok(n < 8, `a sugestão da pendência repetida não apareceu: ${was}`);
+          await p.locator(`${sug} [data-action="dismiss"]`).click();
+          await p.waitForFunction(([s, w]) => document.querySelector(s)?.getAttribute("data-item") !== w, [sug, was] as const);
+        }
+        const asked = (await sugItem())!;
+        const vez = asked.split("~")[1]!;
+        await p.locator(`${sug} [data-action="accept"]`).click();
+        // A nota: a série ganha o ⏭ da vez, e a linha avulsa leva a vez para amanhã, 9h. A hora da série não muda.
+        for (let n = 0; !(await rotina()).includes(`- [ ] Regar as plantas @ ${day(1)} 09:00\n`); n++) { assert.ok(n < 50, await rotina()); await Bun.sleep(100); }
+        assert.ok((await rotina()).includes(`- [ ] Regar as plantas @ ${day(-3)} 00:00 🔁 dia ⏭ ${vez}\n`), await rotina());
+        // A vez anterior segue aberta e atrasada (a pendência segura a série, #483): sem a resposta guardada, ela voltaria.
+        const antes = (await invoke("calendar.items", { from: day(-3), to: vez })).items as { title: string; start: string; done?: boolean }[];
+        assert.ok(antes.some((i) => i.title === "Regar as plantas" && !i.done), "a vez anterior está aberta");
+        // A sugestão sai da vez respondida, e por 1 s nenhuma vez da Rotina volta (o painel relê depois do Sim).
+        await p.waitForFunction(([s, w]) => document.querySelector(s)?.getAttribute("data-item") !== w, [sug, asked] as const);
+        for (let n = 0; n < 10; n++) {
+          const now = await p.locator(sug).getAttribute("data-item", { timeout: 100 }).catch(() => null);
+          assert.ok(!now?.includes("Rotina.md"), `a sugestão voltou na vez anterior: ${now}`);
+          await Bun.sleep(100);
+        }
+        await p.screenshot({ path: join(shots, "sim-repeticao.png") });
+        checks.push(`${lang}: o Sim da atrasada na pendência repetida põe o ⏭ ${vez} e a linha de amanhã, 9h, e a sugestão não volta na vez anterior (#485)`);
 
         // 4b. O + Novo, sem projeto, cria a linha no Calendário.md e o item na tela.
         await p.locator(`${pane} .kn-cal-new`).click();
