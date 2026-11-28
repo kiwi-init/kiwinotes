@@ -56,7 +56,7 @@ export function KiwiPanel({
   now: number;
   face: string | null;
   /** O mesmo `save` da tela: grava pelo main, e o conflito vira o aviso de cima. */
-  save(u: CalendarUpdate): Promise<void>;
+  save(u: CalendarUpdate): Promise<boolean | void>;
   storage?: Pick<Storage, "getItem" | "setItem"> | null;
   /** Os itens já lidos (os testes desenhados e o print); sem eles, o painel lê sozinho. */
   initial?: CalendarItems | null;

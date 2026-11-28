@@ -35,9 +35,22 @@ export const dropUpdate = (id: string, start: string) => ({ id, start, allDay: s
  * O Sim da sugestão: grava e guarda a chave, como o "Agora não". Numa repetição, a chave é a da série, e as outras
  * vezes atrasadas não trazem a mesma sugestão de volta (#485).
  */
-export async function answerYes(sug: Pick<Suggestion, "itemId" | "key" | "accept">, save: (u: CalendarUpdate) => Promise<void>, store: { add(key: string): void }): Promise<void> {
-  await save({ id: sug.itemId, ...sug.accept.patch });
+export async function answerYes(sug: Pick<Suggestion, "itemId" | "key" | "accept">, save: (u: CalendarUpdate) => Promise<boolean | void>, store: { add(key: string): void }): Promise<boolean> {
+  // A gravação que falhou (um E_CONFLICT) não conta como resposta (#534): a sugestão fica na tela.
+  if ((await save({ id: sug.itemId, ...sug.accept.patch })) === false) return false;
   store.add(sug.key);
+  return true;
+}
+
+/** Grava pela tela: `true` se gravou; no erro, avisa por `fail` e devolve `false`, sem jogar (#534). */
+export async function trySave(run: () => Promise<unknown>, fail: (e: unknown) => void): Promise<boolean> {
+  try {
+    await run();
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
 }
 
 /** Quanto tempo o "Agora não" vale: depois, a sugestão pode voltar. */

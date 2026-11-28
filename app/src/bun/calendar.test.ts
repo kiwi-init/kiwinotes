@@ -876,3 +876,31 @@ describe("calendar.delete (T34753)", () => {
     expect(await code(cal.delete({ id: "" }))).toBe("E_BAD_ARGS");
   });
 });
+
+describe("o dia todo que ganha uma hora (#528)", () => {
+  test("na linha: o start com hora tira o dia todo, com e sem o fim; o allDay: false sozinho é recusado", async () => {
+    const { cal, read } = await open({});
+    const a = await cal.create({ kind: "reminder", title: "Pagar a conta", start: "2026-11-27" });
+    expect(a.allDay).toBe(true);
+    expect(await code(cal.update({ id: a.id, allDay: false }))).toBe("E_BAD_ARGS");
+    expect(await code(cal.update({ id: a.id, allDay: false, start: "2026-11-27" }))).toBe("E_BAD_ARGS");
+    expect(read("Calendário.md")).toContain("- [ ] Pagar a conta @ 2026-11-27 #lembrete\n");
+    const b = await cal.update({ id: a.id, start: "2026-11-27T10:00" });
+    expect(b).toMatchObject({ start: "2026-11-27T10:00", allDay: false });
+    expect(read("Calendário.md")).toContain("- [ ] Pagar a conta @ 2026-11-27 10:00 #lembrete");
+    const c = await cal.create({ kind: "task", title: "Revisar o exemplo", start: "2026-11-28" });
+    const d = await cal.update({ id: c.id, start: "2026-11-28T14:00", end: "2026-11-28T15:00" });
+    expect(d).toMatchObject({ start: "2026-11-28T14:00", end: "2026-11-28T15:00", allDay: false });
+    // O que já tinha hora segue como antes, e o allDay: true continua levando ao dia todo.
+    const e = await cal.update({ id: d.id, start: "2026-11-28T16:00" });
+    expect(e).toMatchObject({ start: "2026-11-28T16:00", end: "2026-11-28T17:00", allDay: false });
+    expect(await cal.update({ id: e.id, allDay: true })).toMatchObject({ start: "2026-11-28", allDay: true });
+  });
+
+  test("na nota com agenda: o mesmo", async () => {
+    const { cal, read } = await open({ "Pauta.md": '---\nagenda: "2026-11-27"\n---\n\n# Pauta\n' });
+    expect(await code(cal.update({ id: "f:Pauta.md", allDay: false }))).toBe("E_BAD_ARGS");
+    expect(await cal.update({ id: "f:Pauta.md", start: "2026-11-27T09:00" })).toMatchObject({ start: "2026-11-27T09:00", allDay: false });
+    expect(read("Pauta.md")).toContain('agenda: "2026-11-27 09:00"');
+  });
+});
