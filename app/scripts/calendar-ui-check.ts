@@ -389,7 +389,7 @@ try {
         await drag(item("Revisar o orçamento"), 48);
         await until(new RegExp(`@ ${day(0)} 11:00`), "arrastar 1 h");
         await p.locator(item("Revisar o orçamento")).first().hover();
-        await drag(`${item("Revisar o orçamento")} .kn-cal-resize`, 48);
+        await drag(`${item("Revisar o orçamento")} .kn-cal-resize:not(.kn-cal-resize-top)`, 48);
         await until(new RegExp(`@ ${day(0)} 11:00-\\d\\d:\\d\\d`), "esticar a borda");
         checks.push(`${lang}: arrastar muda a hora na nota (${(await line()).trim()}), e esticar põe o fim`);
 
@@ -398,7 +398,7 @@ try {
         // escuta o pointermove e o pointerup depois do pointerdown na borda.
         await show(p, "Revisar o orçamento");
         await p.locator(item("Revisar o orçamento")).first().hover();
-        const rb = await p.locator(`${item("Revisar o orçamento")} .kn-cal-resize`).first().boundingBox();
+        const rb = await p.locator(`${item("Revisar o orçamento")} .kn-cal-resize:not(.kn-cal-resize-top)`).first().boundingBox();
         assert.ok(rb);
         const [rx, ry] = [rb.x + rb.width / 2, rb.y + rb.height / 2];
         await p.mouse.move(rx, ry);
