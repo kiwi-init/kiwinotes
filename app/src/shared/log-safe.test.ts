@@ -54,14 +54,25 @@ test("redactQuotedPaths esconde o caminho no objeto curto, na lista e antes do p
 const REFERENCE = /(['"])(?:\/|~\/)(?:(?![ \t]+->[ \t]+['"](?:\/|~\/)).)*\1(?=[ \t]*(?:[,\]});]|$)|[ \t]+(?:->|\())/gm;
 
 test("redactQuotedPaths dá o mesmo que a regex gulosa de referência, em 20 mil linhas sorteadas (T33931)", () => {
-  const alphabet = ["'", '"', "/", "~/", " ", "\t", ",", "]", "}", ")", ";", "(", " -> ", "->", "a", "\n", "\r\n", "\u2028"];
+  const alphabet = ["'/", '"/', "'~/", "'", '"', "/", "~", " ", "\t", ",", " }", "]", ")", ";", " (", "(", " -> ", "->", "a", "\n", "\r\n", "\u2028"];
+  // O mulberry32, com a semente fixa: as mesmas linhas a cada vez. Cerca de 4.400 delas t\u00eam um caminho, 400 t\u00eam mais de
+  // um e 3.000 t\u00eam uma seta.
   let seed = 33931;
-  const rand = (n: number) => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) % n);
+  const rand = (n: number) => {
+    let t = (seed = (seed + 0x6d2b79f5) | 0);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) % n;
+  };
+  let hits = 0;
   for (let n = 0; n < 20_000; n++) {
     let s = "";
-    for (let len = 1 + rand(24); len > 0; len--) s += alphabet[rand(alphabet.length)];
-    expect([s, redactQuotedPaths(s)]).toEqual([s, s.replace(REFERENCE, "$1<caminho>$1")]);
+    for (let len = 1 + rand(40); len > 0; len--) s += alphabet[rand(alphabet.length)];
+    const want = s.replace(REFERENCE, "$1<caminho>$1");
+    if (want !== s) hits++;
+    expect([s, redactQuotedPaths(s)]).toEqual([s, want]);
   }
+  expect(hits).toBeGreaterThan(4000);
 });
 
 test("uma linha de 100 KB com 12.500 aspas de caminho sem fecho passa rápido (T33931)", () => {
