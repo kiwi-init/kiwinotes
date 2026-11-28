@@ -9,7 +9,7 @@ import { type CalendarItem, parseWhen } from "../../src/shared/calendar.ts";
 import { setAppLocale } from "../src/i18n.ts";
 import { type DetailActions, HoverCard } from "./Detail.tsx";
 import { memorySource } from "./source.ts";
-import { placeNear } from "./NewItem.tsx";
+import { NewItem, nextHour, placeNear } from "./NewItem.tsx";
 import { AgendaList, cascadeStyle, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
 import { viewRange } from "./model.ts";
 
@@ -129,8 +129,37 @@ describe("criar no vazio (spec #34706, ponto 5)", () => {
     // Embaixo, sobe para caber; em cima, desce até a folga.
     expect(placeNear({ left: 100, top: 700, width: 150, height: 48 }, box, area)).toEqual({ left: 258, top: 392 });
     expect(placeNear({ left: 100, top: -300, width: 150, height: 48 }, box, area)).toEqual({ left: 258, top: 8 });
-    // Janela estreita: não sai pela esquerda.
-    expect(placeNear({ left: 20, top: 10, width: 300, height: 48 }, box, { width: 500, height: 800 }).left).toBe(8);
+    // Sem lado livre (o Dia, ou a janela estreita): encosta na borda da direita e deixa o começo do rascunho à vista.
+    expect(placeNear({ left: 20, top: 10, width: 300, height: 48 }, box, { width: 500, height: 800 }).left).toBe(152);
+    expect(placeNear({ left: 60, top: 10, width: 900, height: 48 }, box, area).left).toBe(852);
+    // Mais estreita que o formulário: não sai pela esquerda.
+    expect(placeNear({ left: 20, top: 10, width: 300, height: 48 }, box, { width: 300, height: 800 }).left).toBe(8);
+  });
+});
+
+describe("o + Novo: dia todo à vista (#531)", () => {
+  const form = (time?: string, end?: string) => renderToStaticMarkup(<NewItem day="2026-11-25" time={time} end={end} projects={[]} onCancel={() => {}} onCreate={() => {}} />);
+  test("sem hora, o Dia todo vem marcado e os campos de hora vazios ficam em branco", () => {
+    const html = form();
+    expect(html).toMatch(/<input type="checkbox" name="allDay" checked=""/);
+    expect(html).toContain("Dia todo");
+    expect(html).toMatch(/name="time"[^>]*data-empty=""/);
+    expect(html).toMatch(/name="end"[^>]*data-empty=""[^>]*disabled=""/);
+  });
+  test("com a hora do vazio, o Dia todo vem desmarcado e os campos cheios", () => {
+    const html = form("09:30", "10:00");
+    expect(html).toMatch(/<input type="checkbox" name="allDay"\/?>/);
+    expect(html).not.toMatch(/data-empty/);
+    expect(html).toContain('value="09:30"');
+  });
+  test("em inglês", () => {
+    english();
+    expect(form()).toContain("All day");
+  });
+  test("desmarcar sugere a próxima hora cheia, até as 23:00", () => {
+    expect(nextHour(new Date(2026, 10, 25, 9, 40))).toBe("10:00");
+    expect(nextHour(new Date(2026, 10, 25, 0, 0))).toBe("01:00");
+    expect(nextHour(new Date(2026, 10, 25, 23, 10))).toBe("23:00");
   });
 });
 

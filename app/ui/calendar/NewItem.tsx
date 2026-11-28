@@ -18,18 +18,26 @@ export function whereOf(kind: CalendarKind, project: string, title: string): { k
   return name ? { key: "calendar.new.whereNote", path: inFolder(project, name) } : { key: "calendar.new.whereNoteBlank" };
 }
 
+/** A hora que o "Dia todo" desligado sugere: a próxima hora cheia, até as 23:00 (#531). */
+export function nextHour(now: Date): string {
+  return `${String(Math.min(23, now.getHours() + 1)).padStart(2, "0")}:00`;
+}
+
 /** A folga entre o formulário e o rascunho, e entre ele e a borda da tela. */
 const GAP_PX = 8;
 
 /**
  * Onde o formulário abre ao lado do rascunho (spec #34706, ponto 5): à direita dele se cabe, senão à esquerda, na altura
- * dele e sem sair da tela. Tudo relativo ao `.kn-cal`.
+ * dele e sem sair da tela. No Dia, o rascunho ocupa a largura toda e não sobra lado: o formulário encosta na borda da
+ * direita, por cima só do fim do rascunho, e o "(sem título)" com a hora, à esquerda, segue à vista. Tudo relativo ao `.kn-cal`.
  */
 export function placeNear(near: Rect, box: { width: number; height: number }, area: { width: number; height: number }): { left: number; top: number } {
   const right = near.left + near.width + GAP_PX;
-  const left = right + box.width <= area.width - GAP_PX ? right : near.left - box.width - GAP_PX;
+  const leftSide = near.left - box.width - GAP_PX;
+  const edge = area.width - box.width - GAP_PX;
+  const left = right <= edge ? right : leftSide >= GAP_PX ? leftSide : edge;
   const clamp = (v: number, max: number) => Math.max(GAP_PX, Math.min(max, v));
-  return { left: clamp(left, area.width - box.width - GAP_PX), top: clamp(near.top, area.height - box.height - GAP_PX) };
+  return { left: clamp(left, edge), top: clamp(near.top, area.height - box.height - GAP_PX) };
 }
 
 export function NewItem({ day, time: startTime = "", end: endTime = "", near, projects, onCancel, onCreate }: { day: string; time?: string; end?: string; near?: Rect; projects: string[]; onCancel(): void; onCreate(c: CalendarCreate): void }) {
@@ -110,6 +118,21 @@ export function NewItem({ day, time: startTime = "", end: endTime = "", near, pr
             ))}
           </select>
         </label>
+        {/* O dia todo é escolha à vista, não a hora vazia (#531): o WebKit desenha "12:30" num campo de hora vazio. */}
+        <label className="kn-cal-alldaybox">
+          <input
+            type="checkbox"
+            name="allDay"
+            checked={!time}
+            onChange={(e) => {
+              if (e.target.checked) {
+                setTime("");
+                setEnd("");
+              } else setTime(nextHour(new Date()));
+            }}
+          />
+          {t("calendar.new.allDay")}
+        </label>
         <div className="kn-cal-newrow">
           <label>
             {t("calendar.new.day")}
@@ -117,11 +140,11 @@ export function NewItem({ day, time: startTime = "", end: endTime = "", near, pr
           </label>
           <label>
             {t("calendar.new.time")}
-            <input type="time" name="time" step={900} value={time} onChange={(e) => setTime(e.target.value)} />
+            <input type="time" name="time" step={900} value={time} data-empty={time ? undefined : ""} onChange={(e) => setTime(e.target.value)} />
           </label>
           <label>
             {t("calendar.new.end")}
-            <input type="time" name="end" step={900} value={end} disabled={!time} onChange={(e) => setEnd(e.target.value)} />
+            <input type="time" name="end" step={900} value={end} data-empty={end ? undefined : ""} disabled={!time} onChange={(e) => setEnd(e.target.value)} />
           </label>
         </div>
         {(() => {

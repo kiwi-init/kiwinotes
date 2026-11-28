@@ -79,6 +79,7 @@ export const enCalendar: { readonly [K in keyof typeof ptCalendar]: Entry } = {
   "calendar.new.day": "Day",
   "calendar.new.time": "Time",
   "calendar.new.end": "Until",
+  "calendar.new.allDay": "All day",
   "calendar.new.create": "Create",
   "calendar.new.cancel": "Cancel",
   "calendar.new.where": "Goes to {path}.",

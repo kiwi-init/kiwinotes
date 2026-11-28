@@ -245,9 +245,11 @@ try {
         const draft = p.locator(`${pane} .kn-cal-draft`);
         assert.equal((await draft.innerText()).replace(/\s+/g, " ").trim(), `${lang === "pt" ? "(sem título)" : "(no title)"} 09:30–10:00`);
         const [db, fb] = [await draft.boundingBox(), await p.locator(form).boundingBox()];
-        assert.ok(db && fb && (fb.x >= db.x + db.width || fb.x + fb.width <= db.x), `${lang}: o formulário abre ao lado do rascunho, sem cobri-lo`);
+        // No Dia, o rascunho tem a largura toda: o formulário fica à direita, sem cobrir o começo dele (o título e a hora).
+        assert.ok(db && fb && (fb.x >= db.x + 160 || fb.x + fb.width <= db.x), `${lang}: o formulário abre ao lado do rascunho, sem cobrir o começo dele: ${JSON.stringify({ db, fb })}`);
         assert.ok(Math.abs(fb.y - db.y) < 2 || fb.y + fb.height <= 800, `${lang}: o formulário fica na altura do rascunho ou dentro da janela`);
         assert.equal(await p.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name), "title", "o foco já está no título");
+        assert.equal(await p.isChecked(`${form} input[name="allDay"]`), false, `${lang}: com a hora do vazio, o Dia todo vem desmarcado (#531)`);
         await p.keyboard.type(title);
         await p.screenshot({ path: join(shots, "criar-clicando.png") });
         await p.keyboard.press("Enter");
@@ -296,11 +298,21 @@ try {
         await p.waitForSelector(form);
         assert.deepEqual([await p.inputValue(`${form} input[name="day"]`), await p.inputValue(`${form} input[name="time"]`)], [day(3), ""], `${lang}: o vazio do Mês abre o + Novo no dia`);
         assert.equal(await cell.getAttribute("data-drafting"), "", "o dia fica marcado");
+        // #531: sem hora, o Dia todo vem marcado à vista, e a hora vazia não mostra o "12:30" do WebKit.
+        assert.equal(await p.isChecked(`${form} input[name="allDay"]`), true, `${lang}: sem hora, o Dia todo vem marcado (#531)`);
+        const ghost = await p.locator(`${form} input[name="time"]`).evaluate((el) => getComputedStyle(el, "::-webkit-datetime-edit").color);
+        assert.ok(/rgba\(0, 0, 0, 0\)|transparent/.test(ghost), `${lang}: a hora vazia fica em branco, não "12:30" (#531): ${ghost}`);
+        assert.ok(Number(await p.locator(`${form} input[name="end"]`).evaluate((el) => getComputedStyle(el).opacity)) < 0.6, `${lang}: o Até desligado parece desligado (#531)`);
         await p.screenshot({ path: join(shots, "criar-no-mes.png") });
+        // Desmarcar o Dia todo põe a próxima hora cheia; marcar de novo apaga a hora.
+        await p.locator(`${form} input[name="allDay"]`).uncheck();
+        assert.match(await p.inputValue(`${form} input[name="time"]`), /^\d\d:00$/, `${lang}: desmarcar o Dia todo põe uma hora (#531)`);
+        await p.locator(`${form} input[name="allDay"]`).check();
+        assert.equal(await p.inputValue(`${form} input[name="time"]`), "", `${lang}: marcar o Dia todo apaga a hora (#531)`);
         await p.keyboard.press("Escape");
         await p.waitForSelector(form, { state: "detached" });
         await view(p, before);
-        checks.push(`${lang}: o clique no vazio do dia ${day(3)} no Mês abre o + Novo nele, e o Esc fecha`);
+        checks.push(`${lang}: o clique no vazio do dia ${day(3)} no Mês abre o + Novo nele, com o Dia todo marcado e a hora em branco (#531), e o Esc fecha`);
       }
 
       if (lang === "en") {

@@ -76,6 +76,7 @@ export const ptCalendar = {
   "calendar.new.day": "Dia",
   "calendar.new.time": "Hora",
   "calendar.new.end": "Até",
+  "calendar.new.allDay": "Dia todo",
   "calendar.new.create": "Criar",
   "calendar.new.cancel": "Cancelar",
   "calendar.new.where": "Vai para {path}.",
