@@ -24,7 +24,7 @@ import type { OpenTarget } from "./file-view.ts";
 import type { AliasWarning } from "../store/aliasCheck.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, HistoryPage } from "../store/history.ts";
-import type { CalendarCreate, CalendarItem, CalendarItems, CalendarSource, CalendarUpdate } from "./calendar.ts";
+import type { CalendarCreate, CalendarDelete, CalendarItem, CalendarItems, CalendarSource, CalendarUndo, CalendarUpdate } from "./calendar.ts";
 import type { HomePending, HomeToday, HomeWeek } from "./home.ts";
 import type { AgentMeetingSettings, AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
@@ -346,7 +346,10 @@ export type { NoteModel };
 //   novo, em vez de sumir calado. Só acréscimo.
 // 1.109.0 (T34336, #485): o `only` do `calendar.update`. Numa vez de uma repetição, ele leva só aquela vez para o
 //   `start` novo (um `⏭` na série e uma linha avulsa abaixo), sem mudar a hora da série. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.109.0";
+// 1.110.0 (T34745, spec #34706): editar e apagar à mão. O `project` do `calendar.update` (sozinho) leva a linha para
+//   a nota de outro projeto; o `calendar.delete` apaga um item e devolve o Desfazer, que o `calendar.restore` aplica.
+//   Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.110.0";
 
 /** A voz do Kiwi pelo ElevenLabs nos Ajustes (T31628): só se há chave, nunca ela. */
 export interface ElevenLabsStatus {
@@ -781,6 +784,13 @@ export interface UiCapabilities {
   "calendar.update": { args: CalendarUpdate; result: CalendarItem };
   /** O texto da nota de onde o item veio e a linha dele (0-based), também da pasta interna das reuniões. */
   "calendar.source": { args: { id: string }; result: CalendarSource };
+  /**
+   * Apaga um item (1.110.0, T34745): a linha e o texto embaixo dela; com `only`, só uma vez da repetição (um `⏭`); numa
+   * nota com `agenda:`, só o `agenda:` e o `aviso:` (a nota fica). Devolve o Desfazer. E_READONLY numa reunião gravada.
+   */
+  "calendar.delete": { args: CalendarDelete; result: CalendarUndo };
+  /** O Desfazer de um `calendar.delete`: o trecho volta. E_CONFLICT se a nota mudou ali. */
+  "calendar.restore": { args: CalendarUndo; result: true };
   // ---------------------------------------------------------------- reuniões (1.21.0, T4947)
   /**
    * As notas de reunião (`type: meeting` no frontmatter, do R4), em qualquer pasta, a mais nova primeiro. Uma nota sem
@@ -1459,6 +1469,8 @@ export const UI_CAPABILITIES = [
   "calendar.create",
   "calendar.update",
   "calendar.source",
+  "calendar.delete",
+  "calendar.restore",
   "meetings.list",
   "meetings.live",
   "meetings.stop",

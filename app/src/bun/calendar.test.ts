@@ -770,3 +770,103 @@ describe("titleProblem: o pedaço que não pode ir no título (#493)", () => {
     expect(read("Projeto X/Pendências.md")).toBe(PROJETO);
   });
 });
+
+// ---------------------------------------------------------------- editar o projeto, apagar e desfazer (T34745)
+
+describe("calendar.update: o projeto (T34745)", () => {
+  test("a linha e o texto embaixo dela vão para a nota do outro projeto; a de onde saiu perde só elas", async () => {
+    const nota = "# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-11-27 10:00\n  - ver a planilha da Ana\n- Café com a equipe @ 2026-11-28 09:00 #reuniao\n";
+    const { cal, read } = await open({ "Projeto X/Planejamento.md": nota, "Projeto Y/Ideias.md": "# Y\n" });
+    const it = (await cal.items({ from: "2026-11-27", to: "2026-11-28" })).items.find((i) => i.title === "Revisar o orçamento")!;
+    const moved = await cal.update({ id: it.id, project: "Projeto Y" });
+    expect(moved).toMatchObject({ title: "Revisar o orçamento", project: "Projeto Y", start: "2026-11-27T10:00" });
+    expect(moved.source?.path).toBe("Projeto Y/Pendências.md");
+    expect(read("Projeto Y/Pendências.md")).toBe("# Pendências\n\n- [ ] Revisar o orçamento @ 2026-11-27 10:00\n  - ver a planilha da Ana\n");
+    expect(read("Projeto X/Planejamento.md")).toBe("# Projeto X\n\n- Café com a equipe @ 2026-11-28 09:00 #reuniao\n");
+    // Sem projeto: vai para o Calendário.md da raiz, no fim, sem o recuo.
+    const back = await cal.update({ id: moved.id, project: null });
+    expect(back.source?.path).toBe("Calendário.md");
+    expect(read("Calendário.md")).toContain("- [ ] Revisar o orçamento @ 2026-11-27 10:00\n  - ver a planilha da Ana\n");
+    expect(read("Projeto Y/Pendências.md")).toBe("# Pendências\n\n");
+  });
+
+  test("projeto que não existe, junto de outro campo ou numa nota com agenda: é recusado, e nada muda", async () => {
+    const { cal, read } = await open({ "Projeto X/Planejamento.md": PROJETO, "Projeto X/Pauta.md": '---\nagenda: "2026-11-27 09:00"\n---\n\n# Pauta\n' });
+    const items = (await cal.items({ from: "2026-11-27", to: "2026-11-28" })).items;
+    const it = items.find((i) => i.title === "Revisar o orçamento")!;
+    expect(await code(cal.update({ id: it.id, project: "Projeto Z" }))).toBe("E_NOT_FOUND");
+    expect(await code(cal.update({ id: it.id, project: "Projeto X/sub" }))).toBe("E_BAD_ARGS");
+    expect(await code(cal.update({ id: it.id, project: null, title: "Outro" }))).toBe("E_BAD_ARGS");
+    const pauta = items.find((i) => i.id.startsWith("f:"))!;
+    expect(await code(cal.update({ id: pauta.id, project: null }))).toBe("E_BAD_ARGS");
+    expect(read("Projeto X/Planejamento.md")).toBe(PROJETO);
+  });
+});
+
+describe("calendar.delete e calendar.restore (T34745)", () => {
+  test("apaga a linha e o texto embaixo; o Desfazer põe tudo de volta, igual", async () => {
+    const nota = "# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-11-27 10:00\n  - ver a planilha da Ana\n\n- Café com a equipe @ 2026-11-28 09:00 #reuniao\n";
+    const { cal, read } = await open({ "Projeto X/Planejamento.md": nota });
+    const it = (await cal.items({ from: "2026-11-27", to: "2026-11-28" })).items.find((i) => i.title === "Revisar o orçamento")!;
+    const undo = await cal.remove({ id: it.id });
+    expect(read("Projeto X/Planejamento.md")).toBe("# Projeto X\n\n\n- Café com a equipe @ 2026-11-28 09:00 #reuniao\n");
+    expect((await cal.items({ from: "2026-11-27", to: "2026-11-28" })).items.some((i) => i.title === "Revisar o orçamento")).toBe(false);
+    expect(await cal.restore(undo)).toBe(true);
+    expect(read("Projeto X/Planejamento.md")).toBe(nota);
+  });
+
+  test("o Desfazer acha o lugar quando a nota ganhou linhas em cima, e recusa quando o trecho mudou", async () => {
+    const { cal, read, write } = await open({ "Projeto X/Planejamento.md": PROJETO });
+    const it = (await cal.items({ from: "2026-11-28", to: "2026-11-29" })).items.find((i) => i.title === "Café com a equipe")!;
+    const undo = await cal.remove({ id: it.id });
+    const after = read("Projeto X/Planejamento.md");
+    await write("Projeto X/Planejamento.md", after.replace("# Projeto X\n", "# Projeto X\n\nUma linha nova.\nOutra.\n"));
+    await cal.restore(undo);
+    expect(read("Projeto X/Planejamento.md")).toBe(PROJETO.replace("# Projeto X\n", "# Projeto X\n\nUma linha nova.\nOutra.\n"));
+    // De novo, e agora a linha de cima do lugar mudou: E_CONFLICT, e a nota fica.
+    const it2 = (await cal.items({ from: "2026-11-28", to: "2026-11-29" })).items.find((i) => i.title === "Café com a equipe")!;
+    const undo2 = await cal.remove({ id: it2.id });
+    const mid = read("Projeto X/Planejamento.md").replace("- [x] Mandar o convite @ 2026-11-26", "- [x] Mandar o convite para a Ana @ 2026-11-26");
+    await write("Projeto X/Planejamento.md", mid);
+    expect(await code(cal.restore(undo2))).toBe("E_CONFLICT");
+    expect(read("Projeto X/Planejamento.md")).toBe(mid);
+  });
+
+  test("uma vez da repetição: só ela ganha o ⏭; sem only, sai a série; Desfazer volta cada um", async () => {
+    const { cal, read } = await open({ "Projeto X/Planejamento.md": PROJETO });
+    const rep = (await cal.items({ from: "2026-12-01", to: "2026-12-02" })).items.find((i) => i.title === "Bloco de escrita")!;
+    expect(rep.id).toMatch(/~2026-12-01$/);
+    const undo = await cal.remove({ id: rep.id, only: true });
+    expect(read("Projeto X/Planejamento.md")).toContain("- [ ] Bloco de escrita @ 2026-11-24 08:00-09:00 #foco 🔁 semana ⏭ 2026-12-01\n");
+    expect((await cal.items({ from: "2026-12-01", to: "2026-12-02" })).items.some((i) => i.title === "Bloco de escrita")).toBe(false);
+    expect((await cal.items({ from: "2026-12-08", to: "2026-12-09" })).items.some((i) => i.title === "Bloco de escrita")).toBe(true);
+    await cal.restore(undo);
+    expect(read("Projeto X/Planejamento.md")).toBe(PROJETO);
+    const all = await cal.remove({ id: rep.id });
+    expect(read("Projeto X/Planejamento.md")).not.toContain("Bloco de escrita");
+    await cal.restore(all);
+    expect(read("Projeto X/Planejamento.md")).toBe(PROJETO);
+  });
+
+  test("a nota com agenda: perde só o agenda: e o aviso:, e o corpo fica; reunião gravada e only fora de repetição são recusados", async () => {
+    const pauta = '---\ntitulo: Pauta\nagenda: "2026-11-27 09:00-09:30"\naviso: "10m"\n---\n\n# Pauta do lançamento\n\nTrazer os números do mês.\n';
+    const { cal, read } = await open(
+      { "Projeto X/Pauta.md": pauta, "Projeto X/Planejamento.md": PROJETO },
+      { meetings: { "Reuniões/2026-11-27 Conversa.md": `---\ntype: meeting\nstart: ${new Date(2026, 10, 27, 15, 0).toISOString()}\nend: ${new Date(2026, 10, 27, 15, 30).toISOString()}\n---\n\n# Conversa\n` } },
+    );
+    const items = (await cal.items({ from: "2026-11-27", to: "2026-11-28" })).items;
+    const f = items.find((i) => i.id.startsWith("f:"))!;
+    const undo = await cal.remove({ id: f.id });
+    expect(read("Projeto X/Pauta.md")).toBe("---\ntitulo: Pauta\n---\n\n# Pauta do lançamento\n\nTrazer os números do mês.\n");
+    await cal.restore(undo);
+    expect(read("Projeto X/Pauta.md")).toBe(pauta);
+    const m = items.find((i) => i.id.startsWith("m:"))!;
+    expect(m).toBeDefined();
+    expect(await code(cal.remove({ id: m.id }))).toBe("E_READONLY");
+    const one = items.find((i) => i.title === "Revisar o orçamento")!;
+    expect(await code(cal.remove({ id: one.id, only: true }))).toBe("E_BAD_ARGS");
+    expect(await code(cal.remove({ id: "" }))).toBe("E_BAD_ARGS");
+    expect(await code(cal.restore({ path: "Projeto X/Planejamento.md", at: -1, removed: [], added: [], prev: null }))).toBe("E_BAD_ARGS");
+    expect(read("Projeto X/Planejamento.md")).toBe(PROJETO);
+  });
+});

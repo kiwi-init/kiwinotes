@@ -111,10 +111,37 @@ export interface CalendarUpdate {
   kind?: CalendarKind;
   repeat?: CalendarRepeat | null;
   /**
+   * O projeto (T34745): a linha sai da nota onde está e vai para `<projeto>/Pendências.md` (ou `Calendário.md` com
+   * `null`), igual à que o `calendar.create` escreve. Só nas linhas: uma nota com `agenda:` muda de pasta pelas Notas.
+   */
+  project?: string | null;
+  /**
    * Só esta vez (#485): numa vez de uma repetição, com o `start`, a vez ganha um `⏭` e uma linha avulsa logo abaixo
    * leva a vez para o `start` novo. A série e a hora dela não mudam. É o Sim da sugestão "atrasada".
    */
   only?: boolean;
+}
+
+/**
+ * O que o `calendar.delete` apaga (T34745). Numa vez de uma repetição, `only` tira só aquela vez (um `⏭`); sem ele, sai
+ * a série inteira. A nota com `agenda:` fica: sai só o `agenda:` (e o `aviso:`) do frontmatter.
+ */
+export interface CalendarDelete {
+  id: string;
+  only?: boolean;
+}
+
+/**
+ * O Desfazer de um apagar (T34745): o trecho da nota que mudou, para o `calendar.restore` pôr de volta. `removed` são as
+ * linhas que saíram em `at` (0-based), `added` as que entraram no lugar, e `prev` a linha logo acima, para achar o
+ * lugar se a nota mudou em cima.
+ */
+export interface CalendarUndo {
+  path: string;
+  at: number;
+  removed: string[];
+  added: string[];
+  prev: string | null;
 }
 
 // ---------------------------------------------------------------- datas

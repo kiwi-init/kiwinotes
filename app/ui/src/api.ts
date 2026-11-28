@@ -277,6 +277,8 @@ export const api = {
     create: (args: UiCapabilities["calendar.create"]["args"]) => invoke("calendar.create", args),
     update: (args: UiCapabilities["calendar.update"]["args"]) => invoke("calendar.update", args),
     source: (id: string) => invoke("calendar.source", { id }),
+    delete: (args: UiCapabilities["calendar.delete"]["args"]) => invoke("calendar.delete", args),
+    restore: (undo: UiCapabilities["calendar.restore"]["args"]) => invoke("calendar.restore", undo),
     onChanged: (fn: () => void) => on("calendar.changed", fn),
   },
   /** A aba Reuniões do hub (1.21.0, T4947): as notas de reunião e a gravação ao vivo. */

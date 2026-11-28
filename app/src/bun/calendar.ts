@@ -15,12 +15,14 @@ import {
   addDays,
   CALENDAR_LIMITS,
   type CalendarCreate,
+  type CalendarDelete,
   type CalendarItem,
   type CalendarItems,
   type CalendarKind,
   type CalendarNotify,
   type CalendarRepeat,
   type CalendarSource,
+  type CalendarUndo,
   type CalendarUpdate,
   DEFAULT_NOTIFY,
   dayOf,
@@ -34,6 +36,7 @@ import {
   parseAgenda,
   parseWhen,
   rewriteWhen,
+  sortedDays,
   titleProblem,
   toMs,
 } from "../shared/calendar.ts";
@@ -264,6 +267,10 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
     checkUpdate(u);
     const src = await sources();
     if (u.id.startsWith("m:")) throw new CalendarError("E_READONLY", "a recorded meeting can't change");
+    if (u.project !== undefined) {
+      if (u.id.startsWith("f:")) throw new CalendarError("E_BAD_ARGS", "calendar.update: a note with agenda changes folder in Notes");
+      return moveToProject(src, u);
+    }
     if (u.id.startsWith("f:")) return updateNote(src, u);
     // Duas tentativas: se a nota mudou entre ler e gravar, lê de novo e acha a linha pelo hash.
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -398,28 +405,148 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
     }
     const text = formatWhen({ title: c.title, kind: c.kind, start, end, allDay, notify, repeat: c.repeat ?? null }, src.locale);
     const line = `- ${c.kind === "task" || c.kind === "reminder" ? "[ ] " : ""}${text}`;
+    const got = await appendBlock(src, project, [line]);
+    const item = got && itemsOfNote(got.saved, { vault: src.notes, internal: false }).dated.find((i) => i.source?.line === got.line);
+    if (item) return item;
+    throw new CalendarError("E_CONFLICT", "the note changed while saving; try again");
+  }
+
+  /**
+   * Põe as linhas no fim da nota do projeto (`<projeto>/Pendências.md`, ou `Calendário.md` na raiz), criando-a se não
+   * existe. Devolve a nota gravada e a linha (0-based) da primeira; `null` se a nota mudou nas três tentativas.
+   */
+  async function appendBlock(src: CalendarSources, project: string | null, block: string[]): Promise<{ saved: Note; line: number } | null> {
     const name = project ? PROJECT_NOTE : ROOT_NOTE;
     const path = `${project ? `${project}/` : ""}${name}.md`;
+    const text = block.join("\n");
     for (let attempt = 0; attempt < 3; attempt++) {
       const note = await src.notes.get(path).catch(() => null);
       let saved: Note;
       if (!note) {
-        const made = await src.notes.create(project ?? "", name, `# ${name}\n\n${line}\n`);
+        const made = await src.notes.create(project ?? "", name, `# ${name}\n\n${text}\n`);
         // Outro criou a nota no meio: o vault deu "Pendências 2"; tenta de novo na de verdade.
         if (made.path !== path) continue;
         saved = made;
       } else {
         const body = note.content.length && !note.content.endsWith("\n") ? `${note.content}\n` : note.content;
-        const content = `${body}${line}\n`;
+        const content = `${body}${text}\n`;
         const res = await src.notes.save(path, content, note.version);
         if (!res.saved) continue;
         saved = { ...note, ...res.meta, content };
       }
-      const lineNo = saved.content.split("\n").lastIndexOf(line);
-      const item = itemsOfNote(saved, { vault: src.notes, internal: false }).dated.find((i) => i.source?.line === lineNo);
-      if (item) return item;
+      const lines = saved.content.split("\n");
+      return { saved, line: lines.length - 1 - block.length };
     }
-    throw new CalendarError("E_CONFLICT", "the note changed while saving; try again");
+    return null;
+  }
+
+  /** O fim (exclusivo) do bloco de um item: a linha dele e as de baixo com recuo maior, o texto que ele leva. */
+  function blockEnd(raw: string[], line: number): number {
+    const indent = (s: string) => /^[ \t]*/.exec(s)![0].replace(/\t/g, "    ").length;
+    const own = indent(raw[line]!);
+    let end = line + 1;
+    while (end < raw.length && raw[end]!.trim() && indent(raw[end]!) > own) end++;
+    return end;
+  }
+
+  /** O projeto de um item de linha (T34745): o bloco sai da nota dele e vai para o fim da nota do outro projeto. */
+  async function moveToProject(src: CalendarSources, u: CalendarUpdate): Promise<CalendarItem> {
+    const target = u.project ?? null;
+    if (target !== null && !projectsOf(src).includes(target)) throw new CalendarError("E_NOT_FOUND", `no project ${target}`);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const at = await locate(src, u.id);
+      if (!at) throw new CalendarError("E_BAD_ARGS", "unknown id");
+      if (at.where.internal) throw new CalendarError("E_READONLY", "the meetings folder is read-only here");
+      const series = u.id.replace(/~\d{4}-\d{2}-\d{2}$/, "");
+      if (projectOf(at.note.path) === target) {
+        const same = itemsOfNote(at.note, at.where);
+        const item = [...same.dated, ...same.undated].find((i) => i.id === series);
+        if (item) return item;
+        throw new CalendarError("E_CONFLICT", "the item changed in the note; read again");
+      }
+      const end = blockEnd(at.raw, at.line);
+      // O bloco vai sem o recuo da linha do item (um item dentro de outro vira um item da lista nova), e sem o `\r`.
+      const cut = /^[ \t]*/.exec(at.raw[at.line]!)![0].length;
+      const block = at.raw.slice(at.line, end).map((l) => l.replace(/\r$/, "").slice(Math.min(cut, /^[ \t]*/.exec(l)![0].length)));
+      const rest = [...at.raw];
+      rest.splice(at.line, end - at.line);
+      // Primeiro tira da nota de onde sai, pela versão: se ela mudou, nada foi escrito em lugar nenhum e tenta de novo.
+      const res = await src.notes.save(at.note.path, rest.join("\n"), at.note.version);
+      if (!res.saved) continue;
+      const got = await appendBlock(src, target, block);
+      const item = got && [...itemsOfNote(got.saved, { vault: src.notes, internal: false }).dated, ...itemsOfNote(got.saved, { vault: src.notes, internal: false }).undated].find((i) => i.source?.line === got.line);
+      if (item) return item;
+      // A nota do projeto não aceitou: o bloco volta para onde estava, para nada se perder.
+      await restore(undoOf(at.note.path, at.raw, rest)).catch(() => undefined);
+      throw new CalendarError("E_CONFLICT", "the project's note changed while saving; try again");
+    }
+    throw new CalendarError("E_CONFLICT", "the note changed while saving; read again");
+  }
+
+  /**
+   * Apaga um item (T34745): a linha e o texto embaixo dela, ou só uma vez da repetição (`only`, um `⏭`), ou o `agenda:`
+   * de uma nota (a nota fica). Devolve o Desfazer para o `restore`.
+   */
+  async function remove(d: CalendarDelete): Promise<CalendarUndo> {
+    if (!d || typeof d !== "object" || typeof d.id !== "string" || !d.id) throw new CalendarError("E_BAD_ARGS", "calendar.delete: id is required");
+    if (d.only !== undefined && typeof d.only !== "boolean") throw new CalendarError("E_BAD_ARGS", "calendar.delete: only must be true or false");
+    const src = await sources();
+    if (d.id.startsWith("m:")) throw new CalendarError("E_READONLY", "a recorded meeting can't change");
+    if (d.id.startsWith("f:")) {
+      if (d.only) throw new CalendarError("E_BAD_ARGS", "calendar.delete: only is for one time of a repetition");
+      const path = d.id.slice(2);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const note = await src.notes.get(path).catch(() => null);
+        if (!note) throw new CalendarError("E_NOT_FOUND", `no note ${path}`);
+        if (!parseAgenda(frontmatterOf(note.content)?.agenda)) throw new CalendarError("E_CONFLICT", "the note has no agenda anymore; read again");
+        const content = setFrontmatter(setFrontmatter(note.content, "agenda", null), "aviso", null);
+        const res = await src.notes.save(path, content, note.version);
+        if (res.saved) return undoOf(path, note.content.split("\n"), content.split("\n"));
+      }
+      throw new CalendarError("E_CONFLICT", "the note changed while saving; read again");
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const at = await locate(src, d.id);
+      if (!at) throw new CalendarError("E_BAD_ARGS", "unknown id");
+      if (at.where.internal) throw new CalendarError("E_READONLY", "the meetings folder is read-only here");
+      const lines = [...at.raw];
+      if (d.only) {
+        const raw = at.raw[at.line]!;
+        const cr = raw.endsWith("\r") ? "\r" : "";
+        const parts = LIST_LINE.exec(raw.slice(0, raw.length - cr.length));
+        const cur = parts ? parseWhen(parts[4]!) : null;
+        if (!parts || !cur?.repeat || !at.occurrence) throw new CalendarError("E_BAD_ARGS", "calendar.delete: only is for one time of a repetition");
+        lines[at.line] = `${parts[1]}${parts[2] ?? ""}${rewriteWhen(parts[4]!, { skip: sortedDays([...cur.skip, at.occurrence]) }, src.locale)}${cr}`;
+      } else lines.splice(at.line, blockEnd(at.raw, at.line) - at.line);
+      const res = await src.notes.save(at.note.path, lines.join("\n"), at.note.version);
+      if (res.saved) return undoOf(at.note.path, at.raw, lines);
+    }
+    throw new CalendarError("E_CONFLICT", "the note changed while saving; read again");
+  }
+
+  /** O Desfazer de um apagar: o trecho que mudou volta, se ainda está lá (achado pela linha de cima, se a nota andou). */
+  async function restore(u: CalendarUndo): Promise<true> {
+    const strs = (v: unknown) => Array.isArray(v) && v.length <= 500 && v.every((s) => typeof s === "string" && !s.includes("\n"));
+    if (!u || typeof u !== "object" || typeof u.path !== "string" || !u.path || !Number.isInteger(u.at) || u.at < 0 || !strs(u.removed) || !strs(u.added) || (u.prev !== null && typeof u.prev !== "string"))
+      throw new CalendarError("E_BAD_ARGS", "calendar.restore: give the undo from calendar.delete");
+    const src = await sources();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const note = await src.notes.get(u.path).catch(() => null);
+      if (!note) throw new CalendarError("E_NOT_FOUND", `no note ${u.path}`);
+      const lines = note.content.split("\n");
+      const fits = (i: number) => i <= lines.length && (u.prev === null ? i === 0 : lines[i - 1] === u.prev) && u.added.every((l, k) => lines[i + k] === l);
+      let i = fits(u.at) ? u.at : -1;
+      if (i < 0) {
+        // A nota andou: o lugar mais perto do de antes onde o trecho e a linha de cima ainda batem.
+        const all = lines.map((_, k) => k).concat(lines.length).filter(fits);
+        i = all.sort((a, b) => Math.abs(a - u.at) - Math.abs(b - u.at))[0] ?? -1;
+      }
+      if (i < 0) throw new CalendarError("E_CONFLICT", "the note changed there; can't undo");
+      lines.splice(i, u.added.length, ...u.removed);
+      const res = await src.notes.save(u.path, lines.join("\n"), note.version);
+      if (res.saved) return true;
+    }
+    throw new CalendarError("E_CONFLICT", "the note changed while saving; read again");
   }
 
   /** A nota de onde o item veio, para a aba "Nota" do painel (#32193): também a reunião da pasta interna. */
@@ -443,7 +570,7 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
     throw new CalendarError("E_NOT_FOUND", `no note ${path}`);
   }
 
-  return { items, create, update, source };
+  return { items, create, update, source, remove, restore };
 }
 
 
@@ -563,6 +690,18 @@ function noteNotify(v: unknown): CalendarNotify | null {
 }
 
 /** Troca (ou põe, ou tira com `null`) uma chave de uma linha só no frontmatter, sem mexer no resto. */
+/**
+ * O Desfazer de uma troca de `before` por `after` (T34745): o menor trecho que mudou, sem as linhas iguais do começo e
+ * do fim, e a linha logo acima dele.
+ */
+export function undoOf(path: string, before: string[], after: string[]): CalendarUndo {
+  let a = 0;
+  while (a < before.length && a < after.length && before[a] === after[a]) a++;
+  let z = 0;
+  while (z < before.length - a && z < after.length - a && before[before.length - 1 - z] === after[after.length - 1 - z]) z++;
+  return { path, at: a, removed: before.slice(a, before.length - z), added: after.slice(a, after.length - z), prev: a > 0 ? before[a - 1]! : null };
+}
+
 export function setFrontmatter(content: string, key: string, value: string | null): string {
   const fm = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(content);
   const line = value === null ? null : `${key}: "${value}"`;
@@ -614,6 +753,11 @@ function checkUpdate(u: CalendarUpdate): void {
   if (u.notify !== undefined && !isCalendarNotify(u.notify)) throw new CalendarError("E_BAD_ARGS", "calendar.update: unknown notify");
   if (u.kind !== undefined && (!isCalendarKind(u.kind) || u.kind === "note")) throw new CalendarError("E_BAD_ARGS", "calendar.update: kind is meeting, reminder, task or focus");
   if (u.repeat !== undefined && u.repeat !== null && !isCalendarRepeat(u.repeat)) throw new CalendarError("E_BAD_ARGS", "calendar.update: repeat is daily, weekly or null");
+  if (u.project !== undefined) {
+    if (u.project !== null && (typeof u.project !== "string" || !u.project || u.project.includes("/")))
+      throw new CalendarError("E_BAD_ARGS", "calendar.update: project is a top-level folder name or null");
+    if (Object.keys(u).some((k) => k !== "id" && k !== "project")) throw new CalendarError("E_BAD_ARGS", "calendar.update: project goes alone");
+  }
   if (u.only !== undefined) {
     if (typeof u.only !== "boolean") throw new CalendarError("E_BAD_ARGS", "calendar.update: only must be true or false");
     const extra = Object.keys(u).filter((k) => !["id", "only", "start", "end", "allDay"].includes(k));

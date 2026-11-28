@@ -33,7 +33,7 @@ import { isCustomRoutineId, isRoutineKind, isRoutineTime, ROUTINE_KINDS, routine
 import { type AppSettings, MAX_PINNED, type SettingsPatch,
 } from "../store/settings.ts";
 import { filePath, folderPath, notePath, VaultError } from "../notes/paths.ts";
-import type { CalendarCreate, CalendarUpdate } from "../shared/calendar.ts";
+import type { CalendarCreate, CalendarDelete, CalendarUndo, CalendarUpdate } from "../shared/calendar.ts";
 import { CalendarError, calendarService, type CalendarVault } from "./calendar.ts";
 import { type AttachmentData, type Attachments, attachmentsFolder,
 } from "../notes/attachments.ts";
@@ -1746,12 +1746,20 @@ export function uiCapabilities(deps: CapabilityDeps,
       return cal(() => calendar.create(a as unknown as CalendarCreate));
     },
     "calendar.update": async (args) => {
-      const a = fields(args, "calendar.update", ["id", "title", "start", "end", "allDay", "done", "notify", "kind", "repeat", "only"]);
+      const a = fields(args, "calendar.update", ["id", "title", "start", "end", "allDay", "done", "notify", "kind", "repeat", "only", "project"]);
       return cal(() => calendar.update(a as unknown as CalendarUpdate));
     },
     "calendar.source": async (args) => {
       const a = fields(args, "calendar.source", ["id"]);
       return cal(() => calendar.source(a.id));
+    },
+    "calendar.delete": async (args) => {
+      const a = fields(args, "calendar.delete", ["id", "only"]);
+      return cal(() => calendar.remove(a as unknown as CalendarDelete));
+    },
+    "calendar.restore": async (args) => {
+      const a = fields(args, "calendar.restore", ["path", "at", "removed", "added", "prev"]);
+      return cal(() => calendar.restore(a as unknown as CalendarUndo));
     },
     "meetings.list": async (args) => {
       noArgs(args, "meetings.list");
