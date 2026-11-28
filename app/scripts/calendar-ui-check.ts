@@ -201,6 +201,22 @@ try {
       await p.waitForSelector(item("Revisão do Projeto X"));
       checks.push(`${lang}: o filtro esconde o Projeto X (na grade e no sem data) e as reuniões, e fica ao recarregar`);
 
+      // O rodapé do + Novo diz o arquivo de verdade: a pendência vai ao Calendário.md, e a Nota vira uma nota nova com o título (#492).
+      {
+        const where = () => p.locator(`${pane} .kn-cal-newform .kn-cal-where`).innerText();
+        await p.locator(`${pane} .kn-cal-new`).click();
+        assert.equal(await where(), lang === "pt" ? "Vai para Calendário.md." : "Goes to Calendário.md.");
+        await p.locator(`${pane} .kn-cal-newform [data-kind="note"]`).click();
+        await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Plano: Q1");
+        await p.selectOption(`${pane} .kn-cal-newform select[name="project"]`, "Projeto X");
+        const note = lang === "pt" ? "Vira a nota Projeto X/Plano Q1.md." : "Becomes the note Projeto X/Plano Q1.md.";
+        assert.equal(await where(), note, `${lang}: o rodapé da Nota (#492)`);
+        await p.screenshot({ path: join(shots, "novo-nota.png") });
+        await p.locator(`${pane} .kn-cal-newform button.kn-cal-btn[type="button"]`).click();
+        await p.waitForSelector(`${pane} .kn-cal-newform`, { state: "detached" });
+        checks.push(`${lang}: o + Novo diz "${note}" com o tipo Nota, e Calendário.md na pendência (#492)`);
+      }
+
       if (lang === "en") {
         // O item que o pt esticou até 24 h (4c), em inglês: o bloco e o cartão com o (+1 day) (T34131).
         await plusOneDay(p, "11:00–11:00 (+1 day)");

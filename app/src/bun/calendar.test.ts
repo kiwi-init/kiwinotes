@@ -8,6 +8,7 @@ import path from "node:path";
 import { Vault } from "../notes/vault.ts";
 import { addDays, type CalendarItem, dayOf, notifyAt, parseWhen, rewriteWhen, titleProblem, toMs } from "../shared/calendar.ts";
 import { tempDir } from "../../test/tmp.ts";
+import { whereOf } from "../../ui/calendar/NewItem.tsx";
 import { alertsBetween, calendarService, occurrences, setFrontmatter } from "./calendar.ts";
 import { startMs, suggestion } from "../shared/calendar-kiwi.ts";
 import { answerYes } from "../../ui/calendar/kiwi-panel.ts";
@@ -400,6 +401,21 @@ describe("calendar.create", () => {
     const n = await cal.create({ kind: "note", title: "Plano do trimestre", project: "Projeto X", start: "2026-12-02T14:00", notify: "30m" });
     expect(n).toMatchObject({ id: "f:Projeto X/Plano do trimestre.md", kind: "note", start: "2026-12-02T14:00", notify: "30m" });
     expect(read("Projeto X/Plano do trimestre.md")).toBe('---\nagenda: "2026-12-02 14:00"\naviso: "30m"\n---\n\n# Plano do trimestre\n');
+  });
+
+  test("o rodapé do + Novo diz o arquivo que o create escreve, em todo tipo (#492)", async () => {
+    const { cal, read } = await open({ "Projeto X/a.md": "" });
+    const title = "  Plano: Q1/Q2 #2027?  ";
+    for (const kind of ["meeting", "reminder", "task", "note", "focus"] as const)
+      for (const project of ["", "Projeto X"]) {
+        const w = whereOf(kind, project, title);
+        expect(w.path).toBeDefined();
+        await cal.create({ kind, title: kind === "note" ? title : `${kind} ${project || "raiz"}`, project: project || null, start: "2026-12-02" });
+        expect(read(w.path!)).toContain(kind === "note" ? "agenda:" : `${kind} ${project || "raiz"}`);
+      }
+    expect(whereOf("note", "", title)).toEqual({ key: "calendar.new.whereNote", path: "Plano Q1 Q2 2027.md" });
+    expect(whereOf("note", "Projeto X", " ")).toEqual({ key: "calendar.new.whereNoteBlank" });
+    expect(whereOf("task", "", "")).toEqual({ key: "calendar.new.where", path: "Calendário.md" });
   });
 
   test("os argumentos errados e o projeto que não existe", async () => {
