@@ -546,3 +546,33 @@
   .kn-cal-card { animation: none; }
 }
 .kn-cal-title-problem { color: var(--danger); font-size: 12px; margin: -2px 0 6px; }
+
+/* ---------------------------------------------------------------- editar e apagar à mão (T34745) */
+.kn-cal-card[data-editing] { max-height: calc(100% - 16px); overflow-y: auto; }
+.kn-cal-editor { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.kn-cal-ed-row,
+.kn-cal-ed-when label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-2); }
+.kn-cal-ed-when { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; align-items: end; margin: 0; padding: 0; border: 0; min-width: 0; }
+.kn-cal-ed-when .kn-cal-ed-check { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 6px; }
+.kn-cal-editor[data-compact] .kn-cal-ed-when { grid-template-columns: 1fr 1fr; }
+.kn-cal-editor[data-compact] .kn-cal-ed-when label:first-child { grid-column: 1 / -1; }
+.kn-cal-editor input:not([type="checkbox"]),
+.kn-cal-editor select,
+.kn-cal-editor textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  min-width: 0;
+}
+.kn-cal-editor textarea { resize: vertical; line-height: 1.45; }
+.kn-cal-editor :is(input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kn-cal-editor :is(input, select, textarea):disabled { opacity: 0.6; }
+.kn-cal-editor input[aria-invalid="true"] { border-color: var(--danger); }
+.kn-cal-editor .kn-cal-title-problem { margin: -4px 0 0; }
+.kn-cal-btn.kn-cal-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.kn-cal-btn.kn-cal-danger:hover { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
+.kn-cal-ed-acts { justify-content: flex-start; }
+.kn-cal-notice[data-undo] .kn-cal-undo { margin-left: 8px; }

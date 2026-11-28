@@ -7,6 +7,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { CALENDAR_NOTIFY, type CalendarItem, type CalendarNotify } from "../../src/shared/calendar.ts";
 import { useT } from "../src/i18n.ts";
+import { editable } from "./edit.ts";
+import { type EditorActions, ItemEditor } from "./Editor.tsx";
 import { whenLine } from "./format.ts";
 import { noteLine } from "./model.ts";
 import type { CalendarSource } from "../../src/shared/calendar.ts";
@@ -41,12 +43,18 @@ export function rectIn(el: Element, root: Element): Rect {
 
 const px = (r: Rect) => ({ left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
 
-/** O que o cartão e o painel podem fazer com o item. */
-export interface DetailActions {
+/** O que o cartão e o painel podem fazer com o item; editar e apagar à mão são do T34745. */
+export interface DetailActions extends EditorActions {
   openNote(item: CalendarItem): void;
   snooze(item: CalendarItem): void;
   toggleDone(item: CalendarItem): void;
   setNotify(item: CalendarItem, n: CalendarNotify): void;
+}
+
+/** Os projetos e a fonte, para o editor (a lista do seletor e o texto do item). */
+export interface EditCtx {
+  projects: readonly string[];
+  source: CalendarStore;
 }
 
 function KindTags({ item }: { item: CalendarItem }) {
@@ -82,8 +90,21 @@ function NotifyLine({ item, face }: { item: CalendarItem; face: string | null })
 }
 
 /** O corpo do cartão: os mesmos dados na ida e no começo da animação (a camada que some enquanto o painel cresce). */
-function CardBody({ item, a, face, onExpand }: { item: CalendarItem; a: DetailActions; face: string | null; onExpand?(): void }) {
+function CardBody({ item, a, face, onExpand, edit, onEdit }: { item: CalendarItem; a: DetailActions; face: string | null; onExpand?(): void; edit?: EditCtx | null; onEdit?(): void }) {
   const { t, locale } = useT();
+  if (edit) {
+    return (
+      <>
+        <button type="button" className="kn-cal-expand" title={t("calendar.expand")} aria-label={t("calendar.expand")} onClick={onExpand} tabIndex={onExpand ? 0 : -1}>
+          ⤢
+        </button>
+        <div className="kn-cal-tags">
+          <KindTags item={item} />
+        </div>
+        <ItemEditor item={item} projects={edit.projects} source={edit.source} a={a} compact />
+      </>
+    );
+  }
   return (
     <>
       <button type="button" className="kn-cal-expand" title={t("calendar.expand")} aria-label={t("calendar.expand")} onClick={onExpand} tabIndex={onExpand ? 0 : -1}>
@@ -119,6 +140,11 @@ function CardBody({ item, a, face, onExpand }: { item: CalendarItem; a: DetailAc
             {t("calendar.openNote")}
           </button>
         ) : null}
+        {onEdit && editable(item).any ? (
+          <button type="button" className="kn-cal-btn kn-cal-edit" onClick={onEdit}>
+            {t("calendar.edit.open")}
+          </button>
+        ) : null}
         {item.readOnly ? null : (
           <button type="button" className="kn-cal-btn" onClick={() => a.snooze(item)}>
             {t("calendar.snooze")}
@@ -135,8 +161,13 @@ function CardBody({ item, a, face, onExpand }: { item: CalendarItem; a: DetailAc
 }
 
 /** O cartão do hover, do lado do item que tem espaço; um só ⤢, no canto de cima (spec #32129). */
-export function HoverCard({ item, at, face, a, onExpand, onEnter, onLeave }: { item: CalendarItem; at: Rect; face: string | null; a: DetailActions; onExpand(card: HTMLElement): void; onEnter(): void; onLeave(): void }) {
+export function HoverCard({ item, at, face, a, ctx, onExpand, onEnter, onLeave }: { item: CalendarItem; at: Rect; face: string | null; a: DetailActions; ctx: EditCtx; onExpand(card: HTMLElement): void; onEnter(): void; onLeave(): void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState(false);
+  // O "Editar" leva o foco para o título: dali, Tab passa pelos campos.
+  useEffect(() => {
+    if (editing) ref.current?.querySelector<HTMLInputElement>(".kn-cal-editor input:not([disabled]), .kn-cal-editor input")?.focus();
+  }, [editing]);
   return (
     <div
       ref={ref}
@@ -144,11 +175,24 @@ export function HoverCard({ item, at, face, a, onExpand, onEnter, onLeave }: { i
       role="dialog"
       aria-label={item.title}
       data-id={item.id}
+      data-editing={editing ? "" : undefined}
       style={{ left: at.left, top: at.top }}
       onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
+      onMouseLeave={() => {
+        // Editando, o cartão fica até o foco sair dele (Tab para fora ou um clique fora).
+        if (!ref.current?.contains(document.activeElement)) onLeave();
+      }}
+      onBlur={(e) => {
+        if (editing && !e.currentTarget.contains(e.relatedTarget as Node | null)) onLeave();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && editing) {
+          setEditing(false);
+          onLeave();
+        }
+      }}
     >
-      <CardBody item={item} a={a} face={face} onExpand={() => ref.current && onExpand(ref.current)} />
+      <CardBody item={item} a={a} face={face} onExpand={() => ref.current && onExpand(ref.current)} edit={editing ? ctx : null} onEdit={() => setEditing(true)} />
     </div>
   );
 }
@@ -238,6 +282,7 @@ export function WidePanel(props: {
   face: string | null;
   a: DetailActions;
   items: CalendarItem[];
+  projects: readonly string[];
   source: CalendarStore;
   openPath(path: string, internal: boolean, line?: number): void;
   openItem(i: CalendarItem): void;
@@ -373,7 +418,33 @@ export function WidePanel(props: {
           ))}
         </div>
         <div className="kn-cal-tabpanel" role="tabpanel" data-tab={tab}>
-          {tab === "item" ? (
+          {tab === "item" && editable(item).any ? (
+            <div className="kn-cal-fields">
+              <ItemEditor item={item} projects={props.projects} source={props.source} a={a} />
+              {item.people?.length ? (
+                <div className="kn-cal-row-kv">
+                  <i>{t("calendar.row.people")}</i>
+                  <span>{item.people.join(", ")}</span>
+                </div>
+              ) : null}
+              {item.source ? (
+                <div className="kn-cal-row-kv">
+                  <i>{t("calendar.row.note")}</i>
+                  <NoteLink item={item} onOpen={() => a.openNote(item)} />
+                </div>
+              ) : null}
+              <div className="kn-cal-acts">
+                <button type="button" className="kn-cal-btn" onClick={() => a.snooze(item)}>
+                  {t("calendar.snooze")}
+                </button>
+                {item.kind === "task" ? (
+                  <button type="button" className="kn-cal-btn" onClick={() => a.toggleDone(item)}>
+                    {t(item.done ? "calendar.undone" : "calendar.done")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : tab === "item" ? (
             <div className="kn-cal-fields">
               <div className="kn-cal-row-kv">
                 <i>{t("calendar.row.kind")}</i>

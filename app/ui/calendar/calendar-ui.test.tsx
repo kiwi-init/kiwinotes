@@ -38,7 +38,8 @@ const items: CalendarItem[] = [
 
 const h: ItemHandlers = { onEnter() {}, onLeave() {}, onPointerDown() {}, onOpen() {} };
 const s: ItemState = { openId: null, dragId: null, pulseId: null, kiwiFace: "data:image/png;base64,AA==" };
-const a: DetailActions = { openNote() {}, snooze() {}, toggleDone() {}, setNotify() {} };
+const a: DetailActions = { openNote() {}, snooze() {}, toggleDone() {}, setNotify() {}, edit: async () => {}, remove() {} };
+const ctx = { projects: ["Projeto X"], source: memorySource([]) };
 const week = viewRange("week", "2026-11-25");
 const now = Date.parse("2026-11-25T12:00");
 
@@ -72,7 +73,7 @@ describe("as vistas do Calendário", () => {
   });
 
   test("o cartão: um só ⤢, no canto, e o link da nota com a linha", () => {
-    const html = renderToStaticMarkup(<HoverCard item={items[0]!} at={{ left: 0, top: 0, width: 300, height: 0 }} face={null} a={a} onExpand={() => {}} onEnter={() => {}} onLeave={() => {}} />);
+    const html = renderToStaticMarkup(<HoverCard item={items[0]!} at={{ left: 0, top: 0, width: 300, height: 0 }} face={null} a={a} ctx={ctx} onExpand={() => {}} onEnter={() => {}} onLeave={() => {}} />);
     expect(html.match(/kn-cal-expand/g)?.length).toBe(1);
     expect(html.match(/⤢/g)?.length).toBe(1);
     expect(html).toContain('data-note-link="Projeto X/Pendências.md"');
@@ -84,7 +85,7 @@ describe("as vistas do Calendário", () => {
     english();
     const html =
       renderToStaticMarkup(<TimeGrid days={week.days} items={items} today="2026-11-25" now={now} h={h} s={s} />) +
-      renderToStaticMarkup(<HoverCard item={items[0]!} at={{ left: 0, top: 0, width: 300, height: 0 }} face={null} a={a} onExpand={() => {}} onEnter={() => {}} onLeave={() => {}} />);
+      renderToStaticMarkup(<HoverCard item={items[0]!} at={{ left: 0, top: 0, width: 300, height: 0 }} face={null} a={a} ctx={ctx} onExpand={() => {}} onEnter={() => {}} onLeave={() => {}} />);
     for (const text of ["all day", "Meeting", "Open the note", "10 min before"]) expect(html).toContain(text);
     for (const text of ["Dia todo", "Reunião", "Abrir a nota"]) expect(html).not.toContain(text);
   });

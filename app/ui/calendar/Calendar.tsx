@@ -6,10 +6,11 @@ import "./calendar.css";
 
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { addDays, type CalendarItem, type CalendarItems, type CalendarNotify, type CalendarUpdate } from "../../src/shared/calendar.ts";
+import { addDays, type CalendarItem, type CalendarItems, type CalendarNotify, type CalendarUndo, type CalendarUpdate } from "../../src/shared/calendar.ts";
 import { kiwiFace } from "../notes/editor/kiwi-face.ts";
 import { useT } from "../src/i18n.ts";
 import { type DetailActions, HIDE_MS, HoverCard, PULSE_MS, type Rect, rectIn, WIDE_PX, WidePanel, type WideState } from "./Detail.tsx";
+import { editable, isOccurrence, typing } from "./edit.ts";
 import { type CalendarFilter, filterStorage, passes, readFilter, shownProjects, toggleAllProjects, toggleKind, toggleProject, writeFilter } from "./filter.ts";
 import { periodTitle } from "./format.ts";
 import { CALENDAR_VIEWS, type CalendarView, isCalendarView, moveItem, newItemDay, noteLine, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
@@ -125,6 +126,8 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
 
   const keepCard = () => clearTimeout(hideTimer.current);
   const hideCard = () => {
+    // Editando no cartão (T34745): ele fica enquanto o foco está nele, mesmo com o mouse fora.
+    if (root.current?.querySelector(".kn-cal-card")?.contains(document.activeElement)) return;
     clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(() => setHover(null), HIDE_MS);
   };
@@ -217,7 +220,47 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     }
   };
 
+  // ---------------------------------------------------------------- apagar e desfazer (T34745)
+
+  const [undo, setUndo] = useState<{ token: CalendarUndo; title: string; once: boolean } | null>(null);
+  const undoBtn = useRef<HTMLButtonElement>(null);
+
+  const remove = async (item: CalendarItem, only?: boolean) => {
+    if (!editable(item).any) return;
+    try {
+      const token = await source.remove({ id: item.id, ...(only ? { only: true } : {}) });
+      setHover((h) => (h && h.item.id === item.id ? null : h));
+      // O painel fecha sem a volta: o item para onde ela iria não existe mais.
+      setOpen((o) => (o && o.item.id === item.id ? null : o));
+      setNotice(null);
+      setUndo({ token, title: item.title, once: !!only });
+      reload();
+    } catch (e) {
+      setNotice(t(errCode(e) === "E_CONFLICT" ? "calendar.conflict" : "calendar.saveFailed"));
+      reload();
+    }
+  };
+  const doUndo = async () => {
+    const u = undo;
+    if (!u) return;
+    setUndo(null);
+    try {
+      await source.restore(u.token);
+      setNotice(t("calendar.restored", { title: u.title }));
+      reload();
+    } catch {
+      setNotice(t("calendar.undoFailed"));
+      reload();
+    }
+  };
+  // O Desfazer recebe o foco: Enter desfaz, e o leitor de tela lê o aviso.
+  useEffect(() => {
+    if (undo) undoBtn.current?.focus();
+  }, [undo]);
+
   const actions: DetailActions = {
+    edit: (item, patch) => save({ id: item.id, ...patch }),
+    remove: (item, only) => void remove(item, only),
     openNote: (item) => item.source && onOpenNote(item.source.path, item.source.internal, noteLine(item)),
     snooze: (item) => {
       const m = moveItem(item, 0, 1);
@@ -226,6 +269,39 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     toggleDone: (item) => void save({ id: item.id, done: !item.done }),
     setNotify: (item, notify: CalendarNotify) => void save({ id: item.id, notify }),
   };
+
+  // A tecla Delete (ou ⌫) apaga o item com o foco, o do painel largo ou o do cartão; numa repetição, só aquela vez. O
+  // ⌘Z desfaz o último apagar. Nunca dentro de um campo, onde as duas são do texto.
+  useEffect(() => {
+    if (!active) return;
+    const key = (e: KeyboardEvent) => {
+      if (typing(e.target) || e.altKey) return;
+      if ((e.key === "z" || e.key === "Z") && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+        if (!undo) return;
+        e.preventDefault();
+        void doUndo();
+        return;
+      }
+      if ((e.key !== "Delete" && e.key !== "Backspace") || e.metaKey || e.ctrlKey || creating) return;
+      const el = e.target instanceof Element ? e.target : null;
+      const focused = el?.closest<HTMLElement>(".kn-cal-item[data-id]")?.dataset.id;
+      const item = focused
+        ? items.find((i) => i.id === focused)
+        : open && open.state === "open" && el?.closest(".kn-cal-wide")
+          ? open.item
+          : hover && el?.closest(".kn-cal-card")
+            ? hover.item
+            : open && open.state === "open"
+              ? open.item
+              : undefined;
+      if (!item || !editable(item).any) return;
+      e.preventDefault();
+      void remove(item, isOccurrence(item.id));
+    };
+    addEventListener("keydown", key);
+    return () => removeEventListener("keydown", key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, items, open, hover, undo, creating]);
 
   // ---------------------------------------------------------------- arrastar e esticar
 
@@ -362,6 +438,17 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
           {t("calendar.legend.kiwi")}
         </span>
       </div>
+      {undo ? (
+        <div className="kn-cal-notice" role="status" data-undo="">
+          {t(undo.once ? "calendar.deletedOnce" : "calendar.deleted", { title: undo.title })}
+          <button type="button" className="kn-cal-btn kn-cal-undo" ref={undoBtn} onClick={() => void doUndo()}>
+            {t("calendar.undoDelete")}
+          </button>
+          <button type="button" className="kn-cal-ic" aria-label={t("calendar.close")} onClick={() => setUndo(null)}>
+            ✕
+          </button>
+        </div>
+      ) : null}
       {notice ? (
         <div className="kn-cal-notice" role="status">
           {notice}
@@ -395,7 +482,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
         </aside>
       </div>
       {hover && !open ? (
-        <HoverCard item={hover.item} at={hover.at} face={face} a={actions} onExpand={(card) => expand(hover.item, card)} onEnter={keepCard} onLeave={hideCard} />
+        <HoverCard key={hover.item.id} item={hover.item} at={hover.at} face={face} a={actions} ctx={{ projects, source }} onExpand={(card) => expand(hover.item, card)} onEnter={keepCard} onLeave={hideCard} />
       ) : null}
       {open ? (
         <WidePanel
@@ -408,6 +495,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
           face={face}
           a={actions}
           items={items}
+          projects={projects}
           source={source}
           openPath={onOpenNote}
           openItem={(i) => {
