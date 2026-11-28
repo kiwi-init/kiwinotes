@@ -315,28 +315,37 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
         patch = { ...patch, ...(start !== undefined ? { start } : {}), ...(end !== undefined ? { end } : {}), ...(u.allDay !== undefined ? { allDay: u.allDay } : {}) };
         if (!cur && start === undefined) throw new CalendarError("E_BAD_ARGS", "an undated item needs start");
       }
-      // Mover a série leva junto as vezes já feitas (`⏭`), pelos mesmos dias.
-      if (cur?.skip.length && patch.start !== undefined) {
+      // Mover a série leva junto as vezes já feitas (`⏭`), pelos mesmos dias, e os dias da semana escolhidos (T34775).
+      if (cur?.repeat && patch.start !== undefined && u.repeat === undefined) {
         const days = Math.round((toMs(patch.start.slice(0, 10)) - toMs(cur.start.slice(0, 10))) / 86_400_000);
-        if (days) patch.skip = cur.skip.map((d) => addDays(d, days));
+        if (days && cur.skip.length) patch.skip = cur.skip.map((d) => addDays(d, days));
+        const rule = repeatRule(cur.repeat);
+        if (days % 7 && rule?.days.length) patch.repeat = repeatOfRule({ ...rule, days: rule.days.map((d) => (((d + days) % 7) + 7) % 7) });
       }
       if (u.done !== undefined) {
         if (u.done && cur?.repeat && at.occurrence) {
-          const step = cur.repeat === "daily" ? 1 : 7;
+          const rule = repeatRule(cur.repeat)!;
+          const day0 = cur.start.slice(0, 10);
+          // A próxima vez em aberto no dia `d` ou depois (pulando as já feitas); `null` quando a regra acabou.
+          const openFrom = (d: string) => repeatDays(rule, day0, d, "9999-12-31", cur.skip.length + 1).find((x) => !cur.skip.includes(x)) ?? null;
           // A 1ª vez em aberto. Num lembrete, a vez que já passou sem o Feito não segura a série (#483): conta de hoje,
           // ou da vez marcada, se ela for antes. Numa pendência, a vez atrasada continua segurando.
-          const from = cur.kind === "reminder" ? (at.occurrence < today() ? at.occurrence : today()) : "";
-          let first = cur.start.slice(0, 10);
-          while (first < from || cur.skip.includes(first)) first = addDays(first, step);
-          if (at.occurrence !== first) {
+          const from = cur.kind === "reminder" ? (at.occurrence < today() ? at.occurrence : today()) : day0;
+          const first = openFrom(from > day0 ? from : day0);
+          if (first !== null && at.occurrence !== first) {
             // Uma vez depois da 1ª em aberto: só ela sai da agenda (`⏭`), e as de antes seguem abertas (#450).
             patch = { ...patch, skip: [...cur.skip, at.occurrence] };
           } else {
             // O Feito na 1ª vez em aberto passa a série para a próxima (pulando as já feitas), e a caixa continua aberta.
-            let next = addDays(first, step);
-            while (cur.skip.includes(next)) next = addDays(next, step);
-            const start = `${next}${cur.start.slice(10)}`;
-            patch = { ...patch, start, ...(cur.end ? { end: shiftBy(cur.end, toMs(start) - toMs(cur.start)) } : {}), skip: cur.skip.filter((d) => d > next) };
+            // Sem próxima (o fim da regra, T34775), a série acabou: a caixa marca.
+            const next = openFrom(addDays(first ?? at.occurrence, 1));
+            if (next === null) newBox = "x";
+            else {
+              const start = `${next}${cur.start.slice(10)}`;
+              // O número de vezes conta da 1ª: as que ficaram para trás saem da conta.
+              const repeat = rule.count !== null ? repeatOfRule({ ...rule, count: rule.count - repeatDays(rule, day0, day0, next).length }) : undefined;
+              patch = { ...patch, start, ...(cur.end ? { end: shiftBy(cur.end, toMs(start) - toMs(cur.start)) } : {}), skip: cur.skip.filter((d) => d > next), ...(repeat ? { repeat } : {}) };
+            }
           }
         } else newBox = u.done ? "x" : " ";
       }
@@ -498,16 +507,12 @@ export function occurrences(it: CalendarItem, from: string, to: string): Calenda
   if (!it.repeat) return day < to && endDay >= from ? [it] : [];
   // Uma repetição concluída (a caixa marcada) acabou: só a primeira vez aparece, feita.
   if (it.done) return day < to && endDay >= from ? [it] : [];
-  const step = it.repeat === "daily" ? 1 : 7;
+  const rule = repeatRule(it.repeat);
+  if (!rule) return day < to && endDay >= from ? [it] : [];
   const out: CalendarItem[] = [];
-  let d = day;
-  // Pula até perto do `from` sem andar dia a dia por anos.
-  if (d < from) {
-    const gap = Math.floor((toMs(from) - toMs(d)) / 86_400_000 / step) * step;
-    d = addDays(d, Math.max(0, gap - step));
-  }
-  for (let i = 0; d < to && i < 400; i++, d = addDays(d, step)) {
-    if (d < day || it.skip?.includes(d)) continue;
+  // O item que passa da meia-noite começa no dia antes do `from`.
+  for (const d of repeatDays(rule, day, addDays(from, -1), to)) {
+    if (it.skip?.includes(d)) continue;
     const shift = toMs(d) - toMs(day);
     const s = shiftBy(it.start, shift);
     const e = it.end ? shiftBy(it.end, shift) : null;
@@ -634,6 +639,9 @@ function checkTitle(title: unknown, cap: string): void {
     throw new CalendarError("E_BAD_ARGS", `${cap}: title can't have a date, a kind tag, 🔔, 🔕, 🔁 or ⏭`);
 }
 
+const REPEAT_HELP = (cap: string) =>
+  `${cap}: repeat is null, daily, weekly, monthly, yearly, weekdays or a rule like 2w:mo,we, 3d/10x, 1m/2026-12-31 (in the short form)`;
+
 const NOTIFY_HELP = (cap: string) => `${cap}: notify is none, atTime, dayBefore or a lead time like 10m, 2h, 3d (up to 30 days)`;
 
 function checkCreate(c: CalendarCreate): void {
@@ -644,7 +652,7 @@ function checkCreate(c: CalendarCreate): void {
   checkTimes(c.start, c.end, c.allDay, "calendar.create");
   if (c.allDay === false && isDay(c.start)) throw new CalendarError("E_BAD_ARGS", "calendar.create: a timed item needs AAAA-MM-DDTHH:MM");
   if (c.notify !== undefined && normalNotify(c.notify) === null) throw new CalendarError("E_BAD_ARGS", NOTIFY_HELP("calendar.create"));
-  if (c.repeat !== undefined && c.repeat !== null && !isCalendarRepeat(c.repeat)) throw new CalendarError("E_BAD_ARGS", "calendar.create: repeat is daily, weekly or null");
+  if (c.repeat !== undefined && c.repeat !== null && !isCalendarRepeat(c.repeat)) throw new CalendarError("E_BAD_ARGS", REPEAT_HELP("calendar.create"));
   if (c.repeat && c.kind === "note") throw new CalendarError("E_BAD_ARGS", "calendar.create: a note doesn't repeat");
   if (c.project !== undefined && c.project !== null && (typeof c.project !== "string" || !c.project || c.project.includes("/")))
     throw new CalendarError("E_BAD_ARGS", "calendar.create: project is a top-level folder name or null");
@@ -661,7 +669,7 @@ function checkUpdate(u: CalendarUpdate): void {
   if (u.done !== undefined && typeof u.done !== "boolean") throw new CalendarError("E_BAD_ARGS", "calendar.update: done must be true or false");
   if (u.notify !== undefined && normalNotify(u.notify) === null) throw new CalendarError("E_BAD_ARGS", NOTIFY_HELP("calendar.update"));
   if (u.kind !== undefined && (!isCalendarKind(u.kind) || u.kind === "note")) throw new CalendarError("E_BAD_ARGS", "calendar.update: kind is meeting, reminder, task or focus");
-  if (u.repeat !== undefined && u.repeat !== null && !isCalendarRepeat(u.repeat)) throw new CalendarError("E_BAD_ARGS", "calendar.update: repeat is daily, weekly or null");
+  if (u.repeat !== undefined && u.repeat !== null && !isCalendarRepeat(u.repeat)) throw new CalendarError("E_BAD_ARGS", REPEAT_HELP("calendar.update"));
   if (u.only !== undefined) {
     if (typeof u.only !== "boolean") throw new CalendarError("E_BAD_ARGS", "calendar.update: only must be true or false");
     const extra = Object.keys(u).filter((k) => !["id", "only", "start", "end", "allDay"].includes(k));

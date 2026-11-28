@@ -8,7 +8,8 @@
 // - O tipo pela tag: `#lembrete`/`#reminder`, `#reuniao`/`#meeting`, `#foco`/`#focus`. Sem tag e com caixa: pendência.
 // - O aviso: `🔔 0` (na hora), `🔔 10m`, `🔔 50m`, `🔔 2h`, `🔔 1d` (na véspera), `🔔 3d`, ou `🔕` (nenhum). Sem ele, o
 //   padrão do tipo. Qualquer antecedência em minutos, horas ou dias, até 30 dias (spec #34706, T34753).
-// - A repetição: `🔁 dia`/`🔁 daily` ou `🔁 semana`/`🔁 weekly`.
+// - A repetição: `🔁 dia`/`daily`, `🔁 semana`/`weekly`, `🔁 mês`/`monthly`, `🔁 ano`/`yearly`, `🔁 úteis`/`weekdays`, ou a
+//   regra montada, igual nas duas línguas: `🔁 2w:mo,we`, `🔁 3d/10x`, `🔁 1m/2026-12-31` (T34775).
 // - Uma vez feita da repetição, fora da primeira em aberto: `⏭ AAAA-MM-DD`, um por vez, em ordem de dia (#450).
 
 export const CALENDAR_KINDS = ["meeting", "reminder", "task", "note", "focus"] as const;
@@ -86,9 +87,131 @@ export function notifyText(n: CalendarNotify): { key: "calendar.notify.none" | "
   return { key: "calendar.notify.minutes", params: { n: min } };
 }
 
-export const CALENDAR_REPEATS = ["daily", "weekly"] as const;
-export type CalendarRepeat = (typeof CALENDAR_REPEATS)[number];
-export const isCalendarRepeat = (v: unknown): v is CalendarRepeat => (CALENDAR_REPEATS as readonly unknown[]).includes(v);
+/**
+ * As repetições prontas (spec #34706, T34775): todo dia, toda semana (no dia da semana do começo), todo mês (no mesmo
+ * dia), todo ano e nos dias úteis (segunda a sexta). A que a pessoa monta é a regra curta, a mesma na linha, no
+ * contrato e na ferramenta: `<N><d|w|m|y>`, com `:mo,we` (os dias da semana, só em semanas) e `/AAAA-MM-DD` (até o dia)
+ * ou `/10x` (10 vezes). `2w:mo,we` é a cada 2 semanas, na segunda e na quarta; `1m/2026-12-31`, todo mês até 31/12.
+ */
+export const CALENDAR_REPEATS = ["daily", "weekly", "monthly", "yearly", "weekdays"] as const;
+export type CalendarRepeatPreset = (typeof CALENDAR_REPEATS)[number];
+export type CalendarRepeat = CalendarRepeatPreset | `${number}${"d" | "w" | "m" | "y"}${string}`;
+
+/** Os dias da semana da regra, de domingo (0) a sábado (6), como o `Date.getDay`. */
+export const WEEKDAY_CODES = ["su", "mo", "tu", "we", "th", "fr", "sa"] as const;
+
+export interface RepeatRule {
+  /** A cada quantos: 1 a 99. */
+  every: number;
+  unit: "d" | "w" | "m" | "y";
+  /** Os dias da semana (0 = domingo), só em semanas; vazio: o dia do começo. Em ordem, de segunda a domingo. */
+  days: number[];
+  /** Até este dia, inclusive. */
+  until: string | null;
+  /** Quantas vezes, contando da primeira. */
+  count: number | null;
+}
+
+export const REPEAT_LIMITS = { every: 99, count: 999 } as const;
+
+const PRESET_RULE: Record<CalendarRepeatPreset, string> = { daily: "1d", weekly: "1w", monthly: "1m", yearly: "1y", weekdays: "1w:mo,tu,we,th,fr" };
+const RULE = /^(\d{1,2})([dwmy])(?::([a-z]{2}(?:,[a-z]{2})*))?(?:\/(?:(\d{4}-\d{2}-\d{2})|(\d{1,3})x))?$/;
+/** Segunda primeiro: a ordem em que a tela e a linha escrevem os dias. */
+const mondayFirst = (a: number, b: number) => ((a + 6) % 7) - ((b + 6) % 7);
+
+/** A regra de uma repetição (pronta ou montada); `null` se não for uma. */
+export function repeatRule(v: unknown): RepeatRule | null {
+  if (typeof v !== "string") return null;
+  const raw = (CALENDAR_REPEATS as readonly string[]).includes(v) ? PRESET_RULE[v as CalendarRepeatPreset] : v.trim().toLowerCase().replace(/\s+/g, "");
+  const m = RULE.exec(raw);
+  if (!m) return null;
+  const every = Number(m[1]);
+  const unit = m[2] as RepeatRule["unit"];
+  const codes = m[3] ? m[3].split(",") : [];
+  const days = [...new Set(codes.map((c) => (WEEKDAY_CODES as readonly string[]).indexOf(c)))].sort(mondayFirst);
+  const until = m[4] ?? null;
+  const count = m[5] !== undefined ? Number(m[5]) : null;
+  if (every < 1 || every > REPEAT_LIMITS.every || days.includes(-1) || (days.length && unit !== "w")) return null;
+  if (until !== null && !isDay(until)) return null;
+  if (count !== null && (count < 1 || count > REPEAT_LIMITS.count)) return null;
+  return { every, unit, days, until, count };
+}
+
+/** A repetição de uma regra, na forma curta: a pronta quando é uma (sem fim), senão a regra. */
+export function repeatOfRule(r: RepeatRule): CalendarRepeat {
+  const body = `${r.every}${r.unit}${r.days.length ? `:${[...r.days].sort(mondayFirst).map((d) => WEEKDAY_CODES[d]).join(",")}` : ""}`;
+  const end = r.until ? `/${r.until}` : r.count !== null ? `/${r.count}x` : "";
+  if (!end) for (const p of CALENDAR_REPEATS) if (PRESET_RULE[p] === body) return p;
+  return `${body}${end}` as CalendarRepeat;
+}
+
+/** Lê uma repetição (a pronta, a regra, ou a palavra da linha: `dia`, `semana`, `mes`…) na forma curta; `null` se não for uma. */
+export function normalRepeat(v: unknown): CalendarRepeat | null {
+  if (typeof v !== "string") return null;
+  const word = REPEAT_TOKEN[v.trim().toLowerCase()];
+  const r = repeatRule(word ?? v);
+  return r ? repeatOfRule(r) : null;
+}
+
+/** Uma repetição já na forma curta (o que o item e o contrato levam). */
+export const isCalendarRepeat = (v: unknown): v is CalendarRepeat => normalRepeat(v) === v;
+
+/** Os dias entre dois dias do calendário (o horário de verão não conta). */
+const daysBetween = (a: string, b: string) => Math.round((toMs(b) - toMs(a)) / 86_400_000);
+
+/** `n` meses depois de `day`, no mesmo dia do mês; `null` quando o mês não tem esse dia (31 de abril, 29 de fevereiro). */
+function addMonths(day: string, n: number): string | null {
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const t = new Date(y, m - 1 + n, d, 12);
+  return t.getDate() === d ? dayOf(t.getTime()) : null;
+}
+
+/**
+ * Os dias de uma repetição que começa em `first`, de `from` até antes de `to`, em ordem, no máximo `max`. O fim da
+ * regra (o `until` e o número de vezes) conta da primeira vez, mesmo antes do `from`. O mês sem o dia (31, 29 de
+ * fevereiro) fica sem aquela vez, como no Google e no Apple.
+ */
+export function repeatDays(rule: RepeatRule, first: string, from: string, to: string, max = 400): string[] {
+  const out: string[] = [];
+  const lo = from > first ? from : first;
+  const stop = rule.until && rule.until < to ? addDays(rule.until, 1) : to;
+  const keep = (d: string, index: number) => {
+    if (rule.count !== null && index >= rule.count) return false;
+    if (d >= stop) return false;
+    if (d >= lo) out.push(d);
+    return out.length < max;
+  };
+  if (rule.unit === "d" || (rule.unit === "w" && !rule.days.length)) {
+    const step = rule.unit === "d" ? rule.every : 7 * rule.every;
+    for (let k = Math.max(0, Math.floor(daysBetween(first, lo) / step)); ; k++) if (!keep(addDays(first, k * step), k)) break;
+    return out;
+  }
+  if (rule.unit === "w") {
+    const monday = addDays(first, -((new Date(toMs(first)).getDay() + 6) % 7));
+    const inWeek = (k: number) => rule.days.map((wd) => addDays(monday, k * 7 * rule.every + ((wd + 6) % 7)));
+    const head = inWeek(0).filter((d) => d >= first).length;
+    for (let k = Math.max(0, Math.floor(daysBetween(monday, lo) / (7 * rule.every))); ; k++) {
+      const week = inWeek(k).filter((d) => d >= first);
+      const base = k === 0 ? 0 : head + (k - 1) * rule.days.length;
+      if (!week.length && k === 0) continue;
+      if (week.some((d, j) => !keep(d, base + j))) break;
+      if (addDays(monday, k * 7 * rule.every) >= stop) break;
+    }
+    return out;
+  }
+  // Meses e anos: anda de um em um desde a primeira vez (os que faltam o dia não contam no número de vezes).
+  const step = rule.unit === "m" ? rule.every : 12 * rule.every;
+  let index = 0;
+  for (let k = 0; k < 12_000; k++) {
+    const d = addMonths(first, k * step);
+    if (d === null) continue;
+    if (!keep(d, index++)) break;
+  }
+  return out;
+}
+
+/** A primeira vez da repetição no dia `from` ou depois; `null` quando a regra já acabou. */
+export const nextRepeatDay = (rule: RepeatRule, first: string, from: string) => repeatDays(rule, first, from, "9999-12-31", 1)[0] ?? null;
 
 export interface CalendarItem {
   /**
@@ -256,14 +379,33 @@ const TAG_OF: Record<"pt" | "en", Partial<Record<CalendarKind, string>>> = {
 const notifyOfToken = (tok: string): CalendarNotify | null => (tok === "0" ? "atTime" : normalNotify(tok));
 /** O `🔔` de um aviso: `0` na hora, `1d` na véspera, a antecedência livre como ela é. */
 const tokenOf = (n: Exclude<CalendarNotify, "none">) => (n === "atTime" ? "0" : n === "dayBefore" ? "1d" : n);
-const REPEAT_TOKEN: Record<string, CalendarRepeat> = { dia: "daily", daily: "daily", semana: "weekly", weekly: "weekly" };
-const REPEAT_OF: Record<"pt" | "en", Record<CalendarRepeat, string>> = { pt: { daily: "dia", weekly: "semana" }, en: { daily: "daily", weekly: "weekly" } };
+/** As palavras do `🔁` na linha; a regra montada (`2w:mo,we/10x`) vai como ela é, nas duas línguas. */
+const REPEAT_TOKEN: Record<string, CalendarRepeatPreset> = {
+  dia: "daily",
+  daily: "daily",
+  semana: "weekly",
+  weekly: "weekly",
+  mes: "monthly",
+  mês: "monthly",
+  monthly: "monthly",
+  ano: "yearly",
+  yearly: "yearly",
+  uteis: "weekdays",
+  úteis: "weekdays",
+  weekdays: "weekdays",
+};
+const REPEAT_OF: Record<"pt" | "en", Record<CalendarRepeatPreset, string>> = {
+  pt: { daily: "dia", weekly: "semana", monthly: "mês", yearly: "ano", weekdays: "úteis" },
+  en: { daily: "daily", weekly: "weekly", monthly: "monthly", yearly: "yearly", weekdays: "weekdays" },
+};
+/** O `🔁` de uma repetição, na língua do app. */
+const repeatToken = (r: CalendarRepeat, locale: "pt" | "en") => `🔁 ${(REPEAT_OF[locale] as Record<string, string>)[r] ?? r}`;
 
 const WHEN = /(^|\s)@\s?(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?)?(?=\s|$)/;
 const TAG = /(^|\s)#([\p{L}]+)(?=\s|$|[.,;!?])/gu;
 const BELL = /(^|\s)🔔\s?(0|\d{1,6}[mhd])(?=\s|$)/;
 const MUTE = /(^|\s)🔕(?=\s|$)/;
-const REPEAT = /(^|\s)🔁\s?(dia|daily|semana|weekly)(?=\s|$)/;
+const REPEAT = /(^|\s)🔁\s?(\S+)(?=\s|$)/u;
 /** Uma vez feita: `⏭` (com ou sem o seletor de emoji U+FE0F, que o teclado do Mac põe) e o dia. */
 const SKIP = /(^|\s)⏭\uFE0F?\s?(\d{4}-\d{2}-\d{2})(?=\s|$)/g;
 /** O texto sem os `⏭ AAAA-MM-DD`: a Início mostra a pendência sem eles. */
@@ -320,9 +462,13 @@ export function parseWhen(rest: string): LineWhen | null {
   const bell = BELL.exec(title);
   const notify: CalendarNotify | null = MUTE.test(title) ? "none" : bell ? notifyOfToken(bell[2]!) : null;
   const rep = REPEAT.exec(title);
+  // Um `🔁` que não é uma repetição (`🔁 talvez`) fica no título.
+  const repeat = rep ? normalRepeat(rep[2]) : null;
   const skip = sortedDays([...title.matchAll(SKIP)].map((m) => m[2]!).filter(isDay));
-  title = title.replace(BELL, "$1").replace(MUTE, "$1").replace(REPEAT, "$1").replace(SKIP, "$1").replace(/\s+/g, " ").trim();
-  return { title, kind, start, end, allDay, notify, repeat: rep ? REPEAT_TOKEN[rep[2]!]! : null, skip };
+  title = title.replace(BELL, "$1").replace(MUTE, "$1").replace(SKIP, "$1");
+  if (repeat) title = title.replace(REPEAT, "$1");
+  title = title.replace(/\s+/g, " ").trim();
+  return { title, kind, start, end, allDay, notify, repeat, skip };
 }
 
 /**
@@ -356,7 +502,7 @@ export function formatWhen(
   if (tag) parts.push(`#${tag}`);
   if (o.notify === "none") parts.push("🔕");
   else if (o.notify) parts.push(`🔔 ${tokenOf(o.notify)}`);
-  if (o.repeat) parts.push(`🔁 ${REPEAT_OF[locale][o.repeat]}`);
+  if (o.repeat) parts.push(repeatToken(o.repeat, locale));
   if (o.repeat) for (const d of sortedDays(o.skip ?? [])) parts.push(`⏭ ${d}`);
   return parts.join(" ");
 }
@@ -418,7 +564,7 @@ export function rewriteWhen(
   }
   if (patch.repeat !== undefined) {
     out = out.replace(REPEAT, "$1");
-    if (patch.repeat) add(`🔁 ${REPEAT_OF[locale][patch.repeat]}`);
+    if (patch.repeat) add(repeatToken(patch.repeat, locale));
   }
   if (patch.skip !== undefined || patch.repeat !== undefined) {
     // Os `⏭` vão depois do `🔁`, em ordem de dia; sem repetição, saem.
