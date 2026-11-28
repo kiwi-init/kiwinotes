@@ -36,17 +36,16 @@ export function redactQuotedPaths(text: string): string {
 
 function redactLine(line: string): string {
   if (!line.includes("'/") && !line.includes('"/') && !line.includes("'~/") && !line.includes('"~/')) return line;
-  // As setas da linha, como trechos [começo do espaço, fim do espaço): qualquer posição no espaço da frente já é seta.
-  const arrows: { from: number; to: number }[] = [];
+  // Onde começa o espaço de cada seta da linha. O corpo do caminho começa logo depois de uma `/`, então nunca no meio
+  // desse espaço: basta o começo dele.
+  const arrows: number[] = [];
   RENAME_ARROW.lastIndex = 0;
-  for (let m = RENAME_ARROW.exec(line); m; m = RENAME_ARROW.exec(line)) {
-    arrows.push({ from: m.index, to: m.index + m[0].indexOf("-") - 1 });
-  }
+  for (let m = RENAME_ARROW.exec(line); m; m = RENAME_ARROW.exec(line)) arrows.push(m.index);
   let arrow = 0;
-  /** Onde o caminho que começa em `from` tem de parar: a primeira posição de seta a partir dele, ou o fim da linha. */
+  /** Onde o caminho cujo corpo começa em `from` tem de parar: a primeira seta a partir dele, ou o fim da linha. */
   const stopAt = (from: number): number => {
-    while (arrow < arrows.length && arrows[arrow]!.to < from) arrow++;
-    return arrow < arrows.length ? Math.max(arrows[arrow]!.from, from) : line.length;
+    while (arrow < arrows.length && arrows[arrow]! < from) arrow++;
+    return arrow < arrows.length ? arrows[arrow]! : line.length;
   };
   // A aspa que já se sabe sem fecho até uma seta: guarda a seta (o `stopAt`) em que ela morreu.
   const dead: Record<string, number> = {};
