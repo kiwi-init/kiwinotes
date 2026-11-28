@@ -367,6 +367,43 @@ export function formatWhen(
  * Troca, no texto de um item, só o que mudou: a data, o tipo, o aviso ou a repetição. O resto da linha (links, ênfase,
  * outras tags) fica como estava. Um pedaço que a linha não tinha vai no fim.
  */
+/** Onde começa o 1º pedaço do item na linha (a data, a tag do tipo, o aviso, a repetição, o ⏭); sem nenhum, o fim. */
+function firstToken(rest: string): number {
+  let at = rest.length;
+  const seen = (m: RegExpExecArray | null) => {
+    if (m) at = Math.min(at, m.index + m[1]!.length);
+  };
+  for (const re of [WHEN, BELL, MUTE, REPEAT]) seen(re.exec(rest));
+  for (const m of rest.matchAll(SKIP)) seen(m);
+  for (const m of rest.matchAll(TAG)) if (KIND_TAGS[m[2]!.toLowerCase()]) seen(m);
+  return at;
+}
+
+/** Os pedaços da pessoa que um título novo não pode levar embora: os `[[links]]` e as tags que não são do tipo. */
+const KEEP = /\[\[[^\]]+\]\]|(?<=^|\s)#[\p{L}][\p{L}\d_/-]*/gu;
+
+/**
+ * Um título novo (#527) troca só o começo da linha, até o 1º pedaço do item; o que vem depois (a data, as tags, os
+ * `[[links]]`, o texto) fica. O cartão mostra o título inteiro, com o texto de depois da data, e o devolve junto: ele não
+ * entra duas vezes. Um link ou uma tag do começo que o título novo não traz continua na linha, no fim do título.
+ */
+function retitle(rest: string, title: string): string {
+  const norm = (t: string) => t.replace(/\s+/g, " ").trim();
+  const at = firstToken(rest);
+  const lead = rest.slice(0, at);
+  const tail = rest.slice(at);
+  // O texto da pessoa depois do 1º pedaço; sem data na linha, uma data de mentira só para a leitura.
+  const read = parseWhen(`x ${tail}`) ?? parseWhen(`x ${tail} @ 2026-01-01`);
+  const after = norm(read?.title.replace(/^x\b/, "") ?? "");
+  let head = norm(title);
+  if (after && head.endsWith(` ${after}`)) head = head.slice(0, -after.length - 1);
+  else if (after && head === after) head = "";
+  const kept = (lead.match(KEEP) ?? []).filter((k) => !` ${head} `.includes(k) && !` ${after} `.includes(` ${k} `));
+  head = norm([head, ...kept].join(" "));
+  if (!tail) return head;
+  return `${head}${/^\s/.test(tail) ? "" : " "}${tail}`;
+}
+
 export function rewriteWhen(
   rest: string,
   patch: { title?: string; start?: string; end?: string | null; allDay?: boolean; kind?: CalendarKind; notify?: CalendarNotify | null; repeat?: CalendarRepeat | null; skip?: readonly string[] },
@@ -377,23 +414,7 @@ export function rewriteWhen(
   const add = (s: string) => {
     out = `${out.replace(/\s+$/, "")} ${s}`;
   };
-  if (patch.title !== undefined) {
-    // Um título novo troca o texto todo: os pedaços do item voltam do zero.
-    const base = cur ?? { kind: null, start: patch.start ?? "", end: null, allDay: true, notify: null, repeat: null, skip: [] };
-    return formatWhen(
-      {
-        title: patch.title,
-        kind: patch.kind ?? base.kind ?? "task",
-        start: patch.start ?? base.start,
-        end: patch.end !== undefined ? patch.end : base.end,
-        allDay: patch.allDay ?? base.allDay,
-        notify: patch.notify !== undefined ? patch.notify : base.notify,
-        repeat: patch.repeat !== undefined ? patch.repeat : base.repeat,
-        skip: patch.skip ?? base.skip,
-      },
-      locale,
-    );
-  }
+  if (patch.title !== undefined) out = retitle(rest, patch.title);
   if (patch.start !== undefined || patch.end !== undefined || patch.allDay !== undefined) {
     const allDay = patch.allDay ?? cur?.allDay ?? true;
     const start = patch.start ?? cur?.start ?? "";

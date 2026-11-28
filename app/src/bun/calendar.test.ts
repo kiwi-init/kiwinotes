@@ -902,3 +902,46 @@ describe("calendar.update: o texto do item (T34745)", () => {
     expect(await code(cal.update({ id: f.id, text: "x".repeat(20_001) }))).toBe("E_BAD_ARGS");
   });
 });
+
+describe("calendar.update: o título e o tipo não estragam a linha (#527, #529)", () => {
+  test("o título novo troca só o começo; [[links]], outras tags e o texto depois da data ficam (#527)", () => {
+    const rest = "Regar @ 2026-11-02 #lembrete 🔁 dia ⏭ 2026-11-04 [[Plantas]] #casa";
+    expect(rewriteWhen(rest, { title: "Regar as plantas" }, "pt")).toBe("Regar as plantas @ 2026-11-02 #lembrete 🔁 dia ⏭ 2026-11-04 [[Plantas]] #casa");
+    // O cartão mostra o título inteiro (com o resto) e devolve o resto junto: não duplica.
+    expect(rewriteWhen(rest, { title: "Regar as plantas [[Plantas]] #casa" }, "pt")).toBe("Regar as plantas @ 2026-11-02 #lembrete 🔁 dia ⏭ 2026-11-04 [[Plantas]] #casa");
+    // O título com o link no meio fica onde está; sem data, o mesmo.
+    expect(rewriteWhen("Ler o [[Guia]] @ 2026-11-02 10:00 #foco", { title: "Reler o [[Guia]]" }, "en")).toBe("Reler o [[Guia]] @ 2026-11-02 10:00 #foco");
+    expect(rewriteWhen("Escolher o fornecedor #casa", { title: "Escolher a loja" }, "pt")).toBe("Escolher a loja #casa");
+    // O título com outra troca junto: as duas entram.
+    expect(rewriteWhen(rest, { title: "Regar", kind: "task" }, "pt")).toBe("Regar @ 2026-11-02 🔁 dia ⏭ 2026-11-04 [[Plantas]] #casa");
+    expect(rewriteWhen("Sem data [[Plantas]]", { title: "Ainda sem data", start: "2026-11-30" }, "pt")).toBe("Ainda sem data [[Plantas]] @ 2026-11-30");
+  });
+
+  test("pelo calendar.update, a nota guarda o resto da linha (#527)", async () => {
+    const { cal, read } = await open({ "Casa/Rotina.md": "# Rotina\n\n- [ ] Regar @ 2026-11-02 #lembrete 🔁 dia ⏭ 2026-11-04 [[Plantas]] #casa\n" });
+    const it = (await cal.items({ from: "2026-11-02", to: "2026-11-03" })).items[0]!;
+    await cal.update({ id: it.id.replace(/~.*$/, ""), title: "Regar as plantas" });
+    expect(read("Casa/Rotina.md")).toBe("# Rotina\n\n- [ ] Regar as plantas @ 2026-11-02 #lembrete 🔁 dia ⏭ 2026-11-04 [[Plantas]] #casa\n");
+  });
+
+  test("o tipo pendência ou lembrete põe a caixa; reunião e foco tiram (#529)", async () => {
+    const { cal, read } = await open({});
+    const made = await cal.create({ kind: "meeting", title: "Café com a Ana", start: "2026-11-27T10:00", end: "2026-11-27T11:00" });
+    const path = made.source!.path;
+    const line = () => read(path).split("\n").find((l) => l.includes("Café com a Ana"));
+    expect(line()).toBe("- Café com a Ana @ 2026-11-27 10:00-11:00 #reuniao");
+    const task = await cal.update({ id: made.id, kind: "task" });
+    expect(task).toMatchObject({ kind: "task", done: false });
+    expect(line()).toBe("- [ ] Café com a Ana @ 2026-11-27 10:00-11:00");
+    const focus = await cal.update({ id: task.id, kind: "focus" });
+    expect(focus.kind).toBe("focus");
+    expect(focus.done).toBeUndefined();
+    expect(line()).toBe("- Café com a Ana @ 2026-11-27 10:00-11:00 #foco");
+    const rem = await cal.update({ id: focus.id, kind: "reminder" });
+    expect(line()).toBe("- [ ] Café com a Ana @ 2026-11-27 10:00-11:00 #lembrete");
+    // O lembrete feito vira pendência feita: a caixa marcada fica.
+    const done = await cal.update({ id: rem.id, done: true });
+    await cal.update({ id: done.id, kind: "task" });
+    expect(line()).toBe("- [x] Café com a Ana @ 2026-11-27 10:00-11:00");
+  });
+});

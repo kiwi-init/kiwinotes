@@ -299,7 +299,12 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
       let patch: Parameters<typeof rewriteWhen>[1] = {};
       let newBox = box === undefined ? null : box === " " ? " " : "x";
       if (u.title !== undefined) patch.title = u.title;
-      if (u.kind !== undefined) patch.kind = u.kind;
+      if (u.kind !== undefined) {
+        patch.kind = u.kind;
+        // A caixa acompanha o tipo, como no `create` (#529): pendência e lembrete têm, reunião e foco não. Sem a caixa, a
+        // pendência (que não tem tag) deixaria de ser item.
+        newBox = u.kind === "task" || u.kind === "reminder" ? (newBox ?? " ") : null;
+      }
       if (u.notify !== undefined) patch.notify = u.notify === DEFAULT_NOTIFY[u.kind ?? cur?.kind ?? "task"] && !cur?.notify ? null : u.notify;
       if (u.repeat !== undefined) patch.repeat = u.repeat;
       if (u.start !== undefined || u.end !== undefined || u.allDay !== undefined) {
