@@ -184,6 +184,18 @@ export function fitColumns(placed: Placed[], max: number): { shown: Placed[]; mo
   return { shown, more };
 }
 
+/** Quantas linhas a faixa do dia todo mostra em cada dia, com o "+N" contado como uma (10.8 do spec #34706). */
+export const ALLDAY_MAX = 3;
+
+/**
+ * A faixa do dia todo com teto: até `max` itens, todos à vista; mais que isso, os `max - 1` primeiros e um "+N" com o
+ * resto, para a faixa não empurrar a grade das horas para baixo (10.8). Aberta (`open`), mostra todos.
+ */
+export function allDayFit<T>(list: T[], open: boolean, max = ALLDAY_MAX): { shown: T[]; hidden: number } {
+  if (open || list.length <= max) return { shown: list, hidden: 0 };
+  return { shown: list.slice(0, max - 1), hidden: list.length - (max - 1) };
+}
+
 /** Os itens de dia todo de um dia, e os de cada dia na ordem da Agenda e do Mês (dia todo primeiro, depois a hora). */
 export function itemsOfDay(items: CalendarItem[], day: string): CalendarItem[] {
   return items
@@ -209,6 +221,33 @@ export function moveItem(item: CalendarItem, deltaMin: number, deltaDays: number
     return dayTimeOf(toMs(`${addDays(day, deltaDays)}T${time}`) + dm * MIN);
   };
   return { start: shift(item.start), end: item.end ? shift(item.end) : null };
+}
+
+/**
+ * O "Adiar" (o cartão e o painel largo): o item vai para o dia seguinte, na mesma hora. Numa vez de repetição, só aquela
+ * vez anda (`only`, #485); sem isso, o `calendar.update` mudava o começo da série inteira (#530).
+ */
+export function snoozePatch(item: CalendarItem): { start: string; end: string | null; only?: true } | null {
+  const m = moveItem(item, 0, 1);
+  if (!m) return null;
+  return item.repeat ? { ...m, only: true } : m;
+}
+
+/** A série de um item: o id sem o `~AAAA-MM-DD` da vez (as vezes de uma repetição dividem a série). */
+export const seriesOf = (id: string) => id.replace(/~\d{4}-\d{2}-\d{2}$/, "");
+
+/**
+ * As Ligações da mesma nota: os outros itens dela, uma linha por série. As vezes de uma repetição no período à vista
+ * não se repetem, e a série do próprio item não entra (#532).
+ */
+export function sameNote(item: CalendarItem, items: CalendarItem[]): CalendarItem[] {
+  if (!item.source) return [];
+  const seen = new Set([seriesOf(item.id)]);
+  return items.filter((i) => {
+    if (i.source?.path !== item.source!.path || seen.has(seriesOf(i.id))) return false;
+    seen.add(seriesOf(i.id));
+    return true;
+  });
 }
 
 /**
