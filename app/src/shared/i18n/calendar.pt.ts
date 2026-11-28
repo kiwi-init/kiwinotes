@@ -79,5 +79,6 @@ export const ptCalendar = {
   "calendar.new.create": "Criar",
   "calendar.new.cancel": "Cancelar",
   "calendar.new.where": "Vai para {path}.",
+  "calendar.new.titleProblem": "O título não pode ter “{piece}”: na nota, isso vira o tipo, o aviso, a repetição ou a data do item.",
   "calendar.resize": "Esticar",
 } as const;

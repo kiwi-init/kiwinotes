@@ -203,6 +203,18 @@ try {
         await plusOneDay(p, "11:00–11:00 (+1 day)");
         await p.screenshot({ path: join(shots, "mais-um-dia.png") });
         checks.push(`${lang}: o item de 24 h mostra 11:00–11:00 (+1 day) no bloco e no cartão`);
+
+        // O motivo do título com a tag do tipo (#493), em inglês; o Cancelar fecha sem criar.
+        await p.locator(`${pane} .kn-cal-new`).click();
+        await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Plan the #focus block");
+        const why = p.locator(`${pane} .kn-cal-newform .kn-cal-title-problem`);
+        await why.waitFor();
+        assert.equal((await why.textContent())?.trim(), "The title can’t have “#focus”: in the note, it sets the item’s kind, alert, repetition or date.");
+        assert.ok(await p.locator(`${pane} .kn-cal-newform button[type="submit"]`).isDisabled(), "Create is off");
+        await p.locator(`${pane} .kn-cal-newform`).screenshot({ path: join(shots, "titulo-com-tag.png") });
+        await p.locator(`${pane} .kn-cal-newform button[type="button"].kn-cal-btn`).click();
+        assert.equal(await p.locator(`${pane} .kn-cal-newform`).count(), 0, "o Cancelar fecha o + Novo");
+        checks.push(`${lang}: o + Novo com "Plan the #focus block" mostra o motivo em inglês e desliga o Create`);
       }
 
       if (lang === "pt") {
@@ -254,7 +266,16 @@ try {
 
         // 4b. O + Novo, sem projeto, cria a linha no Calendário.md e o item na tela.
         await p.locator(`${pane} .kn-cal-new`).click();
+        // 4b'. Um título com a tag do tipo (#493): o motivo aparece embaixo do campo, com o pedaço, e o Criar desliga.
+        await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Revisar #foco do mês");
+        const why = p.locator(`${pane} .kn-cal-newform .kn-cal-title-problem`);
+        await why.waitFor();
+        assert.equal((await why.textContent())?.trim(), "O título não pode ter “#foco”: na nota, isso vira o tipo, o aviso, a repetição ou a data do item.");
+        assert.ok(await p.locator(`${pane} .kn-cal-newform button[type="submit"]`).isDisabled(), "o Criar fica desligado");
+        await p.locator(`${pane} .kn-cal-newform`).screenshot({ path: join(shots, "titulo-com-tag.png") });
+        checks.push(`${lang}: o + Novo com "Revisar #foco do mês" mostra o motivo com o pedaço e desliga o Criar`);
         await p.fill(`${pane} .kn-cal-newform input[name="title"]`, "Ligar para o Bruno");
+        assert.equal(await why.count(), 0, "o motivo some com o título comum");
         await p.fill(`${pane} .kn-cal-newform input[name="day"]`, day(0));
         await p.fill(`${pane} .kn-cal-newform input[name="time"]`, "16:00");
         await p.locator(`${pane} .kn-cal-newform button[type="submit"]`).click();

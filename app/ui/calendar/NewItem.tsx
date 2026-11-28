@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { CALENDAR_KINDS, type CalendarCreate, type CalendarKind } from "../../src/shared/calendar.ts";
+import { CALENDAR_KINDS, type CalendarCreate, type CalendarKind, titleProblem } from "../../src/shared/calendar.ts";
 import { useT } from "../src/i18n.ts";
 
 const whereOf = (project: string) => (project ? `${project}/Pendências.md` : "Calendário.md"); // i18n-ok: o arquivo que o main escreve
@@ -18,7 +18,9 @@ export function NewItem({ day, projects, onCancel, onCreate }: { day: string; pr
   const [end, setEnd] = useState("");
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => field.current?.focus(), []);
-  const ok = title.trim() && /^\d{4}-\d{2}-\d{2}$/.test(date) && (!end || (time && end > time));
+  // O pedaço que a nota leria como tipo, aviso, repetição ou data (#493): o Criar fica desligado e o motivo aparece.
+  const bad = title.trim() ? titleProblem(title) : null;
+  const ok = title.trim() && !bad && /^\d{4}-\d{2}-\d{2}$/.test(date) && (!end || (time && end > time));
   const submit = () => {
     if (!ok) return;
     onCreate({
@@ -48,8 +50,13 @@ export function NewItem({ day, projects, onCancel, onCreate }: { day: string; pr
         <h3>{t("calendar.new.title")}</h3>
         <label>
           {t("calendar.new.name")}
-          <input ref={field} name="title" value={title} maxLength={300} placeholder={t("calendar.new.placeholder")} onChange={(e) => setTitle(e.target.value)} />
+          <input ref={field} name="title" value={title} maxLength={300} placeholder={t("calendar.new.placeholder")} onChange={(e) => setTitle(e.target.value)} aria-invalid={bad ? true : undefined} aria-describedby={bad ? "kn-cal-title-problem" : undefined} />
         </label>
+        {bad ? (
+          <p id="kn-cal-title-problem" className="kn-cal-title-problem" role="alert">
+            {t("calendar.new.titleProblem", { piece: bad })}
+          </p>
+        ) : null}
         <div className="kn-cal-kinds" role="radiogroup" aria-label={t("calendar.row.kind")}>
           {CALENDAR_KINDS.map((k) => (
             <button type="button" role="radio" key={k} data-kind={k} aria-checked={kind === k} onClick={() => setKind(k)}>

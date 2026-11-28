@@ -256,6 +256,19 @@ export function parseWhen(rest: string): LineWhen | null {
   return { title, kind, start, end, allDay, notify, repeat: rep ? REPEAT_TOKEN[rep[2]!]! : null, skip };
 }
 
+/**
+ * O pedaço do título que a linha da nota leria como outra coisa (#493): a tag do tipo (`#foco`, `#reminder`…), `🔔`,
+ * `🔕`, `🔁`, `⏭` ou uma data com `@`. `null` quando o título pode ir. O `calendar.create`/`update` recusa com ele, e o
+ * "+ Novo" o mostra antes de criar.
+ */
+export function titleProblem(title: string): string | null {
+  const mark = /🔔|🔕|🔁|⏭/u.exec(title)?.[0] ?? /(?:^|\s)(@\s?\d)/.exec(title)?.[1];
+  if (mark) return mark;
+  for (const m of title.matchAll(TAG)) if (KIND_TAGS[m[2]!.toLowerCase()]) return `#${m[2]}`;
+  // Outro pedaço que a leitura tira do título (a regra de antes, inteira): devolve o título todo.
+  return parseWhen(`${title} @ 2026-01-01`)?.title === title.replace(/\s+/g, " ").trim() ? null : title.trim();
+}
+
 /** O pedaço `@ …` de uma data. */
 export function whenToken(start: string, end: string | null, allDay: boolean): string {
   const [day, s] = start.split("T") as [string, string | undefined];

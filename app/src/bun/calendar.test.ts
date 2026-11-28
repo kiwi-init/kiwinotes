@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { Vault } from "../notes/vault.ts";
-import { addDays, type CalendarItem, dayOf, notifyAt, parseWhen, rewriteWhen, toMs } from "../shared/calendar.ts";
+import { addDays, type CalendarItem, dayOf, notifyAt, parseWhen, rewriteWhen, titleProblem, toMs } from "../shared/calendar.ts";
 import { tempDir } from "../../test/tmp.ts";
 import { alertsBetween, calendarService, occurrences, setFrontmatter } from "./calendar.ts";
 import { startMs, suggestion } from "../shared/calendar-kiwi.ts";
@@ -723,5 +723,29 @@ describe("calendar.items: só relê a nota que mudou (#486)", () => {
     expect(b.r.items[0]!.title).not.toBe("Outro");
     expect(b.r.items[0]!.source!.path).not.toBe("x.md");
     expect(b.r.undated.map((i) => i.title)).not.toContain("Outro");
+  });
+});
+
+// O título que a linha leria como outra coisa (#493): o "+ Novo" mostra o pedaço, e o create recusa pelo mesmo teste.
+describe("titleProblem: o pedaço que não pode ir no título (#493)", () => {
+  test("os da issue: a tag do tipo, o sino e a data com @, em pt e en", () => {
+    expect(titleProblem("Revisar #foco do mês")).toBe("#foco");
+    expect(titleProblem("Revisar o #lembrete")).toBe("#lembrete");
+    expect(titleProblem("Pagar conta @ 2")).toBe("@ 2");
+    expect(titleProblem("Ler 🔔 0")).toBe("🔔");
+    expect(titleProblem("Plan the #meeting")).toBe("#meeting");
+    expect(titleProblem("Regar 🔁 dia")).toBe("🔁");
+    expect(titleProblem("Silêncio 🔕")).toBe("🔕");
+    expect(titleProblem("Feito ⏭ ontem")).toBe("⏭");
+  });
+
+  test("um título comum passa: outras tags, o @ de e-mail, o # no meio da palavra", () => {
+    for (const ok of ["Revisar o orçamento", "Ligar para a Ana #casa", "Escrever para ana@exemplo.com", "Curso de C# básico", "Sala 3", "Rever o @ana"]) expect(titleProblem(ok)).toBeNull();
+  });
+
+  test("o create recusa o título da issue, e a nota não muda", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": PROJETO });
+    expect(await code(cal.create({ kind: "task", title: "Revisar #foco do mês", project: "Projeto X", start: "2026-11-30" }))).toBe("E_BAD_ARGS");
+    expect(read("Projeto X/Pendências.md")).toBe(PROJETO);
   });
 });
