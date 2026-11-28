@@ -20,6 +20,8 @@ export const ptHub = {
   "hub.tab.soon": "breve",
   "hub.bubble.more": "Ver mais",
   "hub.bubble.answer": "A resposta do agente",
+  "hub.bubble.ask": "Precisa de mais alguma coisa?",
+  "hub.bubble.close": "Fechar",
   "hub.ask.voiceHint": "Ou segure {keys} para falar.",
   "hub.memory.aria": "A memória do agente",
   "hub.memory.open": "Abrir a memória",

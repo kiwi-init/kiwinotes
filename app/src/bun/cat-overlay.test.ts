@@ -511,12 +511,14 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(r.take()).toEqual([]);
     r.advance(1);
     expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Uma resposta.", error: false, ask: true }]);
-    // Com a pergunta, a pessoa volta ao balão: a pergunta sai, e a espera para.
+    // Com a pergunta, a pessoa volta ao balão: a espera para, e a pergunta fica à vista enquanto ela lê (spec #32534:
+    // é o mouse que mostra o balão). Solta, a pergunta sai e a espera recomeça.
     r.cat.hold(true);
-    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Uma resposta.", error: false }]);
+    expect(r.take()).toEqual([]);
     r.advance(OVERLAY_TIMES.askLeave * 4);
     expect(r.cat.visible).toBe(true);
     r.cat.hold(false);
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Uma resposta.", error: false }]);
     r.advance(OVERLAY_TIMES.idleAsk + OVERLAY_TIMES.askLeave);
     expect(r.take().at(-1)).toEqual({ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit });
     // Um `hold` atrasado, com o gato fora, não faz nada.

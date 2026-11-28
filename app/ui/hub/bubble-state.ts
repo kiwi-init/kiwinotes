@@ -11,7 +11,8 @@
 //   e não muda com o relógio. O resumo é a fala do `cat_speak` (o evento `speech`), quando o agente mandou; senão, o
 //   começo da resposta final, cortado no fim de uma frase que caiba (`summaryOf`). O [Ver mais] aparece quando a
 //   resposta inteira é maior que o resumo, e mostra tudo o que o agente disse no pedido.
-// - No erro, o balão mostra a mensagem. Um pedido novo fecha o balão do anterior; o clique fecha o balão.
+// - No erro, o balão mostra a mensagem. Um pedido novo fecha o balão do anterior. O clique no balão não fecha (spec
+//   #32534): quem fecha é o ×, o Esc e o relógio (`bubble-clock.ts`); a última resposta volta com o mouse no Kiwi.
 // - O texto nunca é reescrito: só cortado. Nada aqui interpreta HTML (a tela mostra como texto).
 // - O markdown (spec #17679): o balão pequeno mostra o texto corrido, sem `**`, `#`, `|` nem a crase. O corte é feito
 //   nesse texto, e não no cru.
@@ -30,7 +31,7 @@ export const webLine = (): string => t("hub.step.web");
 /**
  * Quanto a resposta fica na tela antes de dar lugar a um balão com ação (a memória, a rotina, a proposta; T28350): o
  * tempo de leitura de antes do balão único, 1,5 s mais 60 ms por caractere, entre 2 e 8 s. Sem balão esperando, a
- * resposta fica até o clique (spec #27881).
+ * resposta fica até o × ou o Esc, ou até o relógio do balão a tirar (spec #32534, Cena 3).
  */
 export function readingMs(text: string): number {
   return Math.min(8000, Math.max(2000, 1500 + 60 * [...text].length));
@@ -214,12 +215,14 @@ export class BubbleFeed {
   private heardText = "";
   private ended = false;
   private dismissed = false;
+  /** A resposta que saiu da tela, para voltar com o mouse no Kiwi (`recall`). */
+  private last: Head | null = null;
   private announced: string | null = null;
   /** O limite acabado com a hora de volta (spec #11084): o erro de limite que vem depois mostra esta linha. */
   private outLine: string | null = null;
   /**
    * A resposta do pedido anterior, parada no canto depois do `started` do novo (T15377): ela sai no mesmo quadro em que
-   * o primeiro balão do novo entra, e não antes, com o canto vazio entre elas. Sai também no fim do pedido, no clique ou
+   * o primeiro balão do novo entra, e não antes, com o canto vazio entre elas. Sai também no fim do pedido, no × ou
    * no `ANSWER_HOLD_MS`.
    */
   private held: { view: BubbleView; until: number } | null = null;
@@ -344,13 +347,39 @@ export class BubbleFeed {
     this.showStep(now);
   }
 
-  /** O clique no balão: fecha (o resto deste pedido não aparece mais no balão; o [Ver mais] não abre mais). */
-  close(): void {
+  /**
+   * O balão sai (o ×, o Esc, o relógio, a vez de um balão com ação): o resto deste pedido não aparece mais. A resposta
+   * pronta fica guardada para voltar com o mouse no Kiwi (`recall`, spec #32534), até o próximo pedido; `keep: false`
+   * (o pedido novo mandado pelo campo) a esquece.
+   */
+  close(keep = true): void {
+    const h = this.head;
+    if (!keep) this.last = null;
+    else if (h && !this.dismissed && this.ended && (h.kind === "answer" || h.kind === "error")) this.last = h;
     this.held = null;
     this.afterWarning = null;
     this.warnUntil = 0;
     this.dismissed = true;
     this.head = null;
+  }
+
+  /**
+   * A última resposta de volta (spec #32534, Cena 3): depois que o balão saiu, o mouse no Kiwi a mostra de novo, até o
+   * próximo pedido. Entra como um balão novo (outra `key`), sem anunciar de novo ao leitor de tela. Devolve se voltou.
+   */
+  recall(): boolean {
+    const last = this.last;
+    if (!last || !this.dismissed || !this.ended) return false;
+    this.head = { ...last, key: ++this.keys };
+    this.dismissed = false;
+    return true;
+  }
+
+  /** O balão na tela é o do fim do pedido (a resposta ou o erro): é a hora do relógio (`bubble-clock.ts`). */
+  settled(now: number): boolean {
+    const v = this.view(now);
+    const h = this.head;
+    return !!v && !!h && v.key === h.key && this.ended && (h.kind === "answer" || h.kind === "error");
   }
 
   /** O que o balão mostra agora; null sem balão. */
@@ -433,6 +462,7 @@ export class BubbleFeed {
   private reset(id: string): void {
     this.request = id;
     this.head = null;
+    this.last = null;
     this.said = "";
     this.saidLinks = [];
     this.closedLen = 0;

@@ -227,6 +227,14 @@ public enum CatOverlayBubble {
     }
 
     /**
+     A pessoa está com o balão (spec #32534, Cena 3): o relógio de 45 s + 15 s não corre. O "Ver mais" aberto, o mouse
+     no balão, ou o mouse no Kiwi com o balão à vista (ele só aparece com o mouse lá, e não sai debaixo do mouse).
+     */
+    public static func holds(open: Bool, overBubble: Bool, catHover: Bool, bubbleShown: Bool) -> Bool {
+        open || overBubble || (bubbleShown && catHover)
+    }
+
+    /**
      O clique fora com o "Ver mais" aberto (spec #32534): o botão do mouse desceu agora (`pressed` e não `wasPressed`),
      longe do balão. A janela deixa esse clique passar ao app de trás; o helper só o vê pelo estado dos botões.
      */

@@ -198,8 +198,8 @@ try {
         what = `hub ${size.name} (${size.width}×${size.height}), ${lugar}, resposta`;
         checkTip(m, what);
         await clipShot(p, m, `hub-${size.width}-${where}-resposta.png`, `Hub ${size.width}×${size.height}, ${lugar}: a resposta`);
-        // A resposta fica até o clique (spec #27881).
-        await p.locator(".kn-bubble-slot:not([data-phase='exit']) .kn-bubble").click();
+        // O clique no balão não fecha mais; quem fecha é o × (spec #32534, Cena 3).
+        await p.locator(".kn-bubble-slot:not([data-phase='exit']) .kn-bubble-close").click();
         await p.waitForSelector(".kn-bubble-slot .kn-bubble", { state: "detached" });
       }
       assert.deepEqual(w.report.problems, [], "problemas na página");

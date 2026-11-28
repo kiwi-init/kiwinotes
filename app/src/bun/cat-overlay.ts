@@ -21,6 +21,7 @@
 //   balão ou da cabeça (`catOverlay.close`) fecha na hora. O Control com o gato na tela volta a ouvir dali, sem a
 //   entrada e com o balão onde estava; só depois que ele sai, o Control começa de novo, com a entrada.
 
+import { BUBBLE_ASK_LEAVE_MS, BUBBLE_IDLE_ASK_MS } from "../../ui/hub/bubble-clock.ts";
 import { readingMs } from "../../ui/hub/bubble-state.ts";
 import { CAT_LIMIT_CODE, CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
 import { limitBubble } from "../../ui/settings/usageText.ts";
@@ -40,10 +41,13 @@ export const OVERLAY_TIMES = {
   erro: 2200,
   erroExit: 180,
   cancelExit: 120,
-  /** Sem interação depois da resposta, quanto o gato espera antes de perguntar se precisa de mais algo (spec #13380). */
-  idleAsk: 45_000,
+  /**
+   * Sem interação depois da resposta, quanto o gato espera antes de perguntar se precisa de mais algo (spec #13380). O
+   * relógio é o mesmo do balão do Hub (spec #32534, `bubble-clock.ts`).
+   */
+  idleAsk: BUBBLE_IDLE_ASK_MS,
   /** Depois da pergunta, sem resposta, quanto ele ainda fica antes de sair. */
-  askLeave: 15_000,
+  askLeave: BUBBLE_ASK_LEAVE_MS,
 } as const;
 
 /**
@@ -490,16 +494,18 @@ export class CatOverlay {
 
   /**
    * A pessoa pegou o balão ou soltou (spec #13378, o `catOverlay.hold` do helper): aberto no "ver mais" ou com o mouse
-   * em cima, o gato espera, e a pergunta sai; solto, a espera recomeça do zero.
+   * em cima, o gato espera. A pergunta fica enquanto ela lê: desde o balão no mouse (spec #32534), é o mouse que a
+   * mostra. Solto, a pergunta sai e a espera recomeça do zero.
    */
   hold(held: boolean): void {
     if (held === this.held) return;
     this.held = held;
     if (this.phase !== "lingering" || !this.bubbleShown) return;
-    if (held) {
-      this.cancelTimer();
+    if (held) this.cancelTimer();
+    else {
       this.setAsking(false);
-    } else this.waitIdle();
+      this.waitIdle();
+    }
   }
 
   /** Clicou ou rolou no balão (spec #13380, o `catOverlay.touch`): conta como interação, e a espera recomeça. */

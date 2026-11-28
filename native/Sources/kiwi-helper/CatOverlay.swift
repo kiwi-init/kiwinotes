@@ -315,7 +315,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         mouseWasDown = down
         let take = overBubble || (catHover && CatOverlayBubble.takesClick(panel: panel.frame, rect: closeRect, mouse: mouse))
         if panel.ignoresMouseEvents == take { panel.ignoresMouseEvents = !take }
-        setHeld(bubbleOpen || overBubble)
+        setHeld(CatOverlayBubble.holds(open: bubbleOpen, overBubble: overBubble, catHover: catHover, bubbleShown: bubbleRect != nil))
     }
 
     /// O Esc pode fechar o balão agora (spec #32534, #32777): o tap de atalhos só o engole nessa hora.

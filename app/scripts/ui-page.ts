@@ -60,6 +60,11 @@ export interface PageOptions {
   video?: string;
   /** Um script que roda antes da página, como o `window.__kiwiHeld = true` que o main põe no hub da intro (T23565). */
   init?: string;
+  /**
+   * O relógio do Playwright (`context.clock`), instalado antes da página: o tempo corre normal, e o roteiro pula os
+   * relógios longos com `page.clock.fastForward` (o de 45 s + 15 s do balão, spec #32534).
+   */
+  clock?: boolean;
 }
 
 export interface PageReport {
@@ -310,6 +315,7 @@ export async function openWindow(browser: Browser, ctx: UiContext, opts: PageOpt
     });
     await context.addInitScript(engineShim, { version: UI_CONTRACT_VERSION, capabilities: [...UI_CAPABILITIES] });
     if (opts.init) await context.addInitScript(opts.init);
+    if (opts.clock) await context.clock.install();
 
     const p = await context.newPage();
     // Uma janela a mais (target=_blank que escapou do window.open) fecha na hora; o link fica no relatório.

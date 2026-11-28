@@ -222,7 +222,7 @@ describe("o balão junto com a voz (T33053, Cena 1)", () => {
     expect(f.view(50)).toEqual(segundo);
   });
 
-  test("cancelado depois da fala: o balão sai; fechado pelo clique: o `done` não o traz de volta", () => {
+  test("cancelado depois da fala: o balão sai; fechado pelo ×: o `done` não o traz de volta", () => {
     const cancelado = run(new BubbleFeed(fits(60)), [{ type: "speech", text: "Anotei na nota." }, { type: "done", stopReason: "cancelled" }]);
     expect(cancelado.view(0)).toBeNull();
     const f = run(new BubbleFeed(fits(60)), [{ type: "speech", text: "Anotei na nota." }]);
@@ -243,7 +243,7 @@ describe("o balão junto com a voz (T33053, Cena 1)", () => {
 });
 
 describe("o que fica como antes", () => {
-  test("no erro, a mensagem em uma linha, que fica até o clique", () => {
+  test("no erro, a mensagem em uma linha, que fica até o ×", () => {
     const f = new BubbleFeed(fits(60));
     f.event(ev({ type: "started" }), 0);
     f.event(ev({ type: "text", text: "Começando" }), 0);
@@ -268,7 +268,7 @@ describe("o que fica como antes", () => {
     expect(f.view(5000)!.full).toBe("Nova.");
   });
 
-  test("cancelado, o balão fecha; o clique fecha e o resto do pedido não volta", () => {
+  test("cancelado, o balão fecha; o × fecha e o resto do pedido não volta", () => {
     const c = new BubbleFeed(fits(60));
     c.event(ev({ type: "started" }), 0);
     c.event(ev({ type: "status", status: "running", tool: "web" }), 0);
@@ -290,7 +290,7 @@ describe("o que fica como antes", () => {
     expect(k.takeAnnouncement()).toBe("um texto e mais");
     expect(k.takeAnnouncement()).toBeNull();
     expect(c.takeAnnouncement()).toBeNull();
-    // O clique na resposta: fecha, e o relógio não a traz de volta.
+    // O × na resposta: fecha, e o relógio não a traz de volta.
     const r = run(new BubbleFeed(fits(60)), [{ type: "done", stopReason: "end_turn", text: LONGA }]);
     r.close();
     expect(r.view(60_000)).toBeNull();
@@ -312,7 +312,7 @@ describe("o que fica como antes", () => {
     expect(f.view(lido - 1)).toMatchObject({ text: aviso });
     expect(f.view(lido)).toMatchObject({ text: "Começando. E terminando.", more: false });
     expect(f.nextWake(lido)).toBe(Infinity);
-    // Uma ferramenta que começa também espera; o clique fecha tudo, e o que esperava não volta.
+    // Uma ferramenta que começa também espera; o × fecha tudo, e o que esperava não volta.
     const g = new BubbleFeed(fits(80));
     g.event(ev({ type: "started" }), 0);
     g.event(ev({ type: "limit", status: "warning", percent: 82 }), 0);
@@ -440,7 +440,7 @@ describe("a resposta de antes espera a nova entrar (T15377)", () => {
     expect(b.view(300)).toBeNull();
   });
 
-  test("o clique fecha", () => {
+  test("o × (ou o Esc) fecha", () => {
     const { f } = twoRequests();
     f.close();
     expect(f.view(200)).toBeNull();
@@ -659,5 +659,76 @@ describe("o andamento enquanto o agente trabalha (spec #32534, Cena 2, T33177)",
     expect(f.view(20)!.full).toBe(aviso.full);
     const fim = f.nextWake(20);
     expect(f.view(fim)).toMatchObject({ text: "Lendo uma nota", stop: true, heard: "“resume a nota”" });
+  });
+});
+
+describe("a última resposta de volta (spec #32534, Cena 3)", () => {
+  const answered = () => run(new BubbleFeed(fits(200)), [{ type: "text", text: "Achei duas notas sobre o Projeto X." }, { type: "done", stopReason: "end_turn", text: "Achei duas notas sobre o Projeto X." }]);
+
+  test("depois que o balão saiu, o recall traz a mesma resposta, como um balão novo", () => {
+    const f = answered();
+    const before = f.view(0)!;
+    expect(f.settled(0)).toBe(true);
+    f.close();
+    expect(f.view(0)).toBeNull();
+    expect(f.recall()).toBe(true);
+    const back = f.view(0)!;
+    expect(back.text).toBe(before.text);
+    expect(back.key).not.toBe(before.key);
+    expect(f.settled(0)).toBe(true);
+    // Não anuncia de novo: o leitor de tela ouviu uma vez, no fim.
+    f.takeAnnouncement();
+    f.close();
+    expect(f.recall()).toBe(true);
+    expect(f.takeAnnouncement()).toBeNull();
+  });
+
+  test("com o balão na tela, o recall não faz nada", () => {
+    const f = answered();
+    const key = f.view(0)!.key;
+    expect(f.recall()).toBe(false);
+    expect(f.view(0)!.key).toBe(key);
+    // A resposta que já voltou também não volta de novo por cima dela mesma (o balão piscaria).
+    f.close();
+    expect(f.recall()).toBe(true);
+    const back = f.view(0)!.key;
+    expect(f.recall()).toBe(false);
+    expect(f.view(0)!.key).toBe(back);
+  });
+
+  test("o erro também volta", () => {
+    const f = run(new BubbleFeed(fits(200)), [{ type: "error", code: "E_X", message: "Algo deu errado." }]);
+    expect(f.settled(0)).toBe(true);
+    f.close();
+    expect(f.recall()).toBe(true);
+    expect(f.view(0)!.error).toBe(true);
+  });
+
+  test("até o próximo pedido: o started esquece a resposta de antes", () => {
+    const f = answered();
+    f.close();
+    f.event(ev({ id: "p2", type: "started" }), 0);
+    expect(f.recall()).toBe(false);
+  });
+
+  test("o pedido mandado pelo campo (`close(false)`) esquece a resposta na hora", () => {
+    const f = answered();
+    f.close(false);
+    expect(f.recall()).toBe(false);
+  });
+
+  test("enquanto o agente trabalha não há relógio nem nada para voltar", () => {
+    const f = run(new BubbleFeed(fits(200)), [{ type: "status", status: "running", tool: "web" }]);
+    expect(f.view(0)).not.toBeNull();
+    expect(f.settled(0)).toBe(false);
+    f.close();
+    expect(f.recall()).toBe(false);
+  });
+
+  test("cancelado (sem resposta), nada para voltar", () => {
+    const f = run(new BubbleFeed(fits(200)), [{ type: "text", text: "Vou ver" }, { type: "done", stopReason: "cancelled", text: "Vou ver" }]);
+    expect(f.view(0)).toBeNull();
+    f.close();
+    expect(f.recall()).toBe(false);
   });
 });
