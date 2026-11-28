@@ -40,16 +40,24 @@ export const weekdayNames = (l: Locale) =>
 
 const hm = (v: string) => v.slice(11, 16);
 
-/** "10:00–11:00", "10:00", ou o "dia todo" que a tela passa. */
-export function timeRange(item: Pick<CalendarItem, "start" | "end" | "allDay">, allDay: string): string {
+/** O fim cai noutro dia que o começo (22:00–02:00, ou o item de 24 h, 11:00–11:00). */
+const endsNextDay = (item: Pick<CalendarItem, "start" | "end">) => !!item.end && item.end.slice(0, 10) > item.start.slice(0, 10);
+
+/**
+ * "10:00–11:00", "10:00", ou o "dia todo" que a tela passa. Quando o fim cai no dia seguinte, o `nextDay` que a tela
+ * passa ("(+1 dia)") vem depois, senão o item de 24 h parecia ter duração zero (#480). O teto de 24 h
+ * (`CALENDAR_LIMITS.spanHours`) faz o fim cair, no máximo, no dia seguinte.
+ */
+export function timeRange(item: Pick<CalendarItem, "start" | "end" | "allDay">, allDay: string, nextDay: string): string {
   if (item.allDay) return allDay;
-  return item.end ? `${hm(item.start)}–${hm(item.end)}` : hm(item.start);
+  if (!item.end) return hm(item.start);
+  return `${hm(item.start)}–${hm(item.end)}${endsNextDay(item) ? ` ${nextDay}` : ""}`;
 }
 
-/** "Qui, 26 nov · 10:00–11:00". */
-export function whenLine(item: Pick<CalendarItem, "start" | "end" | "allDay">, l: Locale, allDay: string): string {
+/** "Qui, 26 nov · 10:00–11:00", ou "Sex, 27 nov · 11:00–11:00 (+1 dia)". */
+export function whenLine(item: Pick<CalendarItem, "start" | "end" | "allDay">, l: Locale, allDay: string, nextDay: string): string {
   const day = cap(clean(fmt(l, { weekday: "short", day: "numeric", month: "short" }).format(at(item.start.slice(0, 10)))));
-  return `${day} · ${timeRange(item, allDay)}`;
+  return `${day} · ${timeRange(item, allDay, nextDay)}`;
 }
 
 /** A cabeça de um dia na Agenda: "Quinta, 26 de novembro". */
