@@ -221,11 +221,12 @@ try {
         assert.equal((await more.textContent())?.trim(), `+${5 - shown}`, `${lang}/semana: o +N conta os escondidos (${shown} à vista)`);
         assert.equal(await more.getAttribute("aria-label"), lang === "pt" ? `Mais ${5 - shown} neste horário` : `${5 - shown} more at this time`);
         apart([...crowd, await more.boundingBox()], `${lang}/semana, com o +N`);
+        await p.screenshot({ path: join(shots, "lado-a-lado-semana.png") });
         await more.click();
         const listed = await p.locator(`${col} .kn-cal-more-list .kn-cal-item b`).allTextContents();
         assert.deepEqual([...listed, ...CROWD.filter((_, i) => crowd[i])].sort(), [...CROWD].sort(), `${lang}/semana: a lista do +N tem os outros`);
         const hidden = listed[0]!;
-        await p.screenshot({ path: join(shots, "lado-a-lado-semana.png") });
+        await p.screenshot({ path: join(shots, "lado-a-lado-mais.png") });
         // O cartão de um item da lista.
         await p.locator(`${col} .kn-cal-more-list .kn-cal-item:has-text("${hidden}")`).hover();
         await p.waitForFunction(([s, t]) => document.querySelector(s)?.textContent?.includes(t), [`${pane} .kn-cal-card`, hidden] as const, { timeout: 5_000 });
