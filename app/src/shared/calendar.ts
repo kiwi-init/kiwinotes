@@ -110,6 +110,11 @@ export interface CalendarUpdate {
   notify?: CalendarNotify;
   kind?: CalendarKind;
   repeat?: CalendarRepeat | null;
+  /**
+   * Só esta vez (#485): numa vez de uma repetição, com o `start`, a vez ganha um `⏭` e uma linha avulsa logo abaixo
+   * leva a vez para o `start` novo. A série e a hora dela não mudam. É o Sim da sugestão "atrasada".
+   */
+  only?: boolean;
 }
 
 // ---------------------------------------------------------------- datas

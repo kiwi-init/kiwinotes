@@ -257,6 +257,16 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
       if (!parts) throw new CalendarError("E_CONFLICT", "the item changed in the note; read again");
       const [, lead, , box, rest] = parts as unknown as [string, string, string | undefined, string | undefined, string];
       const cur = parseWhen(rest);
+      if (u.only) {
+        if (!cur?.repeat || !at.occurrence) throw new CalendarError("E_BAD_ARGS", "calendar.update: only is for one time of a repetition");
+        const content = onlyThisTime(at.raw, at.line, { lead, box, rest, cr }, cur, at.occurrence, u, src.locale);
+        const fresh = itemsOfNote({ ...at.note, content }, at.where);
+        const item = [...fresh.dated, ...fresh.undated].find((i) => i.source?.line === at.line + 1);
+        if (!item) throw new CalendarError("E_CONFLICT", "the item left the calendar");
+        const res = await src.notes.save(at.note.path, content, at.note.version);
+        if (!res.saved) continue;
+        return item;
+      }
       let patch: Parameters<typeof rewriteWhen>[1] = {};
       let newBox = box === undefined ? null : box === " " ? " " : "x";
       if (u.title !== undefined) patch.title = u.title;
@@ -484,6 +494,35 @@ function shiftBy(v: string, ms: number): string {
   return v.length === 10 ? dayOf(moved) : dayTimeOfMs(moved);
 }
 
+/**
+ * O "só esta vez" (#485): a série ganha o `⏭` da vez, e uma linha avulsa logo abaixo leva a vez para o `start` novo,
+ * com a mesma duração e sem a repetição. A série, a hora dela e as outras vezes não mudam.
+ */
+function onlyThisTime(
+  raw: readonly string[],
+  at: number,
+  l: { lead: string; box: string | undefined; rest: string; cr: string },
+  cur: NonNullable<ReturnType<typeof parseWhen>>,
+  occurrence: string,
+  u: CalendarUpdate,
+  locale: "pt" | "en",
+): string {
+  const start = u.start!;
+  const allDay = u.allDay ?? isDay(start);
+  const timed = !allDay && !isDay(start) && !isDay(cur.start);
+  const end = allDay ? null : u.end !== undefined ? u.end : timed && cur.end ? shiftBy(cur.end, toMs(start) - toMs(cur.start)) : null;
+  if (typeof end === "string") {
+    if (toMs(end) <= toMs(start)) throw new CalendarError("E_BAD_ARGS", "calendar.update: end must be after start");
+    if (toMs(end) - toMs(start) > CALENDAR_LIMITS.spanHours * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
+  }
+  const box = l.box === undefined ? "" : "[ ] ";
+  const series = `${l.lead}${l.box === undefined ? "" : `[${l.box === " " ? " " : "x"}] `}${rewriteWhen(l.rest, { skip: [...cur.skip, occurrence] }, locale)}${l.cr}`;
+  const once = `${l.lead}${box}${rewriteWhen(l.rest, { start, end, allDay, repeat: null }, locale)}${l.cr}`;
+  const lines = [...raw];
+  lines.splice(at, 1, series, once);
+  return lines.join("\n");
+}
+
 /** O `end` de uma vez da repetição (o fim da série andado até aquela vez). */
 function occurrenceOf(end: string, start: string, day: string): string {
   return shiftBy(end, toMs(day) - toMs(start.slice(0, 10)));
@@ -556,6 +595,11 @@ function checkUpdate(u: CalendarUpdate): void {
   if (u.notify !== undefined && !isCalendarNotify(u.notify)) throw new CalendarError("E_BAD_ARGS", "calendar.update: unknown notify");
   if (u.kind !== undefined && (!isCalendarKind(u.kind) || u.kind === "note")) throw new CalendarError("E_BAD_ARGS", "calendar.update: kind is meeting, reminder, task or focus");
   if (u.repeat !== undefined && u.repeat !== null && !isCalendarRepeat(u.repeat)) throw new CalendarError("E_BAD_ARGS", "calendar.update: repeat is daily, weekly or null");
+  if (u.only !== undefined) {
+    if (typeof u.only !== "boolean") throw new CalendarError("E_BAD_ARGS", "calendar.update: only must be true or false");
+    const extra = Object.keys(u).filter((k) => !["id", "only", "start", "end", "allDay"].includes(k));
+    if (u.only && (u.start === undefined || extra.length)) throw new CalendarError("E_BAD_ARGS", "calendar.update: only takes start (and end, allDay)");
+  }
   const keys = Object.keys(u).filter((k) => k !== "id");
   if (!keys.length) throw new CalendarError("E_BAD_ARGS", "calendar.update: nothing to change");
 }

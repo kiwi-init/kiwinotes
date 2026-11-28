@@ -9,6 +9,8 @@ import { Vault } from "../notes/vault.ts";
 import { addDays, type CalendarItem, notifyAt, parseWhen, rewriteWhen, toMs } from "../shared/calendar.ts";
 import { tempDir } from "../../test/tmp.ts";
 import { alertsBetween, calendarService, occurrences, setFrontmatter } from "./calendar.ts";
+import { startMs, suggestion } from "../shared/calendar-kiwi.ts";
+import { answerYes } from "../../ui/calendar/kiwi-panel.ts";
 
 const dirs: string[] = [];
 const vaults: Vault[] = [];
@@ -498,6 +500,90 @@ describe("calendar.update: a vez esquecida de um lembrete repetido (#483)", () =
     const { cal, read } = await open({ "Projeto X/Pendências.md": "# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-12-07 08:00 🔁 dia\n" }, { today: { day: "2026-12-08" } });
     await cal.update({ id: (await vez(cal, "2026-12-08")).id, done: true });
     expect(read("Projeto X/Pendências.md")).toBe("# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-12-07 08:00 🔁 dia ⏭ 2026-12-08\n");
+  });
+});
+
+describe("o Sim da sugestão atrasada numa repetição (#485)", () => {
+  // O painel lê de 13/11 a 02/12 (`panelRange`) com o relógio em 27/11, 12h.
+  const NOW = startMs("2026-11-27T12:00");
+  const CASA = "# Casa\n\n- [ ] Regar as plantas @ 2026-11-20 08:00 🔁 dia\n";
+  const late = async (cal: Awaited<ReturnType<typeof open>>["cal"], answered: Set<string>) =>
+    suggestion((await cal.items({ from: "2026-11-13", to: "2026-12-02" })).items, NOW, "pt", answered);
+  const yes = (cal: Awaited<ReturnType<typeof open>>["cal"]) => async (u: Parameters<typeof cal.update>[0]) => void (await cal.update(u));
+
+  // Era o teste da issue: ele pedia a série em `@ 2026-11-28 09:00`, o que muda a hora dela. Pelo spec #34320 (#34367), o
+  // Sim leva só a vez para amanhã, numa linha avulsa, e a série fica.
+  test("o Sim da atrasada numa repetição diária passa só a vez para amanhã, e ela não volta", async () => {
+    const { cal, read } = await open({ "Casa.md": CASA });
+    const answered = new Set<string>();
+    const first = await late(cal, answered);
+    expect(first?.rule).toBe("overdue");
+    expect(first!.itemId.endsWith("~2026-11-27")).toBe(true);
+    expect(first!.accept.patch).toEqual({ start: "2026-11-28T09:00", only: true });
+    await answerYes(first!, yes(cal), answered);
+    expect((await late(cal, answered))?.rule).not.toBe("overdue");
+    expect(read("Casa.md")).toBe("# Casa\n\n- [ ] Regar as plantas @ 2026-11-20 08:00 🔁 dia ⏭ 2026-11-27\n- [ ] Regar as plantas @ 2026-11-28 09:00\n");
+  });
+
+  test("a vez do dia anterior, ainda atrasada, não traz a sugestão de volta", async () => {
+    const { cal } = await open({ "Casa.md": CASA });
+    const answered = new Set<string>();
+    await answerYes((await late(cal, answered))!, yes(cal), answered);
+    const items = (await cal.items({ from: "2026-11-13", to: "2026-12-02" })).items;
+    const de26 = items.find((i) => i.start === "2026-11-26T08:00");
+    expect(de26?.done).toBeFalsy();
+    // Sem a resposta guardada, a do dia 26 seria a próxima "atrasada"; com ela, a série inteira fica quieta.
+    expect(suggestion(items, NOW, "pt")?.itemId).toBe(de26!.id);
+    expect(suggestion(items, NOW, "pt", answered)?.rule).not.toBe("overdue");
+  });
+
+  test("o Agora não numa vez vale para as outras vezes da série", async () => {
+    const { cal } = await open({ "Casa.md": CASA });
+    const answered = new Set<string>();
+    answered.add((await late(cal, answered))!.key);
+    expect((await late(cal, answered))?.rule).not.toBe("overdue");
+  });
+
+  test("fora de uma repetição, o Sim continua movendo o item, sem o only", async () => {
+    const { cal, read } = await open({ "Casa.md": "# Casa\n\n- [ ] Pagar a conta @ 2026-11-27 08:00\n" });
+    const answered = new Set<string>();
+    const first = (await late(cal, answered))!;
+    expect(first.accept.patch).toEqual({ start: "2026-11-28T09:00" });
+    await answerYes(first, yes(cal), answered);
+    expect(read("Casa.md")).toBe("# Casa\n\n- [ ] Pagar a conta @ 2026-11-28 09:00\n");
+  });
+});
+
+describe("calendar.update com only: só esta vez (#485)", () => {
+  const vez = async (cal: Awaited<ReturnType<typeof open>>["cal"], day: string) => (await cal.items({ from: day, to: addDays(day, 1) })).items[0]!;
+
+  test("a linha avulsa leva a duração, o tipo e o aviso; a série guarda os ⏭ em ordem", async () => {
+    const { cal, read } = await open({ "Projeto X/Plano.md": "# Projeto X\n\n  - [ ] Ligar para a Ana @ 2026-12-07 08:00-08:30 #lembrete 🔔 10m 🔁 semana ⏭ 2026-12-21\n" });
+    const item = await cal.update({ id: (await vez(cal, "2026-12-14")).id, start: "2026-12-15T10:00", only: true });
+    expect(item.start).toBe("2026-12-15T10:00");
+    expect(item.end).toBe("2026-12-15T10:30");
+    expect(item.repeat).toBeUndefined();
+    expect(read("Projeto X/Plano.md")).toBe(
+      "# Projeto X\n\n  - [ ] Ligar para a Ana @ 2026-12-07 08:00-08:30 #lembrete 🔔 10m 🔁 semana ⏭ 2026-12-14 ⏭ 2026-12-21\n  - [ ] Ligar para a Ana @ 2026-12-15 10:00-10:30 #lembrete 🔔 10m\n",
+    );
+    expect((await cal.items({ from: "2026-12-07", to: "2026-12-29" })).items.map((i) => i.start)).toEqual(["2026-12-07T08:00", "2026-12-15T10:00", "2026-12-28T08:00"]);
+  });
+
+  test("a 1ª vez da série também: ela sai, e a série segue nas outras", async () => {
+    const { cal, read } = await open({ "Casa.md": "# Casa\n\n- [ ] Regar as plantas @ 2026-12-07 #lembrete 🔁 dia\n" });
+    await cal.update({ id: (await vez(cal, "2026-12-07")).id, start: "2026-12-08", only: true });
+    expect(read("Casa.md")).toBe("# Casa\n\n- [ ] Regar as plantas @ 2026-12-07 #lembrete 🔁 dia ⏭ 2026-12-07\n- [ ] Regar as plantas @ 2026-12-08 #lembrete\n");
+  });
+
+  test("recusa fora de uma repetição, sem start e com outros campos", async () => {
+    const { cal, read } = await open({ "Casa.md": "# Casa\n\n- [ ] Pagar a conta @ 2026-12-07 08:00\n- [ ] Regar as plantas @ 2026-12-07 08:00 🔁 dia\n" });
+    const items = (await cal.items({ from: "2026-12-07", to: "2026-12-08" })).items;
+    const avulsa = items.find((i) => i.title === "Pagar a conta")!;
+    const vezDe7 = items.find((i) => i.title === "Regar as plantas")!;
+    await expect(cal.update({ id: avulsa.id, start: "2026-12-08T09:00", only: true })).rejects.toThrow("only is for one time of a repetition");
+    await expect(cal.update({ id: vezDe7.id, only: true })).rejects.toThrow("only takes start");
+    await expect(cal.update({ id: vezDe7.id, start: "2026-12-08T09:00", title: "Outra", only: true })).rejects.toThrow("only takes start");
+    expect(read("Casa.md")).toBe("# Casa\n\n- [ ] Pagar a conta @ 2026-12-07 08:00\n- [ ] Regar as plantas @ 2026-12-07 08:00 🔁 dia\n");
   });
 });
 
