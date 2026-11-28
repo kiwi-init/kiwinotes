@@ -307,8 +307,13 @@ try {
         assert.equal(await cell.getAttribute("data-drafting"), "", "o dia fica marcado");
         // #531: sem hora, o Dia todo vem marcado à vista, e a hora vazia não mostra o "12:30" do WebKit.
         assert.equal(await p.isChecked(`${form} input[name="allDay"]`), true, `${lang}: sem hora, o Dia todo vem marcado (#531)`);
-        const ghost = await p.locator(`${form} input[name="time"]`).evaluate((el) => getComputedStyle(el, "::-webkit-datetime-edit").color);
-        assert.ok(/rgba\(0, 0, 0, 0\)|transparent/.test(ghost), `${lang}: a hora vazia fica em branco, não "12:30" (#531): ${ghost}`);
+        // O WebKit não calcula o estilo do ::-webkit-datetime-edit pelo getComputedStyle: confere a marca no campo e a regra
+        // que a usa, na folha de estilos de verdade.
+        assert.equal(await p.getAttribute(`${form} input[name="time"]`, "data-empty"), "", `${lang}: a hora vazia ganha a marca (#531)`);
+        const ghost = await p.evaluate(() =>
+          [...document.styleSheets].flatMap((sh) => [...sh.cssRules]).some((r) => r instanceof CSSStyleRule && r.selectorText.includes("[data-empty]") && r.selectorText.includes("::-webkit-datetime-edit") && r.style.color === "transparent"),
+        );
+        assert.ok(ghost, `${lang}: a hora vazia fica em branco, não "12:30" (#531)`);
         assert.ok(Number(await p.locator(`${form} input[name="end"]`).evaluate((el) => getComputedStyle(el).opacity)) < 0.6, `${lang}: o Até desligado parece desligado (#531)`);
         await p.screenshot({ path: join(shots, "criar-no-mes.png") });
         // Desmarcar o Dia todo põe a próxima hora cheia; marcar de novo apaga a hora.
