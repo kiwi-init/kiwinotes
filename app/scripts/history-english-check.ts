@@ -10,13 +10,21 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { startEnglish } from "./english-check-lib";
 import { enHistory } from "../src/shared/i18n/history.en.ts";
+import { minutesAgoToday, waitForSameDay } from "./day-clock";
 
 const tr = (key: keyof typeof enHistory) => enHistory[key] as string;
 
 /** O arquivo do dia, como o `HistoryStore` grava: `history/AAAA-MM-DD.jsonl`, no fuso local. */
 const day = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// O grupo de hoje tem de ser hoje do começo ao fim: perto da meia-noite, espera virar o dia; logo depois dela, as
+// entradas de hoje ficam entre a meia-noite e agora (T33888, #33885).
+const wait = waitForSameDay(new Date());
+if (wait) {
+  console.log(`perto da meia-noite: espero ${Math.round(wait / 1000)} s para o roteiro caber num dia só`);
+  await Bun.sleep(wait);
+}
 const now = new Date();
-const minutesAgo = (m: number) => new Date(now.getTime() - m * 60_000);
+const minutesAgo = (m: number) => minutesAgoToday(now, m);
 const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 15, 30);
 const entry = (at: Date, n: number, raw: string, text: string) => ({ id: `${at.toISOString()}-00000000000${n}`, at: at.toISOString(), app: { name: "Mail" }, raw, text });
 const ENTRIES = [
