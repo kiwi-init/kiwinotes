@@ -43,6 +43,21 @@ export function viewRange(view: CalendarView, anchor: string): { days: string[];
   return { days, from, to: addDays(from, n) };
 }
 
+/**
+ * O dia que o "+ Novo" sugere: no Dia, o dia à vista; hoje, se ele está no período à vista;
+ * senão, o 1º dia do período. No Mês, o período é o mês, não a grade: as bordas cinza dos
+ * meses vizinhos não contam (#491).
+ */
+export function newItemDay(view: CalendarView, anchor: string, today: string): string {
+  if (view === "day") return anchor;
+  if (view === "month") {
+    const first = `${anchor.slice(0, 7)}-01`;
+    return today.slice(0, 7) === anchor.slice(0, 7) ? today : first;
+  }
+  const { from, to } = viewRange(view, anchor);
+  return today >= from && today < to ? today : from;
+}
+
 /** O próximo período (‹ ›): um dia, uma semana, um mês, ou a Agenda inteira. */
 export function stepAnchor(view: CalendarView, anchor: string, dir: 1 | -1): string {
   if (view === "day") return addDays(anchor, dir);

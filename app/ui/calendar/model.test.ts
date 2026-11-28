@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { CalendarItem } from "../../src/shared/calendar.ts";
-import { MIN_SHOWN_MIN, NEAR_MIN, itemsOfDay, layoutDay, mondayOf, moveItem, noteLine, nowMinutes, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { MIN_SHOWN_MIN, NEAR_MIN, itemsOfDay, layoutDay, mondayOf, moveItem, newItemDay, noteLine, nowMinutes, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
 
 const item = (o: Partial<CalendarItem> & Pick<CalendarItem, "id" | "start">): CalendarItem => ({
   kind: "task",
@@ -159,5 +159,29 @@ describe("arrastar e esticar", () => {
   test("o link abre na linha 1-based da nota", () => {
     expect(noteLine(item({ id: "n", start: "2026-11-26", source: { path: "Projeto X/Pendências.md", line: 13, internal: false } }))).toBe(14);
     expect(noteLine(item({ id: "f", start: "2026-11-26", source: { path: "Projeto X/Ideias.md", line: null, internal: false } }))).toBeUndefined();
+  });
+});
+
+describe("newItemDay: o dia que o + Novo sugere (#491)", () => {
+  const today = "2026-11-28";
+  test("no Mês de outro mês, o dia 1 dele, não a segunda da grade (30/11)", () => {
+    expect(viewRange("month", "2026-12-01").from).toBe("2026-11-30");
+    expect(newItemDay("month", "2026-12-01", today)).toBe("2026-12-01");
+    expect(newItemDay("month", "2026-10-15", today)).toBe("2026-10-01");
+  });
+  test("no Mês de hoje, hoje", () => {
+    expect(newItemDay("month", "2026-11-03", today)).toBe(today);
+  });
+  test("no Mês seguinte, hoje na borda cinza da grade não conta", () => {
+    // A grade de Dezembro começa em 30/11; hoje 30/11 está nela, mas não no mês.
+    expect(newItemDay("month", "2026-12-01", "2026-11-30")).toBe("2026-12-01");
+  });
+  test("na Semana e na Agenda, hoje se está no período, senão o 1º dia", () => {
+    expect(newItemDay("week", "2026-11-26", today)).toBe(today);
+    expect(newItemDay("week", "2026-12-09", today)).toBe("2026-12-07");
+    expect(newItemDay("agenda", "2026-12-10", today)).toBe("2026-12-10");
+  });
+  test("no Dia, o dia à vista", () => {
+    expect(newItemDay("day", "2026-12-24", today)).toBe("2026-12-24");
   });
 });
