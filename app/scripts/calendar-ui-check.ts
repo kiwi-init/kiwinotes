@@ -132,9 +132,16 @@ try {
         if (v !== "month") await p.waitForSelector(item("Revisar o orçamento"));
         if (v === "day" || v === "week") await show(p, "Revisar o orçamento");
         await p.screenshot({ path: join(shots, `${v}.png`) });
+        // As cabeças de data saem como o `format.ts` as escreve, só com a 1ª maiúscula: nenhum CSS muda o texto. Em pt,
+        // o `capitalize` punha "Sexta-Feira, 27 De Novembro" na Agenda (#494).
+        const heads = await p.locator(`${pane} .kn-cal-dayhead, ${pane} .kn-cal-month-head span, ${pane} .kn-cal-agenda-day h3`).evaluateAll((els) =>
+          els.map((e) => ({ shown: (e as HTMLElement).innerText.replace(/\s+/g, " ").trim(), text: (e.textContent ?? "").replace(/\s+/g, " ").trim() })),
+        );
+        assert.ok(heads.length > 0, `${lang}/${v}: nenhuma cabeça de data`);
+        for (const h of heads) assert.equal(h.shown, h.text, `${lang}/${v}: a cabeça de data saiu diferente do texto (#494)`);
       }
       await view(p, "week");
-      checks.push(`${lang}: Dia · Semana · Mês · Agenda, com um print de cada`);
+      checks.push(`${lang}: Dia · Semana · Mês · Agenda, com um print de cada, e as cabeças de data como o format.ts as escreve (#494)`);
 
       // 3. O hover, o ⤢ e o ⤡.
       await hoverCard(p, "Revisão do Projeto X");
