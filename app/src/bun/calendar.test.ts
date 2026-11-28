@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { Vault } from "../notes/vault.ts";
-import { addDays, type CalendarItem, notifyAt, parseWhen, rewriteWhen, toMs } from "../shared/calendar.ts";
+import { addDays, type CalendarItem, dayOf, notifyAt, parseWhen, rewriteWhen, toMs } from "../shared/calendar.ts";
 import { tempDir } from "../../test/tmp.ts";
 import { alertsBetween, calendarService, occurrences, setFrontmatter } from "./calendar.ts";
 import { startMs, suggestion } from "../shared/calendar-kiwi.ts";
@@ -22,7 +22,7 @@ afterEach(() => {
 /** O "hoje" fixo dos testes: antes de todas as datas daqui, para nenhum resultado depender do relógio. */
 const EARLY = { day: "2026-11-01" };
 
-async function open(files: Record<string, string>, opts: { meetings?: Record<string, string>; locale?: "pt" | "en"; live?: string | null; today?: { day: string } } = {}) {
+async function open(files: Record<string, string>, opts: { meetings?: Record<string, string>; locale?: "pt" | "en"; live?: string | null; today?: { day: string } | "relógio" } = {}) {
   const mk = async (fs: Record<string, string>) => {
     const d = tempDir("kiwinotes-calendar-test-");
     dirs.push(d);
@@ -39,7 +39,9 @@ async function open(files: Record<string, string>, opts: { meetings?: Record<str
   };
   const notes = await mk(files);
   const meetings = opts.meetings ? await mk(opts.meetings) : notes;
-  const cal = calendarService(async () => ({ notes: notes.v, meetings: meetings.v, liveSession: opts.live ?? null, locale: opts.locale ?? "pt" }), () => (opts.today ?? EARLY).day);
+  // "relógio": sem o hoje injetado, o serviço usa o padrão dele (a data local de agora).
+  const today = opts.today === "relógio" ? undefined : (opts.today ?? EARLY);
+  const cal = calendarService(async () => ({ notes: notes.v, meetings: meetings.v, liveSession: opts.live ?? null, locale: opts.locale ?? "pt" }), today && (() => today.day));
   const read = (rel: string) => readFileSync(path.join(notes.root, rel), "utf8");
   const write = async (rel: string, content: string) => {
     const cur = await notes.v.get(rel);
@@ -494,6 +496,13 @@ describe("calendar.update: a vez esquecida de um lembrete repetido (#483)", () =
     const { cal, read } = await open({ "Projeto X/Pendências.md": REGAR }, { today: { day: "2026-12-09" } });
     await cal.update({ id: (await vez(cal, "2026-12-07")).id, done: true });
     expect(read("Projeto X/Pendências.md")).toBe("# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-08 08:00 #lembrete 🔁 dia\n");
+  });
+
+  test("com o relógio de verdade (o hoje padrão do serviço): a vez de 3 dias atrás não segura a série", async () => {
+    const hoje = dayOf(Date.now());
+    const { cal, read } = await open({ "Projeto X/Pendências.md": `# Projeto X\n\n- [ ] Regar as plantas @ ${addDays(hoje, -3)} 08:00 #lembrete 🔁 dia\n` }, { today: "relógio" });
+    await cal.update({ id: (await vez(cal, hoje)).id, done: true });
+    expect(read("Projeto X/Pendências.md")).toBe(`# Projeto X\n\n- [ ] Regar as plantas @ ${addDays(hoje, 1)} 08:00 #lembrete 🔁 dia\n`);
   });
 
   test("numa pendência repetida, a vez atrasada continua segurando: o Feito de hoje vira ⏭", async () => {
