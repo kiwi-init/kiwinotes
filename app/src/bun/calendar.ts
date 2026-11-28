@@ -327,7 +327,15 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
       if (!cur) throw new CalendarError("E_CONFLICT", "the note has no agenda anymore; read again");
       const allDay = u.allDay ?? cur.allDay;
       const start = u.start ?? cur.start;
-      const end = allDay ? null : u.end !== undefined ? u.end : cur.end;
+      // Como nas linhas (#449, #484): só o start leva o fim junto, e a duração fica.
+      const timed = !allDay && !cur.allDay && !isDay(cur.start) && !isDay(start);
+      const moved = u.end === undefined && u.start !== undefined && timed && cur.end ? shiftBy(cur.end, toMs(start) - toMs(cur.start)) : undefined;
+      const end = allDay ? null : (moved ?? (u.end !== undefined ? u.end : cur.end));
+      // Só um dos dois: o outro vem da nota, e o par passa pela mesma régua do checkTimes.
+      if ((u.start !== undefined || u.end !== undefined) && !allDay && typeof end === "string" && !isDay(start)) {
+        if (toMs(end) <= toMs(start)) throw new CalendarError("E_BAD_ARGS", "calendar.update: end must be after start");
+        if (toMs(end) - toMs(start) > CALENDAR_LIMITS.spanHours * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
+      }
       let content = setFrontmatter(note.content, "agenda", agendaValue(start, end, allDay));
       if (u.notify !== undefined) content = setFrontmatter(content, "aviso", u.notify === DEFAULT_NOTIFY.note ? null : NOTE_NOTIFY_OF[u.notify]);
       const res = await src.notes.save(path, content, note.version);
