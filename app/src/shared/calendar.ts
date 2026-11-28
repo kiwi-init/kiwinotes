@@ -262,7 +262,7 @@ export function parseWhen(rest: string): LineWhen | null {
  * "+ Novo" o mostra antes de criar.
  */
 export function titleProblem(title: string): string | null {
-  const mark = /🔔|🔕|🔁|⏭/u.exec(title)?.[0] ?? /(?:^|\s)(@\s?\d)/.exec(title)?.[1];
+  const mark = /🔔|🔕|🔁|⏭/u.exec(title)?.[0] ?? /(?:^|\s)(@\s?\d[\d-]*(?: \d{1,2}:\d{2}(?:-\d{1,2}:\d{2})?)?)/.exec(title)?.[1];
   if (mark) return mark;
   for (const m of title.matchAll(TAG)) if (KIND_TAGS[m[2]!.toLowerCase()]) return `#${m[2]}`;
   // Outro pedaço que a leitura tira do título (a regra de antes, inteira): devolve o título todo.
