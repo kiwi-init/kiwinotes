@@ -217,7 +217,7 @@ export async function calendarTool(d: CalendarToolDeps, name: CalendarToolName, 
 function notifyArg(v: unknown): unknown {
   if (v === undefined) return undefined;
   const n = normalNotify(v);
-  if (n === null) throw bad(`notify é ${NOTIFY_PROP.description.replace(/^Quanto antes avisar: /, "")}`);
+  if (n === null) throw bad(`notify: ${NOTIFY_PROP.description}`);
   return n;
 }
 
