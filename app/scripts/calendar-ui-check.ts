@@ -4,6 +4,7 @@
 // - Dia · Semana · Mês · Agenda trocam a vista, e os itens das notas e da reunião aparecem nelas.
 // - O hover num item mostra o cartão com um só ⤢, no canto de cima à direita.
 // - O ⤢ abre o painel largo (Item · Nota · Ligações), e o item fica marcado; o ⤡ fecha e volta ao item.
+// - O aviso livre: o "🔔 50m" da linha sai no cartão como "50 min antes" (T34753).
 // - O link da nota no cartão abre a aba Notas naquela nota, com a linha do item marcada.
 // - A Semana da Início tem o "Abrir o calendário".
 // - O Sim da "atrasada" numa pendência repetida leva só a vez para amanhã, e a sugestão não volta na vez anterior (#485).
@@ -111,7 +112,7 @@ try {
   await invoke("notes.create", { folder: "Projeto X", title: "Pendências", content: `# Pendências\n\n- [ ] Revisar o orçamento @ ${day(0)} 10:00\n- [ ] Mandar a proposta à Ana @ ${day(1)} 15:00\n- [ ] Escolher o fornecedor\n` });
   // Uma pendência repetida que começou há 3 dias, à meia-noite: sempre tem uma vez atrasada, a qualquer hora (#485).
   await invoke("notes.create", { folder: "Casa", title: "Rotina", content: `# Rotina\n\n- [ ] Regar as plantas @ ${day(-3)} 00:00 🔁 dia\n` });
-  await invoke("notes.create", { folder: "Casa", title: "Mudança", content: `# Mudança\n\n- [ ] Comprar fita e caixas @ ${day(2)} 09:00\n- [ ] Levar a geladeira\n` });
+  await invoke("notes.create", { folder: "Casa", title: "Mudança", content: `# Mudança\n\n- [ ] Comprar fita e caixas @ ${day(2)} 09:00\n- [ ] Pagar a conta @ ${day(1)} 11:00 #lembrete 🔔 50m\n- [ ] Levar a geladeira\n` });
   await invoke("notes.create", { folder: "Reuniões", title: "Revisão do Projeto X", content: `---\ntype: meeting\ndate: "${day(0)}"\nstart: "${at(0, 14)}"\nduration: 1800\nparticipants: [Ana, Bruno]\n---\n\nPauta: o orçamento e a data da entrega.\n` });
   await invoke("settings.set", { kiwicat: { overlay: false, show: true } });
 
@@ -167,6 +168,17 @@ try {
       await p.screenshot({ path: join(shots, "largo.png") });
       await p.locator(`${pane} .kn-cal-collapse`).click();
       await wide(p, "gone");
+
+      // 3b. O aviso livre (T34753): o "🔔 50m" da linha sai no cartão como "50 min antes".
+      await show(p, "Pagar a conta");
+      await p.locator(item("Pagar a conta")).first().hover({ position: { x: 8, y: 8 } });
+      const free = lang === "pt" ? "50 min antes" : "50 min before";
+      await p.waitForFunction(([s, t]) => [...document.querySelectorAll(s)].some((e) => e.textContent?.includes(t)), [`${pane} .kn-cal-card .kn-cal-kw`, free] as const, { timeout: 5_000 })
+        .catch(async () => assert.fail(`o aviso no cartão: ${await p.locator(`${pane} .kn-cal-card .kn-cal-kw`).allTextContents()}`));
+      await p.screenshot({ path: join(shots, "aviso-livre.png") });
+      await p.mouse.move(2, 2);
+      await p.waitForSelector(`${pane} .kn-cal-card`, { state: "detached" }).catch(() => {});
+      checks.push(`${lang}: o "🔔 50m" da linha sai no cartão como "${free}" (T34753)`);
       assert.equal(await p.locator(`${pane} .kn-cal-item[data-open]`).count(), 0, "nenhum item marcado depois do ⤡");
       checks.push(`${lang}: o hover com um só ⤢ no canto, o painel largo com Item · Nota · Ligações, e o ⤡ de volta`);
 
