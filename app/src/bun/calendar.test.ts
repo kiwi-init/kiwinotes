@@ -347,6 +347,14 @@ describe("calendar.update numa nota com agenda: a duração (#484)", () => {
     expect(read("Ensaio da banda.md")).toBe(ENSAIO);
   });
 
+  test("start e end juntos gravam os dois (o fim pedido, e não o da nota); a mais de 24 h, recusa", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    expect(await code(cal.update({ id: ID, start: "2026-12-03T15:00", end: "2026-12-04T16:00" }))).toBe("E_BAD_ARGS");
+    expect(read("Ensaio da banda.md")).toBe(ENSAIO);
+    expect(await cal.update({ id: ID, start: "2026-12-02T15:00", end: "2026-12-02T17:00" })).toMatchObject({ start: "2026-12-02T15:00", end: "2026-12-02T17:00" });
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-02 15:00-17:00"');
+  });
+
   test("um end depois do start, até 24 h, grava; o aviso sozinho não mexe no horário", async () => {
     const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
     expect(await cal.update({ id: ID, end: "2026-12-02T12:30" })).toMatchObject({ start: "2026-12-02T10:00", end: "2026-12-02T12:30" });
