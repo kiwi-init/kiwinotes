@@ -50,6 +50,13 @@ describe("readCalendarAsk", () => {
       // "de 9h" é a hora, e "das 9h às 10h" é o começo.
       ["reunião de 9h amanhã", "2026-11-27T09:00", null],
       ["foco amanhã das 9h às 10h", "2026-11-27T09:00", null],
+      // A duração colada no "às" (#34851); o intervalo segue sendo o começo.
+      ["marca uma reunião de 1 hora às 14h", "2026-11-27T14:00", null],
+      ["foco por 2h às 10h", "2026-11-27T10:00", null],
+      ["reunião de 30 minutos às 16h", "2026-11-26T16:00", null],
+      ["reunião das 9h às 10h", "2026-11-27T09:00", null],
+      ["reunião de 9h às 10h", "2026-11-27T09:00", null],
+      ["reunião de 9 horas às 10 horas amanhã", "2026-11-27T09:00", null],
     ];
     for (const [text, start, notify] of cases) expect([text, ask(text)]).toEqual([text, { start, notify }]);
   });

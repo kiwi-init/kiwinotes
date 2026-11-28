@@ -104,12 +104,15 @@ const cut = (t: string, at: [number, number]) => `${t.slice(0, at[0])} ${t.slice
  * block". Sai do texto antes da hora, como a antecedência. "das 9h às 10h" fica (é o começo e o fim).
  */
 function withoutDuration(t: string): string {
-  // Com "de", só a unidade por extenso ("reunião de 9h" é a hora); com "por", "durante" e "for", também o "2h".
-  const tail = `(?:\\s+e\\s+meia|\\s+and a half)?\\b(?!\\s*(?:as|a|ate|-)\\s*\\d)`;
+  // Com "de", só a unidade por extenso ("reunião de 9h" é a hora); com "por", "durante" e "for", também o "2h". O
+  // intervalo ("de 9 horas às 10 horas") fica, só quando a outra ponta tem a mesma unidade por extenso; "de 1 hora às
+  // 14h" e "por 2h às 10h" são a duração e a hora (#34851).
   const n = `(?:\\d{1,3}|${NUM_WORD})`;
-  const pt = new RegExp(`\\b(?:de\\s+${n}\\s*(?:horas?|hours?|min(?:uto|ute)?s?)|(?:por|durante|for)\\s+${n}\\s*(?:h|hs|hrs?|horas?|hours?|min(?:uto|ute)?s?))${tail}`, "g");
+  const half = `(?:\\s+e\\s+meia|\\s+and a half)?\\b`;
+  const de = new RegExp(`\\bde\\s+${n}\\s*(?:horas?|hours?|min(?:uto|ute)?s?)${half}(?!\\s*(?:as|a|ate|-)\\s*\\d{1,2}\\s*(?:horas?|hours?)\\b)`, "g");
+  const por = new RegExp(`\\b(?:por|durante|for)\\s+${n}\\s*(?:h|hs|hrs?|horas?|hours?|min(?:uto|ute)?s?)${half}`, "g");
   const en = new RegExp(`\\b(?:\\d{1,3}|${NUM_WORD})[- ]?(?:hours?|hrs?|minutes?|mins?)(?:\\s+and a half)?(?=\\s+(?:long\\s+)?(?:meeting|block|session|call|focus|slot|event)\\b)`, "g");
-  return t.replace(pt, " ").replace(en, " ");
+  return t.replace(de, " ").replace(por, " ").replace(en, " ");
 }
 
 /** O que o pedido diz de hora, dia e aviso; os dois `null` quando não diz nada disso. */
