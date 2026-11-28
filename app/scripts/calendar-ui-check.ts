@@ -6,7 +6,11 @@
 // - O ⤢ abre o painel largo (Item · Nota · Ligações), e o item fica marcado; o ⤡ fecha e volta ao item.
 // - O link da nota no cartão abre a aba Notas naquela nota, com a linha do item marcada.
 // - A Semana da Início tem o "Abrir o calendário".
+// - Os itens do mesmo horário ficam lado a lado (ponto 9, spec #34706): metade da coluna cada no par, o grupo de cinco
+//   inteiro no Dia e com um "+N" na Semana estreita; o "+N" abre os outros, com o cartão e o arrastar; no Dia estreito, a lista abre dentro da grade.
 // - O Sim da "atrasada" numa pendência repetida leva só a vez para amanhã, e a sugestão não volta na vez anterior (#485).
+// - O Adiar numa vez de repetição leva só aquela vez (#530), e as Ligações mostram a repetição uma vez só (#532).
+// - A faixa do dia todo tem teto: com cinco, dois à vista e o "+3", que abre a faixa; o "Mostrar menos" fecha (10.8).
 // Os prints de cada vista, em pt e en, e um vídeo da ida e da volta do painel largo.
 // Da raiz do app: `bun scripts/calendar-ui-check.ts [pasta]`. Pegue `kiwi lock bench`.
 import assert from "node:assert/strict";
@@ -59,6 +63,8 @@ const at = (n: number, h: number) => {
 };
 
 const VIEWS = ["day", "week", "month", "agenda"] as const;
+const CROWD = ["Ensaio do coral", "Aula de violão", "Consulta do Rex", "Ligar para a Carla", "Pagar a luz"];
+const PAIR = ["Jantar com a Bia", "Ver o jogo"];
 const tab = (p: Page, s: string) => p.locator(`[role="tab"][data-section="${s}"]`);
 const pane = '.kn-hub-pane[data-section="calendar"]';
 const item = (title: string) => `${pane} .kn-cal-item:has-text("${title}")`;
@@ -90,7 +96,7 @@ async function view(p: Page, v: (typeof VIEWS)[number]) {
 
 /** O hover num item: o cartão aparece com um só ⤢, no canto de cima à direita do cartão. */
 async function hoverCard(p: Page, title: string) {
-  // No canto de cima: com a cascata, a caixa de cima cobre o meio da de baixo (#32311).
+  // No canto de cima: o item curto lado a lado é estreito (#32311).
   await p.locator(item(title)).first().hover({ position: { x: 8, y: 8 } });
   await p.waitForSelector(`${pane} .kn-cal-card`);
   assert.equal(await p.locator(`${pane} .kn-cal-card .kn-cal-expand`).count(), 1, "o cartão tem um só ⤢");
@@ -111,7 +117,13 @@ try {
   await invoke("notes.create", { folder: "Projeto X", title: "Pendências", content: `# Pendências\n\n- [ ] Revisar o orçamento @ ${day(0)} 10:00\n- [ ] Mandar a proposta à Ana @ ${day(1)} 15:00\n- [ ] Escolher o fornecedor\n` });
   // Uma pendência repetida que começou há 3 dias, à meia-noite: sempre tem uma vez atrasada, a qualquer hora (#485).
   await invoke("notes.create", { folder: "Casa", title: "Rotina", content: `# Rotina\n\n- [ ] Regar as plantas @ ${day(-3)} 00:00 🔁 dia\n` });
+  // Uma repetição que começa amanhã (nunca atrasada) e uma reunião na mesma nota, para o Adiar e as Ligações (#530, #532).
+  // Cinco coisas de dia todo no mesmo dia, para o teto da faixa (10.8).
+  await invoke("notes.create", { folder: "Casa", title: "Feriado", content: `# Feriado\n\n${["Feira", "Doar roupas", "Aniversário da Bia", "Trocar o filtro", "Devolver o livro"].map((t) => `- ${t} @ ${day(3)} #lembrete`).join("\n")}\n` });
+  await invoke("notes.create", { folder: "Casa", title: "Hábitos", content: `# Hábitos\n\n- [ ] Tomar água @ ${day(1)} 08:00 🔁 dia\n- Café com a Ana @ ${day(1)} 10:00-10:30 #reuniao\n` });
   await invoke("notes.create", { folder: "Casa", title: "Mudança", content: `# Mudança\n\n- [ ] Comprar fita e caixas @ ${day(2)} 09:00\n- [ ] Levar a geladeira\n` });
+  // Amanhã, cinco coisas às 18h e um par às 20h, para o lado a lado (ponto 9): amanhã, para nada delas virar "atrasada".
+  await invoke("notes.create", { folder: "Casa", title: "Agenda cheia", content: `# Agenda cheia\n\n${CROWD.map((t, i) => `- [ ] ${t} @ ${day(1)} 18:${i % 2 ? "15" : "00"}-19:00`).join("\n")}\n${PAIR.map((t) => `- [ ] ${t} @ ${day(1)} 20:00-21:00`).join("\n")}\n` });
   await invoke("notes.create", { folder: "Reuniões", title: "Revisão do Projeto X", content: `---\ntype: meeting\ndate: "${day(0)}"\nstart: "${at(0, 14)}"\nduration: 1800\nparticipants: [Ana, Bruno]\n---\n\nPauta: o orçamento e a data da entrega.\n` });
   await invoke("settings.set", { kiwicat: { overlay: false, show: true } });
 
@@ -169,6 +181,106 @@ try {
       await wide(p, "gone");
       assert.equal(await p.locator(`${pane} .kn-cal-item[data-open]`).count(), 0, "nenhum item marcado depois do ⤡");
       checks.push(`${lang}: o hover com um só ⤢ no canto, o painel largo com Item · Nota · Ligações, e o ⤡ de volta`);
+
+      // 3a. Lado a lado (ponto 9, spec #34706): amanhã, pelo Dia e pela Semana dele.
+      {
+        const col = `${pane} .kn-cal-col[data-day="${day(1)}"]`;
+        const boxes = (titles: string[]) => Promise.all(titles.map(async (t) => {
+          const l = p.locator(`${col} .kn-cal-block:has-text("${t}")`);
+          return (await l.count()) ? l.boundingBox() : null;
+        }));
+        /** Nenhuma caixa à vista cobre outra: as do mesmo horário ficam uma ao lado da outra. */
+        const apart = (list: ({ x: number; y: number; width: number; height: number } | null)[], what: string) => {
+          const b = list.filter((x) => x !== null);
+          for (const [i, a] of b.entries()) for (const c of b.slice(i + 1)) {
+            const cross = a.x < c.x + c.width - 0.5 && c.x < a.x + a.width - 0.5 && a.y < c.y + c.height - 0.5 && c.y < a.y + a.height - 0.5;
+            assert.ok(!cross, `${what}: duas caixas uma sobre a outra (${JSON.stringify([a, c])})`);
+          }
+        };
+        await view(p, "day");
+        await p.locator(`${pane} .kn-cal-tool > .kn-cal-ic`, { hasText: "›" }).click();
+        await p.waitForSelector(`${col} .kn-cal-block:has-text("${CROWD[0]}")`);
+        await show(p, CROWD[0]!);
+        const dayBoxes = await boxes(CROWD);
+        assert.ok(dayBoxes.every(Boolean), `${lang}/dia: as cinco à vista`);
+        assert.equal(await p.locator(`${col} .kn-cal-more`).count(), 0, `${lang}/dia: sem +N no dia largo`);
+        apart(dayBoxes, `${lang}/dia`);
+        const dayW = (await p.locator(col).boundingBox())!.width;
+        for (const b of dayBoxes) assert.ok(b!.width < dayW / 5 + 1 && b!.width > dayW / 5 - 10, `${lang}/dia: um quinto da coluna cada (${b!.width} de ${dayW})`);
+        await p.screenshot({ path: join(shots, "lado-a-lado-dia.png") });
+
+        await view(p, "week");
+        await p.waitForSelector(`${col} .kn-cal-block:has-text("${PAIR[0]}")`);
+        await show(p, CROWD[0]!);
+        const colW = (await p.locator(col).boundingBox())!.width;
+        // O par: lado a lado, metade da coluna cada, na mesma altura.
+        const pair = await boxes(PAIR);
+        assert.ok(pair[0] && pair[1], `${lang}/semana: o par à vista`);
+        apart(pair, `${lang}/semana, o par`);
+        assert.ok(Math.abs(pair[0].y - pair[1].y) < 1 && pair[0].width < colW / 2 && pair[0].width > colW / 2 - 10, `${lang}/semana: o par com metade da coluna (${pair[0].width} de ${colW})`);
+        // Os cinco não cabem na coluna da Semana: os de antes ficam lado a lado, e o +N tem o resto.
+        const crowd = await boxes(CROWD);
+        const shown = crowd.filter(Boolean).length;
+        apart(crowd, `${lang}/semana`);
+        const more = p.locator(`${col} .kn-cal-more-btn`);
+        assert.equal(await more.count(), 1, `${lang}/semana: um +N`);
+        assert.equal((await more.textContent())?.trim(), `+${5 - shown}`, `${lang}/semana: o +N conta os escondidos (${shown} à vista)`);
+        assert.equal(await more.getAttribute("aria-label"), lang === "pt" ? `Mais ${5 - shown} neste horário` : `${5 - shown} more at this time`);
+        apart([...crowd, await more.boundingBox()], `${lang}/semana, com o +N`);
+        await p.screenshot({ path: join(shots, "lado-a-lado-semana.png") });
+        await more.click();
+        const listed = await p.locator(`${col} .kn-cal-more-list .kn-cal-item b`).allTextContents();
+        assert.deepEqual([...listed, ...CROWD.filter((_, i) => crowd[i])].sort(), [...CROWD].sort(), `${lang}/semana: a lista do +N tem os outros`);
+        const hidden = listed[0]!;
+        await p.screenshot({ path: join(shots, "lado-a-lado-mais.png") });
+        // O cartão de um item da lista.
+        await p.locator(`${col} .kn-cal-more-list .kn-cal-item:has-text("${hidden}")`).hover();
+        await p.waitForFunction(([s, t]) => document.querySelector(s)?.textContent?.includes(t), [`${pane} .kn-cal-card`, hidden] as const, { timeout: 5_000 });
+        if (lang === "pt") {
+          // Arrastar um item da lista 1 h para baixo muda a nota; e de volta.
+          const note = async () => (await invoke("notes.get", { path: "Casa/Agenda cheia.md" })).content as string;
+          const until = async (re: RegExp, what: string) => {
+            for (let n = 0; !re.test(await note()); n++) { assert.ok(n < 50, `${what}: ${await note()}`); await Bun.sleep(100); }
+          };
+          const from = new RegExp(`${hidden} @ ${day(1)} (18:\\d\\d)-19:00`).exec(await note())![1]!;
+          const drag = async (sel: string, dy: number) => {
+            const b = (await p.locator(sel).first().boundingBox())!;
+            await p.mouse.move(b.x + b.width / 2, b.y + 8);
+            await p.mouse.down();
+            await p.mouse.move(b.x + b.width / 2, b.y + 8 + dy, { steps: 8 });
+            await p.mouse.up();
+          };
+          await drag(`${col} .kn-cal-more-list .kn-cal-item:has-text("${hidden}")`, 48);
+          await until(new RegExp(`${hidden} @ ${day(1)} 19:${from.slice(3)}-20:00`), "arrastar da lista do +N");
+          await p.waitForSelector(`${col} .kn-cal-block:has-text("${hidden}")`);
+          await drag(`${col} .kn-cal-block:has-text("${hidden}")`, -48);
+          await until(new RegExp(`${hidden} @ ${day(1)} ${from}-19:00`), "arrastar de volta");
+          checks.push(`${lang}: arrastar "${hidden}" da lista do +N muda a hora na nota, e de volta`);
+        }
+        await p.keyboard.press("Escape");
+        // O Dia estreito: o +N fica na coluna da direita da grade, e a lista abre para dentro dela, à vista (revisão do T34737).
+        await view(p, "day");
+        await p.setViewportSize({ width: 600, height: 800 });
+        const dayMore = p.locator(`${col} .kn-cal-more-btn`);
+        await dayMore.waitFor();
+        const dayN = (await dayMore.textContent())?.trim();
+        await dayMore.evaluate((el) => el.scrollIntoView({ block: "start" }));
+        await dayMore.click();
+        const list = p.locator(`${col} .kn-cal-more-list`);
+        await list.waitFor();
+        const lb = (await list.boundingBox())!;
+        const gb = (await p.locator(`${pane} .kn-cal-scroll`).boundingBox())!;
+        assert.ok(lb.x >= gb.x - 0.5 && lb.x + lb.width <= gb.x + gb.width + 0.5, `${lang}/dia estreito: a lista dentro da grade (${lb.x}–${lb.x + lb.width} em ${gb.x}–${gb.x + gb.width})`);
+        assert.ok(lb.y >= gb.y - 0.5 && lb.y + lb.height <= gb.y + gb.height + 0.5, `${lang}/dia estreito: a lista inteira à vista na altura (${lb.y}–${lb.y + lb.height} em ${gb.y}–${gb.y + gb.height})`);
+        assert.ok(await p.evaluate(([x, y, s]) => !!document.elementFromPoint(x, y)?.closest(s), [lb.x + lb.width / 2, lb.y + Math.min(lb.height / 2, 20), ".kn-cal-more-list"] as const), `${lang}/dia estreito: a lista à vista, não cortada`);
+        await p.screenshot({ path: join(shots, "lado-a-lado-dia-estreito.png") });
+        await p.keyboard.press("Escape");
+        await p.setViewportSize({ width: 1300, height: 800 });
+        await p.locator(`${pane} .kn-cal-tool > .kn-cal-btn`).first().click();
+        await p.waitForSelector(item("Revisar o orçamento"));
+        checks.push(`${lang}: o Dia estreito (600 px) tem o ${dayN}, e a lista dele abre dentro da grade, à vista`);
+        checks.push(`${lang}: lado a lado: as cinco das 18h com um quinto do Dia cada; na Semana, ${shown} à vista e o +${5 - shown} com o resto e o cartão; o par das 20h com metade da coluna`);
+      }
 
       // 3b. O filtro (T32408): esconder um projeto e um tipo, na grade e no painel do Kiwi, e ele fica ao recarregar.
       const gone = (sel: string) => p.waitForSelector(sel, { state: "detached" });
@@ -314,6 +426,59 @@ try {
         }
         await p.screenshot({ path: join(shots, "sim-repeticao.png") });
         checks.push(`${lang}: o Sim da atrasada na pendência repetida põe o ⏭ ${vez} e a linha de amanhã, 9h, e a sugestão não volta na vez anterior (#485)`);
+
+        // 4e. Na Agenda (14 dias, a série inteira à vista): as Ligações do Café mostram o "Tomar água" uma vez só (#532), e o
+        // Adiar numa vez leva só ela para o dia seguinte; a série continua começando amanhã (#530).
+        await view(p, "agenda");
+        const habitos = async () => (await invoke("notes.get", { path: "Casa/Hábitos.md" })).content as string;
+        const water = `${pane} .kn-cal-item[data-path="Casa/Hábitos.md"][data-id$="~${day(2)}"]`;
+        await p.waitForSelector(water);
+        assert.ok((await p.locator(`${pane} .kn-cal-item:has-text("Tomar água")`).count()) >= 10, "a série na Agenda");
+        await hoverCard(p, "Café com a Ana");
+        await p.locator(`${pane} .kn-cal-card .kn-cal-expand`).click();
+        await wide(p, "open");
+        await p.locator(`${pane} .kn-cal-wide [role="tab"][data-tab="links"]`).click();
+        await p.waitForSelector(`${pane} .kn-cal-links`);
+        const links = await p.locator(`${pane} .kn-cal-links .kn-cal-link-row`).allTextContents();
+        assert.equal(links.filter((l) => l.includes("Tomar água")).length, 1, `as Ligações: ${links}`);
+        await p.screenshot({ path: join(shots, "ligacoes-repeticao.png") });
+        await p.locator(`${pane} .kn-cal-collapse`).click();
+        await wide(p, "gone");
+        await p.locator(water).hover({ position: { x: 8, y: 8 } });
+        await p.waitForSelector(`${pane} .kn-cal-card`);
+        await p.locator(`${pane} .kn-cal-card .kn-cal-btn`, { hasText: "Adiar" }).click();
+        for (let n = 0; !(await habitos()).includes(`- [ ] Tomar água @ ${day(3)} 08:00\n`); n++) { assert.ok(n < 50, await habitos()); await Bun.sleep(100); }
+        assert.ok((await habitos()).includes(`- [ ] Tomar água @ ${day(1)} 08:00 🔁 dia ⏭ ${day(2)}\n`), await habitos());
+        await p.waitForSelector(water, { state: "detached" });
+        await view(p, "week");
+        checks.push(`${lang}: as Ligações do Café mostram o "Tomar água" uma vez (#532), e o Adiar na vez de ${day(2)} põe o ⏭ e a linha avulsa de ${day(3)}, com a série em ${day(1)} (#530)`);
+
+        // 4f. A faixa do dia todo com teto (10.8): no Dia de daqui a 3 dias, dois à vista e o "+3"; o "+3" abre os cinco, e o
+        // "Mostrar menos" fecha.
+        await view(p, "day");
+        const strip = `${pane} .kn-cal-allday-cell[data-day="${day(3)}"]`;
+        for (let n = 0; !(await p.locator(strip).count()); n++) {
+          assert.ok(n < 4, "o Dia de daqui a 3 dias");
+          await p.locator(`${pane} .kn-cal-tool > .kn-cal-ic`, { hasText: "›" }).click();
+          await Bun.sleep(150);
+        }
+        const chips = p.locator(`${strip} .kn-cal-chip`);
+        await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 2, `${strip} .kn-cal-chip`);
+        const stripMore = p.locator(`${strip} .kn-cal-allday-more`);
+        assert.equal((await stripMore.textContent())?.trim(), "+3", "o +N da faixa");
+        assert.equal(await stripMore.getAttribute("aria-label"), lang === "pt" ? "Mais 3 no dia todo" : "3 more all day");
+        await p.screenshot({ path: join(shots, "dia-todo-teto.png") });
+        await stripMore.click();
+        await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 5, `${strip} .kn-cal-chip`);
+        const less = p.locator(`${strip} .kn-cal-allday-less`);
+        assert.equal((await less.textContent())?.trim(), lang === "pt" ? "Mostrar menos" : "Show less");
+        await p.screenshot({ path: join(shots, "dia-todo-aberto.png") });
+        await less.click();
+        await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 2, `${strip} .kn-cal-chip`);
+        assert.equal(await chips.count(), 2);
+        await p.locator(`${pane} .kn-cal-tool > .kn-cal-btn`).first().click();
+        await view(p, "week");
+        checks.push(`${lang}: a faixa do dia todo com cinco mostra dois e o +3, abre os cinco e fecha pelo Mostrar menos (10.8)`);
 
         // 4b. O + Novo, sem projeto, cria a linha no Calendário.md e o item na tela.
         await p.locator(`${pane} .kn-cal-new`).click();

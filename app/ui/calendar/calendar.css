@@ -296,9 +296,45 @@
 .kn-cal-col { position: relative; border-left: 1px solid var(--cal-line); }
 .kn-cal-col[data-today] { background: color-mix(in srgb, var(--accent) 4%, transparent); }
 .kn-cal-block { position: absolute; font-size: 12px; }
-/* A cascata: a caixa de cima ganha um contorno da cor do fundo, para a borda dela se ver sobre a de baixo. */
-.kn-cal-block[data-depth] { box-shadow: 0 0 0 1.5px var(--surface), var(--shadow-1, 0 1px 3px rgb(0 0 0 / 0.25)); }
-.kn-cal-block[data-depth]:hover { box-shadow: 0 0 0 1.5px var(--c); }
+/* O "+N" de um grupo que não cabe lado a lado (ponto 9, spec #34706): ocupa a última coluna e abre a lista dos outros. */
+.kn-cal-more { position: absolute; z-index: 2; }
+.kn-cal-more[data-open] { z-index: 6; }
+.kn-cal-more-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  width: 100%;
+  height: 100%;
+  min-height: 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 3px 0;
+  border: 1px dashed var(--cal-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+  color: var(--text-2);
+  cursor: pointer;
+}
+.kn-cal-more-btn:hover,
+.kn-cal-more[data-open] .kn-cal-more-btn { color: var(--text); border-color: var(--text-3); }
+.kn-cal-more-list {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 4px);
+  width: 220px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+.kn-cal-more-list[data-side="left"] { left: auto; right: calc(100% + 4px); }
+.kn-cal-more-item { display: block; padding: 5px 9px; margin-bottom: 4px; }
+.kn-cal-more-item:last-child { margin-bottom: 0; }
+.kn-cal-more-item small { display: block; }
 .kn-cal-short { padding-block: 1px; }
 .kn-cal-resize {
   position: absolute;

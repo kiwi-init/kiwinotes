@@ -48,7 +48,7 @@ async function noFlash(p: Page, ms: number, why: string) {
 async function fromCard(p: Page) {
   await p.locator('.kn-tab[data-section="calendar"]').click();
   await p.locator('.kn-cal-views [data-view="week"]').click();
-  // Com a cascata, a caixa de cima cobre o meio da de baixo: o hover vai no canto.
+  // No canto: o item curto lado a lado é estreito.
   await p.locator('.kn-cal-item[data-kind="meeting"]').first().hover({ position: { x: 8, y: 8 } });
   await p.waitForSelector(".kn-cal-card");
   await p.locator(".kn-cal-card [data-note-link]").first().click({ force: true });

@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { CalendarItem } from "../../src/shared/calendar.ts";
-import { MIN_SHOWN_MIN, NEAR_MIN, itemsOfDay, layoutDay, mondayOf, moveItem, newItemDay, noteLine, nowMinutes, onDay, resizeItem, stepAnchor, viewRange } from "./model.ts";
+import { allDayFit, fitColumns, itemsOfDay, layoutDay, mondayOf, moveItem, newItemDay, noteLine, nowMinutes, onDay, resizeItem, sameNote, snoozePatch, stepAnchor, viewRange } from "./model.ts";
 
 const item = (o: Partial<CalendarItem> & Pick<CalendarItem, "id" | "start">): CalendarItem => ({
   kind: "task",
@@ -62,42 +62,65 @@ describe("a grade das horas", () => {
     expect(by.d).toMatchObject({ col: 0, cols: 1, top: 14 * 60, bottom: 14 * 60 + 30 });
   });
 
-  // #466: a caixa de cima que começava menos de NEAR_MIN depois cobria a hora da de baixo (a 2ª linha dela).
-  test("na cascata, a caixa que começa logo depois da de baixo desce até abaixo da hora dela, sem mudar o fim", () => {
-    const placed = layoutDay(
-      [
-        item({ id: "ana", start: "2026-11-26T14:00", end: "2026-11-26T15:00" }),
-        item({ id: "perto", start: "2026-11-26T14:30", end: "2026-11-26T16:00" }),
-        item({ id: "longo", start: "2026-11-26T08:00", end: "2026-11-26T11:00" }),
-        item({ id: "depois", start: "2026-11-26T10:00", end: "2026-11-26T11:00" }),
-      ],
-      "2026-11-26",
-    );
-    const by = Object.fromEntries(placed.map((p) => [p.item.id, p]));
-    expect(NEAR_MIN).toBeGreaterThanOrEqual(42);
-    // A de cima começa às 14:30, mas a caixa só a partir de 14:00 + NEAR_MIN; o fim é o de verdade.
-    expect(by.perto).toMatchObject({ col: 1, top: 14 * 60 + 30, shownTop: 14 * 60 + NEAR_MIN, bottom: 16 * 60 });
-    expect(by.ana!.shownTop).toBe(14 * 60);
-    // Começou 2 h depois: a hora da de baixo já ficou para trás, a caixa fica na hora dela.
-    expect(by.depois).toMatchObject({ col: 1, top: 10 * 60, shownTop: 10 * 60 });
+  const at = (id: string, from: string, to: string) => item({ id, start: `2026-11-26T${from}`, end: `2026-11-26T${to}` });
+  const place = (list: CalendarItem[]) => Object.fromEntries(layoutDay(list, "2026-11-26").map((p) => [p.item.id, p]));
+
+  // Ponto 9 do spec #34706: lado a lado, como no Teams e no Google Agenda, em vez da cascata.
+  test("dois no mesmo horário: metade da largura cada; o que vem depois volta à largura cheia", () => {
+    const by = place([at("a", "09:00", "10:00"), at("b", "09:00", "10:00"), at("c", "11:00", "12:00")]);
+    expect(by.a).toMatchObject({ col: 0, cols: 2, span: 1, top: 9 * 60, bottom: 10 * 60 });
+    expect(by.b).toMatchObject({ col: 1, cols: 2, span: 1, top: 9 * 60 });
+    expect(by.c).toMatchObject({ col: 0, cols: 1, span: 1 });
+    expect(by.c!.group).not.toBe(by.a!.group);
   });
 
-  test("a caixa empurrada nunca passa do próprio fim, e três no mesmo começo descem uma abaixo da outra", () => {
-    const placed = layoutDay(
-      [
-        item({ id: "a", start: "2026-11-26T09:00", end: "2026-11-26T11:30" }),
-        item({ id: "b", start: "2026-11-26T09:00", end: "2026-11-26T11:30" }),
-        item({ id: "c", start: "2026-11-26T09:00", end: "2026-11-26T11:30" }),
-        item({ id: "curta", start: "2026-11-26T15:00", end: "2026-11-26T16:00" }),
-        item({ id: "rapida", start: "2026-11-26T15:00", end: "2026-11-26T15:30" }),
-      ],
-      "2026-11-26",
-    );
-    const by = Object.fromEntries(placed.map((p) => [p.item.id, p]));
-    expect([by.a!.shownTop, by.b!.shownTop, by.c!.shownTop]).toEqual([9 * 60, 9 * 60 + NEAR_MIN, 9 * 60 + 2 * NEAR_MIN]);
-    // A de 30 min não cabe abaixo da hora da outra: desce só até sobrar o mínimo dela.
-    expect(by.rapida!.shownTop).toBe(15 * 60 + 30 - MIN_SHOWN_MIN);
-    for (const p of placed) expect(p.bottom - p.shownTop).toBeGreaterThanOrEqual(Math.min(MIN_SHOWN_MIN, p.bottom - p.top));
+  test("três cruzados: um terço cada, cada um na hora de verdade", () => {
+    const by = place([at("a", "14:00", "15:00"), at("b", "14:30", "16:00"), at("c", "14:45", "15:15")]);
+    expect([by.a!.col, by.b!.col, by.c!.col]).toEqual([0, 1, 2]);
+    for (const p of Object.values(by)) expect(p).toMatchObject({ cols: 3, span: 1 });
+    expect(by.b!.top).toBe(14 * 60 + 30);
+  });
+
+  test("cinco no mesmo horário: cinco colunas, e o que não cabe vira um +N só", () => {
+    const five = ["a", "b", "c", "d", "e"].map((id) => at(id, "10:00", "11:00"));
+    const placed = layoutDay(five, "2026-11-26");
+    expect(placed.map((p) => p.col)).toEqual([0, 1, 2, 3, 4]);
+    expect(placed.every((p) => p.cols === 5)).toBe(true);
+    // Cabem 5: nada muda.
+    expect(fitColumns(placed, 5)).toEqual({ shown: placed, more: [] });
+    // Cabem 3: duas à vista, e o +3 na terceira coluna com as outras.
+    const { shown, more } = fitColumns(placed, 3);
+    expect(shown.map((p) => [p.item.id, p.col, p.cols])).toEqual([["a", 0, 3], ["b", 1, 3]]);
+    expect(more).toEqual([{ top: 10 * 60, bottom: 11 * 60, col: 2, cols: 3, items: [five[2], five[3], five[4]] }]);
+  });
+
+  test("a cadeia A–B–C: A e C não se cruzam, dividem a coluna e ficam no mesmo grupo de B", () => {
+    const by = place([at("a", "10:00", "11:00"), at("b", "10:30", "11:30"), at("c", "11:00", "12:00"), at("d", "14:00", "14:30")]);
+    expect([by.a!.col, by.b!.col, by.c!.col]).toEqual([0, 1, 0]);
+    expect([by.a!.cols, by.b!.cols, by.c!.cols]).toEqual([2, 2, 2]);
+    expect(new Set([by.a!.group, by.b!.group, by.c!.group]).size).toBe(1);
+    expect(by.d).toMatchObject({ col: 0, cols: 1, span: 1, top: 14 * 60, bottom: 14 * 60 + 30 });
+  });
+
+  test("na cadeia, o item sem vizinho à direita se estica pelas colunas livres", () => {
+    // A 09–12 cruza com B 09–10 e C 09:30–10:30; D 11–12 só cruza com A e fica com as colunas 1 e 2.
+    const by = place([at("a", "09:00", "12:00"), at("b", "09:00", "10:00"), at("c", "09:30", "10:30"), at("d", "11:00", "12:00")]);
+    expect([by.a!.col, by.b!.col, by.c!.col, by.d!.col]).toEqual([0, 1, 2, 1]);
+    expect(by.d).toMatchObject({ cols: 3, span: 2 });
+    expect(by.b!.span).toBe(1);
+    // Com só 2 colunas à vista, o D não estica por cima do +N, e o +N junta só a faixa do C.
+    const { shown, more } = fitColumns(layoutDay([at("a", "09:00", "12:00"), at("b", "09:00", "10:00"), at("c", "09:30", "10:30"), at("d", "11:00", "12:00")], "2026-11-26"), 2);
+    expect(shown.map((p) => [p.item.id, p.col, p.span])).toEqual([["a", 0, 1]]);
+    expect(more.map((r) => [r.top, r.bottom, r.items.map((i) => i.id)])).toEqual([[9 * 60, 10 * 60 + 30, ["b", "c"]], [11 * 60, 12 * 60, ["d"]]]);
+  });
+
+  test("o +N só em quem não cabe: o grupo que cabe no mesmo dia continua inteiro", () => {
+    const placed = layoutDay([at("a", "08:00", "09:00"), at("b", "08:00", "09:00"), ...["c", "d", "e", "f"].map((id) => at(id, "15:00", "16:00"))], "2026-11-26");
+    const { shown, more } = fitColumns(placed, 2);
+    expect(shown.map((p) => p.item.id)).toEqual(["a", "b", "c"]);
+    expect(more).toHaveLength(1);
+    expect(more[0]).toMatchObject({ col: 1, cols: 2, top: 15 * 60 });
+    expect(more[0]!.items.map((i) => i.id)).toEqual(["d", "e", "f"]);
   });
 
   test("o que passa da meia-noite aparece cortado nos dois dias", () => {
@@ -183,5 +206,36 @@ describe("newItemDay: o dia que o + Novo sugere (#491)", () => {
   });
   test("no Dia, o dia à vista", () => {
     expect(newItemDay("day", "2026-12-24", today)).toBe("2026-12-24");
+  });
+});
+
+describe("as repetições no cartão e no painel largo", () => {
+  const vez = (day: string) => item({ id: `n:Casa/Rotina.md#2:abc~${day}`, start: `${day}T09:00`, repeat: "daily", source: { path: "Casa/Rotina.md", line: 2, internal: false } });
+
+  test("o Adiar numa vez leva só aquela vez para amanhã; no item avulso, o item (#530)", () => {
+    expect(snoozePatch(vez("2026-11-16"))).toEqual({ start: "2026-11-17T09:00", end: null, only: true });
+    expect(snoozePatch(item({ id: "n:a#1:x", start: "2026-11-16T09:00", end: "2026-11-16T10:00" }))).toEqual({ start: "2026-11-17T09:00", end: "2026-11-17T10:00" });
+    expect(snoozePatch(item({ id: "d", start: "2026-11-16", allDay: true }))).toEqual({ start: "2026-11-17", end: null });
+  });
+
+  test("as Ligações: uma linha por série, sem a série do próprio item, e só da mesma nota (#532)", () => {
+    const cafe = item({ id: "n:Casa/Rotina.md#4:def", start: "2026-11-18T10:00", source: { path: "Casa/Rotina.md", line: 4, internal: false } });
+    const outra = item({ id: "n:Casa/Mudança.md#2:ghi", start: "2026-11-18T11:00", source: { path: "Casa/Mudança.md", line: 2, internal: false } });
+    const vezes = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"].map(vez);
+    expect(sameNote(cafe, [...vezes, cafe, outra]).map((i) => i.id)).toEqual([vezes[0]!.id]);
+    // Aberta uma vez da série, as outras vezes não são "ligações" dela.
+    expect(sameNote(vezes[2]!, [...vezes, cafe, outra]).map((i) => i.id)).toEqual([cafe.id]);
+    expect(sameNote({ ...cafe, source: null }, vezes)).toEqual([]);
+  });
+});
+
+describe("a faixa do dia todo (10.8)", () => {
+  test("até três, todos; mais que isso, dois e o resto no +N; aberta, todos", () => {
+    const l = ["a", "b", "c", "d", "e"];
+    expect(allDayFit(l.slice(0, 3), false)).toEqual({ shown: ["a", "b", "c"], hidden: 0 });
+    expect(allDayFit(l.slice(0, 4), false)).toEqual({ shown: ["a", "b"], hidden: 2 });
+    expect(allDayFit(l, false)).toEqual({ shown: ["a", "b"], hidden: 3 });
+    expect(allDayFit(l, true)).toEqual({ shown: l, hidden: 0 });
+    expect(allDayFit([], false)).toEqual({ shown: [], hidden: 0 });
   });
 });

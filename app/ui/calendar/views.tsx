@@ -2,24 +2,29 @@
 // arredondada só com o fundo na cor do tipo, sem barra de cor do lado (harry #32145). O hover, o arrastar e o painel
 // largo são da tela (Calendar.tsx); aqui só se desenha.
 
-import { type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { CalendarItem } from "../../src/shared/calendar.ts";
 import { useT } from "../src/i18n.ts";
 import { agendaHead, dayHead, timeRange, weekdayNames } from "./format.ts";
-import { itemsOfDay, layoutDay, nowMinutes } from "./model.ts";
+import { allDayFit, fitColumns, itemsOfDay, layoutDay, type MoreRun, nowMinutes } from "./model.ts";
 
 /** A altura de uma hora na grade, em px. */
 export const HOUR_PX = 48;
-/** O deslocamento de cada nível da cascata, em px, e quanto da coluna ela pode comer no máximo. */
-export const CASCADE_PX = 16;
-const CASCADE_MAX = 0.45;
+/** A largura mínima de um item lado a lado, em px: com menos, o grupo mostra um "+N" no lugar das últimas colunas. */
+export const MIN_ITEM_PX = 44;
 
-/** Onde uma caixa da cascata fica na coluna: o nível 0 ocupa a coluna inteira; cada nível desce para a direita. */
-export function cascadeStyle(col: number, cols: number) {
-  const step = cols > 1 ? `min(${CASCADE_PX}px, ${(CASCADE_MAX * 100) / (cols - 1)}%)` : "0px";
-  return { left: `calc(${step} * ${col} + 3px)`, width: `calc(100% - ${step} * ${col} - 6px)`, zIndex: col + 1 };
+/**
+ * Onde um item fica na coluna do dia: as `cols` colunas do grupo dividem a largura, e ele ocupa `span` delas a partir
+ * da `col`. Sozinho (1 coluna), a largura cheia. Os 3 px de cada lado e o 1 px entre vizinhos são o respiro.
+ */
+export function columnStyle(col: number, cols: number, span = 1): CSSProperties {
+  const w = 100 / cols;
+  return { left: `calc(${+(w * col).toFixed(4)}% + 3px)`, width: `calc(${+(w * span).toFixed(4)}% - ${cols > 1 && col + span < cols ? 4 : 6}px)` };
 }
+
+/** Quantas colunas de item cabem num dia de `px` de largura (sem medida ainda, todas). */
+export const columnsThatFit = (px: number | null) => (px == null ? Infinity : Math.max(2, Math.floor((px - 6) / MIN_ITEM_PX)));
 
 /** Quantos itens cabem num dia do Mês antes do "+n". */
 const MONTH_MAX = 3;
@@ -41,7 +46,7 @@ export interface ItemState {
   kiwiFace: string | null;
 }
 
-function ItemBox({ item, h, s, style, children, className = "", depth }: { item: CalendarItem; h: ItemHandlers; s: ItemState; style?: CSSProperties; children: ReactNode; className?: string; depth?: number }) {
+function ItemBox({ item, h, s, style, children, className = "" }: { item: CalendarItem; h: ItemHandlers; s: ItemState; style?: CSSProperties; children: ReactNode; className?: string }) {
   const { t } = useT();
   const line = item.source?.line;
   return (
@@ -58,7 +63,6 @@ function ItemBox({ item, h, s, style, children, className = "", depth }: { item:
       data-pulse={s.pulseId === item.id ? "" : undefined}
       data-done={item.done ? "" : undefined}
       data-readonly={item.readOnly ? "" : undefined}
-      data-depth={depth || undefined}
       aria-label={`${t(`calendar.kind.${item.kind}`)}: ${item.title}`}
       style={style}
       onMouseEnter={(e) => h.onEnter(item, e.currentTarget)}
@@ -84,6 +88,10 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
   const { t, locale } = useT();
   const scroller = useRef<HTMLDivElement>(null);
   const cols = { gridTemplateColumns: `52px repeat(${days.length}, minmax(0, 1fr))` };
+  // A faixa do dia todo abre inteira pelo "+N" de qualquer dia, e fecha pelo "Mostrar menos" (10.8).
+  const [allOpen, setAllOpen] = useState(false);
+  const allDay = days.map((d) => itemsOfDay(items, d).filter((i) => i.allDay));
+  const allFolds = allDay.some((list) => allDayFit(list, false).hidden > 0);
   // Abre rolada para o começo do dia útil (ou para perto do agora, se for mais tarde).
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -93,6 +101,20 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
     el.scrollTop = Math.min(first, 17 * 60) * (HOUR_PX / 60);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days.length, days[0]]);
+  // A largura de um dia, para saber quantos itens lado a lado cabem antes do "+N".
+  const hours = useRef<HTMLDivElement>(null);
+  const [colPx, setColPx] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = hours.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setColPx((el.clientWidth - 52) / days.length);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [days.length]);
+  const fit = columnsThatFit(colPx);
+  const [openMore, setOpenMore] = useState<string | null>(null);
   const nowMin = nowMinutes(today, now);
   return (
     <div className="kn-cal-time" data-days={days.length}>
@@ -112,20 +134,31 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
       </div>
       <div className="kn-cal-allday" style={cols}>
         <span className="kn-cal-allday-label">{t("calendar.allDay")}</span>
-        {days.map((d) => (
-          <div key={d} className="kn-cal-allday-cell" data-day={d}>
-            {itemsOfDay(items, d)
-              .filter((i) => i.allDay)
-              .map((i) => (
+        {days.map((d, di) => {
+          const fit = allDayFit(allDay[di]!, allOpen);
+          return (
+            <div key={d} className="kn-cal-allday-cell" data-day={d}>
+              {fit.shown.map((i) => (
                 <ItemBox key={i.id} item={i} h={h} s={s} className="kn-cal-chip">
                   <b>{i.title}</b>
                 </ItemBox>
               ))}
-          </div>
-        ))}
+              {fit.hidden ? (
+                <button type="button" className="kn-cal-cell-more kn-cal-allday-more" aria-label={t("calendar.allDayMore", { n: fit.hidden })} onClick={() => setAllOpen(true)}>
+                  {t("calendar.more", { n: fit.hidden })}
+                </button>
+              ) : null}
+              {allOpen && allFolds && di === days.length - 1 ? (
+                <button type="button" className="kn-cal-cell-more kn-cal-allday-less" onClick={() => setAllOpen(false)}>
+                  {t("calendar.allDayLess")}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
       <div className="kn-cal-scroll" ref={scroller}>
-        <div className="kn-cal-hours" style={{ ...cols, height: 24 * HOUR_PX }}>
+        <div className="kn-cal-hours" ref={hours} style={{ ...cols, height: 24 * HOUR_PX }}>
           <div className="kn-cal-gutter">
             {Array.from({ length: 24 }, (_, hr) => (
               <span key={hr} className="kn-cal-hour" style={{ top: hr * HOUR_PX }}>
@@ -133,43 +166,113 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
               </span>
             ))}
           </div>
-          {days.map((d) => (
+          {days.map((d, di) => (
             <div key={d} className="kn-cal-col" data-day={d} data-today={d === today ? "" : undefined}>
-              {layoutDay(items, d).map((p) => {
-                // A caixa começa no `shownTop`: na cascata, abaixo da hora da que ela cobre (#466). A hora escrita é a de verdade.
-                const top = (p.shownTop / 60) * HOUR_PX;
-                const height = Math.max(18, ((p.bottom - p.shownTop) / 60) * HOUR_PX - 3);
-                const short = height < 34;
-                return (
-                  <ItemBox
-                    key={p.item.id}
-                    item={p.item}
-                    h={h}
-                    s={s}
-                    className={short ? "kn-cal-block kn-cal-short" : "kn-cal-block"}
-                    depth={p.col}
-                    style={{ top, height, ...cascadeStyle(p.col, p.cols) }}
-                  >
-                    <b>{p.item.title}</b>
-                    {short ? null : <span>{timeRange(p.item, t("calendar.allDay"), t("calendar.nextDay"))}{p.item.project ? ` · ${p.item.project}` : ""}</span>}
-                    {p.item.readOnly ? null : (
-                      <i
-                        className="kn-cal-resize"
-                        aria-label={t("calendar.resize")}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          h.onPointerDown(e, p.item, "resize");
-                        }}
-                      />
-                    )}
-                  </ItemBox>
-                );
-              })}
+              <DayColumn day={d} items={items} fit={fit} last={di === days.length - 1} h={h} s={s} openMore={openMore} setOpenMore={setOpenMore} />
               {d === today && nowMin !== null ? <div className="kn-cal-now" style={{ top: (nowMin / 60) * HOUR_PX }} /> : null}
             </div>
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Os itens com hora de um dia: lado a lado quando se cruzam, e o "+N" quando o dia é estreito demais para todos. */
+function DayColumn({ day, items, fit, last, h, s, openMore, setOpenMore }: { day: string; items: CalendarItem[]; fit: number; last: boolean; h: ItemHandlers; s: ItemState; openMore: string | null; setOpenMore(key: string | null): void }) {
+  const { t } = useT();
+  const { shown, more } = fitColumns(layoutDay(items, day), fit);
+  return (
+    <>
+      {shown.map((p) => {
+        const top = (p.top / 60) * HOUR_PX;
+        const height = Math.max(18, ((p.bottom - p.top) / 60) * HOUR_PX - 3);
+        const short = height < 34;
+        return (
+          <ItemBox
+            key={p.item.id}
+            item={p.item}
+            h={h}
+            s={s}
+            className={short ? "kn-cal-block kn-cal-short" : "kn-cal-block"}
+            style={{ top, height, ...columnStyle(p.col, p.cols, p.span) }}
+          >
+            <b>{p.item.title}</b>
+            {short ? null : <span>{timeRange(p.item, t("calendar.allDay"), t("calendar.nextDay"))}{p.item.project ? ` · ${p.item.project}` : ""}</span>}
+            {p.item.readOnly ? null : (
+              <i
+                className="kn-cal-resize"
+                aria-label={t("calendar.resize")}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  h.onPointerDown(e, p.item, "resize");
+                }}
+              />
+            )}
+          </ItemBox>
+        );
+      })}
+      {more.map((r) => {
+        const key = `${day}@${r.top}`;
+        return <MoreSlot key={key} run={r} open={openMore === key || r.items.some((i) => i.id === s.dragId)} last={last} h={h} s={s} onToggle={(on) => setOpenMore(on ? key : null)} />;
+      })}
+    </>
+  );
+}
+
+/** O "+N" de uma faixa com itens escondidos: abre a lista deles, cada um com o cartão e o arrastar de sempre. */
+/** A largura da lista do "+N" e o respiro dela até o "+N" e até a borda da grade. */
+const LIST_PX = 220;
+const LIST_GAP = 4;
+
+function MoreSlot({ run, open, last, h, s, onToggle }: { run: MoreRun; open: boolean; last: boolean; h: ItemHandlers; s: ItemState; onToggle(on: boolean): void }) {
+  const { t } = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node) && !(e.target as Element | null)?.closest?.(".kn-cal-card")) onToggle(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onToggle(false);
+    addEventListener("pointerdown", away);
+    addEventListener("keydown", esc);
+    return () => {
+      removeEventListener("pointerdown", away);
+      removeEventListener("keydown", esc);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  // A lista abre do lado pedido, mas sempre dentro da grade (a área que rola): medida ao abrir, ela encosta na borda
+  // e fica mais estreita se a grade não tem 220 px (o Dia estreito, revisão do T34737).
+  const [place, setPlace] = useState<CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    const slot = ref.current;
+    const grid = slot?.closest(".kn-cal-scroll");
+    if (!open || !slot || !grid) return setPlace(null);
+    const a = slot.getBoundingClientRect();
+    const g = grid.getBoundingClientRect();
+    const w = Math.min(LIST_PX, g.width - 2 * LIST_GAP);
+    const want = last ? a.left - LIST_GAP - w : a.right + LIST_GAP;
+    const left = Math.max(g.left + LIST_GAP, Math.min(want, g.right - LIST_GAP - w));
+    setPlace({ left: left - a.left, right: "auto", width: w });
+  }, [open, last]);
+  const top = (run.top / 60) * HOUR_PX;
+  const height = Math.max(18, ((run.bottom - run.top) / 60) * HOUR_PX - 3);
+  return (
+    <div ref={ref} className="kn-cal-more" style={{ top, height, ...columnStyle(run.col, run.cols) }} data-open={open ? "" : undefined}>
+      <button type="button" className="kn-cal-more-btn" aria-expanded={open} aria-label={t("calendar.moreHidden", { n: run.items.length })} onClick={() => onToggle(!open)}>
+        {t("calendar.more", { n: run.items.length })}
+      </button>
+      {open ? (
+        <div className="kn-cal-more-list" role="group" data-side={last ? "left" : "right"} style={place ?? undefined}>
+          {run.items.map((i) => (
+            <ItemBox key={i.id} item={i} h={h} s={s} className="kn-cal-row kn-cal-more-item">
+              <b>{i.title}</b>
+              <small>{timeRange(i, t("calendar.allDay"), t("calendar.nextDay"))}</small>
+            </ItemBox>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
