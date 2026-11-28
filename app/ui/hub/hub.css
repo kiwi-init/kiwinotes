@@ -31,7 +31,13 @@
   position: relative;
   z-index: 5;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  /* Os lados nunca ficam menores que o conteúdo deles, e as abas pegam o que sobra: numa janela estreita, elas rolam
+     em vez de ficar embaixo dos botões (#496). À direita, os botões não encolhem (min-content). À esquerda, o caminho
+     das Notas encolhe com reticências até o ícone: o mínimo é o botão só com o ícone, e não o min-content, que seria o
+     caminho inteiro e tiraria as abas do meio com um caminho longo (hub-crumb-check). Com espaço, os dois lados têm a
+     mesma largura e as abas ficam no meio, como antes. */
+  grid-template-columns: minmax(var(--kn-hub-start-min), 1fr) minmax(0, auto) minmax(min-content, 1fr);
+  --kn-hub-start-min: 32px;
   align-items: center;
   gap: 12px;
   /* os semáforos ficam à esquerda */
@@ -59,16 +65,49 @@
 .kn-tabs {
   position: relative;
   display: inline-flex;
-  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
   padding: 2px;
   border-radius: var(--r-ctl);
   background: var(--float);
   box-shadow: var(--shadow-float);
 }
 
+/* A faixa das abas (#496, `tabs-fit.ts`): sem `data-clip`, cabe tudo e nada rola (o anel do foco sai inteiro). Com ele,
+   rola de lado sem barra, também pelo trackpad, e a borda que esconde abas esmaece nos 24 px do `TABS_FADE`, ou menos
+   quando a faixa não cabe a aba escolhida e as duas bordas (`--tabs-fade`, `tabsFade`). */
+.kn-tabs-track {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kn-tabs-track[data-clip] {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.kn-tabs-track[data-clip]::-webkit-scrollbar {
+  display: none;
+}
+
+.kn-tabs-track[data-clip="end"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--tabs-fade, 24px)), transparent);
+}
+
+.kn-tabs-track[data-clip="start"] {
+  mask-image: linear-gradient(to left, #000 calc(100% - var(--tabs-fade, 24px)), transparent);
+}
+
+.kn-tabs-track[data-clip="start end"] {
+  mask-image: linear-gradient(to right, transparent, #000 var(--tabs-fade, 24px), #000 calc(100% - var(--tabs-fade, 24px)), transparent);
+}
+
 .kn-tabs-pill {
   position: absolute;
-  top: 2px;
+  top: 0;
   left: 0;
   height: calc(var(--ctl) - 4px);
   border-radius: var(--r-row);

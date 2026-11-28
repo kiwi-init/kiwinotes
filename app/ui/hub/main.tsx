@@ -7,6 +7,7 @@ import "../kiwicat-v2/bubble-md.css";
 import "./hub.css";
 import { DoubtCard } from "./DoubtCard";
 import { GooLayer } from "./Goo.tsx";
+import { tabsClip, tabsFade, tabsScrollToShow } from "./tabs-fit.ts";
 import { KiwiCat, useAgentCat } from "./KiwiCat";
 import { Onboarding } from "./onboarding/Onboarding.tsx";
 import { Welcome } from "./onboarding/Welcome.tsx";
@@ -97,8 +98,31 @@ function Tabs({ section, onGo, homeView, onHomeView }: { section: Tab; onGo(s: T
   const [menu, setMenu] = useState(false);
   const homeTab = useRef<HTMLButtonElement>(null);
   const pillEl = useRef<HTMLSpanElement>(null);
+  const trackEl = useRef<HTMLDivElement>(null);
   const measured = useRef(false);
   useLayoutEffect(() => {
+    const track = trackEl.current;
+    // Na janela estreita (#496), a faixa rola e a aba escolhida fica à vista; a borda que esconde abas esmaece.
+    const clip = () => {
+      if (!track) return;
+      const c = tabsClip(track.scrollLeft, track.clientWidth, track.scrollWidth);
+      if (c) track.dataset.clip = c;
+      else delete track.dataset.clip;
+    };
+    const fit = (tab: HTMLElement) => {
+      if (!track) return;
+      // Mede sem rolar (`data-clip` liga o overflow): cabendo tudo, a faixa volta ao começo e não rola.
+      if (track.scrollWidth <= track.clientWidth + 1) {
+        track.scrollLeft = 0;
+        return clip();
+      }
+      track.dataset.clip ??= "end";
+      // Faixa curta (o Ditado a 480 px): o esmaecido encolhe para a escolhida caber inteira fora dele.
+      const fade = tabsFade(track.clientWidth, tab.offsetWidth);
+      track.style.setProperty("--tabs-fade", `${fade}px`);
+      track.scrollLeft = tabsScrollToShow(tab.offsetLeft, tab.offsetWidth, track.scrollLeft, track.clientWidth, track.scrollWidth, fade);
+      clip();
+    };
     const measure = (resized = false) => {
       const tab = group.current?.querySelector<HTMLElement>(`[data-section="${section}"]`);
       const pill = pillEl.current;
@@ -108,6 +132,7 @@ function Tabs({ section, onGo, homeView, onHomeView }: { section: Tab; onGo(s: T
       pill.style.transform = `translateX(${tab.offsetLeft}px)`;
       pill.style.width = `${tab.offsetWidth}px`;
       measured.current = true;
+      fit(tab);
     };
     measure();
     // A primeira notificação do observer só confirma o layout; não interrompe uma seleção em movimento.
@@ -117,7 +142,11 @@ function Tabs({ section, onGo, homeView, onHomeView }: { section: Tab; onGo(s: T
       observed = true;
     });
     if (group.current) ro.observe(group.current);
-    return () => ro.disconnect();
+    track?.addEventListener("scroll", clip, { passive: true });
+    return () => {
+      ro.disconnect();
+      track?.removeEventListener("scroll", clip);
+    };
   }, [section, homeView]);
   const move = (dir: 1 | -1) => {
     const i = TABS.indexOf(section);
@@ -138,37 +167,40 @@ function Tabs({ section, onGo, homeView, onHomeView }: { section: Tab; onGo(s: T
         }
       }}
     >
-      <span className="kn-tabs-pill" ref={pillEl} aria-hidden="true" />
-      {TABS.map((s) => (
-        <button
-          type="button"
-          role="tab"
-          key={s}
-          data-section={s}
-          aria-selected={s === section}
-          tabIndex={s === section ? 0 : -1}
-          className="kn-tab"
-          ref={s === "home" ? homeTab : undefined}
-          {...(s === "home" ? { "aria-haspopup": "menu" as const, "aria-expanded": menu, "data-view": homeView } : {})}
-          onClick={(e) => {
-            if (s !== "home") return onGo(s);
-            // A seta abre o menu de qualquer aba; o clique na Início já aberta também.
-            const onChevron = (e.target as Element).closest(".kn-home-v-chevron");
-            if (section === "home" || onChevron) setMenu((m) => !m);
-            onGo(s);
-          }}
-          onKeyDown={(e) => {
-            if (s === "home" && e.key === "ArrowDown") {
-              e.preventDefault();
+      {/* A faixa das abas: rola de lado só quando a barra é estreita demais para elas (#496). */}
+      <div className="kn-tabs-track" role="none" ref={trackEl}>
+        <span className="kn-tabs-pill" ref={pillEl} aria-hidden="true" />
+        {TABS.map((s) => (
+          <button
+            type="button"
+            role="tab"
+            key={s}
+            data-section={s}
+            aria-selected={s === section}
+            tabIndex={s === section ? 0 : -1}
+            className="kn-tab"
+            ref={s === "home" ? homeTab : undefined}
+            {...(s === "home" ? { "aria-haspopup": "menu" as const, "aria-expanded": menu, "data-view": homeView } : {})}
+            onClick={(e) => {
+              if (s !== "home") return onGo(s);
+              // A seta abre o menu de qualquer aba; o clique na Início já aberta também.
+              const onChevron = (e.target as Element).closest(".kn-home-v-chevron");
+              if (section === "home" || onChevron) setMenu((m) => !m);
               onGo(s);
-              setMenu(true);
-            }
-          }}
-        >
-          {s === "home" ? <InicioTabLabel view={homeView} /> : t(LABELS[s])}
-          {SOON.has(s) ? <span className="kn-tab-soon">{t("hub.tab.soon")}</span> : null}
-        </button>
-      ))}
+            }}
+            onKeyDown={(e) => {
+              if (s === "home" && e.key === "ArrowDown") {
+                e.preventDefault();
+                onGo(s);
+                setMenu(true);
+              }
+            }}
+          >
+            {s === "home" ? <InicioTabLabel view={homeView} /> : t(LABELS[s])}
+            {SOON.has(s) ? <span className="kn-tab-soon">{t("hub.tab.soon")}</span> : null}
+          </button>
+        ))}
+      </div>
       {menu ? (
         <InicioMenu
           view={homeView}
