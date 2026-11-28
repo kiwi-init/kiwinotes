@@ -273,7 +273,7 @@ try {
         await p.screenshot({ path: join(shots, "novo-mes-seguinte.png") });
         await p.locator(`${pane} .kn-cal-newform button.kn-cal-btn[type="button"]`).click();
         await p.waitForSelector(`${pane} .kn-cal-newform`, { state: "detached" });
-        await p.locator(`${pane} .kn-cal-tool > .kn-cal-btn`).click();
+        await p.locator(`${pane} .kn-cal-tool > .kn-cal-btn:not(.kn-cal-new)`).click();
         await view(p, before);
         checks.push(`${lang}: no Mês seguinte, o + Novo sugere ${first}, o dia 1 do mês à vista (#491)`);
 
