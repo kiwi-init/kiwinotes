@@ -188,6 +188,32 @@ async function useTool(client: AgentContext, sessionId: string, name: string, ar
   return { text: String(r.result?.content?.[0]?.text ?? ""), isError: !!r.result?.isError };
 }
 
+/** O item do pedido (T34753): o título depois do "de", o tipo pela palavra, e o começo e o aviso que o Kiwi leu. */
+async function scheduleFake(client: AgentContext, sessionId: string, text: string, hint: string): Promise<string> {
+  const start = /inicio ([\dT:-]+)/.exec(hint)?.[1];
+  const notify = /aviso ([A-Za-z0-9]+)/.exec(hint)?.[1];
+  if (!start) return "Para quando? Não achei a hora no pedido.";
+  const what = /\b(?:de|da|do|para|pra)\s+((?:ligar|pagar|revisar|mandar|enviar|buscar|tirar|levar|falar|comprar|ver|reuni)[^,.]*?)(?=\s+e\s+(?:me\s+)?avis|,|\.|$)/i.exec(text)?.[1];
+  const title = (what ?? "Lembrete").replace(/^\w/, (c) => c.toUpperCase());
+  const kind = /\breuni[aã]o\b/i.test(text) ? "meeting" : "reminder";
+  const r = await useTool(client, sessionId, "calendar_create", { title, kind, start, ...(notify ? { notify } : {}) });
+  if (r.isError) return `Não consegui marcar: ${r.text}`;
+  const item = (JSON.parse(r.text) as { item: { start: string; notify: string } }).item;
+  return `Marquei "${title}" para ${item.start.replace("T", " às ")}, com o aviso ${item.notify}.`;
+}
+
+/** Apaga pelo título: lista a semana e manda o id do item que bate. */
+async function unscheduleFake(client: AgentContext, sessionId: string, wanted: string): Promise<string> {
+  const fold = (t: string) => t.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
+  const list = await useTool(client, sessionId, "calendar_list", {});
+  if (list.isError) return `Não consegui ler a agenda: ${list.text}`;
+  const items = (JSON.parse(list.text) as { items: { id: string; title: string }[] }).items;
+  const hit = items.find((i) => fold(i.title).includes(fold(wanted)) || fold(wanted).includes(fold(i.title)));
+  if (!hit) return `Não achei "${wanted}" na agenda.`;
+  const r = await useTool(client, sessionId, "calendar_delete", { id: hit.id });
+  return r.isError ? `Não consegui apagar: ${r.text}` : `Apaguei "${hit.title}".`;
+}
+
 /** A proposta fixa da reunião (spec #8360): os campos que o agente falso manda à `meeting_propose`. */
 export const FAKE_PROPOSAL = {
   tema: "Cronograma da mudança",
@@ -838,6 +864,19 @@ const app = agent({ name: "kiwi-fake-agent" })
         const summary = /^\/resumo\s+(.+)$/i.exec(text) ?? /resumo executivo d[oa]s?\s+(?:projeto\s+)?(.+?)[.?!]*$/i.exec(text);
         if (summary && kiwiServers.has(sessionId)) {
           await say(client, sessionId, await proposeSummary(client, sessionId, summary[1]!.trim()));
+          return { stopReason: "end_turn" };
+        }
+        // O Calendário (spec #34706, T34753): como o agente de verdade com o cartão do agendar, o falso usa a hora e o
+        // aviso que o Kiwi leu do pedido (`[Kiwi leu no pedido: …]`) e cria um item só. "apaga/desmarca o lembrete de X"
+        // lista a agenda e apaga o item pelo título.
+        const hint = /\[Kiwi leu no pedido: ([^\]]*)\]/.exec(raw)?.[1];
+        if (hint && kiwiServers.has(sessionId) && /\b(me lembr|lembrete|agend|reuni|me avis|remind)/i.test(text)) {
+          await say(client, sessionId, await scheduleFake(client, sessionId, text, hint));
+          return { stopReason: "end_turn" };
+        }
+        const unschedule = /^(?:apaga|desmarca|cancela|tira)\s+(?:o |a )?(?:lembrete|reuni[aã]o|item)\s+(?:de |do |da )?(.+?)[.!]?$/i.exec(text.trim());
+        if (unschedule && kiwiServers.has(sessionId)) {
+          await say(client, sessionId, await unscheduleFake(client, sessionId, unschedule[1]!));
           return { stopReason: "end_turn" };
         }
         // A memória (spec #11469): "lembra que …" anota, "esquece que …" tira.

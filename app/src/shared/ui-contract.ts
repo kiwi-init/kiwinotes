@@ -24,7 +24,7 @@ import type { OpenTarget } from "./file-view.ts";
 import type { AliasWarning } from "../store/aliasCheck.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, HistoryPage } from "../store/history.ts";
-import type { CalendarCreate, CalendarItem, CalendarItems, CalendarSource, CalendarUpdate } from "./calendar.ts";
+import type { CalendarCreate, CalendarDeleted, CalendarItem, CalendarItems, CalendarSource, CalendarUpdate } from "./calendar.ts";
 import type { HomePending, HomeToday, HomeWeek } from "./home.ts";
 import type { AgentMeetingSettings, AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
@@ -346,7 +346,11 @@ export type { NoteModel };
 //   novo, em vez de sumir calado. Só acréscimo.
 // 1.109.0 (T34336, #485): o `only` do `calendar.update`. Numa vez de uma repetição, ele leva só aquela vez para o
 //   `start` novo (um `⏭` na série e uma linha avulsa abaixo), sem mudar a hora da série. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.109.0";
+// 1.110.0 (T34753, spec #34706): o aviso livre e o `calendar.delete`. O `notify` aceita qualquer antecedência, além dos
+//   de antes: `50m`, `2h`, `3d` (até 30 dias), e o item volta com a forma curta (`60m` vira `1h`, `24h` vira
+//   `dayBefore`). O `calendar.delete` apaga a linha do item na nota (a série inteira, numa repetição), ou tira o
+//   `agenda:` de uma nota com data, sem apagar a nota. E_READONLY numa reunião gravada.
+export const UI_CONTRACT_VERSION = "1.110.0";
 
 /** A voz do Kiwi pelo ElevenLabs nos Ajustes (T31628): só se há chave, nunca ela. */
 export interface ElevenLabsStatus {
@@ -779,6 +783,11 @@ export interface UiCapabilities {
    * mudou dá E_CONFLICT (leia de novo). E_READONLY numa reunião gravada.
    */
   "calendar.update": { args: CalendarUpdate; result: CalendarItem };
+  /**
+   * Apaga um item (1.110.0, T34753): a linha sai da nota pela versão (a série inteira numa repetição); numa nota com
+   * `agenda:`, saem o `agenda:` e o `aviso:` e a nota fica. E_CONFLICT como no update, E_READONLY numa reunião gravada.
+   */
+  "calendar.delete": { args: { id: string }; result: CalendarDeleted };
   /** O texto da nota de onde o item veio e a linha dele (0-based), também da pasta interna das reuniões. */
   "calendar.source": { args: { id: string }; result: CalendarSource };
   // ---------------------------------------------------------------- reuniões (1.21.0, T4947)
@@ -1458,6 +1467,7 @@ export const UI_CAPABILITIES = [
   "calendar.items",
   "calendar.create",
   "calendar.update",
+  "calendar.delete",
   "calendar.source",
   "meetings.list",
   "meetings.live",

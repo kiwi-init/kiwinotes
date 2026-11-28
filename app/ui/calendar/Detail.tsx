@@ -5,7 +5,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { CALENDAR_NOTIFY, type CalendarItem, type CalendarNotify } from "../../src/shared/calendar.ts";
+import { CALENDAR_NOTIFY, type CalendarItem, type CalendarNotify, notifyText } from "../../src/shared/calendar.ts";
 import { useT } from "../src/i18n.ts";
 import { whenLine } from "./format.ts";
 import { noteLine } from "./model.ts";
@@ -76,7 +76,7 @@ function NotifyLine({ item, face }: { item: CalendarItem; face: string | null })
   return (
     <div className="kn-cal-kw">
       {face ? <img src={face} alt="" /> : null}
-      <span>{item.notify === "none" ? t("calendar.notify.off") : t("calendar.notify.says", { when: t(`calendar.notify.${item.notify}`) })}</span>
+      <span>{item.notify === "none" ? t("calendar.notify.off") : t("calendar.notify.says", { when: t(notifyText(item.notify).key, notifyText(item.notify).params) })}</span>
     </div>
   );
 }

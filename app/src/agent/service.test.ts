@@ -28,6 +28,8 @@ import { PACKAGE_HEAD_NONE } from "./pacote.ts";
 import { EMPTY_READER, readerFromCapabilities, type VaultReader } from "./tools/reader.ts";
 import { writerFromCapabilities, type VaultWriter } from "./tools/writer.ts";
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
+import { calendarFromCapabilities } from "./tools/calendar-tools.ts";
+import { addDays, dayOf } from "../shared/calendar.ts";
 import { TextIndex } from "../notes/text-index.ts";
 import { Vault } from "../notes/vault.ts";
 import { applyLiveEdits } from "../shared/live-edits.ts";
@@ -3355,5 +3357,90 @@ describe("o Antigravity (spec #25046): os testes do #24666 com o agy falso", () 
     expect((await askAndWait(m, "oi")).at(-1)?.type).toBe("done");
     s = await m.svc.status(true);
     expect(s.gemini).toMatchObject({ loggedIn: true });
+  });
+});
+
+describe("o Calendário pelo agente falso (spec #34706, T34753)", () => {
+  /** Um cofre de verdade num tmp; o Calendário, o leitor e o escritor pelas capacidades, como no app. */
+  function agenda() {
+    const root = path.join(tmp(), "KiwiNotes");
+    mkdirSync(root, { recursive: true });
+    writeFileSync(path.join(root, "Ideias.md"), "# Ideias\n");
+    const vault = new Vault({ root, debounceMs: 20, trash: async () => {} });
+    const caps = uiCapabilities({
+      dictionary: { load: async () => [], save: async (t) => t },
+      snippets: { load: async () => [], save: async (s) => s },
+      history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
+      dictationNotes: { toNew: async () => { throw new Error("not used"); }, append: async () => { throw new Error("not used"); } },
+      settings: { load: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }), save: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }) },
+      clipboardWrite: () => {},
+      notes: vault,
+    });
+    const m = make({ reader: readerFromCapabilities(caps as never), writer: writerFromCapabilities(caps as never) });
+    m.svc.useCalendar(calendarFromCapabilities(caps as never));
+    const file = () => (existsSync(path.join(root, "Calendário.md")) ? readFileSync(path.join(root, "Calendário.md"), "utf8") : "");
+    const lines = () => file().split("\n").filter((l) => l.startsWith("- "));
+    return { root, vault, m, file, lines };
+  }
+  // O agente falso lista a semana a partir de hoje (o relógio de verdade): os pedidos são para amanhã.
+  const tomorrow = () => addDays(dayOf(Date.now()), 1);
+
+  test("frases variadas de hora e aviso: um item só, na hora pedida, com o aviso, sem fim", async () => {
+    const a = agenda();
+    try {
+      await readyNow(a.m);
+      const cases: [string, string, string][] = [
+        ["me lembra amanhã às 10h de ligar para o Bruno e me avisa 50 min antes", "Ligar para o Bruno", "10:00 #lembrete 🔔 50m"],
+        ["amanhã às 15:30 me lembra de pagar a conta, avisa meia hora antes", "Pagar a conta", "15:30 #lembrete 🔔 30m"],
+        ["me lembra amanhã às 8h de levar o exemplo, me avisa 2 horas antes", "Levar o exemplo", "08:00 #lembrete 🔔 2h"],
+        // A reunião é uma linha sem caixa.
+        ["agenda uma reunião amanhã às 11h para revisar o Projeto X, me avisa um dia antes", "Revisar o Projeto X", "11:00 #reuniao 🔔 1d"],
+      ];
+      for (const [ask, title, tail] of cases) {
+        const turn = await askAndWait(a.m, ask);
+        expect([ask, turn.at(-1)]).toEqual([ask, expect.objectContaining({ type: "done", text: expect.stringContaining(`Marquei "${title}" para ${tomorrow()} às`) })]);
+        expect(a.lines()).toContain(`${tail.includes("#reuniao") ? "-" : "- [ ]"} ${title} @ ${tomorrow()} ${tail}`);
+      }
+      // Quatro pedidos, quatro linhas: nenhum aviso virou começo ou fim (nada de "09:10-10:00").
+      expect(a.lines()).toHaveLength(4);
+      expect(a.file()).not.toMatch(/\d{2}:\d{2}-\d{2}:\d{2}/);
+    } finally {
+      a.vault.close();
+    }
+  });
+
+  test("o mesmo pedido duas vezes não duplica; apagar tira a linha, e o Desfazer da Atividade a traz de volta", async () => {
+    const a = agenda();
+    try {
+      await readyNow(a.m);
+      const ask = "me lembra amanhã às 10h de ligar para o Bruno e me avisa 50 min antes";
+      await askAndWait(a.m, ask);
+      await askAndWait(a.m, ask);
+      expect(a.lines()).toEqual([`- [ ] Ligar para o Bruno @ ${tomorrow()} 10:00 #lembrete 🔔 50m`]);
+      const [again] = await a.m.svc.activityLog();
+      expect(again!.changes).toEqual([]);
+      const before = a.file();
+      const turn = await askAndWait(a.m, "apaga o lembrete de ligar para o Bruno");
+      expect(turn.at(-1)).toMatchObject({ type: "done", text: 'Apaguei "Ligar para o Bruno".' });
+      expect(a.lines()).toEqual([]);
+      const [del] = await a.m.svc.activityLog();
+      expect(del!.changes).toEqual([expect.objectContaining({ kind: "replaced", path: "Calendário.md" })]);
+      a.m.svc.useUndo({
+        folder: async () => null,
+        get: async (p) => {
+          const n = await a.vault.get(p).catch(() => null);
+          return n ? { content: n.content, version: n.version } : null;
+        },
+        save: async (p, content, base) => (await a.vault.save(p, content, base)).saved,
+        trash: async () => "gone",
+      });
+      await a.m.svc.undo(del!.id);
+      expect(a.file()).toBe(before);
+      // Pedir para apagar o que não existe não muda nada.
+      expect((await askAndWait(a.m, "desmarca a reunião de exemplo")).at(-1)).toMatchObject({ text: 'Não achei "exemplo" na agenda.' });
+      expect(a.file()).toBe(before);
+    } finally {
+      a.vault.close();
+    }
   });
 });

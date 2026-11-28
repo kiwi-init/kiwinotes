@@ -15,6 +15,7 @@ import {
   addDays,
   CALENDAR_LIMITS,
   type CalendarCreate,
+  type CalendarDeleted,
   type CalendarItem,
   type CalendarItems,
   type CalendarKind,
@@ -26,7 +27,7 @@ import {
   dayOf,
   formatWhen,
   isCalendarKind,
-  isCalendarNotify,
+  normalNotify,
   isCalendarRepeat,
   isDay,
   isDayTime,
@@ -262,6 +263,8 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
 
   async function update(u: CalendarUpdate): Promise<CalendarItem> {
     checkUpdate(u);
+    // O aviso na forma curta (`60m` vira `1h`): a linha e o item dizem o mesmo.
+    if (u.notify !== undefined) u = { ...u, notify: normalNotify(u.notify)! };
     const src = await sources();
     if (u.id.startsWith("m:")) throw new CalendarError("E_READONLY", "a recorded meeting can't change");
     if (u.id.startsWith("f:")) return updateNote(src, u);
@@ -372,7 +375,7 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
         if (toMs(end) - toMs(start) > CALENDAR_LIMITS.spanHours * 3_600_000) throw new CalendarError("E_BAD_ARGS", "calendar.update: at most 24 h");
       }
       let content = setFrontmatter(note.content, "agenda", agendaValue(start, end, allDay));
-      if (u.notify !== undefined) content = setFrontmatter(content, "aviso", u.notify === DEFAULT_NOTIFY.note ? null : NOTE_NOTIFY_OF[u.notify]);
+      if (u.notify !== undefined) content = setFrontmatter(content, "aviso", u.notify === DEFAULT_NOTIFY.note ? null : noteNotifyValue(u.notify));
       const res = await src.notes.save(path, content, note.version);
       if (!res.saved) continue;
       const item = itemsOfNote({ ...note, ...res.meta, content }, { vault: src.notes, internal: false }).dated.find((i) => i.id === u.id);
@@ -384,6 +387,7 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
 
   async function create(c: CalendarCreate): Promise<CalendarItem> {
     checkCreate(c);
+    if (c.notify !== undefined) c = { ...c, notify: normalNotify(c.notify)! };
     const src = await sources();
     const project = c.project ?? null;
     if (project !== null && !projectsOf(src).includes(project)) throw new CalendarError("E_NOT_FOUND", `no project ${project}`);
@@ -392,7 +396,7 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
     const end = allDay ? null : (c.end ?? null);
     const notify = c.notify === undefined || c.notify === DEFAULT_NOTIFY[c.kind] ? null : c.notify;
     if (c.kind === "note") {
-      const fm = [`agenda: "${agendaValue(start, end, allDay)}"`, ...(notify ? [`aviso: "${NOTE_NOTIFY_OF[notify]}"`] : [])];
+      const fm = [`agenda: "${agendaValue(start, end, allDay)}"`, ...(notify ? [`aviso: "${noteNotifyValue(notify)}"`] : [])];
       const note = await src.notes.create(project ?? "", c.title.trim(), `---\n${fm.join("\n")}\n---\n\n# ${c.title.trim()}\n`);
       return itemsOfNote(note, { vault: src.notes, internal: false }).dated[0]!;
     }
@@ -422,6 +426,38 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
     throw new CalendarError("E_CONFLICT", "the note changed while saving; try again");
   }
 
+  /**
+   * Apaga um item (spec #34706, T34753): a linha sai da nota, e o resto da nota fica. Numa repetição, a série inteira.
+   * O item de uma nota inteira (`agenda:`) sai do calendário sem apagar a nota: saem o `agenda:` e o `aviso:`.
+   */
+  async function remove(args: { id: string }): Promise<CalendarDeleted> {
+    const id: unknown = args?.id;
+    if (typeof id !== "string" || !id) throw new CalendarError("E_BAD_ARGS", "calendar.delete: id is required");
+    const src = await sources();
+    const bare = id.replace(/~\d{4}-\d{2}-\d{2}$/, "");
+    if (bare.startsWith("m:")) throw new CalendarError("E_READONLY", "a recorded meeting can't be deleted here");
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (bare.startsWith("f:")) {
+        const path = bare.slice(2);
+        const note = await src.notes.get(path).catch(() => null);
+        if (!note) throw new CalendarError("E_NOT_FOUND", `no note ${path}`);
+        if (!parseAgenda(frontmatterOf(note.content)?.agenda)) throw new CalendarError("E_CONFLICT", "the note has no agenda anymore; read again");
+        const content = setFrontmatter(setFrontmatter(note.content, "agenda", null), "aviso", null);
+        const res = await src.notes.save(path, content, note.version);
+        if (res.saved) return { id, path };
+        continue;
+      }
+      const at = await locate(src, bare);
+      if (!at) throw new CalendarError("E_BAD_ARGS", "unknown id");
+      if (at.where.internal) throw new CalendarError("E_READONLY", "the meetings folder is read-only here");
+      const lines = [...at.raw];
+      lines.splice(at.line, 1);
+      const res = await src.notes.save(at.note.path, lines.join("\n"), at.note.version);
+      if (res.saved) return { id, path: at.note.path };
+    }
+    throw new CalendarError("E_CONFLICT", "the note changed while saving; read again");
+  }
+
   /** A nota de onde o item veio, para a aba "Nota" do painel (#32193): também a reunião da pasta interna. */
   async function source(id: unknown): Promise<CalendarSource> {
     if (typeof id !== "string" || !id) throw new CalendarError("E_BAD_ARGS", "calendar.source: id is required");
@@ -443,7 +479,7 @@ export function calendarService(sources: () => Promise<CalendarSources>, today: 
     throw new CalendarError("E_NOT_FOUND", `no note ${path}`);
   }
 
-  return { items, create, update, source };
+  return { items, create, update, delete: remove, source };
 }
 
 
@@ -554,12 +590,14 @@ function agendaValue(start: string, end: string | null, allDay: boolean): string
   return e ? `${day} ${s}-${e}` : `${day} ${s}`;
 }
 
-const NOTE_NOTIFY_OF: Record<CalendarNotify, string> = { none: "nenhum", atTime: "0", "10m": "10m", "30m": "30m", dayBefore: "1d" };
+/** O `aviso:` do frontmatter: `nenhum`, `0` (na hora), `1d` (na véspera) ou a antecedência livre (`50m`, `2h`, `3d`). */
+const noteNotifyValue = (n: CalendarNotify) => (n === "none" ? "nenhum" : n === "atTime" ? "0" : n === "dayBefore" ? "1d" : n);
 function noteNotify(v: unknown): CalendarNotify | null {
   const s = typeof v === "number" ? String(v) : typeof v === "string" ? v.trim() : null;
   if (s === null) return null;
-  const hit = Object.entries(NOTE_NOTIFY_OF).find(([, t]) => t === s || (s === "none" && t === "nenhum"));
-  return hit ? (hit[0] as CalendarNotify) : null;
+  if (s === "nenhum" || s === "none") return "none";
+  if (s === "0") return "atTime";
+  return normalNotify(s);
 }
 
 /** Troca (ou põe, ou tira com `null`) uma chave de uma linha só no frontmatter, sem mexer no resto. */
@@ -592,6 +630,8 @@ function checkTitle(title: unknown, cap: string): void {
     throw new CalendarError("E_BAD_ARGS", `${cap}: title can't have a date, a kind tag, 🔔, 🔕, 🔁 or ⏭`);
 }
 
+const NOTIFY_HELP = (cap: string) => `${cap}: notify is none, atTime, dayBefore or a lead time like 10m, 2h, 3d (up to 30 days)`;
+
 function checkCreate(c: CalendarCreate): void {
   if (!c || typeof c !== "object") throw new CalendarError("E_BAD_ARGS", "calendar.create: give an object");
   if (!isCalendarKind(c.kind)) throw new CalendarError("E_BAD_ARGS", "calendar.create: unknown kind");
@@ -599,7 +639,7 @@ function checkCreate(c: CalendarCreate): void {
   if (c.start === undefined) throw new CalendarError("E_BAD_ARGS", "calendar.create: start is required");
   checkTimes(c.start, c.end, c.allDay, "calendar.create");
   if (c.allDay === false && isDay(c.start)) throw new CalendarError("E_BAD_ARGS", "calendar.create: a timed item needs AAAA-MM-DDTHH:MM");
-  if (c.notify !== undefined && !isCalendarNotify(c.notify)) throw new CalendarError("E_BAD_ARGS", "calendar.create: unknown notify");
+  if (c.notify !== undefined && normalNotify(c.notify) === null) throw new CalendarError("E_BAD_ARGS", NOTIFY_HELP("calendar.create"));
   if (c.repeat !== undefined && c.repeat !== null && !isCalendarRepeat(c.repeat)) throw new CalendarError("E_BAD_ARGS", "calendar.create: repeat is daily, weekly or null");
   if (c.repeat && c.kind === "note") throw new CalendarError("E_BAD_ARGS", "calendar.create: a note doesn't repeat");
   if (c.project !== undefined && c.project !== null && (typeof c.project !== "string" || !c.project || c.project.includes("/")))
@@ -611,7 +651,7 @@ function checkUpdate(u: CalendarUpdate): void {
   if (u.title !== undefined) checkTitle(u.title, "calendar.update");
   checkTimes(u.start, u.end, u.allDay, "calendar.update");
   if (u.done !== undefined && typeof u.done !== "boolean") throw new CalendarError("E_BAD_ARGS", "calendar.update: done must be true or false");
-  if (u.notify !== undefined && !isCalendarNotify(u.notify)) throw new CalendarError("E_BAD_ARGS", "calendar.update: unknown notify");
+  if (u.notify !== undefined && normalNotify(u.notify) === null) throw new CalendarError("E_BAD_ARGS", NOTIFY_HELP("calendar.update"));
   if (u.kind !== undefined && (!isCalendarKind(u.kind) || u.kind === "note")) throw new CalendarError("E_BAD_ARGS", "calendar.update: kind is meeting, reminder, task or focus");
   if (u.repeat !== undefined && u.repeat !== null && !isCalendarRepeat(u.repeat)) throw new CalendarError("E_BAD_ARGS", "calendar.update: repeat is daily, weekly or null");
   if (u.only !== undefined) {
