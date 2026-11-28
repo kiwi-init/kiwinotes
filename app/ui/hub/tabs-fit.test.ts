@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { TABS_FADE, tabsClip, tabsScrollToShow } from "./tabs-fit.ts";
+import { TABS_FADE, tabsClip, tabsFade, tabsScrollToShow } from "./tabs-fit.ts";
 
 describe("tabsClip", () => {
   test("cabe tudo: nada esmaece (e a faixa não rola)", () => {
@@ -37,9 +37,27 @@ describe("tabsScrollToShow", () => {
   });
 });
 
-test("o hub.css esmaece os mesmos px do TABS_FADE", () => {
+describe("tabsFade", () => {
+  test("com folga, os 24 px", () => {
+    expect(tabsFade(260, 80)).toBe(TABS_FADE);
+  });
+  test("faixa curta (o Ditado a 480 px, #34567): encolhe para a aba caber inteira entre as duas bordas", () => {
+    const fade = tabsFade(102, 80);
+    expect(fade).toBe(11);
+    expect(80 + 2 * fade).toBeLessThanOrEqual(102);
+  });
+  test("a aba maior que a faixa: sem esmaecido", () => {
+    expect(tabsFade(60, 80)).toBe(0);
+  });
+  test("com o esmaecido menor, a aba no fim vem inteira para dentro", () => {
+    // Faixa de 102 px, aba de 80 px em x 300: termina a 11 px da borda.
+    expect(tabsScrollToShow(300, 80, 0, 102, 500, tabsFade(102, 80))).toBe(300 + 80 + 11 - 102);
+  });
+});
+
+test("o hub.css esmaece pelo --tabs-fade, com os px do TABS_FADE como padrão", () => {
   const css = readFileSync(join(import.meta.dir, "hub.css"), "utf8");
   const fades = [...css.matchAll(/\.kn-tabs-track\[data-clip="[^"]+"\] \{\s*mask-image: ([^;]+);/g)].map((m) => m[1]!);
   expect(fades).toHaveLength(3);
-  for (const f of fades) expect(f).toContain(`${TABS_FADE}px`);
+  for (const f of fades) expect(f).toContain(`var(--tabs-fade, ${TABS_FADE}px)`);
 });

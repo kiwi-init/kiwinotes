@@ -74,7 +74,8 @@
 }
 
 /* A faixa das abas (#496, `tabs-fit.ts`): sem `data-clip`, cabe tudo e nada rola (o anel do foco sai inteiro). Com ele,
-   rola de lado sem barra, também pelo trackpad, e a borda que esconde abas esmaece nos 24 px do `TABS_FADE`. */
+   rola de lado sem barra, também pelo trackpad, e a borda que esconde abas esmaece nos 24 px do `TABS_FADE`, ou menos
+   quando a faixa não cabe a aba escolhida e as duas bordas (`--tabs-fade`, `tabsFade`). */
 .kn-tabs-track {
   position: relative;
   display: flex;
@@ -93,15 +94,15 @@
 }
 
 .kn-tabs-track[data-clip="end"] {
-  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--tabs-fade, 24px)), transparent);
 }
 
 .kn-tabs-track[data-clip="start"] {
-  mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - var(--tabs-fade, 24px)), transparent);
 }
 
 .kn-tabs-track[data-clip="start end"] {
-  mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 var(--tabs-fade, 24px), #000 calc(100% - var(--tabs-fade, 24px)), transparent);
 }
 
 .kn-tabs-pill {

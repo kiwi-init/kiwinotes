@@ -7,7 +7,7 @@ import "../kiwicat-v2/bubble-md.css";
 import "./hub.css";
 import { DoubtCard } from "./DoubtCard";
 import { GooLayer } from "./Goo.tsx";
-import { tabsClip, tabsScrollToShow } from "./tabs-fit.ts";
+import { tabsClip, tabsFade, tabsScrollToShow } from "./tabs-fit.ts";
 import { KiwiCat, useAgentCat } from "./KiwiCat";
 import { Onboarding } from "./onboarding/Onboarding.tsx";
 import { Welcome } from "./onboarding/Welcome.tsx";
@@ -117,7 +117,10 @@ function Tabs({ section, onGo, homeView, onHomeView }: { section: Tab; onGo(s: T
         return clip();
       }
       track.dataset.clip ??= "end";
-      track.scrollLeft = tabsScrollToShow(tab.offsetLeft, tab.offsetWidth, track.scrollLeft, track.clientWidth, track.scrollWidth);
+      // Faixa curta (o Ditado a 480 px): o esmaecido encolhe para a escolhida caber inteira fora dele.
+      const fade = tabsFade(track.clientWidth, tab.offsetWidth);
+      track.style.setProperty("--tabs-fade", `${fade}px`);
+      track.scrollLeft = tabsScrollToShow(tab.offsetLeft, tab.offsetWidth, track.scrollLeft, track.clientWidth, track.scrollWidth, fade);
       clip();
     };
     const measure = (resized = false) => {
