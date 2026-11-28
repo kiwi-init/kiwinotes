@@ -1,12 +1,21 @@
 // O "+ Novo" da aba Calendário (T32155): título, tipo, projeto, dia e hora (sem hora, o dia todo). O item vai para
-// `<projeto>/Pendências.md`, ou `Calendário.md` na raiz sem projeto (o main decide, T32154).
+// `<projeto>/Pendências.md`, ou `Calendário.md` na raiz sem projeto (o main decide, T32154). O tipo Nota vira uma nota
+// nova, `<projeto>/<título>.md`, e o rodapé diz essa (#492).
 
 import { useEffect, useRef, useState } from "react";
 
 import { CALENDAR_KINDS, type CalendarCreate, type CalendarKind, titleProblem } from "../../src/shared/calendar.ts";
+import { noteFileName } from "../../src/shared/note-name.ts";
 import { useT } from "../src/i18n.ts";
 
-const whereOf = (project: string) => (project ? `${project}/Pendências.md` : "Calendário.md"); // i18n-ok: o arquivo que o main escreve
+const inFolder = (project: string, name: string) => `${project ? `${project}/` : ""}${name}.md`;
+
+/** O rodapé do "+ Novo": o arquivo que o `calendar.create` escreve. A Nota vira `<projeto>/<título>.md` (com " 2" se o nome já existe). */
+export function whereOf(kind: CalendarKind, project: string, title: string): { key: "calendar.new.where" | "calendar.new.whereNote" | "calendar.new.whereNoteBlank"; path?: string } {
+  if (kind !== "note") return { key: "calendar.new.where", path: inFolder(project, project ? "Pendências" : "Calendário") }; // i18n-ok: o arquivo que o main escreve
+  const name = noteFileName(title);
+  return name ? { key: "calendar.new.whereNote", path: inFolder(project, name) } : { key: "calendar.new.whereNoteBlank" };
+}
 
 export function NewItem({ day, projects, onCancel, onCreate }: { day: string; projects: string[]; onCancel(): void; onCreate(c: CalendarCreate): void }) {
   const { t } = useT();
@@ -89,7 +98,10 @@ export function NewItem({ day, projects, onCancel, onCreate }: { day: string; pr
             <input type="time" name="end" step={900} value={end} disabled={!time} onChange={(e) => setEnd(e.target.value)} />
           </label>
         </div>
-        <p className="kn-cal-muted">{t("calendar.new.where", { path: whereOf(project) })}</p>
+        {(() => {
+          const w = whereOf(kind, project, title);
+          return <p className="kn-cal-muted kn-cal-where">{t(w.key, w.path ? { path: w.path } : undefined)}</p>;
+        })()}
         <div className="kn-cal-acts">
           <button type="button" className="kn-cal-btn" onClick={onCancel}>
             {t("calendar.new.cancel")}

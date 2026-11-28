@@ -4,6 +4,7 @@
 
 import { lstatSync } from "node:fs";
 import path from "node:path";
+import { MAX_SEGMENT, noteFileName } from "../shared/note-name.ts";
 import { linkSafeName } from "../shared/wikilinks.ts";
 
 /** Um erro com código, que o AppEngine passa à UI como está. */
@@ -17,7 +18,6 @@ export class VaultError extends Error {
 }
 
 const MAX_PATH = 1024;
-const MAX_SEGMENT = 200;
 
 function segments(input: unknown, what: string): string[] {
   if (typeof input !== "string") throw new VaultError("E_BAD_ARGS", `${what} must be a string`);
@@ -98,21 +98,10 @@ export function linkSafeTarget(from: string, to: string): string {
   return clean === name ? to : notePath(`${to.slice(0, cut + 1)}${clean}.md`);
 }
 
-/**
- * Um título vira nome de arquivo: sem os caracteres que o Obsidian e o macOS não aceitam num nome, sem pontos no começo
- * (arquivo oculto) e sem espaço nas pontas. Os pontos e os espaços do começo saem juntos (T15890): tirar só os pontos
- * depois do `trim` deixava `../fora` como ` fora`. O corte no tamanho também não deixa espaço no fim.
- */
+/** Um título vira nome de arquivo: a regra está em `shared/note-name.ts`, que a UI também usa (o "+ Novo", #492). */
 export function fileNameFor(title: unknown): string {
   if (typeof title !== "string") throw new VaultError("E_BAD_ARGS", "title must be a string");
-  const name = title
-    .normalize("NFC")
-    .replace(/[\\/:*?"<>|#^[\]\0]/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/^[.\s]+/, "")
-    .trimEnd()
-    .slice(0, MAX_SEGMENT - 8)
-    .trimEnd();
+  const name = noteFileName(title);
   if (!name) throw new VaultError("E_BAD_ARGS", "title is empty");
   return name;
 }
