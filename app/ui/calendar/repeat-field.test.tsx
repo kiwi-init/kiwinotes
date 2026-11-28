@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { setAppLocale } from "../src/i18n.ts";
-import { NewItem } from "./NewItem.tsx";
+import { createOf, NewItem } from "./NewItem.tsx";
 import { modeOf, RepeatField, repeatOfForm, ruleFor } from "./RepeatField.tsx";
 
 afterEach(() => setAppLocale({ setting: "auto", locale: "pt", system: "pt" }));
@@ -45,5 +45,12 @@ describe("o campo da repetição", () => {
     const html = renderToStaticMarkup(<NewItem day="2026-12-07" projects={["Projeto X"]} onCancel={() => {}} onCreate={() => {}} />);
     expect(html).toContain('name="repeat"');
     for (const v of ["", "daily", "weekly", "monthly", "yearly", "weekdays", "custom"]) expect(html).toContain(`<option value="${v}"`);
+  });
+
+  test("o Criar manda a repetição; a Nota e o 'não repete' vão sem ela", () => {
+    const f = { kind: "task" as const, title: " Aula de violão ", project: "", date: "2026-12-07", time: "18:00", end: "", repeat: "2w:mo,we/10x" as const };
+    expect(createOf(f)).toEqual({ kind: "task", title: "Aula de violão", project: null, start: "2026-12-07T18:00", end: null, allDay: false, repeat: "2w:mo,we/10x" });
+    expect(createOf({ ...f, kind: "note" })).not.toHaveProperty("repeat");
+    expect(createOf({ ...f, repeat: null })).not.toHaveProperty("repeat");
   });
 });

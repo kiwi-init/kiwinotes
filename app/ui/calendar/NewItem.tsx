@@ -18,6 +18,19 @@ export function whereOf(kind: CalendarKind, project: string, title: string): { k
   return name ? { key: "calendar.new.whereNote", path: inFolder(project, name) } : { key: "calendar.new.whereNoteBlank" };
 }
 
+/** O pedido do `calendar.create` que o Criar manda. A Nota não repete (o main recusa). */
+export function createOf(f: { kind: CalendarKind; title: string; project: string; date: string; time: string; end: string; repeat: CalendarRepeat | null }): CalendarCreate {
+  return {
+    kind: f.kind,
+    title: f.title.trim(),
+    project: f.project || null,
+    start: f.time ? `${f.date}T${f.time}` : f.date,
+    end: f.time && f.end ? `${f.date}T${f.end}` : null,
+    allDay: !f.time,
+    ...(f.kind !== "note" && f.repeat ? { repeat: f.repeat } : {}),
+  };
+}
+
 export function NewItem({ day, projects, onCancel, onCreate }: { day: string; projects: string[]; onCancel(): void; onCreate(c: CalendarCreate): void }) {
   const { t } = useT();
   const [title, setTitle] = useState("");
@@ -34,17 +47,7 @@ export function NewItem({ day, projects, onCancel, onCreate }: { day: string; pr
   const bad = title.trim() ? titleProblem(title) : null;
   const ok = title.trim() && !bad && /^\d{4}-\d{2}-\d{2}$/.test(date) && (!end || (time && end > time)) && (kind === "note" || repeat !== undefined);
   const submit = () => {
-    if (!ok) return;
-    onCreate({
-      kind,
-      title: title.trim(),
-      project: project || null,
-      start: time ? `${date}T${time}` : date,
-      end: time && end ? `${date}T${end}` : null,
-      allDay: !time,
-      // A nota não repete (o main recusa).
-      ...(kind !== "note" && repeat ? { repeat } : {}),
-    });
+    if (ok) onCreate(createOf({ kind, title, project, date, time, end, repeat: repeat ?? null }));
   };
   return (
     <div
