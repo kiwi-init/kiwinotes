@@ -86,7 +86,10 @@ interface Located {
   internal: boolean;
 }
 
-export function calendarService(sources: () => Promise<CalendarSources>) {
+/** O dia de hoje (AAAA-MM-DD, na hora local); os testes passam um fixo. */
+export type CalendarToday = () => string;
+
+export function calendarService(sources: () => Promise<CalendarSources>, today: CalendarToday = () => dayOf(Date.now())) {
   /** As pastas onde ler: as Notas, e a das reuniões se for outra. */
   const vaults = (src: CalendarSources): Located[] =>
     src.meetings === src.notes ? [{ vault: src.notes, internal: false }] : [{ vault: src.notes, internal: false }, { vault: src.meetings, internal: true }];
@@ -285,8 +288,11 @@ export function calendarService(sources: () => Promise<CalendarSources>) {
       if (u.done !== undefined) {
         if (u.done && cur?.repeat && at.occurrence) {
           const step = cur.repeat === "daily" ? 1 : 7;
+          // A 1ª vez em aberto. Num lembrete, a vez que já passou sem o Feito não segura a série (#483): conta de hoje,
+          // ou da vez marcada, se ela for antes. Numa pendência, a vez atrasada continua segurando.
+          const from = cur.kind === "reminder" ? (at.occurrence < today() ? at.occurrence : today()) : "";
           let first = cur.start.slice(0, 10);
-          while (cur.skip.includes(first)) first = addDays(first, step);
+          while (first < from || cur.skip.includes(first)) first = addDays(first, step);
           if (at.occurrence !== first) {
             // Uma vez depois da 1ª em aberto: só ela sai da agenda (`⏭`), e as de antes seguem abertas (#450).
             patch = { ...patch, skip: [...cur.skip, at.occurrence] };

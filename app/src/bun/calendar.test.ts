@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { Vault } from "../notes/vault.ts";
-import { type CalendarItem, notifyAt, parseWhen, rewriteWhen, toMs } from "../shared/calendar.ts";
+import { addDays, type CalendarItem, notifyAt, parseWhen, rewriteWhen, toMs } from "../shared/calendar.ts";
 import { tempDir } from "../../test/tmp.ts";
 import { alertsBetween, calendarService, occurrences, setFrontmatter } from "./calendar.ts";
 
@@ -17,7 +17,10 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-async function open(files: Record<string, string>, opts: { meetings?: Record<string, string>; locale?: "pt" | "en"; live?: string | null } = {}) {
+/** O "hoje" fixo dos testes: antes de todas as datas daqui, para nenhum resultado depender do relógio. */
+const EARLY = { day: "2026-11-01" };
+
+async function open(files: Record<string, string>, opts: { meetings?: Record<string, string>; locale?: "pt" | "en"; live?: string | null; today?: { day: string } } = {}) {
   const mk = async (fs: Record<string, string>) => {
     const d = tempDir("kiwinotes-calendar-test-");
     dirs.push(d);
@@ -34,7 +37,7 @@ async function open(files: Record<string, string>, opts: { meetings?: Record<str
   };
   const notes = await mk(files);
   const meetings = opts.meetings ? await mk(opts.meetings) : notes;
-  const cal = calendarService(async () => ({ notes: notes.v, meetings: meetings.v, liveSession: opts.live ?? null, locale: opts.locale ?? "pt" }));
+  const cal = calendarService(async () => ({ notes: notes.v, meetings: meetings.v, liveSession: opts.live ?? null, locale: opts.locale ?? "pt" }), () => (opts.today ?? EARLY).day);
   const read = (rel: string) => readFileSync(path.join(notes.root, rel), "utf8");
   const write = async (rel: string, content: string) => {
     const cur = await notes.v.get(rel);
@@ -453,6 +456,48 @@ describe("alertsBetween", () => {
     expect(a.key).toBe(b.key);
     const c = alertsBetween([item({ start: "2026-11-27T15:00" })], 0, Number.MAX_SAFE_INTEGER)[0]!;
     expect(c.key).not.toBe(a.key);
+  });
+});
+
+describe("calendar.update: a vez esquecida de um lembrete repetido (#483)", () => {
+  const REGAR = "# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-07 08:00 #lembrete 🔁 dia\n";
+  const vez = async (cal: Awaited<ReturnType<typeof open>>["cal"], day: string) => (await cal.items({ from: day, to: addDays(day, 1) })).items[0]!;
+
+  test("esqueceu o dia 7 e marca o de hoje todo dia: a série anda, e a linha não junta ⏭", async () => {
+    const today = { day: "2026-12-08" };
+    const { cal, read } = await open({ "Projeto X/Pendências.md": REGAR }, { today });
+    for (const day of ["2026-12-08", "2026-12-09", "2026-12-10"]) {
+      today.day = day;
+      await cal.update({ id: (await vez(cal, day)).id, done: true });
+    }
+    expect(read("Projeto X/Pendências.md")).toBe("# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-11 08:00 #lembrete 🔁 dia\n");
+  });
+
+  test("a linha que já juntou ⏭ antes da correção: o Feito de hoje tira os ⏭ que ficaram para trás", async () => {
+    const { cal, read } = await open(
+      { "Projeto X/Pendências.md": "# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-07 08:00 #lembrete 🔁 dia ⏭ 2026-12-08 ⏭ 2026-12-09\n" },
+      { today: { day: "2026-12-10" } },
+    );
+    await cal.update({ id: (await vez(cal, "2026-12-10")).id, done: true });
+    expect(read("Projeto X/Pendências.md")).toBe("# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-11 08:00 #lembrete 🔁 dia\n");
+  });
+
+  test("um Feito adiantado, depois de hoje, ainda vira ⏭: a vez de hoje segue aberta", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": REGAR }, { today: { day: "2026-12-08" } });
+    await cal.update({ id: (await vez(cal, "2026-12-10")).id, done: true });
+    expect(read("Projeto X/Pendências.md")).toBe("# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-07 08:00 #lembrete 🔁 dia ⏭ 2026-12-10\n");
+  });
+
+  test("marcar a própria vez esquecida anda a série a partir dela", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": REGAR }, { today: { day: "2026-12-09" } });
+    await cal.update({ id: (await vez(cal, "2026-12-07")).id, done: true });
+    expect(read("Projeto X/Pendências.md")).toBe("# Projeto X\n\n- [ ] Regar as plantas @ 2026-12-08 08:00 #lembrete 🔁 dia\n");
+  });
+
+  test("numa pendência repetida, a vez atrasada continua segurando: o Feito de hoje vira ⏭", async () => {
+    const { cal, read } = await open({ "Projeto X/Pendências.md": "# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-12-07 08:00 🔁 dia\n" }, { today: { day: "2026-12-08" } });
+    await cal.update({ id: (await vez(cal, "2026-12-08")).id, done: true });
+    expect(read("Projeto X/Pendências.md")).toBe("# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-12-07 08:00 🔁 dia ⏭ 2026-12-08\n");
   });
 });
 
