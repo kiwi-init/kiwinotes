@@ -323,6 +323,46 @@ describe("calendar.update: a duração (#449)", () => {
   });
 });
 
+describe("calendar.update numa nota com agenda: a duração (#484)", () => {
+  const ENSAIO = `---\nagenda: "2026-12-02 10:00-11:00"\n---\n\n# Ensaio da banda\n`;
+  const ID = "f:Ensaio da banda.md";
+
+  test("mudar só o start mantém a duração de 1 h", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    const moved = await cal.update({ id: ID, start: "2026-12-02T15:00" });
+    expect(moved).toMatchObject({ start: "2026-12-02T15:00", end: "2026-12-02T16:00" });
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-02 15:00-16:00"');
+  });
+
+  test("só o start, para tarde da noite: o fim passa da meia-noite com a mesma duração", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    const moved = await cal.update({ id: ID, start: "2026-12-02T23:30" });
+    expect(moved.end).toBe("2026-12-03T00:30");
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-02 23:30-00:30"');
+  });
+
+  test("um end antes do start da nota, igual a ele ou a mais de 24 h é recusado, e nada muda", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    for (const end of ["2026-12-02T09:00", "2026-12-02T10:00", "2026-12-03T12:00"]) expect(await code(cal.update({ id: ID, end }))).toBe("E_BAD_ARGS");
+    expect(read("Ensaio da banda.md")).toBe(ENSAIO);
+  });
+
+  test("um end depois do start, até 24 h, grava; o aviso sozinho não mexe no horário", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    expect(await cal.update({ id: ID, end: "2026-12-02T12:30" })).toMatchObject({ start: "2026-12-02T10:00", end: "2026-12-02T12:30" });
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-02 10:00-12:30"');
+    await cal.update({ id: ID, notify: "none" });
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-02 10:00-12:30"');
+  });
+
+  test("o dia inteiro e a volta para um horário seguem como antes", async () => {
+    const { cal, read } = await open({ "Ensaio da banda.md": ENSAIO });
+    expect(await cal.update({ id: ID, allDay: true })).toMatchObject({ start: "2026-12-02", end: null, allDay: true });
+    expect(await cal.update({ id: ID, allDay: false, start: "2026-12-03T09:00" })).toMatchObject({ start: "2026-12-03T09:00", end: null });
+    expect(read("Ensaio da banda.md")).toContain('agenda: "2026-12-03 09:00"');
+  });
+});
+
 describe("calendar.create", () => {
   test("com projeto vai para Pendências.md; sem, para Calendário.md; a linha na língua do app", async () => {
     const { cal, read } = await open({ "Projeto X/Planejamento.md": PROJETO });
