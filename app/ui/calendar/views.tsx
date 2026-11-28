@@ -7,7 +7,7 @@ import { type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactN
 import type { CalendarItem } from "../../src/shared/calendar.ts";
 import { useT } from "../src/i18n.ts";
 import { agendaHead, dayHead, timeRange, weekdayNames } from "./format.ts";
-import { fitColumns, itemsOfDay, layoutDay, type MoreRun, nowMinutes } from "./model.ts";
+import { allDayFit, fitColumns, itemsOfDay, layoutDay, type MoreRun, nowMinutes } from "./model.ts";
 
 /** A altura de uma hora na grade, em px. */
 export const HOUR_PX = 48;
@@ -88,6 +88,10 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
   const { t, locale } = useT();
   const scroller = useRef<HTMLDivElement>(null);
   const cols = { gridTemplateColumns: `52px repeat(${days.length}, minmax(0, 1fr))` };
+  // A faixa do dia todo abre inteira pelo "+N" de qualquer dia, e fecha pelo "Mostrar menos" (10.8).
+  const [allOpen, setAllOpen] = useState(false);
+  const allDay = days.map((d) => itemsOfDay(items, d).filter((i) => i.allDay));
+  const allFolds = allDay.some((list) => allDayFit(list, false).hidden > 0);
   // Abre rolada para o começo do dia útil (ou para perto do agora, se for mais tarde).
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -130,17 +134,28 @@ export function TimeGrid({ days, items, today, now, h, s }: { days: string[]; it
       </div>
       <div className="kn-cal-allday" style={cols}>
         <span className="kn-cal-allday-label">{t("calendar.allDay")}</span>
-        {days.map((d) => (
-          <div key={d} className="kn-cal-allday-cell" data-day={d}>
-            {itemsOfDay(items, d)
-              .filter((i) => i.allDay)
-              .map((i) => (
+        {days.map((d, di) => {
+          const fit = allDayFit(allDay[di]!, allOpen);
+          return (
+            <div key={d} className="kn-cal-allday-cell" data-day={d}>
+              {fit.shown.map((i) => (
                 <ItemBox key={i.id} item={i} h={h} s={s} className="kn-cal-chip">
                   <b>{i.title}</b>
                 </ItemBox>
               ))}
-          </div>
-        ))}
+              {fit.hidden ? (
+                <button type="button" className="kn-cal-cell-more kn-cal-allday-more" aria-label={t("calendar.allDayMore", { n: fit.hidden })} onClick={() => setAllOpen(true)}>
+                  {t("calendar.more", { n: fit.hidden })}
+                </button>
+              ) : null}
+              {allOpen && allFolds && di === days.length - 1 ? (
+                <button type="button" className="kn-cal-cell-more kn-cal-allday-less" onClick={() => setAllOpen(false)}>
+                  {t("calendar.allDayLess")}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
       <div className="kn-cal-scroll" ref={scroller}>
         <div className="kn-cal-hours" ref={hours} style={{ ...cols, height: 24 * HOUR_PX }}>

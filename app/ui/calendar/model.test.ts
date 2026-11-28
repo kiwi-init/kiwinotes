@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { CalendarItem } from "../../src/shared/calendar.ts";
-import { fitColumns, itemsOfDay, layoutDay, mondayOf, moveItem, newItemDay, noteLine, nowMinutes, onDay, resizeItem, sameNote, snoozePatch, stepAnchor, viewRange } from "./model.ts";
+import { allDayFit, fitColumns, itemsOfDay, layoutDay, mondayOf, moveItem, newItemDay, noteLine, nowMinutes, onDay, resizeItem, sameNote, snoozePatch, stepAnchor, viewRange } from "./model.ts";
 
 const item = (o: Partial<CalendarItem> & Pick<CalendarItem, "id" | "start">): CalendarItem => ({
   kind: "task",
@@ -226,5 +226,16 @@ describe("as repetições no cartão e no painel largo", () => {
     // Aberta uma vez da série, as outras vezes não são "ligações" dela.
     expect(sameNote(vezes[2]!, [...vezes, cafe, outra]).map((i) => i.id)).toEqual([cafe.id]);
     expect(sameNote({ ...cafe, source: null }, vezes)).toEqual([]);
+  });
+});
+
+describe("a faixa do dia todo (10.8)", () => {
+  test("até três, todos; mais que isso, dois e o resto no +N; aberta, todos", () => {
+    const l = ["a", "b", "c", "d", "e"];
+    expect(allDayFit(l.slice(0, 3), false)).toEqual({ shown: ["a", "b", "c"], hidden: 0 });
+    expect(allDayFit(l.slice(0, 4), false)).toEqual({ shown: ["a", "b"], hidden: 2 });
+    expect(allDayFit(l, false)).toEqual({ shown: ["a", "b"], hidden: 3 });
+    expect(allDayFit(l, true)).toEqual({ shown: l, hidden: 0 });
+    expect(allDayFit([], false)).toEqual({ shown: [], hidden: 0 });
   });
 });

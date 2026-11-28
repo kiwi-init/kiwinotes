@@ -15,6 +15,8 @@ export const ptCalendar = {
   "calendar.nextDay": "(+1 dia)",
   "calendar.more": "+{n}",
   "calendar.moreHidden": "Mais {n} neste horário",
+  "calendar.allDayMore": "Mais {n} no dia todo",
+  "calendar.allDayLess": "Mostrar menos",
   "calendar.loading": "Lendo o calendário…",
   "calendar.loadFailed": "Não consegui ler o calendário.",
   "calendar.retry": "Tentar de novo",

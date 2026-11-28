@@ -10,6 +10,7 @@
 //   inteiro no Dia e com um "+N" na Semana estreita; o "+N" abre os outros, com o cartão e o arrastar; no Dia estreito, a lista abre dentro da grade.
 // - O Sim da "atrasada" numa pendência repetida leva só a vez para amanhã, e a sugestão não volta na vez anterior (#485).
 // - O Adiar numa vez de repetição leva só aquela vez (#530), e as Ligações mostram a repetição uma vez só (#532).
+// - A faixa do dia todo tem teto: com cinco, dois à vista e o "+3", que abre a faixa; o "Mostrar menos" fecha (10.8).
 // Os prints de cada vista, em pt e en, e um vídeo da ida e da volta do painel largo.
 // Da raiz do app: `bun scripts/calendar-ui-check.ts [pasta]`. Pegue `kiwi lock bench`.
 import assert from "node:assert/strict";
@@ -117,6 +118,8 @@ try {
   // Uma pendência repetida que começou há 3 dias, à meia-noite: sempre tem uma vez atrasada, a qualquer hora (#485).
   await invoke("notes.create", { folder: "Casa", title: "Rotina", content: `# Rotina\n\n- [ ] Regar as plantas @ ${day(-3)} 00:00 🔁 dia\n` });
   // Uma repetição que começa amanhã (nunca atrasada) e uma reunião na mesma nota, para o Adiar e as Ligações (#530, #532).
+  // Cinco coisas de dia todo no mesmo dia, para o teto da faixa (10.8).
+  await invoke("notes.create", { folder: "Casa", title: "Feriado", content: `# Feriado\n\n${["Feira", "Doar roupas", "Aniversário da Bia", "Trocar o filtro", "Devolver o livro"].map((t) => `- ${t} @ ${day(3)} #lembrete`).join("\n")}\n` });
   await invoke("notes.create", { folder: "Casa", title: "Hábitos", content: `# Hábitos\n\n- [ ] Tomar água @ ${day(1)} 08:00 🔁 dia\n- Café com a Ana @ ${day(1)} 10:00-10:30 #reuniao\n` });
   await invoke("notes.create", { folder: "Casa", title: "Mudança", content: `# Mudança\n\n- [ ] Comprar fita e caixas @ ${day(2)} 09:00\n- [ ] Levar a geladeira\n` });
   // Amanhã, cinco coisas às 18h e um par às 20h, para o lado a lado (ponto 9): amanhã, para nada delas virar "atrasada".
@@ -449,6 +452,33 @@ try {
         await p.waitForSelector(water, { state: "detached" });
         await view(p, "week");
         checks.push(`${lang}: as Ligações do Café mostram o "Tomar água" uma vez (#532), e o Adiar na vez de ${day(2)} põe o ⏭ e a linha avulsa de ${day(3)}, com a série em ${day(1)} (#530)`);
+
+        // 4f. A faixa do dia todo com teto (10.8): no Dia de daqui a 3 dias, dois à vista e o "+3"; o "+3" abre os cinco, e o
+        // "Mostrar menos" fecha.
+        await view(p, "day");
+        const strip = `${pane} .kn-cal-allday-cell[data-day="${day(3)}"]`;
+        for (let n = 0; !(await p.locator(strip).count()); n++) {
+          assert.ok(n < 4, "o Dia de daqui a 3 dias");
+          await p.locator(`${pane} .kn-cal-tool > .kn-cal-ic`, { hasText: "›" }).click();
+          await Bun.sleep(150);
+        }
+        const chips = p.locator(`${strip} .kn-cal-chip`);
+        await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 2, `${strip} .kn-cal-chip`);
+        const stripMore = p.locator(`${strip} .kn-cal-allday-more`);
+        assert.equal((await stripMore.textContent())?.trim(), "+3", "o +N da faixa");
+        assert.equal(await stripMore.getAttribute("aria-label"), lang === "pt" ? "Mais 3 no dia todo" : "3 more all day");
+        await p.screenshot({ path: join(shots, "dia-todo-teto.png") });
+        await stripMore.click();
+        await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 5, `${strip} .kn-cal-chip`);
+        const less = p.locator(`${strip} .kn-cal-allday-less`);
+        assert.equal((await less.textContent())?.trim(), lang === "pt" ? "Mostrar menos" : "Show less");
+        await p.screenshot({ path: join(shots, "dia-todo-aberto.png") });
+        await less.click();
+        await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 2, `${strip} .kn-cal-chip`);
+        assert.equal(await chips.count(), 2);
+        await p.locator(`${pane} .kn-cal-tool > .kn-cal-btn`).first().click();
+        await view(p, "week");
+        checks.push(`${lang}: a faixa do dia todo com cinco mostra dois e o +3, abre os cinco e fecha pelo Mostrar menos (10.8)`);
 
         // 4b. O + Novo, sem projeto, cria a linha no Calendário.md e o item na tela.
         await p.locator(`${pane} .kn-cal-new`).click();

@@ -184,6 +184,18 @@ export function fitColumns(placed: Placed[], max: number): { shown: Placed[]; mo
   return { shown, more };
 }
 
+/** Quantas linhas a faixa do dia todo mostra em cada dia, com o "+N" contado como uma (10.8 do spec #34706). */
+export const ALLDAY_MAX = 3;
+
+/**
+ * A faixa do dia todo com teto: até `max` itens, todos à vista; mais que isso, os `max - 1` primeiros e um "+N" com o
+ * resto, para a faixa não empurrar a grade das horas para baixo (10.8). Aberta (`open`), mostra todos.
+ */
+export function allDayFit<T>(list: T[], open: boolean, max = ALLDAY_MAX): { shown: T[]; hidden: number } {
+  if (open || list.length <= max) return { shown: list, hidden: 0 };
+  return { shown: list.slice(0, max - 1), hidden: list.length - (max - 1) };
+}
+
 /** Os itens de dia todo de um dia, e os de cada dia na ordem da Agenda e do Mês (dia todo primeiro, depois a hora). */
 export function itemsOfDay(items: CalendarItem[], day: string): CalendarItem[] {
   return items

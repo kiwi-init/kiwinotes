@@ -64,6 +64,18 @@ describe("as vistas do Calendário", () => {
     expect(html.match(/kn-cal-kiwi-mark/g)?.length).toBe(3);
   });
 
+  test("a faixa do dia todo tem teto: até três à vista, e mais que isso dois e o +N (10.8)", () => {
+    const allDay = (day: string, n: number) =>
+      Array.from({ length: n }, (_, i) => item({ id: `n:d#${day}-${i}:z`, kind: "reminder", title: `Lembrete ${i + 1}`, start: day, end: null, allDay: true, source: null }));
+    const html = renderToStaticMarkup(<TimeGrid days={week.days} items={[...allDay("2026-11-24", 3), ...allDay("2026-11-26", 5)]} today="2026-11-25" now={now} h={h} s={s} />);
+    const cell = (day: string) => html.split(`kn-cal-allday-cell" data-day="${day}">`)[1]!.split("kn-cal-allday-cell")[0]!;
+    expect(cell("2026-11-24").match(/kn-cal-chip/g)?.length).toBe(3);
+    expect(cell("2026-11-24")).not.toContain("kn-cal-allday-more");
+    expect(cell("2026-11-26").match(/kn-cal-chip/g)?.length).toBe(2);
+    expect(cell("2026-11-26")).toMatch(/kn-cal-allday-more" aria-label="Mais 3 no dia todo">\+3</);
+    expect(html).not.toContain("kn-cal-allday-less");
+  });
+
   test("o Mês e a Agenda", () => {
     const month = viewRange("month", "2026-11-25");
     const html = renderToStaticMarkup(<MonthGrid days={month.days} anchor="2026-11-25" items={items} today="2026-11-25" h={h} s={s} onDay={() => {}} />);
