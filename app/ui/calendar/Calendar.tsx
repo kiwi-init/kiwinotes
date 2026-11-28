@@ -39,6 +39,8 @@ interface Open {
   from: Rect;
   to: Rect;
   state: WideState;
+  /** A chave do painel: o título mudado muda o id (o hash da linha), e o painel não pode se remontar (T34745). */
+  key: number;
 }
 
 const DRAG_START_PX = 4;
@@ -117,7 +119,9 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
 
   // ---------------------------------------------------------------- o cartão do hover
 
-  const [hover, setHover] = useState<{ item: CalendarItem; at: Rect } | null>(null);
+  // `key`: a mesma enquanto o cartão é do mesmo item; o título mudado muda o id, e o cartão não pode se remontar (T34745).
+  const [hover, setHover] = useState<{ item: CalendarItem; at: Rect; key: number } | null>(null);
+  const cardSeq = useRef(0);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [open, setOpen] = useState<Open | null>(null);
   const [pulse, setPulse] = useState<string | null>(null);
@@ -141,7 +145,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     // À esquerda do item, como no protótipo; sem espaço, à direita.
     const left = r.left - W - 12 >= 8 ? r.left - W - 12 : Math.min(r.left + r.width + 12, box.width - W - 8);
     const top = Math.max(8, Math.min(r.top - 20, box.height - 330));
-    setHover({ item, at: { left, top, width: W, height: 0 } });
+    setHover((h) => ({ item, at: { left, top, width: W, height: 0 }, key: h && h.item.id === item.id ? h.key : ++cardSeq.current }));
   };
 
   // ---------------------------------------------------------------- o painel largo
@@ -179,7 +183,7 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
     if (open || !root.current) return;
     clearTimeout(hideTimer.current);
     setHover(null);
-    setOpen({ item, from: rectIn(from, root.current), to: wideRect(), state: "opening" });
+    setOpen({ item, from: rectIn(from, root.current), to: wideRect(), state: "opening", key: ++cardSeq.current });
   };
   const collapse = () => setOpen((o) => (o && o.state === "open" ? { ...o, state: "closing" } : o));
   const closed = () => {
@@ -482,11 +486,11 @@ export function Calendar({ active, source: given, onOpenNote, catColor }: { acti
         </aside>
       </div>
       {hover && !open ? (
-        <HoverCard key={hover.item.id} item={hover.item} at={hover.at} face={face} a={actions} ctx={{ projects, source }} onExpand={(card) => expand(hover.item, card)} onEnter={keepCard} onLeave={hideCard} />
+        <HoverCard key={hover.key} item={hover.item} at={hover.at} face={face} a={actions} ctx={{ projects, source }} onExpand={(card) => expand(hover.item, card)} onEnter={keepCard} onLeave={hideCard} />
       ) : null}
       {open ? (
         <WidePanel
-          key={open.item.id}
+          key={open.key}
           item={open.item}
           from={open.from}
           to={open.to}

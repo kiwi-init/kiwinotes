@@ -113,6 +113,8 @@ try {
   await invoke("notes.create", { folder: "Casa", title: "Rotina", content: `# Rotina\n\n- [ ] Regar as plantas @ ${day(-3)} 00:00 🔁 dia\n` });
   await invoke("notes.create", { folder: "Casa", title: "Mudança", content: `# Mudança\n\n- [ ] Comprar fita e caixas @ ${day(2)} 09:00\n- [ ] Levar a geladeira\n` });
   await invoke("notes.create", { folder: "Reuniões", title: "Revisão do Projeto X", content: `---\ntype: meeting\ndate: "${day(0)}"\nstart: "${at(0, 14)}"\nduration: 1800\nparticipants: [Ana, Bruno]\n---\n\nPauta: o orçamento e a data da entrega.\n` });
+  // Para editar e apagar à mão (T34745): dois itens por língua, numa nota só deles.
+  await invoke("notes.create", { folder: "Oficina", title: "Edição", content: `# Edição\n\n- [ ] Pintar a cerca @ ${day(0)} 08:00\n- [ ] Trocar a lâmpada @ ${day(0)} 12:00\n- [ ] Lavar o carro @ ${day(0)} 18:00\n- [ ] Podar a roseira @ ${day(0)} 20:00\n` });
   await invoke("settings.set", { kiwicat: { overlay: false, show: true } });
 
   for (const lang of ["pt", "en"] as const) {
@@ -215,6 +217,111 @@ try {
         await p.locator(`${pane} .kn-cal-newform button.kn-cal-btn[type="button"]`).click();
         await p.waitForSelector(`${pane} .kn-cal-newform`, { state: "detached" });
         checks.push(`${lang}: o + Novo diz "${note}" com o tipo Nota, e Calendário.md na pendência (#492)`);
+      }
+
+      // 3c. Editar à mão no cartão e no painel largo, e apagar com o Desfazer (T34745).
+      {
+        const [E, D] = lang === "pt" ? ["Pintar a cerca", "Trocar a lâmpada"] : ["Lavar o carro", "Podar a roseira"];
+        const ed = `${pane} .kn-cal-card .kn-cal-editor`;
+        const note = async (path = "Oficina/Edição.md") => ((await invoke("notes.get", { path }).catch(() => ({ content: "" }))).content as string);
+        const until = async (ok: (t: string) => boolean | Promise<boolean>, what: string, path?: string) => {
+          for (let n = 0; !(await ok(await note(path))); n++) { assert.ok(n < 50, `${lang}: ${what}:\n${await note(path)}`); await Bun.sleep(100); }
+        };
+        const lineOf = async (title: string, path?: string) => (await note(path)).split("\n").find((l) => l.includes(title)) ?? "";
+        const focused = () => p.evaluate(() => { const e = document.activeElement as HTMLInputElement | null; return e ? `${e.className}|${e.name ?? ""}` : ""; });
+
+        // O Editar do cartão abre os campos, com o foco no título.
+        await show(p, E);
+        await hoverCard(p, E);
+        await p.locator(`${pane} .kn-cal-card .kn-cal-edit`).click();
+        await p.waitForSelector(`${pane} .kn-cal-card[data-editing]`);
+        assert.match(await focused(), /\|title$/, `${lang}: o foco vai ao título`);
+        // O título pelo teclado: End, digitar, Enter. O cartão segue aberto e editando (o id muda com o título).
+        const E2 = `${E} ${lang === "pt" ? "de novo" : "again"}`;
+        await p.keyboard.press("End");
+        await p.keyboard.type(lang === "pt" ? " de novo" : " again");
+        await p.keyboard.press("Enter");
+        await until((t) => t.includes(`${E2} @ ${day(0)} ${lang === "pt" ? "08:00" : "18:00"}`), "o título");
+        assert.equal(await p.locator(`${pane} .kn-cal-card[data-editing]`).count(), 1, `${lang}: o cartão segue editando depois do título`);
+        // O Esc num campo mudado volta o valor, e o cartão segue editando.
+        await p.keyboard.type("xyz");
+        await p.keyboard.press("Escape");
+        assert.equal(await p.inputValue(`${ed} input[name="title"]`), E2, `${lang}: o Esc volta o título`);
+        assert.equal(await p.locator(`${pane} .kn-cal-card[data-editing]`).count(), 1, `${lang}: o Esc no campo não fecha o cartão`);
+        // O tipo (a cor).
+        await p.locator(`${ed} [data-kind="focus"]`).click();
+        await until(async () => /#(foco|focus)\b/.test(await lineOf(E2)), "o tipo");
+        assert.equal(await p.locator(`${ed} [data-kind="focus"]`).getAttribute("aria-checked"), "true");
+        // O início e o fim: digitar, a seta no fim, e o Enter grava.
+        const from = lang === "pt" ? ["09:30", "10:15", "11:15"] : ["19:30", "20:45", "21:45"];
+        await p.fill(`${ed} input[name="from"]`, from[0]!);
+        await p.fill(`${ed} input[name="to"]`, from[1]!);
+        await p.locator(`${ed} input[name="to"]`).focus();
+        await p.keyboard.press("ArrowUp");
+        assert.equal(await p.inputValue(`${ed} input[name="to"]`), from[2], `${lang}: a seta para cima sobe a hora do fim`);
+        await p.keyboard.press("Enter");
+        await until(async () => (await lineOf(E2)).includes(`@ ${day(0)} ${from[0]}-${from[2]}`), "o início e o fim");
+        // A repetição e o aviso.
+        await p.selectOption(`${ed} select[name="repeat"]`, "weekly");
+        await until(async () => /🔁 (semana|weekly)/.test(await lineOf(E2)), "a repetição");
+        await p.locator(`${ed} [data-notify="30m"]`).click();
+        await until(async () => /🔔 30m/.test(await lineOf(E2)), "o aviso");
+        // O texto embaixo da linha: ⌘Enter grava.
+        await p.waitForSelector(`${ed} textarea[name="text"]:not([disabled])`);
+        await p.locator(`${ed} textarea[name="text"]`).fill(lang === "pt" ? "Comprar a tinta\nLixar antes" : "Buy the soap\nRinse first");
+        await p.keyboard.press("Meta+Enter");
+        const body = lang === "pt" ? "  Comprar a tinta\n  Lixar antes" : "  Buy the soap\n  Rinse first";
+        await until((t) => t.includes(body), "o texto");
+        await p.screenshot({ path: join(shots, "editar-cartao.png") });
+        // O projeto leva a linha e o texto para a nota do projeto.
+        await p.selectOption(`${ed} select[name="project"]`, "Casa");
+        await until((t) => !t.includes(E2), "o projeto tira da nota");
+        await until((t) => t.includes(E2) && t.includes(body), "o projeto põe na nota do Casa, com o texto", "Casa/Pendências.md");
+        checks.push(`${lang}: no cartão, o título (Enter e Esc), o tipo, o início e o fim (com a seta), a repetição, o aviso, o texto e o projeto vão à nota: ${(await lineOf(E2, "Casa/Pendências.md")).trim()}`);
+        await p.keyboard.press("Escape");
+        await p.mouse.move(2, 2);
+
+        // No painel largo: o mesmo editor, na aba Item; o dia todo grava no clique.
+        await show(p, D);
+        await hoverCard(p, D);
+        await p.locator(`${pane} .kn-cal-card .kn-cal-expand`).click();
+        await wide(p, "open");
+        const wed = `${pane} .kn-cal-wide .kn-cal-editor`;
+        await p.locator(`${wed} input[name="allDay"]`).check();
+        await until(async () => (await lineOf(D)).includes(`@ ${day(0)} `) && !/\d\d:\d\d/.test(await lineOf(D)), "o dia todo");
+        await p.locator(`${wed} input[name="allDay"]`).uncheck();
+        await until(async () => (await lineOf(D)).includes(`@ ${day(0)} 09:00`), "sem o dia todo, 09:00");
+        await p.screenshot({ path: join(shots, "editar-painel.png") });
+
+        // A tecla Delete no painel apaga; o Desfazer tem o foco, e o Enter nele põe de volta.
+        await p.locator(`${pane} .kn-cal-wide [role="tab"][data-tab="item"]`).focus();
+        await p.keyboard.press("Delete");
+        await wide(p, "gone");
+        await until((t) => !t.includes(D), "a tecla Delete");
+        await p.waitForSelector(`${pane} .kn-cal-notice[data-undo]`);
+        assert.match(await focused(), /kn-cal-undo/, `${lang}: o foco vai ao Desfazer`);
+        await p.screenshot({ path: join(shots, "apagado-desfazer.png") });
+        await p.keyboard.press("Enter");
+        await until(async () => (await lineOf(D)).includes(`@ ${day(0)} 09:00`), "o Desfazer");
+        await p.waitForSelector(item(D));
+        // O botão Apagar do cartão, e o ⌘Z fora dos campos desfaz.
+        await show(p, D);
+        await hoverCard(p, D);
+        await p.locator(`${pane} .kn-cal-card .kn-cal-edit`).click();
+        await p.locator(`${ed} [data-delete="item"]`).click();
+        await until((t) => !t.includes(D), "o Apagar do cartão");
+        await p.waitForSelector(item(D), { state: "detached" });
+        await p.keyboard.press("Meta+z");
+        await until((t) => t.includes(D), "o ⌘Z");
+        await p.waitForSelector(item(D));
+        // A tecla Delete no item com o foco, e o ⌘Z de novo.
+        await p.locator(item(D)).first().focus();
+        await p.keyboard.press("Delete");
+        await until((t) => !t.includes(D), "a tecla Delete no item");
+        await p.keyboard.press("Meta+z");
+        await until((t) => t.includes(D), "o ⌘Z depois do Delete no item");
+        await p.waitForSelector(item(D));
+        checks.push(`${lang}: no painel largo, o dia todo liga e desliga; a tecla Delete (no painel e no item) e o Apagar do cartão apagam, e o Desfazer (Enter no foco) e o ⌘Z põem de volta`);
       }
 
       if (lang === "en") {
