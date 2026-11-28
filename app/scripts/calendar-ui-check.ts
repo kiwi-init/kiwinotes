@@ -262,6 +262,21 @@ try {
         assert.match((await invoke("notes.get", { path: "Calendário.md" })).content, new RegExp(`Ligar para o Bruno @ ${day(0)} 16:00`));
         checks.push(`${lang}: o + Novo cria "Ligar para o Bruno" no Calendário.md e na tela`);
 
+        // 4b'. No Mês seguinte, o + Novo sugere o dia 1 dele, não a segunda da grade, que cai no mês de hoje (#491).
+        const before = (await p.locator(`${pane} .kn-cal`).getAttribute("data-view")) as (typeof VIEWS)[number];
+        await view(p, "month");
+        await p.locator(`${pane} .kn-cal-tool > .kn-cal-ic`, { hasText: "›" }).click();
+        const n = new Date();
+        const first = `${new Date(n.getFullYear(), n.getMonth() + 1, 1).getFullYear()}-${String(((n.getMonth() + 1) % 12) + 1).padStart(2, "0")}-01`;
+        await p.locator(`${pane} .kn-cal-new`).click();
+        assert.equal(await p.inputValue(`${pane} .kn-cal-newform input[name="day"]`), first, `${lang}: o + Novo no Mês seguinte sugere o dia 1 (#491)`);
+        await p.screenshot({ path: join(shots, "novo-mes-seguinte.png") });
+        await p.locator(`${pane} .kn-cal-newform button.kn-cal-btn[type="button"]`).click();
+        await p.waitForSelector(`${pane} .kn-cal-newform`, { state: "detached" });
+        await p.locator(`${pane} .kn-cal-tool > .kn-cal-btn`).click();
+        await view(p, before);
+        checks.push(`${lang}: no Mês seguinte, o + Novo sugere ${first}, o dia 1 do mês à vista (#491)`);
+
         // 4c. O link da nota abre as Notas naquela nota, na linha do item.
         await hoverCard(p, "Revisar o orçamento");
         await p.locator(`${pane} .kn-cal-card [data-note-link]`).first().click();
