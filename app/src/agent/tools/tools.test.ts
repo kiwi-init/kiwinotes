@@ -191,8 +191,8 @@ describe("o servidor MCP do Kiwi", () => {
     // existem, mas voltam com erro.
     expect(kiwiTools(false)).toHaveLength(13);
     // As 22 de antes, as 4 da escrita pela diferença (T14650), as 2 da planilha (T21114), as 2 do docx (T21231), a
-    // fala do gato (T26709) e as 3 do Calendário (T32156; o calendar_list é de leitura).
-    expect(KIWI_TOOLS).toHaveLength(34);
+    // fala do gato (T26709) e as 4 do Calendário (T32156, T34753; o calendar_list é de leitura).
+    expect(KIWI_TOOLS).toHaveLength(35);
   });
 
   test("uma ferramenta que não existe é recusada, e um método desconhecido também", async () => {

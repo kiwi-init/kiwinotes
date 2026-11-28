@@ -78,6 +78,7 @@ import { PREFIX_RESEND_EVERY, prefixParts } from "./fixed-prefix.ts";
 import { buildIndex, type FaroIndex, type FaroResult, sniff } from "./faro.ts";
 import { buildPackage } from "./pacote.ts";
 import { cardsBlock, cardsFor } from "./tools/kiwi-tool.ts";
+import { calendarHint } from "../shared/calendar-pedido.ts";
 import {
   buildCapsule,
   CAPSULE_TURNS,
@@ -2195,7 +2196,10 @@ export class AgentService {
       // O cartão de instrução (ADR 0013 peça 6, T14563): o jeito longo de gerar um arquivo, propor uma reunião, um resumo
       // ou uma rotina saiu da lista fixa e vai aqui, só no pedido que precisa dele.
       // A rotina que roda já diz o que fazer, ação por ação: o "Rotina" dela não pede o cartão de propor uma.
-      const cards = isRoutinePrompt(text) ? "" : cardsBlock(cardsFor(text));
+      const cardList = isRoutinePrompt(text) ? [] : cardsFor(text);
+      // O pedido de agenda (T34753): a hora, o dia e o aviso que o Kiwi leu do texto vão junto do cartão do agendar.
+      const hint = cardList.some((a) => a.tool === "calendar_create") ? calendarHint(text, new Date((this.d.now ?? Date.now)())) : "";
+      const cards = cardsBlock(cardList, hint);
       // O pedido por voz com "O gato fala" (T26709) leva uma linha: a definição da ferramenta fica igual (o cache).
       const voz = turn.fala ? `${FALA_PEDIDO}\n\n` : "";
       const prompt =

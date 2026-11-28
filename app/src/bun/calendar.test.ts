@@ -6,7 +6,8 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { Vault } from "../notes/vault.ts";
-import { addDays, type CalendarItem, dayOf, notifyAt, parseWhen, rewriteWhen, titleProblem, toMs } from "../shared/calendar.ts";
+import { addDays, type CalendarItem, dayOf, isCalendarNotify, normalNotify, notifyAt, notifyMinutes, notifyText, parseWhen, rewriteWhen, titleProblem, toMs } from "../shared/calendar.ts";
+import { translate } from "../shared/i18n/index.ts";
 import { tempDir } from "../../test/tmp.ts";
 import { whereOf } from "../../ui/calendar/NewItem.tsx";
 import { alertsBetween, calendarService, occurrences, setFrontmatter } from "./calendar.ts";
@@ -279,7 +280,8 @@ describe("calendar.update", () => {
     expect(await code(cal.update({ id }))).toBe("E_BAD_ARGS");
     expect(await code(cal.update({ id, start: "amanhã" }))).toBe("E_BAD_ARGS");
     expect(await code(cal.update({ id, start: "2026-11-27T10:00", end: "2026-11-27T09:00" }))).toBe("E_BAD_ARGS");
-    expect(await code(cal.update({ id, notify: "1h" as never }))).toBe("E_BAD_ARGS");
+    expect(await code(cal.update({ id, notify: "31d" as never }))).toBe("E_BAD_ARGS");
+    expect(await code(cal.update({ id, notify: "1w" as never }))).toBe("E_BAD_ARGS");
     expect(await code(cal.update({ id, title: "Duas\nlinhas" }))).toBe("E_BAD_ARGS");
     expect(await code(cal.update({ id, title: "Com data @ 2026-11-30" }))).toBe("E_BAD_ARGS");
     expect(await code(cal.update({ id: "n:Nada.md#0:00000000", done: true }))).toBe("E_NOT_FOUND");
@@ -768,5 +770,109 @@ describe("titleProblem: o pedaço que não pode ir no título (#493)", () => {
     const { cal, read } = await open({ "Projeto X/Pendências.md": PROJETO });
     expect(await code(cal.create({ kind: "task", title: "Revisar #foco do mês", project: "Projeto X", start: "2026-11-30" }))).toBe("E_BAD_ARGS");
     expect(read("Projeto X/Pendências.md")).toBe(PROJETO);
+  });
+});
+
+describe("o aviso livre (spec #34706, T34753)", () => {
+  test("normalNotify: os de antes, a antecedência livre na forma curta, e o que não vale", () => {
+    for (const n of ["none", "atTime", "10m", "30m", "dayBefore"]) expect(normalNotify(n)).toBe(n as never);
+    expect(normalNotify("50m")).toBe("50m");
+    expect(normalNotify("50 min")).toBe("50m");
+    expect(normalNotify("60m")).toBe("1h");
+    expect(normalNotify("90m")).toBe("90m");
+    expect(normalNotify("2 horas")).toBe("2h");
+    expect(normalNotify("24h")).toBe("dayBefore");
+    expect(normalNotify("1d")).toBe("dayBefore");
+    expect(normalNotify("3d")).toBe("3d");
+    expect(normalNotify("0m")).toBe("atTime");
+    expect(normalNotify(45)).toBe("45m");
+    expect(normalNotify("30d")).toBe("30d");
+    for (const bad of ["31d", "1w", "-5m", "dez", "", null, 1.5, "10x"]) expect(normalNotify(bad)).toBeNull();
+    expect(isCalendarNotify("2h")).toBe(true);
+    expect(isCalendarNotify("120m")).toBe(false); // a forma curta é 2h
+    expect(notifyMinutes("3d")).toBe(3 * 24 * 60);
+    expect(notifyMinutes("none")).toBeNull();
+  });
+
+  test("a linha lê e escreve 🔔 50m, 🔔 2h e 🔔 3d; os de antes seguem iguais", () => {
+    expect(parseWhen("Ligar para a Ana @ 2026-11-27 10:00 #lembrete 🔔 50m")).toMatchObject({ title: "Ligar para a Ana", start: "2026-11-27T10:00", notify: "50m" });
+    expect(parseWhen("Entrega @ 2026-11-27 🔔 3d")?.notify).toBe("3d");
+    expect(parseWhen("Entrega @ 2026-11-27 🔔 1d")?.notify).toBe("dayBefore");
+    expect(parseWhen("Entrega @ 2026-11-27 🔔 0")?.notify).toBe("atTime");
+    expect(parseWhen("Entrega @ 2026-11-27 🔔 120m")?.notify).toBe("2h");
+    // Mais de 30 dias: a linha não avisa por ele, e o título não fica com o 🔔.
+    expect(parseWhen("Entrega @ 2026-11-27 🔔 45d")).toMatchObject({ title: "Entrega", notify: null });
+    expect(rewriteWhen("Ligar para a Ana @ 2026-11-27 10:00 #lembrete 🔔 30m", { notify: "50m" }, "pt")).toBe("Ligar para a Ana @ 2026-11-27 10:00 #lembrete 🔔 50m");
+    expect(rewriteWhen("Ligar para a Ana @ 2026-11-27 10:00 🔔 50m", { notify: "dayBefore" }, "pt")).toBe("Ligar para a Ana @ 2026-11-27 10:00 🔔 1d");
+    expect(notifyAt({ start: "2026-11-27T10:00", allDay: false, notify: "50m" })).toBe(toMs("2026-11-27T09:10"));
+    expect(notifyAt({ start: "2026-11-27", allDay: true, notify: "2h" })).toBe(toMs("2026-11-27T07:00"));
+  });
+
+  test("criar e mudar com o aviso livre: a linha, o frontmatter da nota e o aviso na hora certa", async () => {
+    const { cal, read } = await open({});
+    const a = await cal.create({ kind: "reminder", title: "Ligar para a Ana", start: "2026-11-27T10:00", notify: "50 min" as never });
+    expect(a).toMatchObject({ start: "2026-11-27T10:00", end: null, notify: "50m" });
+    expect(read("Calendário.md")).toContain("- [ ] Ligar para a Ana @ 2026-11-27 10:00 #lembrete 🔔 50m");
+    const b = await cal.update({ id: a.id, notify: "120m" as never });
+    expect(b.notify).toBe("2h");
+    expect(read("Calendário.md")).toContain("🔔 2h");
+    const nota = await cal.create({ kind: "note", title: "Pauta", start: "2026-11-30T09:00", notify: "3d" });
+    expect(nota.notify).toBe("3d");
+    expect(read("Pauta.md")).toContain('aviso: "3d"');
+    expect((await cal.update({ id: nota.id, notify: "45m" })).notify).toBe("45m");
+    expect(read("Pauta.md")).toContain('aviso: "45m"');
+    const got = alertsBetween([b, { ...nota, notify: "45m" }], toMs("2026-11-27T00:00"), toMs("2026-12-01T00:00"));
+    expect(got.map((x) => [x.item.title, new Date(x.at).toTimeString().slice(0, 5)])).toEqual([
+      ["Ligar para a Ana", "08:00"],
+      ["Pauta", "08:15"],
+    ]);
+    expect(await code(cal.create({ kind: "reminder", title: "X", start: "2026-11-27T10:00", notify: "31d" as never }))).toBe("E_BAD_ARGS");
+  });
+
+  test("a frase do aviso na tela, em pt e em en", () => {
+    const say = (l: "pt" | "en", n: Parameters<typeof notifyText>[0]) => translate(l, notifyText(n).key, notifyText(n).params);
+    expect(["50m", "2h", "3d", "1d", "dayBefore", "10m", "atTime"].map((n) => say("pt", n as never))).toEqual(["50 min antes", "2 h antes", "3 dias antes", "na véspera", "na véspera", "10 min antes", "na hora"]);
+    expect(say("en", "3d")).toBe("3 days before");
+    expect(say("en", "90m")).toBe("90 min before");
+  });
+
+  test("a sugestão da reunião cedo vê o aviso livre: 15m ainda é pouco, 45m e 1h já bastam", () => {
+    const now = new Date(2026, 10, 26, 15, 0).getTime();
+    const meeting = (notify: string) => ({ id: "n:a.md#0:00000000", kind: "meeting" as const, title: "Revisão", start: "2026-11-27T08:30", allDay: false, notify: notify as never, source: { path: "a.md" } });
+    expect(suggestion([meeting("15m")], now, "pt")?.rule).toBe("meetingTomorrow");
+    expect(suggestion([meeting("45m")], now, "pt")).toBeNull();
+    expect(suggestion([meeting("1h")], now, "pt")).toBeNull();
+  });
+});
+
+describe("calendar.delete (T34753)", () => {
+  test("a linha sai e o resto da nota fica; numa repetição, a série", async () => {
+    const { cal, read } = await open({ "Projeto X/Plano.md": "# Plano\n\n- [ ] Revisar @ 2026-11-27 10:00\n- [ ] Ligar para a Ana @ 2026-11-27 14:00 #lembrete\n- [ ] Café @ 2026-11-27 08:00 🔁 dia\n\nTexto do fim.\n" });
+    const r = await cal.items({ from: "2026-11-27", to: "2026-11-29" });
+    const ana = r.items.find((i) => i.title === "Ligar para a Ana")!;
+    expect(await cal.delete({ id: ana.id })).toEqual({ id: ana.id, path: "Projeto X/Plano.md" });
+    expect(read("Projeto X/Plano.md")).toBe("# Plano\n\n- [ ] Revisar @ 2026-11-27 10:00\n- [ ] Café @ 2026-11-27 08:00 🔁 dia\n\nTexto do fim.\n");
+    const cafe = (await cal.items({ from: "2026-11-28", to: "2026-11-29" })).items.find((i) => i.title === "Café")!;
+    expect(cafe.id).toContain("~2026-11-28");
+    await cal.delete({ id: cafe.id });
+    expect(read("Projeto X/Plano.md")).toBe("# Plano\n\n- [ ] Revisar @ 2026-11-27 10:00\n\nTexto do fim.\n");
+    // O mesmo id de novo: a linha não está mais lá.
+    expect(await code(cal.delete({ id: ana.id }))).toBe("E_CONFLICT");
+  });
+
+  test("a nota com agenda: fica, sem o agenda: e o aviso:; a reunião gravada e o id estranho não", async () => {
+    const start = new Date(2026, 10, 27, 15, 0).toISOString();
+    const { cal, read } = await open(
+      { "Pauta.md": '---\ntags: [x]\nagenda: "2026-11-27 09:00"\naviso: "2h"\n---\n\n# Pauta\n\nOs números.\n' },
+      { meetings: { "Reuniões/Conversa.md": `---\ntype: meeting\nstart: ${start}\n---\n\nnada\n` } },
+    );
+    const r = await cal.items({ from: "2026-11-27", to: "2026-11-28" });
+    await cal.delete({ id: "f:Pauta.md" });
+    expect(read("Pauta.md")).toBe("---\ntags: [x]\n---\n\n# Pauta\n\nOs números.\n");
+    expect((await cal.items({ from: "2026-11-27", to: "2026-11-28" })).items.some((i) => i.id === "f:Pauta.md")).toBe(false);
+    expect(await code(cal.delete({ id: "f:Pauta.md" }))).toBe("E_CONFLICT");
+    expect(await code(cal.delete({ id: r.items.find((i) => i.id.startsWith("m:"))!.id }))).toBe("E_READONLY");
+    expect(await code(cal.delete({ id: "x:qualquer" }))).toBe("E_BAD_ARGS");
+    expect(await code(cal.delete({ id: "" }))).toBe("E_BAD_ARGS");
   });
 });

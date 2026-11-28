@@ -1749,6 +1749,10 @@ export function uiCapabilities(deps: CapabilityDeps,
       const a = fields(args, "calendar.update", ["id", "title", "start", "end", "allDay", "done", "notify", "kind", "repeat", "only"]);
       return cal(() => calendar.update(a as unknown as CalendarUpdate));
     },
+    "calendar.delete": async (args) => {
+      const a = fields(args, "calendar.delete", ["id"]);
+      return cal(() => calendar.delete({ id: a.id as string }));
+    },
     "calendar.source": async (args) => {
       const a = fields(args, "calendar.source", ["id"]);
       return cal(() => calendar.source(a.id));

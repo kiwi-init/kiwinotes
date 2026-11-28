@@ -6,7 +6,8 @@
 //   - [ ] Revisar o orçamento @ 2026-11-27 10:00-11:30 #lembrete 🔔 30m 🔁 semana
 // - `@ AAAA-MM-DD`, com ` HH:MM` ou ` HH:MM-HH:MM`; sem hora, o dia todo.
 // - O tipo pela tag: `#lembrete`/`#reminder`, `#reuniao`/`#meeting`, `#foco`/`#focus`. Sem tag e com caixa: pendência.
-// - O aviso: `🔔 0` (na hora), `🔔 10m`, `🔔 30m`, `🔔 1d` (na véspera), ou `🔕` (nenhum). Sem ele, o padrão do tipo.
+// - O aviso: `🔔 0` (na hora), `🔔 10m`, `🔔 50m`, `🔔 2h`, `🔔 1d` (na véspera), `🔔 3d`, ou `🔕` (nenhum). Sem ele, o
+//   padrão do tipo. Qualquer antecedência em minutos, horas ou dias, até 30 dias (spec #34706, T34753).
 // - A repetição: `🔁 dia`/`🔁 daily` ou `🔁 semana`/`🔁 weekly`.
 // - Uma vez feita da repetição, fora da primeira em aberto: `⏭ AAAA-MM-DD`, um por vez, em ordem de dia (#450).
 
@@ -14,16 +15,76 @@ export const CALENDAR_KINDS = ["meeting", "reminder", "task", "note", "focus"] a
 export type CalendarKind = (typeof CALENDAR_KINDS)[number];
 export const isCalendarKind = (v: unknown): v is CalendarKind => (CALENDAR_KINDS as readonly unknown[]).includes(v);
 
-/** Quando o Kiwi avisa: nunca, na hora, 10 ou 30 min antes, ou na véspera (no mesmo horário, um dia antes). */
+/**
+ * Os avisos prontos da tela: nunca, na hora, 10 ou 30 min antes, ou na véspera (no mesmo horário, um dia antes). O
+ * aviso em si é livre (spec #34706, T34753): qualquer antecedência em minutos, horas ou dias (`50m`, `2h`, `3d`).
+ */
 export const CALENDAR_NOTIFY = ["none", "atTime", "10m", "30m", "dayBefore"] as const;
-export type CalendarNotify = (typeof CALENDAR_NOTIFY)[number];
-export const isCalendarNotify = (v: unknown): v is CalendarNotify => (CALENDAR_NOTIFY as readonly unknown[]).includes(v);
+export type CalendarNotifyPreset = (typeof CALENDAR_NOTIFY)[number];
+/** O aviso: um dos prontos, ou a antecedência livre (`50m`, `2h`, `3d`), sempre na forma de `normalNotify`. */
+export type CalendarNotify = CalendarNotifyPreset | `${number}m` | `${number}h` | `${number}d`;
+
+/** A antecedência mais longa: 30 dias. */
+export const NOTIFY_MAX_MINUTES = 30 * 24 * 60;
+
+const FREE_NOTIFY = /^(\d{1,6})\s*(m|min|mins|minutos?|minutes?|h|hrs?|horas?|hours?|d|dias?|days?)$/i;
+const UNIT_MINUTES: Record<string, number> = { m: 1, h: 60, d: 24 * 60 };
+
+/** Os minutos antes do começo de um aviso escrito à mão (`50m`, `2h`, `3d`, `50 min`); `null` se não for um. */
+function freeMinutes(v: string): number | null {
+  const m = FREE_NOTIFY.exec(v.trim());
+  if (!m) return null;
+  const n = Number(m[1]) * UNIT_MINUTES[m[2]!.toLowerCase()[0]!]!;
+  return n <= NOTIFY_MAX_MINUTES ? n : null;
+}
+
+/** O aviso de uma antecedência em minutos, na forma curta: 0 é na hora, um dia é a véspera, `90m`, `2h`, `3d`. */
+export function notifyOfMinutes(min: number): CalendarNotify {
+  if (min === 0) return "atTime";
+  if (min === 24 * 60) return "dayBefore";
+  if (min % (24 * 60) === 0) return `${min / (24 * 60)}d`;
+  if (min % 60 === 0) return `${min / 60}h`;
+  return `${min}m`;
+}
+
+/**
+ * Lê um aviso: um dos prontos, ou a antecedência livre (`50m`, `2h`, `3d`, `50 min`, `2 horas`, ou um número, em
+ * minutos), e devolve a forma curta (`60m` vira `1h`, `24h` vira `dayBefore`). `null` se não for um aviso ou passar de
+ * 30 dias.
+ */
+export function normalNotify(v: unknown): CalendarNotify | null {
+  if (typeof v === "number") return Number.isInteger(v) && v >= 0 && v <= NOTIFY_MAX_MINUTES ? notifyOfMinutes(v) : null;
+  if (typeof v !== "string") return null;
+  if ((CALENDAR_NOTIFY as readonly string[]).includes(v)) return v as CalendarNotifyPreset;
+  const min = freeMinutes(v);
+  return min === null ? null : notifyOfMinutes(min);
+}
+
+/** Um aviso já na forma curta (o que o item e o contrato levam). */
+export const isCalendarNotify = (v: unknown): v is CalendarNotify => normalNotify(v) === v;
 
 /** O aviso de cada tipo quando a linha não diz (spec #32129): 10 min antes das reuniões, na hora dos lembretes. */
 export const DEFAULT_NOTIFY: Record<CalendarKind, CalendarNotify> = { meeting: "10m", reminder: "atTime", task: "none", note: "none", focus: "none" };
 
-/** Quantos minutos antes do começo o aviso sai; `null` sem aviso. */
-export const NOTIFY_MINUTES: Record<CalendarNotify, number | null> = { none: null, atTime: 0, "10m": 10, "30m": 30, dayBefore: 24 * 60 };
+/** Quantos minutos antes do começo o aviso sai; `null` sem aviso (ou um aviso que não vale). */
+export function notifyMinutes(n: CalendarNotify): number | null {
+  if (n === "none") return null;
+  if (n === "atTime") return 0;
+  if (n === "dayBefore") return 24 * 60;
+  return freeMinutes(n);
+}
+
+/** Como a tela diz um aviso: a chave do texto e o número (`10 min antes`, `2 h antes`, `3 dias antes`). */
+export function notifyText(n: CalendarNotify): { key: "calendar.notify.none" | "calendar.notify.atTime" | "calendar.notify.dayBefore" | "calendar.notify.minutes" | "calendar.notify.hours" | "calendar.notify.days"; params: { n?: number } } {
+  // A forma curta antes: "1d" e "24h" são a véspera, "0m" é na hora.
+  const v = normalNotify(n) ?? "none";
+  if (v === "none" || v === "atTime" || v === "dayBefore") return { key: `calendar.notify.${v}`, params: {} };
+  const min = notifyMinutes(v);
+  if (min === null) return { key: "calendar.notify.none", params: {} };
+  if (min % (24 * 60) === 0) return { key: "calendar.notify.days", params: { n: min / (24 * 60) } };
+  if (min % 60 === 0) return { key: "calendar.notify.hours", params: { n: min / 60 } };
+  return { key: "calendar.notify.minutes", params: { n: min } };
+}
 
 export const CALENDAR_REPEATS = ["daily", "weekly"] as const;
 export type CalendarRepeat = (typeof CALENDAR_REPEATS)[number];
@@ -99,6 +160,12 @@ export interface CalendarCreate {
   repeat?: CalendarRepeat | null;
 }
 
+/** O que o `calendar.delete` devolve (T34753): o item que saiu e a nota que mudou. */
+export interface CalendarDeleted {
+  id: string;
+  path: string;
+}
+
 /** O que o `calendar.update` muda: arrastar (start/end), esticar (end), Feito (done), o aviso e o resto. */
 export interface CalendarUpdate {
   id: string;
@@ -163,7 +230,7 @@ export function addDays(day: string, n: number): string {
 
 /** Quando o aviso de um item sai, em epoch ms; `null` sem aviso. No dia todo, conta a partir das 9h. */
 export function notifyAt(item: Pick<CalendarItem, "start" | "allDay" | "notify">): number | null {
-  const min = NOTIFY_MINUTES[item.notify];
+  const min = notifyMinutes(item.notify);
   if (min === null) return null;
   const start = item.allDay ? toMs(`${item.start}T09:00`) : toMs(item.start);
   return start - min * 60_000;
@@ -185,14 +252,16 @@ const TAG_OF: Record<"pt" | "en", Partial<Record<CalendarKind, string>>> = {
   pt: { reminder: "lembrete", meeting: "reuniao", focus: "foco" },
   en: { reminder: "reminder", meeting: "meeting", focus: "focus" },
 };
-const NOTIFY_TOKEN: Record<string, CalendarNotify> = { "0": "atTime", "10m": "10m", "30m": "30m", "1d": "dayBefore" };
-const TOKEN_OF: Record<Exclude<CalendarNotify, "none">, string> = { atTime: "0", "10m": "10m", "30m": "30m", dayBefore: "1d" };
+/** O aviso de um `🔔`: `0` é na hora, `1d` é a véspera, o resto é a antecedência livre. */
+const notifyOfToken = (tok: string): CalendarNotify | null => (tok === "0" ? "atTime" : normalNotify(tok));
+/** O `🔔` de um aviso: `0` na hora, `1d` na véspera, a antecedência livre como ela é. */
+const tokenOf = (n: Exclude<CalendarNotify, "none">) => (n === "atTime" ? "0" : n === "dayBefore" ? "1d" : n);
 const REPEAT_TOKEN: Record<string, CalendarRepeat> = { dia: "daily", daily: "daily", semana: "weekly", weekly: "weekly" };
 const REPEAT_OF: Record<"pt" | "en", Record<CalendarRepeat, string>> = { pt: { daily: "dia", weekly: "semana" }, en: { daily: "daily", weekly: "weekly" } };
 
 const WHEN = /(^|\s)@\s?(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?)?(?=\s|$)/;
 const TAG = /(^|\s)#([\p{L}]+)(?=\s|$|[.,;!?])/gu;
-const BELL = /(^|\s)🔔\s?(0|10m|30m|1d)(?=\s|$)/;
+const BELL = /(^|\s)🔔\s?(0|\d{1,6}[mhd])(?=\s|$)/;
 const MUTE = /(^|\s)🔕(?=\s|$)/;
 const REPEAT = /(^|\s)🔁\s?(dia|daily|semana|weekly)(?=\s|$)/;
 /** Uma vez feita: `⏭` (com ou sem o seletor de emoji U+FE0F, que o teclado do Mac põe) e o dia. */
@@ -249,7 +318,7 @@ export function parseWhen(rest: string): LineWhen | null {
     return sp;
   });
   const bell = BELL.exec(title);
-  const notify: CalendarNotify | null = MUTE.test(title) ? "none" : bell ? NOTIFY_TOKEN[bell[2]!]! : null;
+  const notify: CalendarNotify | null = MUTE.test(title) ? "none" : bell ? notifyOfToken(bell[2]!) : null;
   const rep = REPEAT.exec(title);
   const skip = sortedDays([...title.matchAll(SKIP)].map((m) => m[2]!).filter(isDay));
   title = title.replace(BELL, "$1").replace(MUTE, "$1").replace(REPEAT, "$1").replace(SKIP, "$1").replace(/\s+/g, " ").trim();
@@ -286,7 +355,7 @@ export function formatWhen(
   const tag = TAG_OF[locale][o.kind];
   if (tag) parts.push(`#${tag}`);
   if (o.notify === "none") parts.push("🔕");
-  else if (o.notify) parts.push(`🔔 ${TOKEN_OF[o.notify]}`);
+  else if (o.notify) parts.push(`🔔 ${tokenOf(o.notify)}`);
   if (o.repeat) parts.push(`🔁 ${REPEAT_OF[locale][o.repeat]}`);
   if (o.repeat) for (const d of sortedDays(o.skip ?? [])) parts.push(`⏭ ${d}`);
   return parts.join(" ");
@@ -345,7 +414,7 @@ export function rewriteWhen(
   if (patch.notify !== undefined) {
     out = out.replace(BELL, "$1").replace(MUTE, "$1");
     if (patch.notify === "none") add("🔕");
-    else if (patch.notify) add(`🔔 ${TOKEN_OF[patch.notify]}`);
+    else if (patch.notify) add(`🔔 ${tokenOf(patch.notify)}`);
   }
   if (patch.repeat !== undefined) {
     out = out.replace(REPEAT, "$1");

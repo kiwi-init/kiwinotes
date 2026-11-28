@@ -220,3 +220,81 @@ describe("a ferramenta única", () => {
     expect(pathOfId("m:Reuniões/x.md")).toBeNull();
   });
 });
+
+describe("o aviso livre e o pedido repetido (spec #34706, T34753)", () => {
+  test("o aviso de 50 min: um item só, às 10:00 e sem fim; \"50 min\" vira 50m", async () => {
+    const r = await rig();
+    const out = await r.call({ fazer: "escrever", alvo: "Ligar para o Bruno", opcoes: { como: "agendar", tipo: "reminder", inicio: "2026-11-27T10:00", aviso: "50 min" } });
+    const item = (out.value as { item: Record<string, unknown> }).item;
+    expect(item).toMatchObject({ start: "2026-11-27T10:00", notify: "50m" });
+    expect(item.end).toBeUndefined(); // sem fim: nunca das 9:10 às 10:00
+    expect(r.read("Calendário.md")).toContain("- [ ] Ligar para o Bruno @ 2026-11-27 10:00 #lembrete 🔔 50m");
+    const e = await r.call({ fazer: "escrever", alvo: "X", opcoes: { como: "agendar", tipo: "reminder", inicio: "2026-11-27T10:00", aviso: "uma semana" } }).catch((x) => x);
+    expect(e.code).toBe("E_BAD_ARGS");
+    expect(e.message).toContain("30 dias");
+  });
+
+  test("o mesmo pedido de novo não cria outro item; com outro aviso, muda o aviso do mesmo", async () => {
+    const r = await rig();
+    const ask = (aviso: string, alvo = "Ligar para o Bruno") => r.call({ fazer: "escrever", alvo, opcoes: { como: "agendar", tipo: "reminder", inicio: "2026-11-27T10:00", aviso } });
+    const a = await ask("50m");
+    const b = await ask("50 min", "ligar para o bruno");
+    expect((b.value as { item: { id: string } }).item.id).toBe((a.value as { item: { id: string } }).item.id);
+    expect((b.value as { mudou: string }).mudou).toContain("já estava");
+    expect(b.change).toBeUndefined();
+    expect(r.read("Calendário.md").match(/Ligar para o Bruno/g)).toHaveLength(1);
+    const c = await ask("1h");
+    expect(c.tool).toBe("calendar_create");
+    expect(c.change).toMatchObject({ kind: "replaced", path: "Calendário.md" });
+    expect(r.read("Calendário.md").match(/Ligar para o Bruno/g)).toHaveLength(1);
+    expect(r.read("Calendário.md")).toContain("🔔 1h");
+    // Outro horário é outro item.
+    await r.call({ fazer: "escrever", alvo: "Ligar para o Bruno", opcoes: { como: "agendar", tipo: "reminder", inicio: "2026-11-28T10:00" } });
+    expect(r.read("Calendário.md").match(/Ligar para o Bruno/g)).toHaveLength(2);
+  });
+
+  test("o feito não segura o pedido novo: um item fechado com o mesmo título e hora não conta", async () => {
+    const r = await rig({ "Calendário.md": "# Calendário\n\n- [x] Ligar para o Bruno @ 2026-11-27 10:00 #lembrete\n" });
+    await r.call({ fazer: "escrever", alvo: "Ligar para o Bruno", opcoes: { como: "agendar", tipo: "reminder", inicio: "2026-11-27T10:00" } });
+    expect(r.read("Calendário.md").match(/Ligar para o Bruno/g)).toHaveLength(2);
+  });
+});
+
+describe("kiwi escrever/desmarcar (T34753)", () => {
+  test("apaga a linha pelo id; a cópia de antes vai à Atividade para o Desfazer", async () => {
+    const r = await rig();
+    const list = (await r.call({ fazer: "achar", opcoes: { como: "agenda" } })).value as { items: { id: string; title: string }[] };
+    const id = list.items.find((i) => i.title === "Ligar para a Ana")!.id;
+    const out = await r.call({ fazer: "escrever", alvo: id, opcoes: { como: "desmarcar" } });
+    expect(out.tool).toBe("calendar_delete");
+    expect(out.value).toMatchObject({ apagou: id });
+    expect(r.read("Projeto X/Plano.md")).toBe("# Projeto X\n\n- [ ] Revisar o orçamento @ 2026-11-27 10:00\n");
+    expect(out.change).toMatchObject({ kind: "replaced", path: "Projeto X/Plano.md", before: PROJETO.length });
+    expect(r.copies.get(out.change!.copy!)).toBe(PROJETO);
+  });
+
+  test("o item que o Kiwi criou também, e o sinônimo desmarcar", async () => {
+    const r = await rig();
+    const made = await r.call({ fazer: "escrever", alvo: "Ligar para o Bruno", opcoes: { como: "agendar", tipo: "reminder", inicio: "2026-11-27T10:00", aviso: "50m" } });
+    const id = (made.value as { item: { id: string } }).item.id;
+    expect(resolveKiwiCall({ fazer: "desmarcar", alvo: id }).tool).toBe("calendar_delete");
+    await r.call({ fazer: "desmarcar", alvo: id });
+    expect(r.read("Calendário.md")).not.toContain("Ligar para o Bruno");
+  });
+
+  test("a reunião gravada não se apaga; o id estranho e a sessão de leitura também não", async () => {
+    const r = await rig();
+    expect(await codeOf(r.call({ fazer: "escrever", alvo: "m:Reuniões/2026-11-26 Planejamento.md", opcoes: { como: "desmarcar" } }))).toBe("E_READONLY");
+    expect(await codeOf(r.call({ fazer: "escrever", alvo: "qualquer", opcoes: { como: "desmarcar" } }))).toBe("E_BAD_ARGS");
+    const list = (await r.call({ fazer: "achar", opcoes: { como: "agenda" } })).value as { items: { id: string }[] };
+    expect(await codeOf(r.call({ fazer: "escrever", alvo: list.items[0]!.id, opcoes: { como: "desmarcar" } }, { writes: false, proposes: false, memory: false }))).toBe("E_NOT_ALLOWED");
+    expect(r.read("Projeto X/Plano.md")).toBe(PROJETO);
+  });
+
+  test("o pedido de apagar traz o cartão do desmarcar; um apagar de nota, não", () => {
+    const tools = (t: string) => cardsFor(t).map((a) => a.tool);
+    for (const t of ["desmarca a reunião de sexta", "apaga o lembrete de ligar para o Bruno", "tira da agenda a revisão", "cancela o compromisso das 10h", "delete the reminder about Ana"]) expect(tools(t)).toContain("calendar_delete");
+    expect(tools("apaga o parágrafo do fim da nota Ideias")).not.toContain("calendar_delete");
+    expect(tools("me lembra às 10h de ligar para a Ana")).not.toContain("calendar_delete");
+  });
+});
