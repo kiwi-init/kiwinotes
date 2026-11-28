@@ -9,7 +9,7 @@ import { type CalendarItem, parseWhen } from "../../src/shared/calendar.ts";
 import { setAppLocale } from "../src/i18n.ts";
 import { type DetailActions, HoverCard } from "./Detail.tsx";
 import { memorySource } from "./source.ts";
-import { AgendaList, cascadeStyle, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
+import { AgendaList, columnStyle, columnsThatFit, type ItemHandlers, type ItemState, MonthGrid, TimeGrid } from "./views.tsx";
 import { viewRange } from "./model.ts";
 
 const english = () => setAppLocale({ setting: "en", locale: "en", system: "en" });
@@ -51,10 +51,13 @@ describe("as vistas do Calendário", () => {
     expect(html).toMatch(/kn-cal-allday-cell" data-day="2026-11-26">.*Feira/);
     // O item leva o tipo, a nota e a linha 1-based dela (a mesma que as Notas marcam com `data-flash-line`).
     expect(html).toContain('data-kind="meeting" data-path="Projeto X/Pendências.md" data-line="5"');
-    // As duas coisas das 10h ficam em cascata: a segunda por cima, deslocada, sem partir a coluna (lead #32229).
+    // As duas coisas das 10h ficam lado a lado, metade da coluna cada (ponto 9 do spec #34706); a das 15h, cheia.
     expect(html).toMatch(/Plano do jardim[\s\S]*kn-cal-resize/);
-    expect(html.match(/data-depth="1"/g)?.length).toBe(1);
-    expect(html).toMatch(/data-depth="1"[^>]*style="[^"]*width:calc\(100% - min\(16px, 45%\) \* 1 - 6px\)/);
+    expect(html).toMatch(/data-id="n:Projeto X\/Pendências.md#4:abc"[^>]*style="[^"]*left:calc\(0% \+ 3px\);width:calc\(50% - 4px\)/);
+    expect(html).toMatch(/data-id="n:a#1:x"[^>]*style="[^"]*left:calc\(50% \+ 3px\);width:calc\(50% - 6px\)/);
+    expect(html).toMatch(/data-id="m:r"[^>]*style="[^"]*width:calc\(100% - 6px\)/);
+    expect(html).not.toContain("data-depth");
+    expect(html).not.toContain("kn-cal-more");
     expect(html).toMatch(/data-id="m:r"[^>]*data-readonly=""/);
     expect(html.match(/kn-cal-resize/g)?.length).toBe(2);
     // O Kiwi marca só o que ele avisa.
@@ -90,10 +93,14 @@ describe("as vistas do Calendário", () => {
   });
 });
 
-test("a cascata: o nível 0 tem a coluna inteira, e cada nível desce para a direita sem passar de 45%", () => {
-  expect(cascadeStyle(0, 1)).toEqual({ left: "calc(0px * 0 + 3px)", width: "calc(100% - 0px * 0 - 6px)", zIndex: 1 });
-  expect(cascadeStyle(2, 3).left).toBe("calc(min(16px, 22.5%) * 2 + 3px)");
-  expect(cascadeStyle(2, 3).zIndex).toBe(3);
+test("lado a lado: as colunas dividem a largura, o item esticado soma as dele, e o dia estreito corta no +N", () => {
+  expect(columnStyle(0, 1)).toEqual({ left: "calc(0% + 3px)", width: "calc(100% - 6px)" });
+  expect(columnStyle(1, 3)).toEqual({ left: "calc(33.3333% + 3px)", width: "calc(33.3333% - 4px)" });
+  expect(columnStyle(1, 3, 2)).toEqual({ left: "calc(33.3333% + 3px)", width: "calc(66.6667% - 6px)" });
+  // Sem medida (o desenho no servidor), todas; um dia de 140 px leva 3; nunca menos de 2 (um à vista e o +N).
+  expect(columnsThatFit(null)).toBe(Infinity);
+  expect(columnsThatFit(140)).toBe(3);
+  expect(columnsThatFit(40)).toBe(2);
 });
 
 describe("a fonte na memória", () => {
