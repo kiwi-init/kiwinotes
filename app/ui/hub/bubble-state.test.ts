@@ -770,6 +770,32 @@ describe("o \"Não ouvi\" (spec #32534, Cena 4)", () => {
     expect(f.nextWake(1000 + NOT_HEARD_MS)).toBe(Infinity);
   });
 
+  test("o × ou o Esc no \"Não ouvi\" guardam a resposta que ele cobria: o mouse a traz de volta (#33986)", () => {
+    const f = run(new BubbleFeed(fits(80)), [{ type: "text", text: "Pronto, anotei." }, { type: "done", text: "Pronto, anotei.", stopReason: "end_turn" }]);
+    const answer = f.view(0)!;
+    f.notHeard(LINE, 0);
+    expect(f.view(0)?.text).toBe(LINE);
+    f.close();
+    expect(f.view(0)).toBeNull();
+    // O fim do aviso não traz a resposta sozinho: o balão saiu.
+    expect(f.view(NOT_HEARD_MS)).toBeNull();
+    expect(f.recall()).toBe(true);
+    expect(f.view(NOT_HEARD_MS)?.text).toBe(answer.text);
+  });
+
+  test("o \"Não ouvi\" por cima de uma resposta já fechada mantém a guardada; sem resposta, nada volta", () => {
+    const f = run(new BubbleFeed(fits(80)), [{ type: "text", text: "Pronto, anotei." }, { type: "done", text: "Pronto, anotei.", stopReason: "end_turn" }]);
+    f.close();
+    f.notHeard(LINE, 0);
+    f.close();
+    expect(f.recall()).toBe(true);
+    expect(f.view(0)?.text).toBe("Pronto, anotei.");
+    const empty = new BubbleFeed(fits(80));
+    empty.notHeard(LINE, 0);
+    empty.close();
+    expect(empty.recall()).toBe(false);
+  });
+
   test("cobre a resposta de antes e a devolve quando sai", () => {
     const f = run(new BubbleFeed(fits(80)), [{ type: "text", text: "Pronto, anotei." }, { type: "done", text: "Pronto, anotei.", stopReason: "end_turn" }]);
     const answer = f.view(0);

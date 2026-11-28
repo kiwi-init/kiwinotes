@@ -382,12 +382,14 @@ export class BubbleFeed {
   /**
    * O balão sai (o ×, o Esc, o relógio, a vez de um balão com ação): o resto deste pedido não aparece mais. A resposta
    * pronta fica guardada para voltar com o mouse no Kiwi (`recall`, spec #32534), até o próximo pedido; `keep: false`
-   * (o pedido novo mandado pelo campo) a esquece.
+   * (o pedido novo mandado pelo campo) a esquece. O "Não ouvi" fechado pelo × ou pelo Esc guarda a resposta que ele
+   * cobria (#33986): ela também volta com o mouse.
    */
   close(keep = true): void {
-    const h = this.head;
+    const under = this.head?.kind === "notice" ? this.underNotice : null;
+    const h = under ? (under.dismissed ? null : under.head) : this.dismissed ? null : this.head;
     if (!keep) this.last = null;
-    else if (h && !this.dismissed && this.ended && (h.kind === "answer" || h.kind === "error")) this.last = h;
+    else if (h && this.ended && (h.kind === "answer" || h.kind === "error")) this.last = h;
     this.held = null;
     this.afterWarning = null;
     this.warnUntil = 0;
