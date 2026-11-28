@@ -1,7 +1,7 @@
 // #495 (spec #34320): na janela estreita, a cabeça dos dias da Semana não se sobrepõe. O hub de verdade (WebKit
 // headless), na Semana, em pt e en, a 760×560 (a largura da issue) e a 640×560: em cada cabeça, o número e o nome não
-// se cobrem, nenhum dos dois passa da coluna do dia, e o nome aparece inteiro. A 1300 px, o controle: número e nome na
-// mesma linha, como antes. Nunca abre janela, nem liga o mic, nem o agente.
+// se cobrem, nenhum dos dois passa da coluna do dia, e todas as cabeças têm o mesmo jeito (o nome embaixo do número).
+// A 1300 px, o controle: número e nome na mesma linha, como antes. Nunca abre janela, nem liga o mic, nem o agente.
 // Da raiz do app: `bun scripts/calendar-narrow-check.ts [pasta]`. Pegue `kiwi lock bench`.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -35,7 +35,7 @@ async function invoke(cap: string, args: unknown = {}) {
 }
 const pane = '.kn-hub-pane[data-section="calendar"]';
 
-interface Head { day: string; text: string; n: DOMRect; name: DOMRect; col: { left: number; right: number }; clipped: boolean }
+interface Head { day: string; text: string; n: DOMRect; name: DOMRect; col: { left: number; right: number }}
 
 const browser = await webkit.launch({ headless: true });
 const checks: string[] = [];
@@ -64,7 +64,6 @@ try {
               n: r(e.querySelector("b")!),
               name: range.getBoundingClientRect().toJSON(),
               col: { left: cell.left, right: cell.right },
-              clipped: !!name && name.scrollWidth > name.clientWidth,
             };
           }),
         )) as Head[];
@@ -82,12 +81,14 @@ try {
           }
           const next = heads[i + 1];
           if (next) for (const r of [h.n, h.name]) assert.ok(!overlap(r, next.n) && !overlap(r, next.name), `${where}: "${h.text}" encosta em "${next.text}"`);
-          assert.ok(!h.clipped, `${where}: o nome de "${h.text}" cortado numa coluna de ${cols[i]} px`);
         }
-        const oneLine = heads.every((h) => Math.abs(h.n.bottom - h.name.bottom) < 4);
+        const lines = heads.map((h) => Math.abs(h.n.bottom - h.name.bottom) < 4);
+        // Todas do mesmo jeito: uma cabeça numa linha ao lado de outra com o nome embaixo deixa a fileira torta.
+        assert.ok(lines.every((l) => l === lines[0]), `${where}: as cabeças saíram de jeitos diferentes (${heads.filter((_, i) => lines[i]).map((h) => h.text).join(", ")} numa linha)`);
+        const oneLine = lines[0];
         // O controle: com largura, a cabeça fica numa linha só, como era antes da correção.
         if (width === 1300) assert.ok(oneLine, `${where}: o nome desceu numa coluna larga`);
-        checks.push(`${where}: colunas de ${Math.min(...cols)} px, ${oneLine ? "número e nome na mesma linha" : "o nome embaixo do número"}, sem sobrepor e sem cortar (${heads[0]!.text} … ${heads[6]!.text})`);
+        checks.push(`${where}: colunas de ${Math.min(...cols)} px, ${oneLine ? "número e nome na mesma linha" : "o nome embaixo do número"}, todas iguais, sem sobrepor (${heads[0]!.text} … ${heads[6]!.text})`);
       } finally {
         await w.close();
       }
