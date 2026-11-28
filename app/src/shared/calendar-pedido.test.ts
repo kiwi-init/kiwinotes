@@ -35,6 +35,25 @@ describe("readCalendarAsk", () => {
     expect(ask("me avisa 2 h antes").notify).toBe("2h");
   });
 
+  test("a duração não vira a hora (#34842): \"de 1 hora\", \"de 2 horas\", \"por 30 min\", \"2 hour meeting\"", () => {
+    // NOW é quinta, 26/11, 15:00: amanhã é 27/11 e a próxima segunda, 30/11.
+    const cases: [string, string | null, CalendarNotify | null][] = [
+      ["marca uma reunião de 1 hora amanhã às 14h", "2026-11-27T14:00", null],
+      ["agenda um foco de 2 horas na segunda às 9h", "2026-11-30T09:00", null],
+      ["reunião de 2 horas na segunda às 15h, me avisa 30 min antes", "2026-11-30T15:00", "30m"],
+      ["bloco de foco de 3 horas amanhã", "2026-11-27", null],
+      ["reunião de uma hora e meia amanhã às 10h", "2026-11-27T10:00", null],
+      ["foco por 2h amanhã às 8h", "2026-11-27T08:00", null],
+      ["schedule a 2 hour meeting tomorrow at 3pm", "2026-11-27T15:00", null],
+      ["book a 1-hour call on monday at 9am", "2026-11-30T09:00", null],
+      ["block focus for 45 minutes tomorrow at 4pm", "2026-11-27T16:00", null],
+      // "de 9h" é a hora, e "das 9h às 10h" é o começo.
+      ["reunião de 9h amanhã", "2026-11-27T09:00", null],
+      ["foco amanhã das 9h às 10h", "2026-11-27T09:00", null],
+    ];
+    for (const [text, start, notify] of cases) expect([text, ask(text)]).toEqual([text, { start, notify }]);
+  });
+
   test("mais de 30 dias de aviso não vale; o pedido sem hora nem aviso não leva linha", () => {
     expect(ask("me avisa 40 dias antes").notify).toBeNull();
     expect(calendarHint("resume a nota Ideias", NOW)).toBe("");

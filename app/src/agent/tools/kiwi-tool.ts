@@ -317,7 +317,7 @@ export function cardsFor(request: string): Acao[] {
   if (has(/\bresumo executivo\b|\b(status|ponto|situacao) d[oe]s? projeto\b|\bcomo (esta|anda|vai) o projeto\b/)) out.push("project_summary_propose");
   if (has(/\breferencias?\b|\blinks?\b|\bdocumentacao\b/)) out.push("notes_add_references");
   // O Calendário (T32156): marcar, lembrar numa hora, mudar a hora ou dar como feito um item da agenda.
-  if (has(/\b(agend\w*|calendario|agenda|lembr[ae]\w* (de|que|amanha|hoje|as|na|no)|me avis\w*|remarc\w*|desmarc\w*|marc[ae]\w* (uma|a|o|um|reuniao)|compromissos?|lembretes?)\b/)) out.push("calendar_create", "calendar_update");
+  if (has(/\b(agend\w*|calendario|agenda|lembr[ae]\w* (de|que|amanha|hoje|as|na|no)|me avis\w*|remarc\w*|desmarc\w*|marc[ae]\w* (uma|a|o|um|reuniao)|compromissos?|lembretes?|schedul\w*|reschedul\w*|remind me|reminders?|calendar)\b/)) out.push("calendar_create", "calendar_update");
   // Apagar da agenda (T34753): o desmarcar, o cancelar, ou o apagar e o tirar de um item da agenda.
   if (has(/\b(desmarc\w*|cancel\w*)\b/) || (has(/\b(apag\w*|tir[ae]\w*|remov\w*|exclu\w*|delet\w*)\b/) && has(/\b(agenda|calendario|lembretes?|reuniao|reunioes|compromissos?|eventos?|calendar|reminders?|meetings?|events?|appointments?)\b/))) out.push("calendar_delete");
   if (has(/\brotina\b|\btodo dia\b|\btodos os dias\b|\btoda (semana|segunda|terca|quarta|quinta|sexta|manha|tarde|noite)\b|\bdiariamente\b|\bsemanalmente\b|\bdias uteis\b/)) out.push("routine_propose");

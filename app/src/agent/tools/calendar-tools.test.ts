@@ -211,6 +211,10 @@ describe("a ferramenta única", () => {
     expect(tools("põe na agenda a revisão de sexta")).toContain("calendar_create");
     expect(tools("remarca a reunião do Projeto X para segunda")).toContain("calendar_update");
     expect(tools("resume a nota Ideias")).not.toContain("calendar_create");
+    // Em inglês também (#34842): o "schedule" e o "remind me" abrem o agendar.
+    expect(tools("schedule a 2 hour meeting tomorrow at 3pm")).toContain("calendar_create");
+    expect(tools("remind me to call Ana at 9am")).toContain("calendar_create");
+    expect(tools("summarize the Ideas note")).not.toContain("calendar_create");
   });
 
   test("o caminho de cada id", () => {
@@ -232,6 +236,8 @@ describe("o aviso livre e o pedido repetido (spec #34706, T34753)", () => {
     const e = await r.call({ fazer: "escrever", alvo: "X", opcoes: { como: "agendar", tipo: "reminder", inicio: "2026-11-27T10:00", aviso: "uma semana" } }).catch((x) => x);
     expect(e.code).toBe("E_BAD_ARGS");
     expect(e.message).toContain("30 dias");
+    // A frase inteira, sem um pedaço trocado (#34842).
+    expect(e.message).toContain("notify: A antecedência: 50m, 2h, 3d");
   });
 
   test("o mesmo pedido de novo não cria outro item; com outro aviso, muda o aviso do mesmo", async () => {

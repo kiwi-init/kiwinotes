@@ -99,12 +99,25 @@ function relativeOf(t: string, now: Date): { start: string; at: [number, number]
 
 const cut = (t: string, at: [number, number]) => `${t.slice(0, at[0])} ${t.slice(at[1])}`;
 
+/**
+ * A duração não é hora (#34842): "reunião de 1 hora", "foco de 2 horas", "por 30 min", "a 2 hour meeting", "2-hour
+ * block". Sai do texto antes da hora, como a antecedência. "das 9h às 10h" fica (é o começo e o fim).
+ */
+function withoutDuration(t: string): string {
+  // Com "de", só a unidade por extenso ("reunião de 9h" é a hora); com "por", "durante" e "for", também o "2h".
+  const tail = `(?:\\s+e\\s+meia|\\s+and a half)?\\b(?!\\s*(?:as|a|ate|-)\\s*\\d)`;
+  const n = `(?:\\d{1,3}|${NUM_WORD})`;
+  const pt = new RegExp(`\\b(?:de\\s+${n}\\s*(?:horas?|hours?|min(?:uto|ute)?s?)|(?:por|durante|for)\\s+${n}\\s*(?:h|hs|hrs?|horas?|hours?|min(?:uto|ute)?s?))${tail}`, "g");
+  const en = new RegExp(`\\b(?:\\d{1,3}|${NUM_WORD})[- ]?(?:hours?|hrs?|minutes?|mins?)(?:\\s+and a half)?(?=\\s+(?:long\\s+)?(?:meeting|block|session|call|focus|slot|event)\\b)`, "g");
+  return t.replace(pt, " ").replace(en, " ");
+}
+
 /** O que o pedido diz de hora, dia e aviso; os dois `null` quando não diz nada disso. */
 export function readCalendarAsk(request: string, now: Date): CalendarAsk {
   const t = fold(request);
   const lead = leadOf(t);
-  // A antecedência sai do texto antes da hora: "2 h antes" não é uma hora.
-  const rest = lead ? cut(t, lead.at) : t;
+  // A antecedência e a duração saem do texto antes da hora: "2 h antes" e "de 1 hora" não são uma hora.
+  const rest = withoutDuration(lead ? cut(t, lead.at) : t);
   const rel = relativeOf(rest, now);
   if (rel) return { start: rel.start, notify: lead?.notify ?? null };
   const time = timeOf(rest);
