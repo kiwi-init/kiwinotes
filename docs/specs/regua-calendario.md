@@ -9,7 +9,6 @@ Cada linha diz o que as referências fazem e o que o Kiwi faz hoje. A última co
 - **cumpre:** já vale hoje, na `main` de onde saiu o branch (7b6354e6);
 - **falta A**, **falta B** ou **falta C** (com a task): ainda não vale, e a parte com essa letra no spec #34706 fecha a linha. A é a tela, B é editar à mão e C é o Kiwi no Calendário;
 - **falta: T<n>:** ainda não vale, e a task que a régua pediu ao lead fecha a linha;
-- **falta, sem parte:** ainda não vale, e não tem task ainda. Está na lista do fim, para o lead;
 - **n/a:** não se aplica, e a linha diz o porquê.
 
 Quando uma parte fecha uma linha, o mesmo PR troca a linha para "cumpre" e diz qual teste ou roteiro prova isso.
@@ -109,7 +108,7 @@ Fontes das referências:
 | 9.1 | Na Semana estreita, as cabeças dos dias não se sobrepõem | nas três | conferido pelo `calendar-narrow-check` (#495) | cumpre |
 | 9.2 | Com o painel largo aberto, a grade ocupa o espaço que sobra (ponto 1) | Google e Teams | fica uma faixa vazia entre a grade e o painel | falta A (T34741) |
 | 9.3 | O painel largo nunca cobre o Kiwi nem o balão (ponto 8) | n/a (é do Kiwi) | o painel fica por cima do Kiwi | falta A (T34741) |
-| 9.4 | Na janela estreita, o painel lateral cede espaço para a grade | Google e Teams recolhem o painel lateral | o painel do Kiwi tem largura fixa (`--cal-side`). A 760 px, ele fica com uns 290 px, e a Semana com uns 400 px (snug-puma, #34801) | falta, sem parte |
+| 9.4 | Na janela estreita, o painel lateral cede espaço para a grade | Google e Teams recolhem o painel lateral | o painel do Kiwi tem largura fixa (`--cal-side`). A 760 px, ele fica com uns 290 px, e a Semana com uns 400 px (snug-puma, #34801) | falta A (T34741, lead #34834) |
 
 ## 10. Os itens na grade
 
@@ -122,8 +121,8 @@ Fontes das referências:
 | 10.5 | Vários calendários com cor, para mostrar e esconder | nas três | o filtro por tipo e por projeto, que fica salvo (T32408) | cumpre |
 | 10.6 | Atualiza sozinho quando a fonte muda | Google e Mac (e Google `r`, Mac ⌘R) | relê quando a nota muda (`onChanged`) | cumpre |
 | 10.7 | A vista do Ano | Mac ⌘4, e Google | não há | falta: T34785. O lead decidiu que entra (#34756) |
-| 10.8 | A faixa do dia todo tem um teto, com o "+N" | Google | a faixa cresce sem teto: com 4 itens, empurra a grade para baixo (snug-puma, #34801) | falta, sem parte |
-| 10.9 | Criar um item de um tipo ou projeto escondido pelo filtro avisa | Google mostra o item criado mesmo assim | o item é criado, mas não aparece, e nada avisa (snug-puma, #34801) | falta, sem parte |
+| 10.8 | A faixa do dia todo tem um teto, com o "+N" | Google | a faixa cresce sem teto: com 4 itens, empurra a grade para baixo (snug-puma, #34801) | falta A (T34737, no PR à parte do #530 e do #532, lead #34834) |
+| 10.9 | Criar um item de um tipo ou projeto escondido pelo filtro avisa | Google mostra o item criado mesmo assim | o item é criado, mas não aparece, e nada avisa (snug-puma, #34801) | falta B (T34748, lead #34834) |
 
 ## 11. Editar e criar
 
@@ -135,8 +134,8 @@ Fontes das referências:
 | 11.4 | Aviso com qualquer antecedência | nas três | só "na hora", "10 min", "30 min" e "na véspera" | falta C (T34753) |
 | 11.5 | A repetição mensal, anual, nos dias úteis ou a que a pessoa montar | nas três | só a diária e a semanal | falta: T34775 |
 | 11.6 | Duplicar um item | Google (Duplicar) e Mac (copiar e colar) | não há | falta: T34767 |
-| 11.7 | O "+ Novo" já pede o aviso e a repetição | nas três | só o título, o tipo, o projeto, o dia, o início e o fim (snug-puma, #34801) | falta, sem parte |
-| 11.8 | O "+ Novo" aceita um fim depois da meia-noite (22:00–01:00) | nas três | o botão fica desligado quando o fim é antes do começo (`end > time`), embora o main aceite (#480) | falta, sem parte |
+| 11.7 | O "+ Novo" já pede o aviso e a repetição | nas três | só o título, o tipo, o projeto, o dia, o início e o fim (snug-puma, #34801) | falta: T34748 o aviso e T34775 a repetição (lead #34834) |
+| 11.8 | O "+ Novo" aceita um fim depois da meia-noite (22:00–01:00) | nas três | o botão fica desligado quando o fim é antes do começo (`end > time`), embora o main aceite (#480) | falta: T34781 (lead #34834) |
 
 ## 12. O Kiwi no Calendário (onde o Kiwi tem de ser melhor)
 
@@ -195,9 +194,9 @@ As que a régua achou e o lead abriu (#34756):
 - **T34785:** a vista do Ano (10.7);
 - **T34789:** os roteiros no escuro e o teste de 500 itens (8.2 e 13.3).
 
-**Ainda sem task**, as linhas da snug-puma (#34801), para o lead:
-- 9.4: o painel lateral cede espaço na janela estreita;
-- 10.8: o teto da faixa do dia todo;
-- 10.9: avisar ao criar um item escondido pelo filtro;
-- 11.7: o aviso e a repetição no "+ Novo";
-- 11.8: o fim depois da meia-noite no "+ Novo".
+As linhas que a snug-puma achou (#34801) entraram em tasks que já existiam (lead, #34834):
+- 9.4, o painel lateral cede espaço na janela estreita: T34741;
+- 10.8, o teto da faixa do dia todo: T34737, no PR à parte do #530 e do #532;
+- 10.9, avisar ao criar um item escondido pelo filtro: T34748;
+- 11.7, o aviso e a repetição no "+ Novo": T34748 (o aviso) e T34775 (a repetição);
+- 11.8, o fim depois da meia-noite no "+ Novo": T34781.
