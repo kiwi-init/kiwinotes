@@ -1746,7 +1746,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       return cal(() => calendar.create(a as unknown as CalendarCreate));
     },
     "calendar.update": async (args) => {
-      const a = fields(args, "calendar.update", ["id", "title", "start", "end", "allDay", "done", "notify", "kind", "repeat"]);
+      const a = fields(args, "calendar.update", ["id", "title", "start", "end", "allDay", "done", "notify", "kind", "repeat", "only"]);
       return cal(() => calendar.update(a as unknown as CalendarUpdate));
     },
     "calendar.source": async (args) => {

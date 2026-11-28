@@ -344,7 +344,9 @@ export type { NoteModel };
 // 1.108.0 (T33054, spec #32534): o "Não ouvi". O `agent.voice` no `idle` ganha o `notHeard`, com o atalho de falar
 //   com o Kiwi, quando a fala foi curta demais ou a transcrição veio vazia: o Kiwi fica confuso e diz como tentar de
 //   novo, em vez de sumir calado. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.108.0";
+// 1.109.0 (T34336, #485): o `only` do `calendar.update`. Numa vez de uma repetição, ele leva só aquela vez para o
+//   `start` novo (um `⏭` na série e uma linha avulsa abaixo), sem mudar a hora da série. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.109.0";
 
 /** A voz do Kiwi pelo ElevenLabs nos Ajustes (T31628): só se há chave, nunca ela. */
 export interface ElevenLabsStatus {
